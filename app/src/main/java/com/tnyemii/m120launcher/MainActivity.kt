@@ -1,0 +1,85 @@
+package com.tnyemii.m120launcher
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import com.tnyemii.m120launcher.ui.theme.M120LauncherTheme
+
+// main entry point activity for our kawaii home launcher :3
+class MainActivity : ComponentActivity() {
+    // tracks how many times user pressed physical home button <3
+    var homePressCount by mutableStateOf(0)
+        private set
+
+    // counter to trigger app list refresh when apps change :3
+    var appListRefreshCount by mutableIntStateOf(0)
+
+    // listens for package added, removed, or replaced broadcasts <3
+    private val packageChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (
+                intent?.action == Intent.ACTION_PACKAGE_ADDED ||
+                intent?.action == Intent.ACTION_PACKAGE_REMOVED ||
+                intent?.action == Intent.ACTION_PACKAGE_REPLACED
+            ) {
+                appListRefreshCount++
+            }
+        }
+    }
+
+    // unregister broadcast receiver when activity is destroyed :3
+    override fun onDestroy() {
+        unregisterReceiver(packageChangeReceiver)
+        super.onDestroy()
+    }
+
+    // handles physical home button presses when already running <3
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+
+        if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
+            homePressCount++
+        }
+    }
+
+    // sets up edge-to-edge system bars and sets root compose content :3
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val packageFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        }
+
+        registerReceiver(packageChangeReceiver, packageFilter)
+
+        enableEdgeToEdge()
+        setContent {
+            M120LauncherTheme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    MainLauncher(
+                        name = "Android",
+                        modifier = Modifier.padding(innerPadding),
+                        homePressCount = homePressCount,
+                        appListRefreshCount = appListRefreshCount
+                    )
+                }
+            }
+        }
+    }
+}
