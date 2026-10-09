@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+    <!-- Quickstep / Recents System Permissions -->
+    <uses-permission android:name="android.permission.STATUS_BAR_SERVICE" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.MANAGE_ACTIVITY_TASKS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.START_TASKS_FROM_RECENTS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.REMOVE_TASKS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.STATUS_BAR" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.STOP_APP_SWITCHES" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.SET_ORIENTATION" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.READ_FRAME_BUFFER" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.MONITOR_INPUT" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.ALLOW_SLIPPERY_TOUCHES" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.SYSTEM_APPLICATION_OVERLAY" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.GET_TOP_ACTIVITY_INFO" tools:ignore="ProtectedPermissions" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.M120Launcher">
+        <activity
+            android:name=".MainActivity"
+            android:launchMode="singleTask"
+            android:exported="true"
+            android:theme="@style/Theme.M120Launcher"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Quickstep Service -->
+        <service
+            android:name="com.android.quickstep.TouchInteractionService"
+            android:permission="android.permission.STATUS_BAR_SERVICE"
+            android:directBootAware="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.QUICKSTEP_SERVICE" />
+            </intent-filter>
+        </service>
+
+        <!-- Recents Overview Activity -->
+        <activity
+            android:name="com.android.quickstep.RecentsActivity"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:clearTaskOnLaunch="true"
+            android:stateNotNeeded="true"
+            android:exported="true"
+            android:screenOrientation="unspecified"
+            android:configChanges="keyboard|keyboardHidden|mcc|mnc|navigation|orientation|screenSize|screenLayout|smallestScreenSize|density"
+            android:resizeableActivity="true"
+            android:resumeWhilePausing="true"
+            android:taskAffinity="" />
+    </application>
+
+</manifest>
