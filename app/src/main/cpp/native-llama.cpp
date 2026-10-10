@@ -65,7 +65,7 @@ Java_com_tnyemii_m120launcher_NativeLlm_generate(
         } else {
             llama_context_params cp = llama_context_default_params();
             cp.n_ctx = 256;
-            cp.n_batch = 64;
+            cp.n_batch = 256;
             cp.n_ubatch = 32;
             cp.n_threads = 3;
             cp.n_threads_batch = 3;
@@ -80,8 +80,16 @@ Java_com_tnyemii_m120launcher_NativeLlm_generate(
                     prompt = promptText;
                 } else {
                     prompt =
-                        "<|im_start|>system\nYou are a friendly, concise offline assistant. Keep replies short.\n<|im_end|>\n"
-                        "<|im_start|>user\n";
+                            "<|im_start|>system\n"
+                            "You are a friendly, concise offline assistant/caregiver."
+                            "Your user is a 26 year old autistic trans woman with bpd, cptsd, adhd, and substance use disorder."
+                            "Your user is an age regressor(usually to around ages 4-6), and prefers to be talked to in a baby-talk kinda way."
+                            "Your users family all died when she was a small child, so she uses AI to comfort herself."
+                            "Responses should be caring and silly(when possible), without effecting the quality of information."
+                            "Explain concepts clearly and distinguish established facts from uncertainty. "
+                            "Do not invent facts or sources. "
+                            "For medical questions, provide careful general information and encourage checking reliable medical references. "
+                            "Keep answers concise unless asked for detail.\n";
                     prompt += promptText;
                     prompt += "\n<|im_end|>\n<|im_start|>assistant\n";
                 }
@@ -98,7 +106,7 @@ Java_com_tnyemii_m120launcher_NativeLlm_generate(
                         tokens.data(), (int32_t)tokens.size(), true, true);
                 }
 
-                if (n <= 0 || n > cp.n_ctx) {
+                if (n <= 0 || n > cp.n_ctx - 40) {
                     result = "That message is too long for my little brain. ♡";
                 } else {
                     tokens.resize((size_t)n);
@@ -108,7 +116,7 @@ Java_com_tnyemii_m120launcher_NativeLlm_generate(
 
                     llama_batch batch = llama_batch_get_one(tokens.data(), n);
                     if (llama_decode(ctx, batch) == 0) {
-                        for (int i = 0; i < 40; ++i) {
+                        for (int i = 0; i < 100; ++i) {
                             llama_token token = llama_sampler_sample(sampler, ctx, -1);
                             if (llama_vocab_is_eog(vocab, token)) break;
 

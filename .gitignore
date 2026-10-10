@@ -1,3 +1,103 @@
+# ==============================
+
+# Android Studio / IntelliJ
+
+# ==============================
+
+.idea/
+*.iml
+out/
+
+# ==============================
+
+# Gradle / Android build output
+
+# ==============================
+
+.gradle/
+build/
+**/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ==============================
+
+# Android packages and build artifacts
+
+# ==============================
+
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# ==============================
+
+# Signing keys and private credentials
+
+# ==============================
+
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+secrets.properties
+.env
+.env.*
+
+# ==============================
+
+# Local AI model files
+
+# ==============================
+
+*.gguf
+*.ggml
+models/
+
+# Keep model files out of Git even if copied into the project.
+
+app/src/main/assets/*.gguf
+app/src/main/assets/*.ggml
+
+# ==============================
+
+# Logs and temporary files
+
+# ==============================
+
+*.log
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==============================
+
+# Native build artifacts
+
+# ==============================
+
+*.o
+*.obj
+*.a
+*.so
+
+# ==============================
+
+# Local editor / backup files
+
+# ==============================
+
+*~
+*.swp
+*.swo
+*.bak
+
+
 *.iml
 .gradle
 /local.properties

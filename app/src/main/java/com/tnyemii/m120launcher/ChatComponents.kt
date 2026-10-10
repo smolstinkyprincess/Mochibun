@@ -68,22 +68,6 @@ fun ChatPlaceholderPage(
 
     val chatListState = rememberLazyListState()
 
-    // cleanup native llm model when leaving chat screen :3
-    DisposableEffect(Unit) {
-        onDispose {
-            coroutineScope.launch(Dispatchers.IO) {
-                NativeLlm.unloadModel()
-            }
-        }
-    }
-
-    // scroll to bottom of chat when new message arrives <3
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            chatListState.scrollToItem(messages.lastIndex)
-        }
-    }
-
     // check if model exists in internal storage or sdcard path :3
     var resolvedModelPath by remember {
         mutableStateOf(
@@ -105,6 +89,32 @@ fun ChatPlaceholderPage(
                 }
             }
         )
+    }
+
+    var mascotExpression by remember { mutableStateOf(MascotExpression.IDLE) }
+
+    LaunchedEffect(resolvedModelPath, isGenerating, messages.size) {
+        mascotExpression = when {
+            resolvedModelPath.isEmpty() -> MascotExpression.OFFLINE
+            isGenerating -> MascotExpression.THINKING
+            else -> {
+                val lastMsg = messages.lastOrNull()
+                if (lastMsg != null && !lastMsg.isUser && !isGenerating) {
+                    MascotExpression.RESPONDING
+                } else {
+                    MascotExpression.IDLE
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(mascotExpression) {
+        if (mascotExpression == MascotExpression.RESPONDING) {
+            kotlinx.coroutines.delay(3000)
+            if (mascotExpression == MascotExpression.RESPONDING) {
+                mascotExpression = MascotExpression.IDLE
+            }
+        }
     }
 
     // auto copy model file from sdcard to app private storage on startup <3
@@ -193,25 +203,21 @@ fun ChatPlaceholderPage(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
-                onClick = {
-                    coroutineScope.launch(Dispatchers.IO) {
-                        NativeLlm.unloadModel()
-                    }
-                    onBack()
-                }
-            ) {
-                Text("← Home", color = Color(0xFF9C6DF5))
-            }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            Text(
-                text = "✧･ﾟ local llm ✧˖°",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = cardTextColor
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                PixelArtMascot(expression = mascotExpression, size = 32.dp)
+                Text(
+                    text = "✧･ﾟ local llm ✧˖°",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = cardTextColor
+                )
+            }
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -251,19 +257,22 @@ fun ChatPlaceholderPage(
         ) {
             if (isGenerating) {
                 item(key = "generating_status") {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth(0.88f)
-                            .align(Alignment.Start),
-                        shape = RoundedCornerShape(cardRoundness),
-                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.Start
                     ) {
-                        Text(
-                            text = activeStatus ?: "thinking... ♡",
-                            modifier = Modifier.padding(12.dp),
-                            color = Color(0xFFB77BBF),
-                            fontSize = 14.sp
-                        )
+                        Card(
+                            modifier = Modifier.fillMaxWidth(0.88f),
+                            shape = RoundedCornerShape(cardRoundness),
+                            colors = CardDefaults.cardColors(containerColor = cardBgColor)
+                        ) {
+                            Text(
+                                text = activeStatus ?: "thinking... ♡",
+                                modifier = Modifier.padding(12.dp),
+                                color = cardTextColor,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }
@@ -388,8 +397,12 @@ fun ChatPlaceholderPage(
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.White,
                     unfocusedContainerColor = Color.White,
+                    focusedTextColor = Color(0xFFFFFFFF),
+                    unfocusedTextColor = Color(0xFFD36BFF),
                     focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledContainerColor = Color.White,
+                    disabledTextColor = Color(0xFF684A7C),
                 ),
                 maxLines = 3
             )
