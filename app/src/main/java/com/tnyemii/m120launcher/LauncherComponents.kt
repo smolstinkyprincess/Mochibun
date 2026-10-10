@@ -33,9 +33,13 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onKeyEvent
@@ -54,9 +58,10 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -96,6 +101,8 @@ fun StatusCard(
     var batteryLevel by remember { mutableStateOf(0) }
     var wifiConnected by remember { mutableStateOf(false) }
     var wifiSsid by remember { mutableStateOf<String?>(null) }
+
+    val drawerListState = rememberLazyListState()
 
     // Update Clock
     LaunchedEffect(Unit) {
@@ -292,11 +299,19 @@ fun FavoritesCard(
     selectedIndex: Int = 0,
     onAppLongClick: (LauncherApp) -> Unit
 ) {
+    val lazyRowState = rememberLazyListState()
+
+    LaunchedEffect(selectedIndex) {
+        if (favoriteApps.isNotEmpty()) {
+            lazyRowState.animateScrollToItem(selectedIndex.coerceIn(0, favoriteApps.size - 1))
+        }
+    }
+
     if (favoriteApps.isNotEmpty()) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp)
+                .padding(vertical = 8.dp, horizontal = 4.dp)
                 .border(
                     width = 4.dp,
                     color = greetingOutlineColor,
@@ -321,22 +336,28 @@ fun FavoritesCard(
                     color = cardTextColor
                 )
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    state = lazyRowState,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     itemsIndexed(favoriteApps, key = { _, app -> app.resolveInfo.activityInfo.packageName }) { index, app ->
                         val appName = app.name
                         val isSelected = (index == selectedIndex)
+                        val scale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.06f else 1.0f,
+                            animationSpec = tween(durationMillis = 150)
+                        )
 
                         Column(
                             modifier = Modifier
+                                .graphicsLayer(scaleX = scale, scaleY = scale)
                                 .background(
-                                    color = if (isSelected) Color(0x66E675FF) else Color.Transparent,
-                                    shape = RoundedCornerShape(8.dp)
+                                    color = if (isSelected) Color(0xFFFFD1F0) else Color.Transparent,
+                                    shape = RoundedCornerShape(10.dp)
                                 )
                                 .border(
-                                    width = if (isSelected) 2.dp else 0.dp,
+                                    width = if (isSelected) 2.5.dp else 0.dp,
                                     color = if (isSelected) Color(0xFF9B5FA5) else Color.Transparent,
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = RoundedCornerShape(10.dp)
                                 )
                                 .combinedClickable(
                                     onClick = {
@@ -375,7 +396,7 @@ fun FavoritesCard(
 }
 
 @Composable
-fun AppDrawerItem(
+fun AppDrawerGridItem(
     context: Context,
     app: LauncherApp,
     iconCache: Map<String, Bitmap>,
@@ -383,20 +404,16 @@ fun AppDrawerItem(
     onAppLongClick: (LauncherApp) -> Unit
 ) {
     val packageName = app.resolveInfo.activityInfo.packageName
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.08f else 1.0f,
+        animationSpec = tween(durationMillis = 150)
+    )
+
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(
-                color = if (isSelected) Color(0xFFFFC2F0) else cardBgColor,
-                shape = RoundedCornerShape(cardRoundness)
-            )
-            .border(
-                width = if (isSelected) 3.dp else 4.dp,
-                color = if (isSelected) Color(0xFF9B5FA5) else greetingOutlineColor,
-                shape = RoundedCornerShape(cardRoundness)
-            )
+            .graphicsLayer(scaleX = scale, scaleY = scale)
             .combinedClickable(
                 onClick = {
                     val launchIntent =
@@ -411,16 +428,22 @@ fun AppDrawerItem(
                     onAppLongClick(app)
                 }
             ),
-        shape = RoundedCornerShape(cardRoundness),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFFFFC2F0) else cardBgColor
+            containerColor = if (isSelected) {
+                Color(0xFFFFD1F0)
+            } else {
+                Color(0xD9CEBAFF)
+            }
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (isSelected) Color(0xFFFFC2F0) else cardBgColor)
-                .padding(12.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             val icon = iconCache[packageName]
@@ -431,20 +454,27 @@ fun AppDrawerItem(
                     contentDescription = app.resolveInfo.loadLabel(
                         context.packageManager
                     ).toString(),
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(40.dp)
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
             Text(
-                text = app.resolveInfo.loadLabel(
-                    context.packageManager
-                ).toString(),
-                modifier = Modifier.weight(1f),
-                fontSize = 16.sp,
-                color = cardTextColor
+                text = app.resolveInfo.loadLabel(context.packageManager).toString(),
+                fontSize = 14.sp,
+                color = cardTextColor,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
             )
+
+            if (isSelected) {
+                Text(
+                    text = "♡",
+                    color = Color(0xFF9B5FA5),
+                    fontSize = 18.sp
+                )
+            }
         }
     }
 }
@@ -1041,7 +1071,24 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 val nativeEvent = event.nativeKeyEvent
                 if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN && nativeEvent.repeatCount == 0) {
                     when (nativeEvent.keyCode) {
-                        android.view.KeyEvent.KEYCODE_DPAD_UP,
+                        android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                            if (drawerOpen) {
+                                selectedDrawerIndex =
+                                    (selectedDrawerIndex - 1).coerceAtLeast(0)
+                            } else if (!chatPageOpen) {
+                                drawerOpen = true
+                            }
+                            true
+                        }
+
+                        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            if (drawerOpen) {
+                                selectedDrawerIndex =
+                                    (selectedDrawerIndex + 1)
+                                        .coerceIn(0, (visibleApps.size - 1).coerceAtLeast(0))
+                            }
+                            true
+                        }
                         android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
                             if (drawerOpen) {
                                 if (visibleApps.isNotEmpty()) {
@@ -1054,7 +1101,6 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             }
                             true
                         }
-                        android.view.KeyEvent.KEYCODE_DPAD_DOWN,
                         android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             if (drawerOpen) {
                                 if (visibleApps.isNotEmpty()) {
@@ -1062,7 +1108,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 }
                             } else if (!chatPageOpen) {
                                 if (favoriteApps.isNotEmpty()) {
-                                    selectedFavoriteIndex = (selectedFavoriteIndex + 1).coerceIn(0, favoriteApps.size - 1)
+                                    selectedFavoriteIndex = (selectedFavoriteIndex + 1).coerceIn(0, (favoriteApps.size - 1).coerceAtLeast(0))
                                 }
                             }
                             true
@@ -1365,6 +1411,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 )
             }
 
+
             if (drawerOpen) {
                 AppDrawerHeader(
                     onSwipeDown = { drawerOpen = false }
@@ -1374,26 +1421,27 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     state = listState,
                     modifier = Modifier
                         .weight(1f)
-                        .pointerInput(drawerOpen, listState) {
-                            detectVerticalDragGestures { _, dragAmount ->
-                                if (
-                                    drawerOpen &&
-                                    listState.firstVisibleItemIndex == 0 &&
-                                    dragAmount > 10
-                                ) {
-                                    drawerOpen = false
-                                }
-                            }
-                        },
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFFF8F0FF))
+                        .border(
+                            width = 2.dp,
+                            color = Color(0xFFCE93D8),
+                            shape = RoundedCornerShape(16.dp)
+                        ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
-
                 ) {
-                    itemsIndexed(visibleApps, key = { _, app -> "${app.resolveInfo.activityInfo.packageName}/" + app.resolveInfo.activityInfo.name }) { index, app ->
-                        AppDrawerItem(
+                    itemsIndexed(
+                        visibleApps,
+                        key = { _, app ->
+                            "${app.resolveInfo.activityInfo.packageName}/${app.resolveInfo.activityInfo.name}"
+                        }
+                    ) { index, app ->
+                        AppDrawerGridItem(
                             context = context,
                             app = app,
                             iconCache = iconCache,
-                            isSelected = (index == selectedDrawerIndex),
+                            isSelected = index == selectedDrawerIndex,
                             onAppLongClick = { selectedApp = it }
                         )
                     }
