@@ -52,6 +52,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
+// overlay activity displaying recent apps in a horizontal scrollable card list :3
 class RecentsActivity : ComponentActivity() {
 
     private lateinit var tasksManager: RecentTasksManager
@@ -73,6 +74,7 @@ class RecentsActivity : ComponentActivity() {
     }
 }
 
+// composable UI container for recent app cards, clear-all action, and backdrop tap to close <3
 @Composable
 fun RecentsScreen(
     tasksManager: RecentTasksManager,
@@ -81,6 +83,7 @@ fun RecentsScreen(
     var tasks by remember { mutableStateOf<List<RecentTaskInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
+    // asynchronously load recent tasks list on IO thread :3
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val fetchedTasks = tasksManager.getRecentTasks()
@@ -104,7 +107,7 @@ fun RecentsScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header
+            // header title banner
             Text(
                 text = "✨ Recent Apps ✨",
                 fontSize = 20.sp,
@@ -136,7 +139,7 @@ fun RecentsScreen(
                     )
                 }
             } else {
-                // Task Cards Row
+                // horizontal list of recent task cards :3
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -168,7 +171,7 @@ fun RecentsScreen(
                 }
             }
 
-            // Bottom Actions
+            // bottom action buttons (clear all / close) <3
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -203,6 +206,7 @@ fun RecentsScreen(
     }
 }
 
+// individual recent app card supporting vertical drag-to-dismiss gesture <3
 @Composable
 fun TaskCard(
     task: RecentTaskInfo,
@@ -211,6 +215,7 @@ fun TaskCard(
 ) {
     var offsetY by remember { mutableFloatStateOf(0f) }
 
+    // vertical drag gesture handler to dismiss task when swiped up :3
     val draggableState = rememberDraggableState { delta ->
         offsetY += delta
         if (offsetY < -300f) {
@@ -242,7 +247,7 @@ fun TaskCard(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Task App Header
+            // task app header (icon, title, close button) :3
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -272,7 +277,7 @@ fun TaskCard(
                     )
                 }
 
-                // Close button
+                // close button
                 Box(
                     modifier = Modifier
                         .size(20.dp)
@@ -285,7 +290,7 @@ fun TaskCard(
                 }
             }
 
-            // Task Snapshot Preview or Icon Placeholder
+            // task thumbnail preview or fallback app icon <3
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -329,6 +334,7 @@ fun TaskCard(
     }
 }
 
+// renders Android drawable object into Compose Image bitmap :3
 @Composable
 fun DrawableImage(
     drawable: Drawable,

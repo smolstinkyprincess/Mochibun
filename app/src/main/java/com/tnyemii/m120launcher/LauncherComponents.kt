@@ -90,6 +90,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 val cardRoundness = 24.dp
 
+// displays current time, date, battery level, and Wi-Fi connection status :3
 @Composable
 fun StatusCard(
     context: Context,
@@ -102,9 +103,7 @@ fun StatusCard(
     var wifiConnected by remember { mutableStateOf(false) }
     var wifiSsid by remember { mutableStateOf<String?>(null) }
 
-    val drawerListState = rememberLazyListState()
-
-    // Update Clock
+    // clock ticker coroutine updates every 10 seconds <3
     LaunchedEffect(Unit) {
         while (true) {
             currentTime = Date()
@@ -112,7 +111,7 @@ fun StatusCard(
         }
     }
 
-    // Update Battery + WiFi
+    // periodic background status reader for battery and Wi-Fi SSID :3
     LaunchedEffect(Unit) {
         while (true) {
             val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
@@ -130,22 +129,16 @@ fun StatusCard(
             if (isWifi) {
                 var rawSsid: String? = null
 
-                // First try the modern Android 10+ path
+                // modern Android 10+ transport info path <3
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    val wifiInfo =
-                        capabilities?.transportInfo as? android.net.wifi.WifiInfo
-
+                    val wifiInfo = capabilities?.transportInfo as? android.net.wifi.WifiInfo
                     rawSsid = wifiInfo?.ssid
                 }
 
-                // M120 fallback
+                // fallback for older API or MTK hardware :3
                 if (rawSsid.isNullOrBlank() || rawSsid == "<unknown ssid>") {
                     try {
-                        val wifiManager =
-                            context.applicationContext.getSystemService(
-                                Context.WIFI_SERVICE
-                            ) as? android.net.wifi.WifiManager
-
+                        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
                         rawSsid = wifiManager?.connectionInfo?.ssid
                     } catch (_: Exception) {
                         rawSsid = null
@@ -154,10 +147,7 @@ fun StatusCard(
 
                 rawSsid = rawSsid?.removeSurrounding("\"")
 
-                wifiSsid = if (
-                    !rawSsid.isNullOrBlank() &&
-                    rawSsid != "<unknown ssid>"
-                ) {
+                wifiSsid = if (!rawSsid.isNullOrBlank() && rawSsid != "<unknown ssid>") {
                     rawSsid
                 } else {
                     "Wi-Fi"
@@ -180,14 +170,11 @@ fun StatusCard(
                 color = outlineColor,
                 shape = RoundedCornerShape(cardRoundness)
             ),
-        colors = CardDefaults.cardColors(
-            containerColor = cardBgColor
-        ),
+        colors = CardDefaults.cardColors(containerColor = cardBgColor),
         shape = RoundedCornerShape(cardRoundness)
     ) {
         Column(
-            modifier = Modifier
-                .padding(16.dp),
+            modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -205,9 +192,7 @@ fun StatusCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "🔋 $batteryLevel%   ",
                     fontSize = 14.sp,
@@ -239,17 +224,14 @@ fun StatusCard(
     }
 }
 
+// top greeting card header with decorative ribbon bow sticker <3
 @Composable
-fun GreetingCard(
-    context: Context
-) {
-    // Cute Greeting
+fun GreetingCard(context: Context) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp)
     ) {
-        // Greeting card
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -259,9 +241,7 @@ fun GreetingCard(
                     color = greetingOutlineColor,
                     shape = RoundedCornerShape(cardRoundness + 4.dp)
                 ),
-            colors = CardDefaults.cardColors(
-                containerColor = greetingBgColor
-            ),
+            colors = CardDefaults.cardColors(containerColor = greetingBgColor),
             shape = RoundedCornerShape(cardRoundness + 4.dp)
         ) {
             Text(
@@ -271,15 +251,11 @@ fun GreetingCard(
                 color = greetingColor,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        horizontal = 20.dp,
-                        vertical = 18.dp
-                    ),
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
                 textAlign = TextAlign.Center
             )
         }
 
-        // Bow sitting on top of the card
         BowSticker(
             size = 52.dp,
             color = Color(0xFFD8A9D9),
@@ -291,6 +267,7 @@ fun GreetingCard(
     }
 }
 
+// horizontal row displaying pinned favorite app icons with selection scale animation :3
 @Composable
 fun FavoritesCard(
     context: Context,
@@ -301,9 +278,15 @@ fun FavoritesCard(
 ) {
     val lazyRowState = rememberLazyListState()
 
-    LaunchedEffect(selectedIndex) {
+    // auto scroll to selected favorite item when navigating with DPAD <3
+    LaunchedEffect(selectedIndex, favoriteApps.size) {
         if (favoriteApps.isNotEmpty()) {
-            lazyRowState.animateScrollToItem(selectedIndex.coerceIn(0, favoriteApps.size - 1))
+            val visibleItems = lazyRowState.layoutInfo.visibleItemsInfo
+            val selectedIsVisible = visibleItems.any { it.index == selectedIndex }
+
+            if (!selectedIsVisible) {
+                lazyRowState.animateScrollToItem(selectedIndex)
+            }
         }
     }
 
@@ -317,16 +300,11 @@ fun FavoritesCard(
                     color = greetingOutlineColor,
                     shape = RoundedCornerShape(cardRoundness)
                 ),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xD9CEBAFF)
-            ),
+            colors = CardDefaults.cardColors(containerColor = Color(0xD9CEBAFF)),
             shape = RoundedCornerShape(cardRoundness)
         ) {
             Column(
-                modifier = Modifier.padding(
-                    horizontal = 12.dp,
-                    vertical = 10.dp
-                ),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -361,18 +339,14 @@ fun FavoritesCard(
                                 )
                                 .combinedClickable(
                                     onClick = {
-                                        val launchIntent =
-                                            context.packageManager.getLaunchIntentForPackage(
-                                                app.resolveInfo.activityInfo.packageName
-                                            )
-
+                                        val launchIntent = context.packageManager.getLaunchIntentForPackage(
+                                            app.resolveInfo.activityInfo.packageName
+                                        )
                                         if (launchIntent != null) {
                                             context.startActivity(launchIntent)
                                         }
                                     },
-                                    onLongClick = {
-                                        onAppLongClick(app)
-                                    }
+                                    onLongClick = { onAppLongClick(app) }
                                 )
                                 .padding(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -395,6 +369,7 @@ fun FavoritesCard(
     }
 }
 
+// single app item row in the vertical app drawer list <3
 @Composable
 fun AppDrawerGridItem(
     context: Context,
@@ -409,40 +384,30 @@ fun AppDrawerGridItem(
         animationSpec = tween(durationMillis = 150)
     )
 
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer(scaleX = scale, scaleY = scale)
             .combinedClickable(
                 onClick = {
-                    val launchIntent =
-                        context.packageManager
-                            .getLaunchIntentForPackage(packageName)
-
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
                     if (launchIntent != null) {
                         context.startActivity(launchIntent)
                     }
                 },
-                onLongClick = {
-                    onAppLongClick(app)
-                }
+                onLongClick = { onAppLongClick(app) }
             ),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(cardRoundness),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                Color(0xFFFFD1F0)
-            } else {
-                Color(0xD9CEBAFF)
-            }
+            containerColor = if (isSelected) Color(0xFFFFD1F0) else Color(0xD9CEBAFF)
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(72.dp)
+                .background(Color.Transparent)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -451,79 +416,64 @@ fun AppDrawerGridItem(
             if (icon != null) {
                 Image(
                     bitmap = icon.asImageBitmap(),
-                    contentDescription = app.resolveInfo.loadLabel(
-                        context.packageManager
-                    ).toString(),
-                    modifier = Modifier.size(40.dp)
+                    contentDescription = app.resolveInfo.loadLabel(context.packageManager).toString(),
+                    modifier = Modifier.size(52.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(32.dp))
 
             Text(
                 text = app.resolveInfo.loadLabel(context.packageManager).toString(),
-                fontSize = 14.sp,
+                fontSize = 20.sp,
                 color = cardTextColor,
                 maxLines = 1,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .background(Color.Transparent)
             )
 
             if (isSelected) {
                 Text(
                     text = "♡",
                     color = Color(0xFF9B5FA5),
-                    fontSize = 18.sp
+                    fontSize = 32.sp
                 )
             }
         }
     }
 }
 
+// app drawer header bar showing title and swipe down button :3
 @Composable
-fun AppDrawerHeader(
-    onSwipeDown: () -> Unit
-) {
+fun AppDrawerHeader(onSwipeDown: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(128.dp)
-            .padding(bottom = 8.dp)
-            .pointerInput(Unit) {
-                detectVerticalDragGestures { _, dragAmount ->
-                    if (dragAmount > 10) {
-                        onSwipeDown()
-                    }
-                }
-            },
+            .padding(vertical = 4.dp)
+            .clickable { onSwipeDown() },
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .width(36.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFFD8A9D9))
-            )
-
             Text(
-                text = "♡",
-                fontSize = 16.sp,
-                color = Color(0xFFB77BBF)
-            )
-
-            Text(
-                text = "All Apps",
-                fontSize = 24.sp,
+                text = "♡ apps ♡",
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF9C6DF5)
+                color = cardTextColor
+            )
+            Text(
+                text = "▾",
+                fontSize = 18.sp,
+                color = cardTextColor
             )
         }
     }
 }
 
+// long-press dialog for app actions (favorite reorder, custom icon, app info, hide) <3
 @Composable
 fun AppActionDialog(
     app: LauncherApp,
@@ -542,123 +492,89 @@ fun AppActionDialog(
     onResetIcon: () -> Unit,
     onHideApp: () -> Unit
 ) {
-    val packageName = app.resolveInfo.activityInfo.packageName
-    val appName = app.name
-    val iconBitmap = iconCache[packageName]
-    val isFavorite = packageName in favoritePackages
-    val favoriteIndex = favoritePackages.indexOf(packageName)
+    val pkgName = app.resolveInfo.activityInfo.packageName
+    val isFav = pkgName in favoritePackages
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = cardBgColor,
         shape = RoundedCornerShape(cardRoundness),
         title = {
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-            ) {
-                if (iconBitmap != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val bitmap = iconCache[pkgName]
+                if (bitmap != null) {
                     Image(
-                        bitmap = iconBitmap.asImageBitmap(),
-                        contentDescription = appName,
-                        modifier = Modifier.size(64.dp)
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp)
                     )
+                    Spacer(modifier = Modifier.width(10.dp))
                 }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
                 Text(
-                    text = appName,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = app.name,
                     color = cardTextColor,
-                    textAlign = TextAlign.Center
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
                 )
             }
         },
         text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (isFavorite) {
-                    if (favoriteIndex > 0) {
-                        TextButton(
-                            onClick = onMoveFavoriteLeft
-                        ) {
-                            Text(
-                                text = "← Move Left",
-                                color = appActionColor,
-                                fontSize = 15.sp
-                            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // reorder buttons if app is currently in favorites :3
+                if (isFav) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        TextButton(onClick = onMoveFavoriteLeft) {
+                            Text("◀ Move Left", color = appActionColor)
                         }
-                    }
-
-                    if (favoriteIndex < favoritePackages.lastIndex) {
-                        TextButton(
-                            onClick = onMoveFavoriteRight
-                        ) {
-                            Text(
-                                text = "→ Move Right",
-                                color = appActionColor,
-                                fontSize = 15.sp
-                            )
+                        TextButton(onClick = onMoveFavoriteRight) {
+                            Text("Move Right ▶", color = appActionColor)
                         }
                     }
                 }
 
-                TextButton(
-                    onClick = onToggleFavorite
-                ) {
+                // toggle favorite status <3
+                TextButton(onClick = onToggleFavorite) {
                     Text(
-                        text = if (isFavorite) {
-                            "☆ Remove from Favorites"
-                        } else {
-                            "☆ Add to Favorites"
-                        },
+                        text = if (isFav) "💔 Remove from favorites" else "💖 Add to favorites",
                         color = appActionColor,
                         fontSize = 15.sp
                     )
                 }
 
-                TextButton(
-                    onClick = onAppInfo
-                ) {
+                // custom icon pack picker :3
+                TextButton(onClick = onChangeIcon) {
                     Text(
-                        text = "⚙ App Info",
+                        text = "🎨 Change app icon",
                         color = appActionColor,
                         fontSize = 15.sp
                     )
                 }
 
-                TextButton(
-                    onClick = onChangeIcon
-                ) {
+                // reset custom icon back to default
+                TextButton(onClick = onResetIcon) {
                     Text(
-                        text = "🎀 Change icon",
+                        text = "↺ Reset icon to default",
                         color = appActionColor,
                         fontSize = 15.sp
                     )
                 }
 
-                TextButton(
-                    onClick = onResetIcon
-                ) {
+                // system app details info <3
+                TextButton(onClick = onAppInfo) {
                     Text(
-                        text = "↩ Reset icon",
+                        text = "ℹ️ App info",
                         color = appActionColor,
                         fontSize = 15.sp
                     )
                 }
 
-                TextButton(
-                    onClick = onHideApp
-                ) {
+                // hide app from app drawer :3
+                TextButton(onClick = onHideApp) {
                     Text(
-                        text = "♡ Hide app",
+                        text = "🙈 Hide app",
                         color = appActionColor,
                         fontSize = 15.sp
                     )
@@ -666,19 +582,14 @@ fun AppActionDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = onDismiss
-            ) {
-                Text(
-                    text = "Cancel",
-                    color = appActionColor,
-                    fontWeight = FontWeight.Bold
-                )
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = appActionColor, fontWeight = FontWeight.Bold)
             }
         }
     )
 }
 
+// dialog search picker for manual Kawaii Icon Pack icon assignment <3
 @Composable
 fun KawaiiIconPicker(
     context: Context,
@@ -686,24 +597,19 @@ fun KawaiiIconPicker(
     onIconSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var searchText by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
 
-    val filteredIcons = remember(searchText, iconNames) {
-        if (searchText.isBlank()) {
-            iconNames
+    val filteredIcons = remember(searchQuery, iconNames) {
+        if (searchQuery.isBlank()) {
+            iconNames.take(60)
         } else {
-            iconNames.filter {
-                it.contains(searchText.trim(), ignoreCase = true)
-            }
+            iconNames.filter { it.contains(searchQuery.trim(), ignoreCase = true) }.take(60)
         }
     }
 
     val iconPackContext = remember {
         try {
-            context.createPackageContext(
-                "kawaii.icon.pack",
-                Context.CONTEXT_IGNORE_SECURITY
-            )
+            context.createPackageContext("kawaii.icon.pack", Context.CONTEXT_IGNORE_SECURITY)
         } catch (e: Exception) {
             null
         }
@@ -714,77 +620,49 @@ fun KawaiiIconPicker(
         containerColor = cardBgColor,
         shape = RoundedCornerShape(cardRoundness),
         title = {
-            Text(
-                text = "♡ Choose an icon ♡",
-                fontWeight = FontWeight.Bold,
-                color = appActionColor
-            )
+            Text("Select Kawaii Icon ♡", fontWeight = FontWeight.Bold, color = appActionColor)
         },
         text = {
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Column(modifier = Modifier.height(320.dp)) {
                 OutlinedTextField(
-                    value = searchText,
-                    onValueChange = {
-                        searchText = it
-                    },
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search icon name...") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = {
-                        Text("Search icons ♡")
-                    }
+                    singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(420.dp),
+                    modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(
-                        filteredIcons,
-                        key = { it }
-                    ) { iconName ->
-
-                        val imageBitmap = remember(iconName, iconPackContext) {
-                            if (iconPackContext == null) {
-                                null
-                            } else {
-                                val resourceId =
-                                    iconPackContext.resources.getIdentifier(
-                                        iconName,
-                                        "drawable",
-                                        "kawaii.icon.pack"
-                                    )
-
-                                if (resourceId != 0) {
-                                    val drawable = iconPackContext.resources.getDrawable(
-                                        resourceId,
-                                        null
-                                    )
-                                    drawableToBitmap(drawable).asImageBitmap()
-                                } else {
-                                    null
-                                }
-                            }
+                    items(filteredIcons) { iconName ->
+                        val resId = remember(iconName) {
+                            iconPackContext?.resources?.getIdentifier(iconName, "drawable", "kawaii.icon.pack") ?: 0
                         }
 
-                        if (imageBitmap != null) {
-                            Image(
-                                bitmap = imageBitmap,
-                                contentDescription = iconName,
+                        if (resId != 0 && iconPackContext != null) {
+                            val drawable = remember(resId) {
+                                iconPackContext.resources.getDrawable(resId, null)
+                            }
+
+                            Box(
                                 modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .clickable {
-                                        onIconSelected(iconName)
-                                    }
-                            )
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onIconSelected(iconName) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    bitmap = drawableToBitmap(drawable).asImageBitmap(),
+                                    contentDescription = iconName,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -798,6 +676,7 @@ fun KawaiiIconPicker(
     )
 }
 
+// custom vector drawn Wi-Fi status icon for StatusCard :3
 @Composable
 fun TinyWifiIcon(
     modifier: Modifier = Modifier,
@@ -840,6 +719,7 @@ fun TinyWifiIcon(
     }
 }
 
+// main launcher composable managing focus, gestures, state, and page navigation <3
 @Composable
 fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: Int = 0, appListRefreshCount: Int = 0) {
     val context = LocalContext.current
@@ -854,7 +734,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         addCategory(Intent.CATEGORY_LAUNCHER)
     }
 
-    //Wallpaper Setup
+    // wallpaper selection and persistence state :3
     var wallpaperUri by remember {
         mutableStateOf(
             preferences.getString("wallpaper_uri", null)?.let {
@@ -871,13 +751,13 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         if (uri != null) {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-            // remember wallpaper uri in prefs
             preferences.edit()
                 .putString("wallpaper_uri", uri.toString())
                 .apply()
         }
     }
 
+    // memory-efficient sampled wallpaper loader <3
     LaunchedEffect(wallpaperUri) {
         val uri = wallpaperUri ?: run {
             wallpaperBitmap = null
@@ -922,6 +802,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
     var apps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
 
+    // queries installed apps and applies KawaiiIconPack automatic mappings :3
     LaunchedEffect(appListRefreshCount) {
         apps = withContext(Dispatchers.Default) {
             val kawaiiIconContext = try {
@@ -947,6 +828,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         }
     }
 
+    // async load icon names list for icon picker <3
     LaunchedEffect(iconEditingApp) {
         if (iconEditingApp != null) {
             kawaiiIconNames = withContext(Dispatchers.Default) {
@@ -985,12 +867,21 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         selectedDrawerIndex = selectedDrawerIndex.coerceIn(0, (visibleApps.size - 1).coerceAtLeast(0))
     }
 
-    LaunchedEffect(selectedDrawerIndex, drawerOpen) {
+    // auto scroll to highlighted item in app drawer :3
+    LaunchedEffect(selectedDrawerIndex, drawerOpen, visibleApps.size) {
         if (drawerOpen && visibleApps.isNotEmpty()) {
-            listState.animateScrollToItem(selectedDrawerIndex)
+            val visibleItems = listState.layoutInfo.visibleItemsInfo
+            val selectedItem = visibleItems.firstOrNull {
+                it.index == selectedDrawerIndex
+            }
+
+            if (selectedItem == null) {
+                listState.animateScrollToItem(selectedDrawerIndex)
+            }
         }
     }
 
+    // focus requester handling for physical hardware key navigation <3
     LaunchedEffect(drawerOpen, chatPageOpen, selectedApp, wallpaperMenuOpen, iconPickerOpen) {
         if (!drawerOpen && !chatPageOpen && selectedApp == null && !wallpaperMenuOpen && !iconPickerOpen) {
             focusRequester.requestFocus()
@@ -999,6 +890,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         }
     }
 
+    // physical home button press brings user back to home screen :3
     LaunchedEffect(homePressCount) {
         if (homePressCount > 0) {
             drawerOpen = false
@@ -1010,6 +902,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         mutableStateMapOf<String, Bitmap>()
     }
 
+    // loads and caches custom app icons in memory <3
     LaunchedEffect(apps, iconRefreshKey) {
         val iconPackContext = try {
             context.createPackageContext(
@@ -1148,7 +1041,9 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             .combinedClickable(
                 onClick = {},
                 onLongClick = {
-                    wallpaperMenuOpen = true
+                    if (!chatPageOpen && !drawerOpen) {
+                        wallpaperMenuOpen = true
+                    }
                 }
             )
     ) {
@@ -1161,7 +1056,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             )
         }
 
-        //cute stickies 4 bg
+        // cute sticker decorations :3
         StickerExplosion()
 
         Column(
@@ -1202,7 +1097,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // what to draw when app drawer closed/at home
+            // main launcher cards on home screen <3
             if (!drawerOpen && !chatPageOpen) {
                 GreetingCard(context = context)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1223,6 +1118,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 )
             }
 
+            // long-press wallpaper menu dialog :3
             if (wallpaperMenuOpen) {
                 AlertDialog(
                     onDismissRequest = {
@@ -1291,6 +1187,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 )
             }
 
+            // AI assistant chat page overlay <3
             if (chatPageOpen && !drawerOpen) {
                 ChatPlaceholderPage(
                     onBack = {
@@ -1299,7 +1196,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 )
             }
 
-            //Selected app
+            // app options long-press dialog :3
             if (selectedApp != null) {
                 AppActionDialog(
                     app = selectedApp!!,
@@ -1390,6 +1287,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 )
             }
 
+            // custom KawaiiIconPack icon picker dialog <3
             if (iconPickerOpen && iconEditingApp != null) {
                 KawaiiIconPicker(
                     context = context,
@@ -1411,7 +1309,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 )
             }
 
-
+            // app drawer view overlay :3
             if (drawerOpen) {
                 AppDrawerHeader(
                     onSwipeDown = { drawerOpen = false }
@@ -1422,13 +1320,9 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFFF8F0FF))
-                        .border(
-                            width = 2.dp,
-                            color = Color(0xFFCE93D8),
-                            shape = RoundedCornerShape(16.dp)
-                        ),
+                        .clip(RoundedCornerShape(cardRoundness))
+                        .background(Color.Transparent)
+                        .padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     itemsIndexed(

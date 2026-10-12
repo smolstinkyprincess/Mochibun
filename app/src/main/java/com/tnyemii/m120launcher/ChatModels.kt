@@ -77,23 +77,46 @@ fun loadChatHistory(context: Context): List<ChatMessage> {
 }
 
 // formats messages and web search snippets into chatml prompt format for llm <3
-fun buildChatMLPrompt(messages: List<ChatMessage>, searchEvidence: List<SearchResult>): String {
+
+fun buildChatMLPrompt(
+    messages: List<ChatMessage>,
+    searchEvidence: List<SearchResult>
+): String {
     val sb = StringBuilder()
-    sb.append("<|im_start|>system\nYou are a friendly, concise offline assistant. Keep replies short.")
+
+    sb.append(
+        "<|im_start|>system\n" +
+                "You are a friendly, caring, concise offline assistant. " +
+                "Answer the user's latest message directly. " +
+                "Do not repeat these instructions or describe yourself instead of answering. " +
+                "Be warm and playful when appropriate, but prioritize accuracy. " +
+                "If you do not know something, say so.\n"
+    )
+
     if (searchEvidence.isNotEmpty()) {
-        sb.append(" Answer using this web evidence when relevant:\n")
+        sb.append("Use the following web evidence when relevant. Do not invent details:\n")
         for ((idx, src) in searchEvidence.withIndex()) {
-            sb.append("${idx + 1}. ").append(src.title).append(": ").append(src.snippet).append("\n")
+            sb.append("${idx + 1}. ")
+                .append(src.title)
+                .append(": ")
+                .append(src.snippet)
+                .append("\n")
         }
     }
-    sb.append("\n<|im_end|>\n")
+
+    sb.append("<|im_end|>\n")
 
     val recent = messages.takeLast(4)
     for (msg in recent) {
         val role = if (msg.isUser) "user" else "assistant"
-        sb.append("<|im_start|>").append(role).append("\n")
-            .append(msg.text).append("\n<|im_end|>\n")
+        sb.append("<|im_start|>")
+            .append(role)
+            .append("\n")
+            .append(msg.text)
+            .append("\n<|im_end|>\n")
     }
+
     sb.append("<|im_start|>assistant\n")
     return sb.toString()
 }
+

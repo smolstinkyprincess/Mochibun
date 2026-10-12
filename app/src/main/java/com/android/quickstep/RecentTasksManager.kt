@@ -28,9 +28,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import java.lang.reflect.Method
 
-/**
- * Data class representing a recent task for display in RecentsActivity.
- */
+// holds information about a recent app task to display in recents switcher :3
 data class RecentTaskInfo(
     val taskId: Int,
     val title: String,
@@ -40,25 +38,22 @@ data class RecentTaskInfo(
     val baseIntent: Intent?
 )
 
-/**
- * Helper class to fetch and manage recent tasks for Quickstep/Recents.
- */
+// manages querying, launching, and dismissing recent tasks via system services <3
 class RecentTasksManager(private val context: Context) {
 
     private val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     private val packageManager = context.packageManager
 
-    /**
-     * Retrieves the list of recent tasks.
-     */
+    // fetches up to maxNum recent tasks using ActivityManager <3
     fun getRecentTasks(maxNum: Int = 15): List<RecentTaskInfo> {
         val result = mutableListOf<RecentTaskInfo>()
         try {
-            // First try using ActivityManager.getRecentTasks via reflection or public API
+            // query active recent tasks from system ActivityManager :3
             val recentTasks = activityManager.getRecentTasks(maxNum, ActivityManager.RECENT_IGNORE_UNAVAILABLE)
             val currentPackage = context.packageName
 
             for (rawInfo in recentTasks) {
+                // get persistent task ID depending on SDK version
                 val taskId = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     rawInfo.taskId
                 } else {
@@ -70,7 +65,7 @@ class RecentTasksManager(private val context: Context) {
                 val component = baseIntent.component ?: rawInfo.origActivity
                 val pkgName = component?.packageName ?: baseIntent.`package` ?: continue
 
-                // Skip our own launcher from recent tasks list if desired
+                // exclude our launcher home activity from recents overview <3
                 if (pkgName == currentPackage && baseIntent.hasCategory(Intent.CATEGORY_HOME)) {
                     continue
                 }
@@ -78,6 +73,7 @@ class RecentTasksManager(private val context: Context) {
                 var title = rawInfo.description?.toString() ?: ""
                 var icon: Drawable? = null
 
+                // load label and icon for app package :3
                 try {
                     val appInfo = packageManager.getApplicationInfo(pkgName, 0)
                     if (title.isEmpty()) {
@@ -88,7 +84,7 @@ class RecentTasksManager(private val context: Context) {
                     if (title.isEmpty()) title = pkgName
                 }
 
-                // Attempt to fetch task thumbnail via reflection if available on API 31 / MTK
+                // fetch task snapshot thumbnail using reflection if supported
                 val thumbnailBitmap = getTaskThumbnail(taskId)
 
                 result.add(
@@ -108,12 +104,10 @@ class RecentTasksManager(private val context: Context) {
         return result
     }
 
-    /**
-     * Attempts to fetch task thumbnail snapshot via reflection on ActivityManager/ActivityTaskManager.
-     */
+    // attempts to extract hardware buffer task snapshot bitmap via reflection <3
     private fun getTaskThumbnail(taskId: Int): ImageBitmap? {
         try {
-            // ActivityManager.getTaskSnapshot(taskId, isLowResolution)
+            // invoke getTaskSnapshot on ActivityManager
             val getTaskSnapshotMethod: Method? = try {
                 ActivityManager::class.java.getMethod("getTaskSnapshot", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
             } catch (e: Exception) {
@@ -142,17 +136,15 @@ class RecentTasksManager(private val context: Context) {
                 }
             }
         } catch (e: Throwable) {
-            // Fail silently if snapshot reflection is unavailable
+            // fail gracefully if snapshot reflection is unavailable
         }
         return null
     }
 
-    /**
-     * Launches the task specified by taskId.
-     */
+    // switches back to selected recent task or opens app intent :3
     fun launchTask(task: RecentTaskInfo): Boolean {
         try {
-            // Try ActivityManager.startActivityFromRecents via reflection or public intent
+            // attempt reflection method startActivityFromRecents <3
             val startActivityFromRecentsMethod: Method? = try {
                 ActivityManager::class.java.getMethod(
                     "startActivityFromRecents",
@@ -169,7 +161,7 @@ class RecentTasksManager(private val context: Context) {
                 return true
             }
 
-            // Fallback: start task's base intent or launch intent
+            // fallback: launch app via standard launch intent
             val intent = task.baseIntent ?: packageManager.getLaunchIntentForPackage(task.packageName)
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
@@ -182,9 +174,7 @@ class RecentTasksManager(private val context: Context) {
         return false
     }
 
-    /**
-     * Removes the task from recents.
-     */
+    // removes task from recents stack via system ActivityManager :3
     fun removeTask(taskId: Int) {
         try {
             val removeTaskMethod: Method? = try {

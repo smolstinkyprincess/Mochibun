@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <android/log.h>
 #include "llama.h"
 
 static std::mutex g_llm_mutex;
@@ -112,12 +113,19 @@ Java_com_tnyemii_m120launcher_NativeLlm_generate(
                     tokens.resize((size_t)n);
                     llama_sampler* sampler =
                         llama_sampler_chain_init(llama_sampler_chain_default_params());
-                    llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+                    llama_sampler_chain_add(sampler, llama_sampler_init_temp(0.7f));
+                    llama_sampler_chain_add(sampler, llama_sampler_init_dist(1234));
 
                     llama_batch batch = llama_batch_get_one(tokens.data(), n);
                     if (llama_decode(ctx, batch) == 0) {
                         for (int i = 0; i < 100; ++i) {
                             llama_token token = llama_sampler_sample(sampler, ctx, -1);
+                            __android_log_print(
+                                    ANDROID_LOG_INFO,
+                                    "M120LLM",
+                                    "generated token id: %d",
+                                    (int)token
+                            );
                             if (llama_vocab_is_eog(vocab, token)) break;
 
                             char piece[256];
