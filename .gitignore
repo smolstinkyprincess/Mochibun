@@ -113,3 +113,6 @@ desktop.ini
 .externalNativeBuild
 .cxx
 local.properties
+
+# reference folder for agents
+reference/
