@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+// mascot assistant expression states :3
 enum class MascotExpression {
     IDLE,
     THINKING,
@@ -26,127 +27,240 @@ enum class MascotExpression {
     OFFLINE
 }
 
+// custom vector-drawn pixel art bunny mascot with animated bouncing and expressions <3
 @Composable
 fun PixelArtMascot(
     expression: MascotExpression,
     modifier: Modifier = Modifier,
     size: Dp = 40.dp
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "mascot_anim")
-    val bounce by infiniteTransition.animateFloat(
+    // idle bouncing transition animation :3
+    val transition = rememberInfiniteTransition(label = "bunny")
+    val bounce by transition.animateFloat(
         initialValue = 0f,
-        targetValue = if (expression == MascotExpression.IDLE || expression == MascotExpression.THINKING) 3f else 0f,
+        targetValue = if (expression == MascotExpression.IDLE ||
+            expression == MascotExpression.THINKING) -2.5f else 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
+            animation = tween(850, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "mascot_bounce"
+        label = "bunny_bounce"
     )
 
     Canvas(modifier = modifier.size(size)) {
-        val w = size.toPx()
-        val h = size.toPx()
-        val yOffset = bounce
+        val unit = this.size.minDimension
+        val cx = this.size.width / 2f
+        val cy = this.size.height * 0.57f + bounce
+        val s = unit / 40f
 
-        val bodyColor = Color(0xFFFFC2F0) // pastel pink
-        val outlineColor = Color(0xFF9B5FA5) // soft lavender / purple
-        val faceColor = Color(0xFF684A7C)
+        fun p(x: Float, y: Float) = Offset(cx + x * s, cy + y * s)
 
-        val bodyRadius = w * 0.35f
-        val centerX = w * 0.5f
-        val centerY = h * 0.55f + yOffset
+        val pink = Color(0xFFFFC9E6)
+        val lightPink = Color(0xFFFFE4F2)
+        val outline = Color(0xFFAC79B8)
+        val dark = Color(0xFF60466F)
+        val cheek = Color(0xFFFF91C3)
+        val white = Color(0xFFFFFFFF)
 
-        // Ears
-        val earPath = Path().apply {
-            // Left ear
-            moveTo(centerX - bodyRadius * 0.8f, centerY - bodyRadius * 0.2f)
-            lineTo(centerX - bodyRadius * 1.1f, centerY - bodyRadius * 0.9f)
-            lineTo(centerX - bodyRadius * 0.2f, centerY - bodyRadius * 0.7f)
-            close()
-            // Right ear
-            moveTo(centerX + bodyRadius * 0.8f, centerY - bodyRadius * 0.2f)
-            lineTo(centerX + bodyRadius * 1.1f, centerY - bodyRadius * 0.9f)
-            lineTo(centerX + bodyRadius * 0.2f, centerY - bodyRadius * 0.7f)
-            close()
-        }
-        drawPath(earPath, bodyColor)
-        drawPath(earPath, outlineColor, style = Stroke(width = 2.dp.toPx()))
-
-        // Head/Body circle
-        drawCircle(
-            color = bodyColor,
-            radius = bodyRadius,
-            center = Offset(centerX, centerY)
+        // bunny ears <3
+        drawOval(
+            color = outline,
+            topLeft = p(-13f, -27f),
+            size = androidx.compose.ui.geometry.Size(9f * s, 19f * s)
         )
-        drawCircle(
-            color = outlineColor,
-            radius = bodyRadius,
-            center = Offset(centerX, centerY),
-            style = Stroke(width = 2.dp.toPx())
+        drawOval(
+            color = pink,
+            topLeft = p(-12f, -27f),
+            size = androidx.compose.ui.geometry.Size(7f * s, 17f * s)
+        )
+        drawOval(
+            color = outline,
+            topLeft = p(4f, -27f),
+            size = androidx.compose.ui.geometry.Size(9f * s, 19f * s)
+        )
+        drawOval(
+            color = pink,
+            topLeft = p(5f, -27f),
+            size = androidx.compose.ui.geometry.Size(7f * s, 17f * s)
         )
 
-        // Face features based on expression
+        // head and body :3
+        drawOval(
+            color = outline,
+            topLeft = p(-17f, -18f),
+            size = androidx.compose.ui.geometry.Size(34f * s, 34f * s)
+        )
+        drawOval(
+            color = pink,
+            topLeft = p(-16f, -17f),
+            size = androidx.compose.ui.geometry.Size(32f * s, 32f * s)
+        )
+
+        // tiny paws <3
+        drawCircle(color = outline, radius = 5f * s, center = p(-10f, 13f))
+        drawCircle(color = outline, radius = 5f * s, center = p(10f, 13f))
+        drawCircle(color = lightPink, radius = 4f * s, center = p(-10f, 12f))
+        drawCircle(color = lightPink, radius = 4f * s, center = p(10f, 12f))
+
+        // blush cheeks :3
+        drawOval(
+            color = cheek.copy(alpha = 0.8f),
+            topLeft = p(-13f, -1f),
+            size = androidx.compose.ui.geometry.Size(7f * s, 4f * s)
+        )
+        drawOval(
+            color = cheek.copy(alpha = 0.8f),
+            topLeft = p(6f, -1f),
+            size = androidx.compose.ui.geometry.Size(7f * s, 4f * s)
+        )
+
+        // facial expressions based on current mascot state <3
         when (expression) {
             MascotExpression.IDLE -> {
-                drawEye(centerX - bodyRadius * 0.3f, centerY - bodyRadius * 0.1f, faceColor, isClosed = true)
-                drawEye(centerX + bodyRadius * 0.3f, centerY - bodyRadius * 0.1f, faceColor, isClosed = true)
-                drawSmile(centerX, centerY + bodyRadius * 0.2f, faceColor)
+                drawSparkleEye(p(-6f, -5f), s, dark, white)
+                drawSparkleEye(p(6f, -5f), s, dark, white)
+                drawTinySmile(p(0f, 2f), s, dark)
             }
+
             MascotExpression.THINKING -> {
-                drawEye(centerX - bodyRadius * 0.3f, centerY - bodyRadius * 0.1f, faceColor, isClosed = false)
-                drawEye(centerX + bodyRadius * 0.3f, centerY - bodyRadius * 0.15f, faceColor, isClosed = false)
-                drawOpenMouth(centerX, centerY + bodyRadius * 0.25f, faceColor)
+                drawSparkleEye(p(-6f, -5f), s, dark, white)
+                drawCircle(dark, 2.1f * s, p(6f, -5f))
+                drawCircle(white, 0.7f * s, p(6.5f, -5.7f))
+                drawCircle(dark, 1.6f * s, p(0f, 2f))
+                // thought sparkles
+                drawStar(p(16f, -19f), 3f * s, Color(0xFFFFB6D9))
+                drawCircle(Color(0xFFD9B7FF), 1.3f * s, p(19f, -12f))
             }
+
             MascotExpression.RESPONDING -> {
-                drawEye(centerX - bodyRadius * 0.3f, centerY - bodyRadius * 0.1f, faceColor, isClosed = true)
-                drawEye(centerX + bodyRadius * 0.3f, centerY - bodyRadius * 0.1f, faceColor, isClosed = true)
-                drawWideSmile(centerX, centerY + bodyRadius * 0.2f, faceColor)
+                drawHappyEye(p(-6f, -5f), s, dark)
+                drawHappyEye(p(6f, -5f), s, dark)
+                drawOval(
+                    color = dark,
+                    topLeft = p(-3f, 0f),
+                    size = androidx.compose.ui.geometry.Size(6f * s, 5f * s)
+                )
+                drawOval(
+                    color = Color(0xFFFF8DBB),
+                    topLeft = p(-1.5f, 2f),
+                    size = androidx.compose.ui.geometry.Size(3f * s, 2f * s)
+                )
+                drawStar(p(-17f, -17f), 3f * s, Color(0xFFFFD36E))
+                drawStar(p(17f, -18f), 3f * s, Color(0xFFD6B2FF))
             }
+
             MascotExpression.OFFLINE -> {
-                drawSleepyEye(centerX - bodyRadius * 0.3f, centerY - bodyRadius * 0.05f, faceColor)
-                drawSleepyEye(centerX + bodyRadius * 0.3f, centerY - bodyRadius * 0.05f, faceColor)
-                drawFlatMouth(centerX, centerY + bodyRadius * 0.25f, faceColor)
+                drawClosedEye(p(-6f, -5f), s, dark)
+                drawClosedEye(p(6f, -5f), s, dark)
+                drawTinySmile(p(0f, 2f), s, dark)
+                // sleepy zzz bubble
+                drawCircle(Color(0xFFD6B2FF), 2f * s, p(17f, -17f))
+                drawCircle(Color(0xFFE8D8FF), 1.2f * s, p(21f, -22f))
             }
         }
+
+        // heart nose :3
+        drawHeart(p(0f, -1f), 2f * s, Color(0xFFFF76B5))
     }
 }
 
-private fun DrawScope.drawEye(x: Float, y: Float, color: Color, isClosed: Boolean) {
-    if (isClosed) {
-        val path = Path().apply {
-            moveTo(x - 5f, y + 3f)
-            quadraticTo(x, y - 4f, x + 5f, y + 3f)
-        }
-        drawPath(path, color, style = Stroke(width = 2f))
-    } else {
-        drawCircle(color, radius = 3.5f, center = Offset(x, y))
-    }
+// draws anime sparkle eye with catchlight highlights <3
+private fun DrawScope.drawSparkleEye(
+    center: Offset,
+    scale: Float,
+    dark: Color,
+    shine: Color
+) {
+    drawCircle(dark, 3.2f * scale, center)
+    drawCircle(shine, 1.25f * scale, center + Offset(-0.8f * scale, -1f * scale))
+    drawCircle(shine, 0.55f * scale, center + Offset(1.4f * scale, 1f * scale))
 }
 
-private fun DrawScope.drawSleepyEye(x: Float, y: Float, color: Color) {
-    drawLine(color, start = Offset(x - 4f, y), end = Offset(x + 4f, y), strokeWidth = 2f)
-}
-
-private fun DrawScope.drawSmile(x: Float, y: Float, color: Color) {
+// draws happy curved eye arch :3
+private fun DrawScope.drawHappyEye(
+    center: Offset,
+    scale: Float,
+    color: Color
+) {
     val path = Path().apply {
-        moveTo(x - 6f, y - 2f)
-        quadraticTo(x, y + 5f, x + 6f, y - 2f)
+        moveTo(center.x - 3f * scale, center.y + 1f * scale)
+        quadraticTo(
+            center.x, center.y - 4f * scale,
+            center.x + 3f * scale, center.y + 1f * scale
+        )
     }
-    drawPath(path, color, style = Stroke(width = 2f))
+    drawPath(path, color, style = Stroke(width = 1.7f * scale))
 }
 
-private fun DrawScope.drawWideSmile(x: Float, y: Float, color: Color) {
+// draws closed sleeping eye arc <3
+private fun DrawScope.drawClosedEye(
+    center: Offset,
+    scale: Float,
+    color: Color
+) {
     val path = Path().apply {
-        moveTo(x - 8f, y - 3f)
-        quadraticTo(x, y + 8f, x + 8f, y - 3f)
+        moveTo(center.x - 2.5f * scale, center.y)
+        quadraticTo(
+            center.x, center.y + 2f * scale,
+            center.x + 2.5f * scale, center.y
+        )
     }
-    drawPath(path, color, style = Stroke(width = 2f))
+    drawPath(path, color, style = Stroke(width = 1.4f * scale))
 }
 
-private fun DrawScope.drawOpenMouth(x: Float, y: Float, color: Color) {
-    drawCircle(color, radius = 3f, center = Offset(x, y))
+// draws tiny curved smile mouth :3
+private fun DrawScope.drawTinySmile(
+    center: Offset,
+    scale: Float,
+    color: Color
+) {
+    val path = Path().apply {
+        moveTo(center.x - 2f * scale, center.y)
+        quadraticTo(
+            center.x, center.y + 2.5f * scale,
+            center.x + 2f * scale, center.y
+        )
+    }
+    drawPath(path, color, style = Stroke(width = 1.3f * scale))
 }
 
-private fun DrawScope.drawFlatMouth(x: Float, y: Float, color: Color) {
-    drawLine(color, start = Offset(x - 4f, y), end = Offset(x + 4f, y), strokeWidth = 2f)
+// draws 5-pointed decorative star sparkle <3
+private fun DrawScope.drawStar(
+    center: Offset,
+    radius: Float,
+    color: Color
+) {
+    val path = Path()
+    for (i in 0 until 10) {
+        val angle = Math.PI * i / 5.0 - Math.PI / 2.0
+        val r = if (i % 2 == 0) radius else radius * 0.42f
+        val x = center.x + kotlin.math.cos(angle).toFloat() * r
+        val y = center.y + kotlin.math.sin(angle).toFloat() * r
+        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    }
+    path.close()
+    drawPath(path, color)
+}
+
+// draws heart shape :3
+private fun DrawScope.drawHeart(
+    center: Offset,
+    radius: Float,
+    color: Color
+) {
+    val path = Path().apply {
+        moveTo(center.x, center.y + radius)
+        cubicTo(
+            center.x - radius * 2f, center.y - radius * 0.2f,
+            center.x - radius, center.y - radius * 1.5f,
+            center.x, center.y - radius * 0.45f
+        )
+        cubicTo(
+            center.x + radius, center.y - radius * 1.5f,
+            center.x + radius * 2f, center.y - radius * 0.2f,
+            center.x, center.y + radius
+        )
+        close()
+    }
+    drawPath(path, color)
 }

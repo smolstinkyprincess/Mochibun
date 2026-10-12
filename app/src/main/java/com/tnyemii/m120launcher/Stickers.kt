@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// vector-drawn heart sticker with thick white border outline :3
 @Composable
 fun HeartSticker(
     size: Dp = 42.dp,
@@ -62,13 +63,13 @@ fun HeartSticker(
             )
         }
 
-        // white sticker border
+        // white sticker border <3
         drawPath(
             path = path,
             color = Color.White
         )
 
-        // pink heart
+        // inner pink heart :3
         scale(
             scaleX = 0.78f,
             scaleY = 0.78f,
@@ -82,6 +83,7 @@ fun HeartSticker(
     }
 }
 
+// vector-drawn ribbon bow sticker with white border outline <3
 @Composable
 fun BowSticker(
     size: Dp = 64.dp,
@@ -97,7 +99,7 @@ fun BowSticker(
         val w = this.size.width
         val h = this.size.height
 
-        // Left bow loop
+        // left bow loop :3
         val leftLoop = Path().apply {
             moveTo(w * 0.46f, h * 0.45f)
 
@@ -116,7 +118,7 @@ fun BowSticker(
             close()
         }
 
-        // Right bow loop
+        // right bow loop <3
         val rightLoop = Path().apply {
             moveTo(w * 0.54f, h * 0.45f)
 
@@ -135,7 +137,7 @@ fun BowSticker(
             close()
         }
 
-        // Ribbon tails
+        // ribbon tails :3
         val leftTail = Path().apply {
             moveTo(w * 0.43f, h * 0.55f)
             lineTo(w * 0.20f, h * 0.95f)
@@ -150,13 +152,13 @@ fun BowSticker(
             close()
         }
 
-        // White sticker outline
+        // white sticker outline <3
         drawPath(leftLoop, Color.White)
         drawPath(rightLoop, Color.White)
         drawPath(leftTail, Color.White)
         drawPath(rightTail, Color.White)
 
-        // Colored bow
+        // colored bow loops and tails :3
         scale(
             scaleX = 0.80f,
             scaleY = 0.80f,
@@ -168,7 +170,7 @@ fun BowSticker(
             drawPath(rightTail, color)
         }
 
-        // Center knot
+        // center knot <3
         drawCircle(
             color = Color.White,
             radius = w * 0.13f,
@@ -183,6 +185,7 @@ fun BowSticker(
     }
 }
 
+// vector-drawn 4-pointed sparkle sticker :3
 @Composable
 fun SparkleSticker(
     size: Dp = 36.dp,
@@ -200,31 +203,23 @@ fun SparkleSticker(
 
         val sparkle = Path().apply {
             moveTo(w * 0.50f, 0f)
-
             lineTo(w * 0.63f, h * 0.37f)
-
             lineTo(w, h * 0.50f)
-
             lineTo(w * 0.63f, h * 0.63f)
-
             lineTo(w * 0.50f, h)
-
             lineTo(w * 0.37f, h * 0.63f)
-
             lineTo(0f, h * 0.50f)
-
             lineTo(w * 0.37f, h * 0.37f)
-
             close()
         }
 
-        // White sticker border
+        // white sticker border <3
         drawPath(
             path = sparkle,
             color = Color.White
         )
 
-        // Colored center
+        // colored center :3
         scale(
             scaleX = 0.72f,
             scaleY = 0.72f,
@@ -238,6 +233,7 @@ fun SparkleSticker(
     }
 }
 
+// vector-drawn fluffy cloud sticker <3
 @Composable
 fun CloudSticker(
     width: Dp = 82.dp,
@@ -255,31 +251,30 @@ fun CloudSticker(
         val h = size.height
 
         val cloud = Path().apply {
-            // Start at the bottom-left
             moveTo(w * 0.15f, h * 0.70f)
 
-            // Left bump
+            // left bump :3
             cubicTo(
                 w * 0.02f, h * 0.45f,
                 w * 0.15f, h * 0.20f,
                 w * 0.35f, h * 0.32f
             )
 
-            // Big middle bump
+            // top middle bump <3
             cubicTo(
                 w * 0.38f, h * 0.02f,
                 w * 0.68f, h * 0.02f,
                 w * 0.72f, h * 0.34f
             )
 
-            // Right bump
+            // right bump :3
             cubicTo(
                 w * 0.95f, h * 0.25f,
                 w * 1.02f, h * 0.52f,
                 w * 0.88f, h * 0.70f
             )
 
-            // Bottom
+            // bottom edge <3
             cubicTo(
                 w * 0.72f, h * 0.88f,
                 w * 0.30f, h * 0.88f,
@@ -289,13 +284,13 @@ fun CloudSticker(
             close()
         }
 
-        // White sticker border
+        // white sticker border :3
         drawPath(
             path = cloud,
             color = Color.White
         )
 
-        // Colored cloud
+        // colored cloud body <3
         scale(
             scaleX = 0.82f,
             scaleY = 0.78f,
@@ -309,6 +304,7 @@ fun CloudSticker(
     }
 }
 
+// vector-drawn 5-petal flower sticker :3
 @Composable
 fun FlowerSticker(
     size: Dp = 42.dp,
@@ -324,7 +320,7 @@ fun FlowerSticker(
     ) {
         val radius = minOf(this.size.width, this.size.height) / 2f
 
-        // White sticker outline
+        // white sticker outline for petals <3
         for (i in 0 until 5) {
             rotate(i * 72f) {
                 drawOval(
@@ -341,7 +337,7 @@ fun FlowerSticker(
             }
         }
 
-        // Colored petals
+        // colored petals :3
         for (i in 0 until 5) {
             rotate(i * 72f) {
                 drawOval(
@@ -358,13 +354,12 @@ fun FlowerSticker(
             }
         }
 
-        // White outline around center
+        // center circle <3
         drawCircle(
             color = Color.White,
             radius = radius * 0.25f
         )
 
-        // Flower center
         drawCircle(
             color = centerColor,
             radius = radius * 0.17f
@@ -372,13 +367,14 @@ fun FlowerSticker(
     }
 }
 
+// decorative sticker layout scatter overlay on launcher background :3
 @Composable
 fun StickerExplosion() {
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
 
-        // ───── custom stickers ─────
+        // custom vector stickers scattering across wallpaper <3
 
         HeartSticker(
             size = 96.dp,
@@ -475,7 +471,7 @@ fun StickerExplosion() {
         )
 
 
-        // ───── tiny top-left accents ─────
+        // tiny top-left sparkle/heart text accents :3
 
         Text(
             text = "♡",
@@ -505,7 +501,7 @@ fun StickerExplosion() {
         )
 
 
-        // ───── tiny top-right accents ─────
+        // tiny top-right accents <3
 
         Text(
             text = "✧",
@@ -526,7 +522,7 @@ fun StickerExplosion() {
         )
 
 
-        // ───── left-middle accents ─────
+        // left-middle accents :3
 
         Text(
             text = "♥",
@@ -556,7 +552,7 @@ fun StickerExplosion() {
         )
 
 
-        // ───── right-middle accents ─────
+        // right-middle accents <3
 
         Text(
             text = "♡",
@@ -586,7 +582,7 @@ fun StickerExplosion() {
         )
 
 
-        // ───── tiny floating decorations ─────
+        // floating decorative accents :3
 
         Text(
             text = "✦",

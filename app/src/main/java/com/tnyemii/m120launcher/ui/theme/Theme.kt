@@ -1,4 +1,3 @@
-
 package com.tnyemii.m120launcher.ui.theme
 
 import android.app.Activity
@@ -13,6 +12,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+// light pastel pink theme color scheme :3
 private val PinkLightColorScheme = lightColorScheme(
     primary = PinkPrimary,
     onPrimary = PinkOnPrimary,
@@ -25,6 +25,7 @@ private val PinkLightColorScheme = lightColorScheme(
     onSurface = ThemeOnSurface
 )
 
+// dark theme fallback color scheme <3
 private val PinkDarkColorScheme = darkColorScheme(
     primary = PinkPrimary,
     onPrimary = PinkOnPrimary,
@@ -37,6 +38,7 @@ private val PinkDarkColorScheme = darkColorScheme(
     onSurface = ThemeBackground
 )
 
+// root theme wrapper configuring system bar colors and typography :3
 @Composable
 fun M120LauncherTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -53,6 +55,7 @@ fun M120LauncherTheme(
 
     val view = LocalView.current
 
+    // configure edge-to-edge system status and navigation bars <3
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window

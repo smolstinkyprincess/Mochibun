@@ -28,14 +28,13 @@ import android.util.Log
 import com.android.systemui.shared.recents.IOverviewProxy
 import com.android.systemui.shared.recents.ISystemUiProxy
 
-/**
- * Service connected by System UI for handling touch interaction and Quickstep recents.
- */
+// system UI service handling gesture touch interactions and opening quickstep recents :3
 class TouchInteractionService : Service() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var systemUiProxy: ISystemUiProxy? = null
 
+    // IPC binder proxy interface connecting launcher recents to Android SystemUI <3
     private val binder = object : IOverviewProxy.Stub() {
 
         override fun onInitialize(bundle: Bundle?) {
@@ -45,6 +44,7 @@ class TouchInteractionService : Service() {
             sIsInitialized = true
         }
 
+        // called when overview recents gesture or button is triggered :3
         override fun onOverviewToggle() {
             Log.d(TAG, "onOverviewToggle called from SystemUI")
             showRecentsActivity()
@@ -102,6 +102,7 @@ class TouchInteractionService : Service() {
         return super.onUnbind(intent)
     }
 
+    // launches RecentsActivity on the main thread <3
     private fun showRecentsActivity() {
         mainHandler.post {
             try {

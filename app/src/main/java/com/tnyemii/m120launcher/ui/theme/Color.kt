@@ -2,6 +2,7 @@ package com.tnyemii.m120launcher.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+// pastel pink and lavender color palette for kawaii launcher aesthetic :3
 val bgColor = Color(0xFFFFEAF5)
 val fgTextColor = Color(0xFF9B5FA5)
 
@@ -17,7 +18,7 @@ val favoritesColor = Color(0xFFE675FF)
 val accentColor = Color(0xFFFFFFFF)
 val appActionColor = Color(0xFF9B5FA5)
 
-// Material theme colors
+// material design 3 color definitions <3
 val PinkPrimary = Color(0xFFD791E3)
 val PinkOnPrimary = Color(0xFF4E2858)
 val LavenderSecondary = Color(0xFFA975B2)
