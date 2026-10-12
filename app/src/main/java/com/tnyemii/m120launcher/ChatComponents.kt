@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -656,7 +658,7 @@ fun ChatPlaceholderPage(
                                                 reply = if (resolvedModelPath.isEmpty()) {
                                                     "Could not reach Ollama on PC (100.103.158.68:11434) and no local SmolLM2 model file is selected. Please select a model file or check Tailscale/PC. ♡"
                                                 } else {
-                                                    "Could not reach Ollama on PC and local SmolLM2 inference failed. ♡"
+                                                    "Could not reach Ollama on PC andddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd                                                                                                                                 d local SmolLM2 inference failed. ♡"
                                                 }
                                             }
                                         }
@@ -1342,6 +1344,9 @@ fun tryOllama(
     enableReasoning: Boolean = false,
     showReasoning: Boolean = false
 ): String? {
+    //Testing ollama
+    Log.e("M120Ollama", "tryOllama was called")
+
     var connection: HttpURLConnection? = null
     return try {
         val url = URL("http://100.103.158.68:11434/api/chat")
@@ -1393,8 +1398,13 @@ fun tryOllama(
             os.write(input, 0, input.size)
         }
 
-        if (connection.respo                        nseCode != 200) {
-            return null
+        if (connection.responseCode != 200) {
+            val errorCode = connection.responseCode
+            val errorBody = connection.errorStream
+                ?.bufferedReader()
+                ?.use { it.readText() }
+                .orEmpty()
+
         }
 
         val responseString = connection.inputStream.bufferedReader().use { it.readText() }
@@ -1402,12 +1412,25 @@ fun tryOllama(
         val rootObj = JSONObject(responseString)
         val messageObj = rootObj.optJSONObject("message")
 
+        val content = messageObj?.optString("content").orEmpty()
+            .ifBlank { rootObj.optString("response", "") }
+        val thinkingText = messageObj?.optString("thinking").orEmpty()
+
         val resultText = StringBuilder()
-        if (showReasoning && !thinkingText.isNullOrBlank()) {
-            resultText.append("💭 *Thinking process:*\n")
+        if (showReasoning && thinkingText.isNotBlank()) {
+            resultText.append("💭 Thinking process:\n")
             resultText.append(thinkingText.trim())
-            resultText.append("\n\n")
+            if (content.isNotBlank()) resultText.append("\n\n")
         }
         resultText.append(content)
 
-        val finalString = result
+        resultText.toString().takeIf { it.isNotBlank() }
+    } catch (e: Exception) {
+        Log.d("M120_Ollama", "Ollama request failed: ${e.javaClass.simpleName}: ${e.message}")
+        e.printStackTrace()
+        null
+    } finally {
+        connection?.disconnect()
+    }
+}
+

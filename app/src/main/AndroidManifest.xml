@@ -47,7 +47,8 @@
             android:launchMode="singleTask"
             android:exported="true"
             android:theme="@style/Theme.M120Launcher"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:usesCleartextTraffic="true" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
