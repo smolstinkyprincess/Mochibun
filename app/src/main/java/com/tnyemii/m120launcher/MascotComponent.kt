@@ -9,15 +9,19 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 // mascot assistant expression states :3
 enum class MascotExpression {
@@ -27,240 +31,152 @@ enum class MascotExpression {
     OFFLINE
 }
 
-// custom vector-drawn pixel art bunny mascot with animated bouncing and expressions <3
+// the sprite lives on a 20 x 15 grid of square pixels <3
+private const val GRID_W = 20
+private const val GRID_H = 15
+
+// pixel color legend: each letter in the sprite below is one colored pixel :3
+// . = empty   O = outline   P = pink      L = light pink   C = cheek
+// D = dark (eyes/mouth)  W = white shine   H = heart nose   T = tongue
+// S = yellow sparkle     V = violet sparkle   K = pink sparkle
+private fun paletteColor(c: Char): Color? = when (c) {
+    'O' -> Color(0xFFAC79B8)
+    'P' -> Color(0xFFFFC9E6)
+    'L' -> Color(0xFFFFE4F2)
+    'C' -> Color(0xFFFF91C3)
+    'D' -> Color(0xFF60466F)
+    'W' -> Color(0xFFFFFFFF)
+    'H' -> Color(0xFFFF76B5)
+    'T' -> Color(0xFFFF8DBB)
+    'S' -> Color(0xFFFFD36E)
+    'V' -> Color(0xFFD6B2FF)
+    'K' -> Color(0xFFFFB6D9)
+    else -> null
+}
+
+// a horizontal strip of same-colored pixels (fewer draw calls = lighter on the phone) <3
+private class PixelRun(val x: Int, val y: Int, val length: Int, val color: Color)
+
+// turns rows of letters into strips of pixels :3
+private fun runsFromRows(rows: List<String>, startRow: Int): List<PixelRun> {
+    val runs = mutableListOf<PixelRun>()
+    rows.forEachIndexed { rowIndex, row ->
+        var x = 0
+        while (x < row.length) {
+            val ch = row[x]
+            val color = paletteColor(ch)
+            if (color == null) {
+                x++
+            } else {
+                val start = x
+                while (x < row.length && row[x] == ch) x++
+                runs.add(PixelRun(start, startRow + rowIndex, x - start, color))
+            }
+        }
+    }
+    return runs
+}
+
+// a little sticker of pixels placed at (x, y) on the grid <3
+private fun patch(x: Int, y: Int, vararg rows: String): List<PixelRun> =
+    runsFromRows(rows.toList(), y).map { PixelRun(it.x + x, it.y, it.length, it.color) }
+
+// the bunny's head, ears, cheeks and paws (16 wide, padded by 2 on each side) :3
+private val BASE_ROWS = listOf(
+    "...OOO....OOO...",
+    "..OPLPO..OPLPO..",
+    "..OPLPO..OPLPO..",
+    "..OPLPO..OPLPO..",
+    "..OPPPO..OPPPO..",
+    "..OOOOOOOOOOOO..",
+    ".OPPPPPPPPPPPPO.",
+    "OPPPPPPPPPPPPPPO",
+    "OPPPPPPPPPPPPPPO",
+    "OPPPPPPPPPPPPPPO",
+    "OPCCPPPPPPPPCCPO",
+    "OPPPPPPPPPPPPPPO",
+    ".OPPPPPPPPPPPPO.",
+    "..OPLLPPPPLLPO..",
+    "...OOOOOOOOOO..."
+).map { ".." + it + ".." }
+
+private val BASE_RUNS = runsFromRows(BASE_ROWS, 0)
+
+// each expression = base bunny + its own face and sparkles <3
+private val EXPRESSION_RUNS: Map<MascotExpression, List<PixelRun>> = mapOf(
+    MascotExpression.IDLE to (
+            BASE_RUNS +
+                    patch(6, 8, "WD", "DD") +        // left sparkle eye
+                    patch(12, 8, "WD", "DD") +       // right sparkle eye
+                    patch(9, 10, "HH") +             // heart nose
+                    patch(8, 11, "D..D") +           // tiny smile
+                    patch(9, 12, "DD")
+            ),
+    MascotExpression.THINKING to (
+            BASE_RUNS +
+                    patch(6, 8, "WD", "DD") +        // sparkle eye
+                    patch(12, 8, "DD", "DD") +       // plain eye
+                    patch(9, 10, "HH") +
+                    patch(9, 11, "DD") +             // little "o" mouth
+                    patch(17, 1, ".K.", "KKK", ".K.") +  // thought sparkle
+                    patch(17, 5, "V")
+            ),
+    MascotExpression.RESPONDING to (
+            BASE_RUNS +
+                    patch(5, 8, ".D.", "D.D") +      // happy ^ eye
+                    patch(12, 8, ".D.", "D.D") +     // happy ^ eye
+                    patch(9, 10, "HH") +
+                    patch(8, 11, "DDDD") +           // open mouth
+                    patch(9, 12, "TT") +             // tongue
+                    patch(0, 2, ".S.", "SSS", ".S.") +   // yellow sparkle
+                    patch(17, 2, ".V.", "VVV", ".V.")    // violet sparkle
+            ),
+    MascotExpression.OFFLINE to (
+            BASE_RUNS +
+                    patch(6, 9, "DD") +              // sleepy closed eye
+                    patch(12, 9, "DD") +             // sleepy closed eye
+                    patch(9, 10, "HH") +
+                    patch(8, 11, "D..D") +
+                    patch(9, 12, "DD") +
+                    patch(17, 2, "VVV", ".V.", "VVV")    // sleepy Z
+            )
+)
+
+// pixel art bunny mascot that hops one whole pixel at a time and changes expressions <3
 @Composable
 fun PixelArtMascot(
     expression: MascotExpression,
     modifier: Modifier = Modifier,
     size: Dp = 40.dp
 ) {
-    // idle bouncing transition animation :3
-    val transition = rememberInfiniteTransition(label = "bunny")
-    val bounce by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = if (expression == MascotExpression.IDLE ||
-            expression == MascotExpression.THINKING) -2.5f else 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(850, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "bunny_bounce"
-    )
+    val shouldHop = expression == MascotExpression.IDLE ||
+            expression == MascotExpression.THINKING
+
+    // simple timer hop: flips up/down twice a second (works even if system animations are off) :3
+    var hopUp by remember { mutableStateOf(false) }
+    LaunchedEffect(shouldHop) {
+        hopUp = false
+        while (shouldHop) {
+            delay(1000)
+            hopUp = !hopUp
+        }
+    }
+
+    val runs = EXPRESSION_RUNS[expression] ?: BASE_RUNS
 
     Canvas(modifier = modifier.size(size)) {
-        val unit = this.size.minDimension
-        val cx = this.size.width / 2f
-        val cy = this.size.height * 0.57f + bounce
-        val s = unit / 40f
+        // every pixel is a whole number of screen pixels so the edges stay crisp :3
+        val cell = (this.size.minDimension / GRID_W).toInt().coerceAtLeast(1).toFloat()
+        val left = ((this.size.width - cell * GRID_W) / 2f).toInt().toFloat()
+        val top = ((this.size.height - cell * GRID_H) / 2f).toInt().toFloat() +
+                (if (hopUp) -cell else 0f)
 
-        fun p(x: Float, y: Float) = Offset(cx + x * s, cy + y * s)
-
-        val pink = Color(0xFFFFC9E6)
-        val lightPink = Color(0xFFFFE4F2)
-        val outline = Color(0xFFAC79B8)
-        val dark = Color(0xFF60466F)
-        val cheek = Color(0xFFFF91C3)
-        val white = Color(0xFFFFFFFF)
-
-        // bunny ears <3
-        drawOval(
-            color = outline,
-            topLeft = p(-13f, -27f),
-            size = androidx.compose.ui.geometry.Size(9f * s, 19f * s)
-        )
-        drawOval(
-            color = pink,
-            topLeft = p(-12f, -27f),
-            size = androidx.compose.ui.geometry.Size(7f * s, 17f * s)
-        )
-        drawOval(
-            color = outline,
-            topLeft = p(4f, -27f),
-            size = androidx.compose.ui.geometry.Size(9f * s, 19f * s)
-        )
-        drawOval(
-            color = pink,
-            topLeft = p(5f, -27f),
-            size = androidx.compose.ui.geometry.Size(7f * s, 17f * s)
-        )
-
-        // head and body :3
-        drawOval(
-            color = outline,
-            topLeft = p(-17f, -18f),
-            size = androidx.compose.ui.geometry.Size(34f * s, 34f * s)
-        )
-        drawOval(
-            color = pink,
-            topLeft = p(-16f, -17f),
-            size = androidx.compose.ui.geometry.Size(32f * s, 32f * s)
-        )
-
-        // tiny paws <3
-        drawCircle(color = outline, radius = 5f * s, center = p(-10f, 13f))
-        drawCircle(color = outline, radius = 5f * s, center = p(10f, 13f))
-        drawCircle(color = lightPink, radius = 4f * s, center = p(-10f, 12f))
-        drawCircle(color = lightPink, radius = 4f * s, center = p(10f, 12f))
-
-        // blush cheeks :3
-        drawOval(
-            color = cheek.copy(alpha = 0.8f),
-            topLeft = p(-13f, -1f),
-            size = androidx.compose.ui.geometry.Size(7f * s, 4f * s)
-        )
-        drawOval(
-            color = cheek.copy(alpha = 0.8f),
-            topLeft = p(6f, -1f),
-            size = androidx.compose.ui.geometry.Size(7f * s, 4f * s)
-        )
-
-        // facial expressions based on current mascot state <3
-        when (expression) {
-            MascotExpression.IDLE -> {
-                drawSparkleEye(p(-6f, -5f), s, dark, white)
-                drawSparkleEye(p(6f, -5f), s, dark, white)
-                drawTinySmile(p(0f, 2f), s, dark)
-            }
-
-            MascotExpression.THINKING -> {
-                drawSparkleEye(p(-6f, -5f), s, dark, white)
-                drawCircle(dark, 2.1f * s, p(6f, -5f))
-                drawCircle(white, 0.7f * s, p(6.5f, -5.7f))
-                drawCircle(dark, 1.6f * s, p(0f, 2f))
-                // thought sparkles
-                drawStar(p(16f, -19f), 3f * s, Color(0xFFFFB6D9))
-                drawCircle(Color(0xFFD9B7FF), 1.3f * s, p(19f, -12f))
-            }
-
-            MascotExpression.RESPONDING -> {
-                drawHappyEye(p(-6f, -5f), s, dark)
-                drawHappyEye(p(6f, -5f), s, dark)
-                drawOval(
-                    color = dark,
-                    topLeft = p(-3f, 0f),
-                    size = androidx.compose.ui.geometry.Size(6f * s, 5f * s)
-                )
-                drawOval(
-                    color = Color(0xFFFF8DBB),
-                    topLeft = p(-1.5f, 2f),
-                    size = androidx.compose.ui.geometry.Size(3f * s, 2f * s)
-                )
-                drawStar(p(-17f, -17f), 3f * s, Color(0xFFFFD36E))
-                drawStar(p(17f, -18f), 3f * s, Color(0xFFD6B2FF))
-            }
-
-            MascotExpression.OFFLINE -> {
-                drawClosedEye(p(-6f, -5f), s, dark)
-                drawClosedEye(p(6f, -5f), s, dark)
-                drawTinySmile(p(0f, 2f), s, dark)
-                // sleepy zzz bubble
-                drawCircle(Color(0xFFD6B2FF), 2f * s, p(17f, -17f))
-                drawCircle(Color(0xFFE8D8FF), 1.2f * s, p(21f, -22f))
-            }
+        runs.forEach { run ->
+            drawRect(
+                color = run.color,
+                topLeft = Offset(left + run.x * cell, top + run.y * cell),
+                size = Size(run.length * cell, cell)
+            )
         }
-
-        // heart nose :3
-        drawHeart(p(0f, -1f), 2f * s, Color(0xFFFF76B5))
     }
-}
-
-// draws anime sparkle eye with catchlight highlights <3
-private fun DrawScope.drawSparkleEye(
-    center: Offset,
-    scale: Float,
-    dark: Color,
-    shine: Color
-) {
-    drawCircle(dark, 3.2f * scale, center)
-    drawCircle(shine, 1.25f * scale, center + Offset(-0.8f * scale, -1f * scale))
-    drawCircle(shine, 0.55f * scale, center + Offset(1.4f * scale, 1f * scale))
-}
-
-// draws happy curved eye arch :3
-private fun DrawScope.drawHappyEye(
-    center: Offset,
-    scale: Float,
-    color: Color
-) {
-    val path = Path().apply {
-        moveTo(center.x - 3f * scale, center.y + 1f * scale)
-        quadraticTo(
-            center.x, center.y - 4f * scale,
-            center.x + 3f * scale, center.y + 1f * scale
-        )
-    }
-    drawPath(path, color, style = Stroke(width = 1.7f * scale))
-}
-
-// draws closed sleeping eye arc <3
-private fun DrawScope.drawClosedEye(
-    center: Offset,
-    scale: Float,
-    color: Color
-) {
-    val path = Path().apply {
-        moveTo(center.x - 2.5f * scale, center.y)
-        quadraticTo(
-            center.x, center.y + 2f * scale,
-            center.x + 2.5f * scale, center.y
-        )
-    }
-    drawPath(path, color, style = Stroke(width = 1.4f * scale))
-}
-
-// draws tiny curved smile mouth :3
-private fun DrawScope.drawTinySmile(
-    center: Offset,
-    scale: Float,
-    color: Color
-) {
-    val path = Path().apply {
-        moveTo(center.x - 2f * scale, center.y)
-        quadraticTo(
-            center.x, center.y + 2.5f * scale,
-            center.x + 2f * scale, center.y
-        )
-    }
-    drawPath(path, color, style = Stroke(width = 1.3f * scale))
-}
-
-// draws 5-pointed decorative star sparkle <3
-private fun DrawScope.drawStar(
-    center: Offset,
-    radius: Float,
-    color: Color
-) {
-    val path = Path()
-    for (i in 0 until 10) {
-        val angle = Math.PI * i / 5.0 - Math.PI / 2.0
-        val r = if (i % 2 == 0) radius else radius * 0.42f
-        val x = center.x + kotlin.math.cos(angle).toFloat() * r
-        val y = center.y + kotlin.math.sin(angle).toFloat() * r
-        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-    }
-    path.close()
-    drawPath(path, color)
-}
-
-// draws heart shape :3
-private fun DrawScope.drawHeart(
-    center: Offset,
-    radius: Float,
-    color: Color
-) {
-    val path = Path().apply {
-        moveTo(center.x, center.y + radius)
-        cubicTo(
-            center.x - radius * 2f, center.y - radius * 0.2f,
-            center.x - radius, center.y - radius * 1.5f,
-            center.x, center.y - radius * 0.45f
-        )
-        cubicTo(
-            center.x + radius, center.y - radius * 1.5f,
-            center.x + radius * 2f, center.y - radius * 0.2f,
-            center.x, center.y + radius
-        )
-        close()
-    }
-    drawPath(path, color)
 }
