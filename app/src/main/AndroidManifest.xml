@@ -45,6 +45,7 @@
         <activity
             android:name=".MainActivity"
             android:launchMode="singleTask"
+            android:excludeFromRecents="true"
             android:exported="true"
             android:theme="@style/Theme.M120Launcher"
             android:windowSoftInputMode="adjustResize"

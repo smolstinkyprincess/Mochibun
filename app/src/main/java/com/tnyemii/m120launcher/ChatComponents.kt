@@ -158,11 +158,23 @@ fun ChatPlaceholderPage(
             withContext(Dispatchers.Main) {
                 isRefreshingModels = false
                 if (fetched.isNotEmpty()) {
-                    val combined = (listOf(selectedOllamaModel) + fetched).distinct()
-                    ollamaModels = combined
-                    modelFetchStatus = "Connected • ${fetched.size} model(s) found ♡"
+                    // Only show names confirmed by /api/tags. Never keep a stale selection
+                    // in the installed-model menu after a successful refresh.
+                    ollamaModels = fetched.distinct()
+                    if (selectedOllamaModel !in ollamaModels) {
+                        val replacement = when {
+                            "qwen3-fast:latest" in ollamaModels -> "qwen3-fast:latest"
+                            else -> ollamaModels.first()
+                        }
+                        updateOllamaModel(replacement)
+                        modelFetchStatus = "${ollamaModels.size} model(s) found • selected $replacement ♡"
+                    } else {
+                        modelFetchStatus = "Connected • ${ollamaModels.size} model(s) found ♡"
+                    }
                 } else {
-                    modelFetchStatus = "Could not fetch models (PC offline/unreachable) ♡"
+                    // An empty list can mean unreachable, an HTTP/JSON error, or no installed models.
+                    ollamaModels = emptyList()
+                    modelFetchStatus = "No models found, or PC is offline/unreachable ♡"
                 }
             }
         }
@@ -346,12 +358,12 @@ fun ChatPlaceholderPage(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                PixelArtMascot(expression = mascotExpression, size = 32.dp)
+                PixelArtMascot(expression = mascotExpression, size = 64.dp)
                 Text(
                     text = when (selectedBackend) {
-                        "PC Ollama" -> "✧･ﾟ ollama ✧˖°"
+                        "PC Ollama" -> "✧･ﾟ remote llm ✧˖°"
                         "Local SmolLM2" -> "✧･ﾟ local llm ✧˖°"
-                        else -> if (ollamaConnected == true) "✧･ﾟ ollama ✧˖°" else "✧･ﾟ local llm ✧˖°"
+                        else -> if (ollamaConnected == true) "✧･ﾟ remote llm ✧˖°" else "✧･ﾟ local llm ✧˖°"
                     },
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
@@ -461,7 +473,7 @@ fun ChatPlaceholderPage(
             if (messages.isEmpty() && !isGenerating) {
                 item(key = "welcome_prompt") {
                     Text(
-                        text = "hi!! ♡ send me a message to try the chat",
+                        text = "♡ send me a message to try the chat ♡",
                         color = Color(0xFF684A7C),
                         modifier = Modifier.padding(8.dp)
                     )
@@ -496,7 +508,7 @@ fun ChatPlaceholderPage(
                             },
                         shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (msg.isUser) Color(0xFFE9D9FF) else Color.White
+                            containerColor = if (msg.isUser) Color(0xFFFFC3FA) else Color.White
                         )
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
@@ -571,6 +583,10 @@ fun ChatPlaceholderPage(
                     unfocusedContainerColor = Color.White,
                     focusedTextColor = Color(0xFFD36BFF),
                     unfocusedTextColor = Color(0xFF8658A1),
+                    // Make placeholder text darker and easier to read
+                    focusedPlaceholderColor = Color(0xFF89549A),
+                    unfocusedPlaceholderColor = Color(0xFF89549A),
+                    disabledPlaceholderColor = Color(0xFF89549A),
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledContainerColor = Color.White,
@@ -586,8 +602,9 @@ fun ChatPlaceholderPage(
                     val sent = messageText.trim()
                     if (sent.isNotEmpty() && !isGenerating) {
                         messages.add(ChatMessage(isUser = true, text = sent))
+                        val userMessageSnapshot = messages.toList()
                         coroutineScope.launch(Dispatchers.IO) {
-                            saveChatHistory(context, messages)
+                            saveChatHistory(context, userMessageSnapshot)
                         }
                         messageText = ""
                         isGenerating = true
@@ -598,6 +615,7 @@ fun ChatPlaceholderPage(
                         coroutineScope.launch(Dispatchers.IO) {
                             var searchResults = emptyList<SearchResult>()
                             var webStatus: String? = null
+                            var historySnapshot: List<ChatMessage> = emptyList()
 
                             try {
                                 if (needSearch) {
@@ -729,8 +747,10 @@ fun ChatPlaceholderPage(
                                 withContext(Dispatchers.Main) {
                                     activeStatus = null
                                     isGenerating = false
+                                    // Read Compose state on the main thread; persist an immutable snapshot off-thread.
+                                    historySnapshot = messages.toList()
                                 }
-                                saveChatHistory(context, messages)
+                                saveChatHistory(context, historySnapshot)
                             }
                         }
                     }
@@ -964,7 +984,7 @@ fun AnimatedTypingIndicator(
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = 2.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE9D9FF).copy(alpha = 0.85f))
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFA7FA).copy(alpha = 0.85f))
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(
@@ -1363,6 +1383,9 @@ fun tryOllama(
         val jsonBody = JSONObject().apply {
             put("model", modelName)
             put("stream", false)
+            // Ollama versions/models that support thinking can honor this option.
+            // If unsupported, the API may reject it; that failure is surfaced to the caller.
+            put("think", enableReasoning)
 
             val messagesArray = JSONArray()
 
@@ -1375,7 +1398,7 @@ fun tryOllama(
                         "If you do not know something, say so."
             )
             if (enableReasoning) {
-                systemContent.append("\nThink step by step before answering.")
+                systemContent.append("\nConsider the question carefully before answering.")
             }
             if (searchEvidence.isNotEmpty()) {
                 systemContent.append("\nUse the following web evidence when relevant. Do not invent details:\n")
