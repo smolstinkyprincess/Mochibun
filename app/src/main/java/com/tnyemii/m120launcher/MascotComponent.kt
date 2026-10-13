@@ -102,15 +102,19 @@ private val BASE_ROWS = listOf(
 
 private val BASE_RUNS = runsFromRows(BASE_ROWS, 0)
 
+// heart nose + tiny smile, shared by the idle, sleepy and blink faces <3
+private val SMILE_RUNS =
+    patch(9, 10, "HH") +
+            patch(8, 11, "D..D") +
+            patch(9, 12, "DD")
+
 // each expression = base bunny + its own face and sparkles <3
 private val EXPRESSION_RUNS: Map<MascotExpression, List<PixelRun>> = mapOf(
     MascotExpression.IDLE to (
             BASE_RUNS +
                     patch(6, 8, "WD", "DD") +        // left sparkle eye
                     patch(12, 8, "WD", "DD") +       // right sparkle eye
-                    patch(9, 10, "HH") +             // heart nose
-                    patch(8, 11, "D..D") +           // tiny smile
-                    patch(9, 12, "DD")
+                    SMILE_RUNS
             ),
     MascotExpression.THINKING to (
             BASE_RUNS +
@@ -135,12 +139,17 @@ private val EXPRESSION_RUNS: Map<MascotExpression, List<PixelRun>> = mapOf(
             BASE_RUNS +
                     patch(6, 9, "DD") +              // sleepy closed eye
                     patch(12, 9, "DD") +             // sleepy closed eye
-                    patch(9, 10, "HH") +
-                    patch(8, 11, "D..D") +
-                    patch(9, 12, "DD") +
+                    SMILE_RUNS +
                     patch(17, 2, "VVV", ".V.", "VVV")    // sleepy Z
             )
 )
+
+// idle face with eyes shut for a quick blink <3
+private val BLINK_RUNS: List<PixelRun> =
+    BASE_RUNS +
+            patch(6, 9, "DD") +              // closed left eye
+            patch(12, 9, "DD") +             // closed right eye
+            SMILE_RUNS
 
 // pixel art bunny mascot that hops one whole pixel at a time and changes expressions <3
 @Composable
@@ -152,7 +161,7 @@ fun PixelArtMascot(
     val shouldHop = expression == MascotExpression.IDLE ||
             expression == MascotExpression.THINKING
 
-    // simple timer hop: flips up/down twice a second (works even if system animations are off) :3
+    // simple timer hop: flips up/down every second (works even if system animations are off) :3
     var hopUp by remember { mutableStateOf(false) }
     LaunchedEffect(shouldHop) {
         hopUp = false
@@ -162,7 +171,25 @@ fun PixelArtMascot(
         }
     }
 
-    val runs = EXPRESSION_RUNS[expression] ?: BASE_RUNS
+    // random blink every few seconds, only when idle :3
+    var blinking by remember { mutableStateOf(false) }
+    LaunchedEffect(expression) {
+        blinking = false
+        if (expression == MascotExpression.IDLE) {
+            while (true) {
+                delay((3000L..6000L).random())   // wait 3 to 6 seconds
+                blinking = true
+                delay(180)                       // eyes shut for a moment
+                blinking = false
+            }
+        }
+    }
+
+    val runs = if (blinking && expression == MascotExpression.IDLE) {
+        BLINK_RUNS
+    } else {
+        EXPRESSION_RUNS[expression] ?: BASE_RUNS
+    }
 
     Canvas(modifier = modifier.size(size)) {
         // every pixel is a whole number of screen pixels so the edges stay crisp :3
