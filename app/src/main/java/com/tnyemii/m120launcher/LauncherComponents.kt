@@ -60,6 +60,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
@@ -87,6 +90,7 @@ import com.tnyemii.m120launcher.ui.theme.greetingBgColor
 import com.tnyemii.m120launcher.ui.theme.greetingColor
 import com.tnyemii.m120launcher.ui.theme.greetingOutlineColor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -374,6 +378,49 @@ fun FavoritesCard(
         }
     }
 }
+
+//alphabet strip in appdrawer
+fun firstLetterOf(label: String): Char {
+    val c = label.trim().firstOrNull()?.uppercaseChar() ?: return '#'
+    return if (c in 'A'..'Z') c else '#'
+}
+
+@Composable
+fun AlphabetIndex(
+    availableLetters: Set<Char>,
+    onLetterTap: (Char) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val letters = remember { ('A'..'Z').toList() + '#' }
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(24.dp)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        letters.forEach { letter ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .pointerInput(letter) {
+                        detectTapGestures { onLetterTap(letter) }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = letter.toString(),
+                    fontSize = 11.sp,
+                    color = Color(0xFF9B5FA5).copy(
+                        alpha = if (letter in availableLetters) 1f else 0.35f
+                    )
+                )
+            }
+        }
+    }
+}
+
 
 // single app item row in the vertical app drawer list <3
 @Composable
@@ -794,6 +841,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     }
 
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     var apps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
 
@@ -834,7 +882,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         iconBitmap = drawableToBitmap(drawable, 96)
                     )
                 }
-                .sortedBy { it.name }
+                .sortedBy { it.name.lowercase() }
         }
     }
 
@@ -853,6 +901,15 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         apps.filter { app ->
             app.resolveInfo.activityInfo.packageName !in hiddenPackages
         }
+    }
+
+    // remembers the list position where each starting letter first appears :3
+    val letterStarts = remember(visibleApps) {
+        val map = linkedMapOf<Char, Int>()
+        visibleApps.forEachIndexed { index, app ->
+            map.getOrPut(firstLetterOf(app.name)) { index }
+        }
+        map
     }
 
     var favoriteApps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
@@ -1307,29 +1364,48 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     onSwipeDown = { drawerOpen = false }
                 )
 
-                LazyColumn(
-                    state = listState,
+                Row(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(cardRoundness))
-                        .background(Color.Transparent)
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    itemsIndexed(
-                        visibleApps,
-                        key = { _, app ->
-                            "${app.resolveInfo.activityInfo.packageName}/${app.resolveInfo.activityInfo.name}"
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(cardRoundness))
+                            .background(Color.Transparent)
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(
+                            visibleApps,
+                            key = { _, app ->
+                                "${app.resolveInfo.activityInfo.packageName}/${app.resolveInfo.activityInfo.name}"
+                            }
+                        ) { index, app ->
+                            AppDrawerGridItem(
+                                context = context,
+                                app = app,
+                                isSelected = index == selectedDrawerIndex,
+                                onAppLongClick = { selectedApp = it }
+                            )
                         }
-                    ) { index, app ->
-                        AppDrawerGridItem(
-                            context = context,
-                            app = app,
-                            isSelected = index == selectedDrawerIndex,
-                            onAppLongClick = { selectedApp = it }
-                        )
                     }
+
+                    AlphabetIndex(
+                        availableLetters = letterStarts.keys,
+                        onLetterTap = { letter ->
+                            val target = letterStarts[letter]
+                                ?: letterStarts.entries.firstOrNull { it.key > letter }?.value
+                                ?: (visibleApps.size - 1)
+                            if (target >= 0) {
+                                selectedDrawerIndex = target
+                                scope.launch { listState.scrollToItem(target) }
+                            }
+                        }
+                    )
                 }
             }
         }
