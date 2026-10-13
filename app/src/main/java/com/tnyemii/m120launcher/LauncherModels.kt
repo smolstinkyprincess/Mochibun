@@ -8,17 +8,27 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import org.xmlpull.v1.XmlPullParser
 
-// holds installed app information and resolved drawable icon :3
+// holds installed app information and resolved bitmap icon :3
 data class LauncherApp(
     val resolveInfo: ResolveInfo,
     val name: String,
-    val icon: Drawable
+    val iconBitmap: Bitmap
 )
 
-// loads kawaii icon pack appfilter xml mapping <3
+@Volatile
+private var cachedIconMap: Map<String, String>? = null
+
+// clears cached icon map when packages change <3
+fun clearKawaiiIconCache() {
+    cachedIconMap = null
+}
+
+// loads kawaii icon pack appfilter xml mapping with in-memory caching <3
 fun loadKawaiiIconMap(
     context: Context
 ): Map<String, String> {
+    cachedIconMap?.let { return it }
+
     val iconMap = mutableMapOf<String, String>()
 
     val iconPackContext = try {
@@ -33,21 +43,25 @@ fun loadKawaiiIconMap(
 
     if (appFilterId == 0) { return emptyMap() }
 
-    val parser = iconPackContext.resources.getXml(appFilterId)
-    var eventType = parser.eventType
+    try {
+        val parser = iconPackContext.resources.getXml(appFilterId)
+        var eventType = parser.eventType
 
-    while (eventType != XmlPullParser.END_DOCUMENT) {
-        if (eventType == XmlPullParser.START_TAG && parser.name == "item") {
-            val component = parser.getAttributeValue(null, "component")
-            val drawable = parser.getAttributeValue(null, "drawable")
+        while (eventType != XmlPullParser.END_DOCUMENT) {
+            if (eventType == XmlPullParser.START_TAG && parser.name == "item") {
+                val component = parser.getAttributeValue(null, "component")
+                val drawable = parser.getAttributeValue(null, "drawable")
 
-            if (component != null && drawable != null) { iconMap[component] = drawable }
+                if (component != null && drawable != null) { iconMap[component] = drawable }
+            }
+
+            eventType = parser.next()
         }
 
-        eventType = parser.next()
-    }
+        parser.close()
+    } catch (_: Exception) {}
 
-    parser.close()
+    cachedIconMap = iconMap
     return iconMap
 }
 
@@ -73,60 +87,39 @@ fun getKawaiiIcon(
     return iconPackContext.resources.getDrawable(resourceId, null)
 }
 
-// loads list of all available icon names from kawaii icon pack <3
+// loads list of all available icon names from kawaii icon pack reuse cached map <3
 fun loadAllKawaiiIconNames(context: Context): List<String> {
-    val iconNames = mutableSetOf<String>()
-
-    val iconPackContext = try {
-        context.createPackageContext(
-            "kawaii.icon.pack",
-            Context.CONTEXT_IGNORE_SECURITY
-        )
-    } catch (e: Exception) {
-        return emptyList()
-    }
-
-    val appFilterId = iconPackContext.resources.getIdentifier(
-        "appfilter",
-        "xml",
-        "kawaii.icon.pack"
-    )
-
-    if (appFilterId == 0) return emptyList()
-
-    val parser = iconPackContext.resources.getXml(appFilterId)
-
-    var eventType = parser.eventType
-
-    while (eventType != XmlPullParser.END_DOCUMENT) {
-        if (
-            eventType == XmlPullParser.START_TAG &&
-            parser.name == "item"
-        ) {
-            val drawableName = parser.getAttributeValue(
-                null,
-                "drawable"
-            )
-
-            if (!drawableName.isNullOrEmpty()) {
-                iconNames.add(drawableName)
-            }
-        }
-
-        eventType = parser.next()
-    }
-
-    parser.close()
-
-    return iconNames.toList()
+    return loadKawaiiIconMap(context).values.filter { it.isNotEmpty() }.distinct().sorted()
 }
 
-// converts android drawable into bitmap for compose display :3
-fun drawableToBitmap(drawable: Drawable): Bitmap {
-    val width = drawable.intrinsicWidth.coerceAtLeast(1)
-    val height = drawable.intrinsicHeight.coerceAtLeast(1)
+// converts android drawable into bitmap capped at targetSizePx for compose display :3
+fun drawableToBitmap(
+    drawable: Drawable,
+    targetSizePx: Int = 96
+): Bitmap {
+    val intrinsicWidth = drawable.intrinsicWidth.coerceAtLeast(1)
+    val intrinsicHeight = drawable.intrinsicHeight.coerceAtLeast(1)
 
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val width: Int
+    val height: Int
+    if (intrinsicWidth > targetSizePx || intrinsicHeight > targetSizePx) {
+        if (intrinsicWidth >= intrinsicHeight) {
+            width = targetSizePx
+            height = (intrinsicHeight * targetSizePx) / intrinsicWidth
+        } else {
+            height = targetSizePx
+            width = (intrinsicWidth * targetSizePx) / intrinsicHeight
+        }
+    } else {
+        width = intrinsicWidth
+        height = intrinsicHeight
+    }
+
+    val bitmap = Bitmap.createBitmap(
+        width.coerceAtLeast(1),
+        height.coerceAtLeast(1),
+        Bitmap.Config.ARGB_8888
+    )
     val canvas = Canvas(bitmap)
 
     drawable.setBounds(0, 0, canvas.width, canvas.height)

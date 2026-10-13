@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
                 intent?.action == Intent.ACTION_PACKAGE_REMOVED ||
                 intent?.action == Intent.ACTION_PACKAGE_REPLACED
             ) {
+                clearKawaiiIconCache()
                 appListRefreshCount++
             }
         }

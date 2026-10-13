@@ -67,6 +67,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -89,6 +94,7 @@ import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 val cardRoundness = 24.dp
+
 
 // displays current time, date, battery level, and Wi-Fi connection status :3
 @Composable
@@ -152,6 +158,12 @@ fun StatusCard(
                 } else {
                     "Wi-Fi"
                 }
+
+                android.util.Log.d(
+                    "M120Wifi",
+                    "connected=$wifiConnected, ssid=$wifiSsid, rawSsid=$rawSsid"
+                )
+
             } else {
                 wifiSsid = null
             }
@@ -272,8 +284,7 @@ fun GreetingCard(context: Context) {
 fun FavoritesCard(
     context: Context,
     favoriteApps: List<LauncherApp>,
-    iconCache: Map<String, Bitmap>,
-    selectedIndex: Int = 0,
+     selectedIndex: Int = 0,
     onAppLongClick: (LauncherApp) -> Unit
 ) {
     val lazyRowState = rememberLazyListState()
@@ -351,16 +362,11 @@ fun FavoritesCard(
                                 .padding(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            val iconKey = app.resolveInfo.activityInfo.packageName
-                            val iconBitmap = iconCache[iconKey]
-
-                            if (iconBitmap != null) {
-                                Image(
-                                    bitmap = iconBitmap.asImageBitmap(),
-                                    contentDescription = appName,
-                                    modifier = Modifier.size(52.dp)
-                                )
-                            }
+                            Image(
+                                bitmap = app.iconBitmap.asImageBitmap(),
+                                contentDescription = appName,
+                                modifier = Modifier.size(52.dp)
+                            )
                         }
                     }
                 }
@@ -374,7 +380,6 @@ fun FavoritesCard(
 fun AppDrawerGridItem(
     context: Context,
     app: LauncherApp,
-    iconCache: Map<String, Bitmap>,
     isSelected: Boolean = false,
     onAppLongClick: (LauncherApp) -> Unit
 ) {
@@ -399,7 +404,7 @@ fun AppDrawerGridItem(
             ),
         shape = RoundedCornerShape(cardRoundness),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFFFFD1F0) else Color(0xD9CEBAFF)
+            containerColor = if (isSelected) Color(0xFFFFD1F0) else Color(0xFFCEBAFF)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -407,30 +412,24 @@ fun AppDrawerGridItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(72.dp)
-                .background(Color.Transparent)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val icon = iconCache[packageName]
-
-            if (icon != null) {
-                Image(
-                    bitmap = icon.asImageBitmap(),
-                    contentDescription = app.resolveInfo.loadLabel(context.packageManager).toString(),
-                    modifier = Modifier.size(52.dp)
-                )
-            }
+            Image(
+                bitmap = app.iconBitmap.asImageBitmap(),
+                contentDescription = app.name,
+                modifier = Modifier.size(52.dp)
+            )
 
             Spacer(modifier = Modifier.width(32.dp))
 
             Text(
-                text = app.resolveInfo.loadLabel(context.packageManager).toString(),
+                text = app.name,
                 fontSize = 20.sp,
                 color = cardTextColor,
                 maxLines = 1,
                 modifier = Modifier
                     .weight(1f)
-                    .background(Color.Transparent)
             )
 
             if (isSelected) {
@@ -478,7 +477,6 @@ fun AppDrawerHeader(onSwipeDown: () -> Unit) {
 fun AppActionDialog(
     app: LauncherApp,
     favoritePackages: List<String>,
-    iconCache: Map<String, Bitmap>,
     cardBgColor: Color,
     cardTextColor: Color,
     appActionColor: Color,
@@ -501,15 +499,12 @@ fun AppActionDialog(
         shape = RoundedCornerShape(cardRoundness),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val bitmap = iconCache[pkgName]
-                if (bitmap != null) {
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = null,
-                        modifier = Modifier.size(36.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                }
+                Image(
+                    bitmap = app.iconBitmap.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = app.name,
                     color = cardTextColor,
@@ -640,7 +635,7 @@ fun KawaiiIconPicker(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredIcons) { iconName ->
+                    items(filteredIcons, key = { it }) { iconName ->
                         val resId = remember(iconName) {
                             iconPackContext?.resources?.getIdentifier(iconName, "drawable", "kawaii.icon.pack") ?: 0
                         }
@@ -802,8 +797,8 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
     var apps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
 
-    // queries installed apps and applies KawaiiIconPack automatic mappings :3
-    LaunchedEffect(appListRefreshCount) {
+    // queries installed apps, applies KawaiiIconPack automatic mappings & custom icon overrides, and loads bitmaps in background :3
+    LaunchedEffect(appListRefreshCount, iconRefreshKey) {
         apps = withContext(Dispatchers.Default) {
             val kawaiiIconContext = try {
                 context.createPackageContext("kawaii.icon.pack", Context.CONTEXT_IGNORE_SECURITY)
@@ -813,15 +808,30 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             context.packageManager
                 .queryIntentActivities(intent, 0)
                 .map { app ->
+                    val pkgName = app.activityInfo.packageName
+                    val customIconName = preferences.getString("custom_icon_$pkgName", null)
+
+                    val drawable = if (customIconName != null && kawaiiIconContext != null) {
+                        val resourceId = kawaiiIconContext.resources.getIdentifier(
+                            customIconName,
+                            "drawable",
+                            "kawaii.icon.pack"
+                        )
+                        if (resourceId != 0) {
+                            kawaiiIconContext.resources.getDrawable(resourceId, null)
+                        } else {
+                            getKawaiiIcon(kawaiiIconContext, kawaiiIconMap, pkgName, app.activityInfo.name)
+                                ?: app.loadIcon(context.packageManager)
+                        }
+                    } else {
+                        getKawaiiIcon(kawaiiIconContext, kawaiiIconMap, pkgName, app.activityInfo.name)
+                            ?: app.loadIcon(context.packageManager)
+                    }
+
                     LauncherApp(
                         resolveInfo = app,
                         name = app.loadLabel(context.packageManager).toString(),
-                        icon = getKawaiiIcon(
-                            iconPackContext = kawaiiIconContext,
-                            iconMap = kawaiiIconMap,
-                            packageName = app.activityInfo.packageName,
-                            activityName = app.activityInfo.name
-                        ) ?: app.loadIcon(context.packageManager)
+                        iconBitmap = drawableToBitmap(drawable, 96)
                     )
                 }
                 .sortedBy { it.name }
@@ -834,6 +844,8 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             kawaiiIconNames = withContext(Dispatchers.Default) {
                 loadAllKawaiiIconNames(context)
             }
+        } else {
+            kawaiiIconNames = emptyList()
         }
     }
 
@@ -843,15 +855,47 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         }
     }
 
-    val favoriteApps = remember(favoritePackages, apps, hiddenPackages) {
-        favoritePackages.mapNotNull { packageName ->
-            if (packageName in hiddenPackages) {
-                null
-            } else {
-                apps.find {
-                    it.resolveInfo.activityInfo.packageName == packageName
+    var favoriteApps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
+
+    // fast async loader for favorite apps (~20ms) so favorites card displays instantly <3
+    LaunchedEffect(favoritePackages, hiddenPackages, appListRefreshCount, iconRefreshKey) {
+        favoriteApps = withContext(Dispatchers.Default) {
+            val kawaiiIconContext = try {
+                context.createPackageContext("kawaii.icon.pack", Context.CONTEXT_IGNORE_SECURITY)
+            } catch (e: Exception) { null }
+            val kawaiiIconMap = loadKawaiiIconMap(context)
+
+            favoritePackages
+                .filter { it !in hiddenPackages }
+                .mapNotNull { pkgName ->
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(pkgName) ?: return@mapNotNull null
+                    val resolveInfo = context.packageManager.resolveActivity(launchIntent, 0) ?: return@mapNotNull null
+                    val activityName = resolveInfo.activityInfo.name
+                    val customIconName = preferences.getString("custom_icon_$pkgName", null)
+
+                    val drawable = if (customIconName != null && kawaiiIconContext != null) {
+                        val resourceId = kawaiiIconContext.resources.getIdentifier(
+                            customIconName,
+                            "drawable",
+                            "kawaii.icon.pack"
+                        )
+                        if (resourceId != 0) {
+                            kawaiiIconContext.resources.getDrawable(resourceId, null)
+                        } else {
+                            getKawaiiIcon(kawaiiIconContext, kawaiiIconMap, pkgName, activityName)
+                                ?: resolveInfo.loadIcon(context.packageManager)
+                        }
+                    } else {
+                        getKawaiiIcon(kawaiiIconContext, kawaiiIconMap, pkgName, activityName)
+                            ?: resolveInfo.loadIcon(context.packageManager)
+                    }
+
+                    LauncherApp(
+                        resolveInfo = resolveInfo,
+                        name = resolveInfo.loadLabel(context.packageManager).toString(),
+                        iconBitmap = drawableToBitmap(drawable, 96)
+                    )
                 }
-            }
         }
     }
 
@@ -898,76 +942,22 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         }
     }
 
-    val iconCache = remember {
-        mutableStateMapOf<String, Bitmap>()
-    }
-
-    // loads and caches custom app icons in memory <3
-    LaunchedEffect(apps, iconRefreshKey) {
-        val iconPackContext = try {
-            context.createPackageContext(
-                "kawaii.icon.pack",
-                Context.CONTEXT_IGNORE_SECURITY
-            )
-        } catch (e: Exception) {
-            null
-        }
-
-        val loadedIcons = withContext(Dispatchers.Default) {
-            apps.associate { app ->
-                val packageName =
-                    app.resolveInfo.activityInfo.packageName
-
-                val customIconName =
-                    preferences.getString(
-                        "custom_icon_$packageName",
-                        null
-                    )
-
-                val drawable = if (
-                    customIconName != null &&
-                    iconPackContext != null
-                ) {
-                    val resourceId =
-                        iconPackContext.resources.getIdentifier(
-                            customIconName,
-                            "drawable",
-                            "kawaii.icon.pack"
-                        )
-
-                    if (resourceId != 0) {
-                        iconPackContext.resources.getDrawable(
-                            resourceId,
-                            null
-                        )
-                    } else {
-                        app.icon
-                    }
-                } else {
-                    app.icon
-                }
-
-                packageName to drawableToBitmap(drawable)
-            }
-        }
-
-        iconCache.clear()
-        iconCache.putAll(loadedIcons)
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .focusable()
             .focusRequester(focusRequester)
-            .onKeyEvent { event ->
+            .onPreviewKeyEvent { event ->
                 val nativeEvent = event.nativeKeyEvent
                 if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN && nativeEvent.repeatCount == 0) {
                     when (nativeEvent.keyCode) {
                         android.view.KeyEvent.KEYCODE_DPAD_UP -> {
                             if (drawerOpen) {
-                                selectedDrawerIndex =
-                                    (selectedDrawerIndex - 1).coerceAtLeast(0)
+                                if (selectedDrawerIndex == 0) { drawerOpen = false }
+                                else {
+                                    selectedDrawerIndex =
+                                        (selectedDrawerIndex - 1).coerceAtLeast(0)
+                                }
                             } else if (!chatPageOpen) {
                                 drawerOpen = true
                             }
@@ -1057,7 +1047,9 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         }
 
         // cute sticker decorations :3
-        StickerExplosion()
+        if (!drawerOpen && !chatPageOpen) {
+            StickerExplosion()
+        }
 
         Column(
             modifier = Modifier
@@ -1110,7 +1102,6 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 FavoritesCard(
                     context = context,
                     favoriteApps = favoriteApps,
-                    iconCache = iconCache,
                     selectedIndex = selectedFavoriteIndex,
                     onAppLongClick = { app ->
                         selectedApp = app
@@ -1201,7 +1192,6 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 AppActionDialog(
                     app = selectedApp!!,
                     favoritePackages = favoritePackages,
-                    iconCache = iconCache,
                     cardBgColor = cardBgColor,
                     cardTextColor = cardTextColor,
                     appActionColor = appActionColor,
@@ -1301,10 +1291,12 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         iconRefreshKey++
                         iconPickerOpen = false
                         iconEditingApp = null
+                        kawaiiIconNames = emptyList()
                     },
                     onDismiss = {
                         iconPickerOpen = false
                         iconEditingApp = null
+                        kawaiiIconNames = emptyList()
                     }
                 )
             }
@@ -1334,7 +1326,6 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         AppDrawerGridItem(
                             context = context,
                             app = app,
-                            iconCache = iconCache,
                             isSelected = index == selectedDrawerIndex,
                             onAppLongClick = { selectedApp = it }
                         )

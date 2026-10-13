@@ -16,6 +16,7 @@
 
 package com.android.quickstep
 
+import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.ActivityOptions
 import android.content.Context
@@ -105,40 +106,71 @@ class RecentTasksManager(private val context: Context) {
     }
 
     // attempts to extract hardware buffer task snapshot bitmap via reflection <3
+
+    @SuppressLint("BlockedPrivateApi")
     private fun getTaskThumbnail(taskId: Int): ImageBitmap? {
-        try {
-            // invoke getTaskSnapshot on ActivityManager
-            val getTaskSnapshotMethod: Method? = try {
-                ActivityManager::class.java.getMethod("getTaskSnapshot", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
-            } catch (e: Exception) {
-                null
+        return try {
+            // Get the ActivityTaskManager service
+            val taskManagerClass =
+                Class.forName("android.app.ActivityTaskManager")
+
+            val getServiceMethod =
+                taskManagerClass.getDeclaredMethod("getService")
+            getServiceMethod.isAccessible = true
+
+            val service = getServiceMethod.invoke(null)
+
+            // Request the snapshot using the method we found in Logcat
+            val getTaskSnapshotMethod = service.javaClass.getMethod(
+                "getTaskSnapshot",
+                Int::class.javaPrimitiveType,
+                Boolean::class.javaPrimitiveType
+            )
+
+            val snapshot = getTaskSnapshotMethod.invoke(
+                service,
+                taskId,
+                false
+            )
+
+            if (snapshot == null) return null
+
+            // Extract the hardware buffer from the snapshot
+            val getHardwareBufferMethod =
+                snapshot.javaClass.getMethod("getHardwareBuffer")
+
+            val hardwareBuffer =
+                getHardwareBufferMethod.invoke(snapshot)
+                        as? android.hardware.HardwareBuffer
+
+
+            if (hardwareBuffer == null) return null
+
+
+            val getColorSpaceMethod =
+                snapshot.javaClass.getMethod("getColorSpace")
+            val colorSpace = getColorSpaceMethod.invoke(snapshot)
+                    as? android.graphics.ColorSpace
+                ?: return null
+
+            // Convert the hardware buffer into a bitmap
+            if (android.os.Build.VERSION.SDK_INT < 29) {
+                return null
             }
 
-            if (getTaskSnapshotMethod != null) {
-                val snapshot = getTaskSnapshotMethod.invoke(activityManager, taskId, false)
-                if (snapshot != null) {
-                    val getSnapshotMethod = snapshot.javaClass.getMethod("getSnapshot")
-                    val hardwareBuffer = getSnapshotMethod.invoke(snapshot)
-                    if (hardwareBuffer != null) {
-                        val colorSpaceMethod = snapshot.javaClass.getMethod("getColorSpace")
-                        val colorSpace = colorSpaceMethod.invoke(snapshot) as? android.graphics.ColorSpace
-                        val wrapHardwareBufferMethod = Bitmap::class.java.getMethod(
-                            "wrapHardwareBuffer",
-                            android.hardware.HardwareBuffer::class.java,
-                            android.graphics.ColorSpace::class.java
-                        )
-                        val hwBitmap = wrapHardwareBufferMethod.invoke(null, hardwareBuffer, colorSpace) as? Bitmap
-                        if (hwBitmap != null) {
-                            val copyBitmap = hwBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                            return copyBitmap?.asImageBitmap()
-                        }
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            // fail gracefully if snapshot reflection is unavailable
+            val bitmap = Bitmap.wrapHardwareBuffer(
+                hardwareBuffer,
+                colorSpace
+            )
+
+            if (bitmap == null) return null
+
+            val copyBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+            copyBitmap?.asImageBitmap()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get thumbnail for task $taskId", e)
+            null
         }
-        return null
     }
 
     // switches back to selected recent task or opens app intent :3
@@ -174,22 +206,40 @@ class RecentTasksManager(private val context: Context) {
         return false
     }
 
-    // removes task from recents stack via system ActivityManager :3
-    fun removeTask(taskId: Int) {
-        try {
-            val removeTaskMethod: Method? = try {
-                ActivityManager::class.java.getMethod("removeTask", Int::class.javaPrimitiveType)
-            } catch (e: Exception) {
-                null
+    // removes task from recents stack via androids task management service
+    @SuppressLint("BlockedPrivateApi")
+    fun removeTask(taskId: Int): Boolean {
+        return try {
+            val activityTaskManagerClass =
+                Class.forName("android.app.ActivityTaskManager")
+
+            val getServiceMethod =
+                activityTaskManagerClass.getDeclaredMethod("getService")
+
+            getServiceMethod.isAccessible = true
+            val service = getServiceMethod.invoke(null)
+
+            val removeTaskMethod = service.javaClass.methods.firstOrNull {
+                it.name == "removeTask" &&
+                        it.parameterTypes.size == 1 &&
+                        it.parameterTypes[0] == Int::class.javaPrimitiveType
+            } ?: run {
+                Log.e(TAG, "No removeTask(int) method found on task service")
+                return false
             }
 
-            if (removeTaskMethod != null) {
-                removeTaskMethod.invoke(activityManager, taskId)
-            }
+            removeTaskMethod.isAccessible = true
+            val result = removeTaskMethod.invoke(service, taskId)
+
+            Log.i(TAG, "removeTask($taskId) returned: $result")
+            result as? Boolean ?: true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to remove task $taskId", e)
+            false
         }
     }
+
+
 
     companion object {
         private const val TAG = "RecentTasksManager"

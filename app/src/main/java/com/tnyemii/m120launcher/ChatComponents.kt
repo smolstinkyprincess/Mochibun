@@ -331,7 +331,7 @@ fun ChatPlaceholderPage(
         modifier = Modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFFFFF4FA))
+            .background(Color(0xAEEECFFF))
             .padding(16.dp)
     ) {
         // top header with title, mascot, and three-dot settings menu <3
@@ -621,15 +621,15 @@ fun ChatPlaceholderPage(
                                 when (selectedBackend) {
                                     "Auto" -> {
                                         withContext(Dispatchers.Main) { activeStatus = "Connecting to PC..." }
-                                        val ollamaReply = tryOllama(
+                                        val ollamaRes = tryOllama(
                                             messages = messages,
                                             searchEvidence = searchResults,
                                             modelName = selectedOllamaModel,
                                             enableReasoning = enableReasoning,
                                             showReasoning = showReasoning
                                         )
-                                        if (ollamaReply != null && ollamaReply.isNotBlank()) {
-                                            reply = ollamaReply
+                                        if (!ollamaRes.content.isNullOrBlank()) {
+                                            reply = ollamaRes.content
                                             backendTag = "PC · Ollama ($selectedOllamaModel)"
                                             withContext(Dispatchers.Main) {
                                                 activeStatus = "Writing a reply..."
@@ -655,25 +655,26 @@ fun ChatPlaceholderPage(
                                             }
                                             if (reply == null) {
                                                 backendTag = "Offline · Error"
+                                                val err = ollamaRes.error ?: "Could not reach Ollama on PC"
                                                 reply = if (resolvedModelPath.isEmpty()) {
-                                                    "Could not reach Ollama on PC (100.103.158.68:11434) and no local SmolLM2 model file is selected. Please select a model file or check Tailscale/PC. ♡"
+                                                    "Ollama PC error: $err. No local SmolLM2 model selected. ♡"
                                                 } else {
-                                                    "Could not reach Ollama on PC andddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd                                                                                                                                 d local SmolLM2 inference failed. ♡"
+                                                    "Ollama PC error: $err. Local SmolLM2 inference also failed. ♡"
                                                 }
                                             }
                                         }
                                     }
                                     "PC Ollama" -> {
                                         withContext(Dispatchers.Main) { activeStatus = "Connecting to PC..." }
-                                        val ollamaReply = tryOllama(
+                                        val ollamaRes = tryOllama(
                                             messages = messages,
                                             searchEvidence = searchResults,
                                             modelName = selectedOllamaModel,
                                             enableReasoning = enableReasoning,
                                             showReasoning = showReasoning
                                         )
-                                        if (ollamaReply != null && ollamaReply.isNotBlank()) {
-                                            reply = ollamaReply
+                                        if (!ollamaRes.content.isNullOrBlank()) {
+                                            reply = ollamaRes.content
                                             backendTag = "PC · Ollama ($selectedOllamaModel)"
                                             withContext(Dispatchers.Main) {
                                                 activeStatus = "Writing a reply..."
@@ -682,7 +683,8 @@ fun ChatPlaceholderPage(
                                         } else {
                                             withContext(Dispatchers.Main) { ollamaConnected = false }
                                             backendTag = "PC · Error"
-                                            reply = "Could not reach Ollama on PC at 100.103.158.68:11434 using model $selectedOllamaModel. Please verify Tailscale is connected and Ollama is running. ♡"
+                                            val err = ollamaRes.error ?: "Could not reach Ollama on PC at 100.103.158.68:11434"
+                                            reply = "Ollama error ($selectedOllamaModel):\n$err\n\nPlease verify Tailscale is connected and Ollama is running. ♡"
                                         }
                                     }
                                     "Local SmolLM2" -> {
@@ -1343,16 +1345,15 @@ fun tryOllama(
     modelName: String = "qwen3-fast:latest",
     enableReasoning: Boolean = false,
     showReasoning: Boolean = false
-): String? {
-    //Testing ollama
-    Log.e("M120Ollama", "tryOllama was called")
+): OllamaResponse {
+    Log.e("M120Ollama", "tryOllama called for model: $modelName")
 
     var connection: HttpURLConnection? = null
     return try {
         val url = URL("http://100.103.158.68:11434/api/chat")
         connection = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = 3500
-            readTimeout = 20000
+            connectTimeout = 10000
+            readTimeout = 60000
             requestMethod = "POST"
             doOutput = true
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -1362,9 +1363,6 @@ fun tryOllama(
         val jsonBody = JSONObject().apply {
             put("model", modelName)
             put("stream", false)
-            if (enableReasoning) {
-                put("think", true)
-            }
 
             val messagesArray = JSONArray()
 
@@ -1376,6 +1374,9 @@ fun tryOllama(
                         "Be warm and playful when appropriate, but prioritize accuracy. " +
                         "If you do not know something, say so."
             )
+            if (enableReasoning) {
+                systemContent.append("\nThink step by step before answering.")
+            }
             if (searchEvidence.isNotEmpty()) {
                 systemContent.append("\nUse the following web evidence when relevant. Do not invent details:\n")
                 for ((idx, src) in searchEvidence.withIndex()) {
@@ -1398,13 +1399,21 @@ fun tryOllama(
             os.write(input, 0, input.size)
         }
 
-        if (connection.responseCode != 200) {
-            val errorCode = connection.responseCode
+        val responseCode = connection.responseCode
+        if (responseCode != HttpURLConnection.HTTP_OK) {
             val errorBody = connection.errorStream
                 ?.bufferedReader()
                 ?.use { it.readText() }
                 .orEmpty()
 
+            val parsedError = try {
+                if (errorBody.isNotBlank()) JSONObject(errorBody).optString("error", errorBody) else ""
+            } catch (e: Exception) {
+                errorBody
+            }
+            val errMessage = if (parsedError.isNotBlank()) "HTTP $responseCode: $parsedError" else "HTTP status $responseCode"
+            Log.e("M120Ollama", "Ollama returned error: $errMessage")
+            return OllamaResponse(error = errMessage)
         }
 
         val responseString = connection.inputStream.bufferedReader().use { it.readText() }
@@ -1424,13 +1433,27 @@ fun tryOllama(
         }
         resultText.append(content)
 
-        resultText.toString().takeIf { it.isNotBlank() }
+        val finalString = resultText.toString().trim()
+        if (finalString.isNotBlank()) {
+            OllamaResponse(content = finalString)
+        } else {
+            OllamaResponse(error = "Ollama returned an empty response.")
+        }
+    } catch (e: java.net.SocketTimeoutException) {
+        val msg = "Connection timed out (60s). The PC model may still be loading."
+        Log.e("M120Ollama", msg, e)
+        OllamaResponse(error = msg)
+    } catch (e: java.net.ConnectException) {
+        val msg = "Could not connect to Ollama at 100.103.158.68:11434 (${e.message})."
+        Log.e("M120Ollama", msg, e)
+        OllamaResponse(error = msg)
     } catch (e: Exception) {
-        Log.d("M120_Ollama", "Ollama request failed: ${e.javaClass.simpleName}: ${e.message}")
-        e.printStackTrace()
-        null
+        val msg = "${e.javaClass.simpleName}: ${e.message}"
+        Log.e("M120Ollama", "Ollama request failed: $msg", e)
+        OllamaResponse(error = msg)
     } finally {
         connection?.disconnect()
     }
 }
+
 
