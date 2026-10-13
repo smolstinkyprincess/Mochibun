@@ -258,6 +258,25 @@ fun GreetingCard(context: Context, isOnline: Boolean = true, isLowBattery: Boole
         }
     }
 
+    // what hour is it? checked once a minute so the greeting changes by itself <3
+    var hour by remember {
+        mutableIntStateOf(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        }
+    }
+    // custom greetings based on time of day
+    val greeting = when (hour) {
+        in 5..11 -> "♡ good morning, emii ♡"
+        in 12..16 -> "♡ good afternoon, emii ♡"
+        in 17..20 -> "♡ good evening, emii ♡"
+        in 21..23 -> "♡ good night, emii ♡"
+        else -> "♡ it's sleepy time, emii ♡"      // 12am to 4am
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -292,8 +311,8 @@ fun GreetingCard(context: Context, isOnline: Boolean = true, isLowBattery: Boole
             shape = RoundedCornerShape(cardRoundness + 4.dp)
         ) {
             Text(
-                text = "♡ welcome home, emii ♡",
-                fontSize = 24.sp,
+                text = greeting,
+                fontSize = if (greeting.length > 22) 22.sp else 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = greetingColor,
                 modifier = Modifier
