@@ -120,3 +120,9 @@ fun buildChatMLPrompt(
     return sb.toString()
 }
 
+// result wrapper for Ollama API calls :3
+data class OllamaResponse(
+    val content: String? = null,
+    val error: String? = null
+)
+
