@@ -1,4 +1,4 @@
-# 🌸 M120Launcher <3
+# 🌸 Mochibun <3
 
 > A lightweight, custom, pastel-pink & lavender Android launcher specially crafted for the **ALT MIVE Style Folder AT-M120** flip phone (and other low-resource / compact portrait devices)! ✨
 
