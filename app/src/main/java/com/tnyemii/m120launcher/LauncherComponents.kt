@@ -62,6 +62,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -106,7 +107,8 @@ fun StatusCard(
     context: Context,
     cardBgColor: Color,
     cardTextColor: Color,
-    outlineColor: Color
+    outlineColor: Color,
+    onWifiChanged: (Boolean) -> Unit = {}
 ) {
     var currentTime by remember { mutableStateOf(Date()) }
     var batteryLevel by remember { mutableStateOf(0) }
@@ -135,6 +137,7 @@ fun StatusCard(
             ) == true
 
             wifiConnected = isWifi
+            onWifiChanged(isWifi)
 
             if (isWifi) {
                 var rawSsid: String? = null
@@ -242,12 +245,37 @@ fun StatusCard(
 
 // top greeting card header with decorative ribbon bow sticker <3
 @Composable
-fun GreetingCard(context: Context) {
+fun GreetingCard(context: Context, isOnline: Boolean = true) {
+
+    // bunny cheers for a moment when tapped :3
+    var cheering by remember { mutableStateOf(false) }
+    LaunchedEffect(cheering) {
+        if (cheering) {
+            kotlinx.coroutines.delay(1500)
+            cheering = false
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp)
     ) {
+
+        // bunny peeks over the top right corner, drawn BEFORE the card so the card hides its lower half <3
+        PixelArtMascot(
+            expression = when {
+                cheering -> MascotExpression.RESPONDING
+                !isOnline -> MascotExpression.OFFLINE
+                else -> MascotExpression.IDLE
+            },
+            size = 64.dp,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-16).dp, y = (-24).dp)
+                .pointerInput(Unit) { detectTapGestures { cheering = true } }
+        )
+
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -718,6 +746,62 @@ fun KawaiiIconPicker(
     )
 }
 
+// dialog listing hidden apps so they can be unhidden again <3
+@Composable
+fun HiddenAppsDialog(
+    hiddenApps: List<LauncherApp>,
+    onUnhide: (LauncherApp) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = cardBgColor,
+        shape = RoundedCornerShape(cardRoundness),
+        title = {
+            Text("♡ Hidden apps ♡", fontWeight = FontWeight.Bold, color = appActionColor)
+        },
+        text = {
+            if (hiddenApps.isEmpty()) {
+                Text("no hidden apps ♡", color = cardTextColor, fontSize = 16.sp)
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(hiddenApps, key = { it.resolveInfo.activityInfo.packageName }) { app ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                bitmap = app.iconBitmap.asImageBitmap(),
+                                contentDescription = app.name,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = app.name,
+                                color = cardTextColor,
+                                fontSize = 16.sp,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { onUnhide(app) }) {
+                                Text("Unhide", color = appActionColor, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", color = appActionColor, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
 // custom vector drawn Wi-Fi status icon for StatusCard :3
 @Composable
 fun TinyWifiIcon(
@@ -835,10 +919,9 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     var iconPickerOpen by remember { mutableStateOf(false) }
     var kawaiiIconNames by remember { mutableStateOf<List<String>>(emptyList()) }
     var iconRefreshKey by remember { mutableStateOf(0) }
-
-    var wallpaperMenuOpen by remember {
-        mutableStateOf(false)
-    }
+    var wallpaperMenuOpen by remember { mutableStateOf(false) }
+    var hiddenManagerOpen by remember { mutableStateOf(false) }
+    var isOnline by remember { mutableStateOf(true) }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -901,6 +984,13 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         apps.filter { app ->
             app.resolveInfo.activityInfo.packageName !in hiddenPackages
         }
+    }
+
+    // hidden apps shown in the hidden apps manager (one entry per package) :3
+    val hiddenApps = remember(apps, hiddenPackages) {
+        apps
+            .filter { it.resolveInfo.activityInfo.packageName in hiddenPackages }
+            .distinctBy { it.resolveInfo.activityInfo.packageName }
     }
 
     // remembers the list position where each starting letter first appears :3
@@ -983,8 +1073,8 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     }
 
     // focus requester handling for physical hardware key navigation <3
-    LaunchedEffect(drawerOpen, chatPageOpen, selectedApp, wallpaperMenuOpen, iconPickerOpen) {
-        if (!drawerOpen && !chatPageOpen && selectedApp == null && !wallpaperMenuOpen && !iconPickerOpen) {
+    LaunchedEffect(drawerOpen, chatPageOpen, selectedApp, wallpaperMenuOpen, iconPickerOpen, hiddenManagerOpen) {
+        if (!drawerOpen && !chatPageOpen && selectedApp == null && !wallpaperMenuOpen && !iconPickerOpen && !hiddenManagerOpen) {
             focusRequester.requestFocus()
         } else if (drawerOpen) {
             focusRequester.requestFocus()
@@ -1148,13 +1238,14 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         ) {
             // main launcher cards on home screen <3
             if (!drawerOpen && !chatPageOpen) {
-                GreetingCard(context = context)
+                GreetingCard(context = context, isOnline = isOnline)
                 Spacer(modifier = Modifier.height(8.dp))
                 StatusCard(
                     context = context,
                     cardBgColor = cardBgColor,
                     cardTextColor = cardTextColor,
-                    outlineColor = greetingOutlineColor
+                    outlineColor = greetingOutlineColor,
+                    onWifiChanged = { isOnline = it }
                 )
                 FavoritesCard(
                     context = context,
@@ -1176,13 +1267,25 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     shape = RoundedCornerShape(cardRoundness),
                     title = {
                         Text(
-                            text = "♡ Wallpaper options ♡",
+                            text = "♡ launcher options ♡",
                             fontWeight = FontWeight.Bold,
                             color = appActionColor
                         )
                     },
                     text = {
                         Column {
+                            TextButton(
+                                onClick = {
+                                    wallpaperMenuOpen = false
+                                    hiddenManagerOpen = true
+                                }
+                            ) {
+                                Text(
+                                    text = "🙈 Hidden apps",
+                                    color = appActionColor,
+                                    fontSize = 15.sp
+                                )
+                            }
                             TextButton(
                                 onClick = {
                                     wallpaperMenuOpen = false
@@ -1355,6 +1458,22 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         iconEditingApp = null
                         kawaiiIconNames = emptyList()
                     }
+                )
+            }
+
+            // hidden apps manager dialog :3
+            if (hiddenManagerOpen) {
+                HiddenAppsDialog(
+                    hiddenApps = hiddenApps,
+                    onUnhide = { app ->
+                        val pkgName = app.resolveInfo.activityInfo.packageName
+                        val newHidden = hiddenPackages.toMutableSet().apply { remove(pkgName) }
+                        hiddenPackages = newHidden
+                        preferences.edit()
+                            .putStringSet("hidden_apps", newHidden)
+                            .apply()
+                    },
+                    onDismiss = { hiddenManagerOpen = false }
                 )
             }
 
