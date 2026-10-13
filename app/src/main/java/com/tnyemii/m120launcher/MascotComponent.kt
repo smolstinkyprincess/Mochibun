@@ -28,7 +28,8 @@ enum class MascotExpression {
     IDLE,
     THINKING,
     RESPONDING,
-    OFFLINE
+    OFFLINE,
+    LOW_BATTERY
 }
 
 // the sprite lives on a 20 x 15 grid of square pixels <3
@@ -51,6 +52,7 @@ private fun paletteColor(c: Char): Color? = when (c) {
     'S' -> Color(0xFFFFD36E)
     'V' -> Color(0xFFD6B2FF)
     'K' -> Color(0xFFFFB6D9)
+    'B' -> Color(0xFF8FD3FF)
     else -> null
 }
 
@@ -141,6 +143,15 @@ private val EXPRESSION_RUNS: Map<MascotExpression, List<PixelRun>> = mapOf(
                     patch(12, 9, "DD") +             // sleepy closed eye
                     SMILE_RUNS +
                     patch(17, 2, "VVV", ".V.", "VVV")    // sleepy Z
+            ),
+    MascotExpression.LOW_BATTERY to (
+            BASE_RUNS +
+                    patch(6, 8, "DD", "WD") +        // heavy-lidded left eye
+                    patch(12, 8, "DD", "WD") +       // heavy-lidded right eye
+                    patch(9, 10, "HH") +             // heart nose
+                    patch(9, 11, "DD") +             // little frown
+                    patch(8, 12, "D..D") +
+                    patch(18, 6, "B", "B")           // sweat drop
             )
 )
 

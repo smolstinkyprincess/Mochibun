@@ -108,7 +108,8 @@ fun StatusCard(
     cardBgColor: Color,
     cardTextColor: Color,
     outlineColor: Color,
-    onWifiChanged: (Boolean) -> Unit = {}
+    onWifiChanged: (Boolean) -> Unit = {},
+    onLowBatteryChanged: (Boolean) -> Unit = {},
 ) {
     var currentTime by remember { mutableStateOf(Date()) }
     var batteryLevel by remember { mutableStateOf(0) }
@@ -128,6 +129,7 @@ fun StatusCard(
         while (true) {
             val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
             batteryLevel = batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            onLowBatteryChanged(batteryLevel in 0..20 && !batteryManager.isCharging)
 
             val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
             val network = connectivityManager.activeNetwork
@@ -245,7 +247,7 @@ fun StatusCard(
 
 // top greeting card header with decorative ribbon bow sticker <3
 @Composable
-fun GreetingCard(context: Context, isOnline: Boolean = true) {
+fun GreetingCard(context: Context, isOnline: Boolean = true, isLowBattery: Boolean = false) {
 
     // bunny cheers for a moment when tapped :3
     var cheering by remember { mutableStateOf(false) }
@@ -266,6 +268,7 @@ fun GreetingCard(context: Context, isOnline: Boolean = true) {
         PixelArtMascot(
             expression = when {
                 cheering -> MascotExpression.RESPONDING
+                isLowBattery -> MascotExpression.LOW_BATTERY
                 !isOnline -> MascotExpression.OFFLINE
                 else -> MascotExpression.IDLE
             },
@@ -922,6 +925,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     var wallpaperMenuOpen by remember { mutableStateOf(false) }
     var hiddenManagerOpen by remember { mutableStateOf(false) }
     var isOnline by remember { mutableStateOf(true) }
+    var isLowBattery by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -1048,6 +1052,8 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
     var selectedFavoriteIndex by remember { mutableIntStateOf(0) }
     var selectedDrawerIndex by remember { mutableIntStateOf(0) }
+    // 0 = center not pressed, 1 = pressed, 2 = held long (menu already opened) :3
+    var centerKeyState by remember { mutableIntStateOf(0) }
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(favoriteApps) {
@@ -1096,7 +1102,59 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             .focusRequester(focusRequester)
             .onPreviewKeyEvent { event ->
                 val nativeEvent = event.nativeKeyEvent
-                if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN && nativeEvent.repeatCount == 0) {
+                val isCenterKey = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
+                        nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+                        nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+
+                if (isCenterKey) {
+                    when (nativeEvent.action) {
+                        android.view.KeyEvent.ACTION_DOWN -> {
+                            if (nativeEvent.repeatCount == 0) {
+                                // just pressed down :3
+                                centerKeyState = 1
+                            } else if (centerKeyState == 1 && !chatPageOpen) {
+                                // still held on the home screen -> remember it was a long hold, menu opens on release <3
+                                centerKeyState = 2
+                            }
+                            true
+                        }
+                        android.view.KeyEvent.ACTION_UP -> {
+                            val wasShortPress = centerKeyState == 1
+                            val wasLongPress = centerKeyState == 2
+                            centerKeyState = 0
+                            if (wasLongPress) {
+                                if (drawerOpen) {
+                                    // held long in the drawer -> open actions for the selected app <3
+                                    val app = visibleApps.getOrNull(selectedDrawerIndex)
+                                    if (app != null) {
+                                        selectedApp = app
+                                    }
+                                } else {
+                                    // held long on the home screen -> open launcher options :3
+                                    wallpaperMenuOpen = true
+                                }
+                            }
+                            if (wasShortPress) {
+                                // quick tap -> launch the selected app :3
+                                val appToLaunch = when {
+                                    drawerOpen -> visibleApps.getOrNull(selectedDrawerIndex)
+                                    !chatPageOpen -> favoriteApps.getOrNull(selectedFavoriteIndex)
+                                    else -> null
+                                }
+                                if (appToLaunch != null) {
+                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(
+                                        appToLaunch.resolveInfo.activityInfo.packageName
+                                    )
+                                    if (launchIntent != null) {
+                                        context.startActivity(launchIntent)
+                                    }
+                                }
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                } else if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN && nativeEvent.repeatCount == 0) {
                     when (nativeEvent.keyCode) {
                         android.view.KeyEvent.KEYCODE_DPAD_UP -> {
                             if (drawerOpen) {
@@ -1139,32 +1197,6 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             } else if (!chatPageOpen) {
                                 if (favoriteApps.isNotEmpty()) {
                                     selectedFavoriteIndex = (selectedFavoriteIndex + 1).coerceIn(0, (favoriteApps.size - 1).coerceAtLeast(0))
-                                }
-                            }
-                            true
-                        }
-                        android.view.KeyEvent.KEYCODE_DPAD_CENTER,
-                        android.view.KeyEvent.KEYCODE_ENTER,
-                        android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                            if (drawerOpen) {
-                                val app = visibleApps.getOrNull(selectedDrawerIndex)
-                                if (app != null) {
-                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(
-                                        app.resolveInfo.activityInfo.packageName
-                                    )
-                                    if (launchIntent != null) {
-                                        context.startActivity(launchIntent)
-                                    }
-                                }
-                            } else if (!chatPageOpen) {
-                                val app = favoriteApps.getOrNull(selectedFavoriteIndex)
-                                if (app != null) {
-                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(
-                                        app.resolveInfo.activityInfo.packageName
-                                    )
-                                    if (launchIntent != null) {
-                                        context.startActivity(launchIntent)
-                                    }
                                 }
                             }
                             true
@@ -1238,14 +1270,15 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         ) {
             // main launcher cards on home screen <3
             if (!drawerOpen && !chatPageOpen) {
-                GreetingCard(context = context, isOnline = isOnline)
+                GreetingCard(context = context, isOnline = isOnline, isLowBattery = isLowBattery)
                 Spacer(modifier = Modifier.height(8.dp))
                 StatusCard(
                     context = context,
                     cardBgColor = cardBgColor,
                     cardTextColor = cardTextColor,
                     outlineColor = greetingOutlineColor,
-                    onWifiChanged = { isOnline = it }
+                    onWifiChanged = { isOnline = it },
+                    onLowBatteryChanged = { isLowBattery = it }
                 )
                 FavoritesCard(
                     context = context,
