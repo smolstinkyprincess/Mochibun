@@ -23,6 +23,20 @@ object WebSearchClient {
     private const val MAX_RESULTS = 3
     private const val MAX_SNIPPET_LENGTH = 140
 
+    // precompiled regex patterns to avoid repeated compilation overhead on low-end hardware <3
+    private val LINK_PATTERN = Pattern.compile(
+        "<a[^>]*class=\"[^\"]*result__a[^\"]*\"[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>",
+        Pattern.DOTALL or Pattern.CASE_INSENSITIVE
+    )
+
+    private val SNIPPET_PATTERN = Pattern.compile(
+        "<(a|div|span)[^>]*class=\"[^\"]*result__snippet[^\"]*\"[^>]*>(.*?)</\\1>",
+        Pattern.DOTALL or Pattern.CASE_INSENSITIVE
+    )
+
+    private val HTML_TAG_PATTERN = Pattern.compile("<[^>]*>")
+    private val WHITESPACE_PATTERN = Pattern.compile("\\s+")
+
     // checks if device has active internet connection :3
     fun isNetworkAvailable(context: Context): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -36,12 +50,13 @@ object WebSearchClient {
     fun search(query: String): List<SearchResult> {
         if (query.isBlank()) return emptyList()
 
+        var connection: HttpURLConnection? = null
         return try {
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
             val urlString = "https://html.duckduckgo.com/html/?q=$encodedQuery"
             val url = URL(urlString)
 
-            val connection = (url.openConnection() as HttpURLConnection).apply {
+            connection = (url.openConnection() as HttpURLConnection).apply {
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
                 requestMethod = "GET"
@@ -49,18 +64,17 @@ object WebSearchClient {
                 setRequestProperty("Accept-Language", "en-US,en;q=0.9")
             }
 
-            if (connection.responseCode != 200) {
-                connection.disconnect()
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                 return emptyList()
             }
 
             val html = connection.inputStream.bufferedReader().use { it.readText() }
-            connection.disconnect()
-
             parseDuckDuckGoHtml(html)
         } catch (e: Exception) {
             e.printStackTrace()
             emptyList()
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -68,17 +82,8 @@ object WebSearchClient {
     private fun parseDuckDuckGoHtml(html: String): List<SearchResult> {
         val results = mutableListOf<SearchResult>()
 
-        val linkPattern = Pattern.compile(
-            "<a[^>]*class=\"[^\"]*result__a[^\"]*\"[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>",
-            Pattern.DOTALL or Pattern.CASE_INSENSITIVE
-        )
-        val snippetPattern = Pattern.compile(
-            "<(a|div|span)[^>]*class=\"[^\"]*result__snippet[^\"]*\"[^>]*>(.*?)</\\1>",
-            Pattern.DOTALL or Pattern.CASE_INSENSITIVE
-        )
-
-        val linkMatcher = linkPattern.matcher(html)
-        val snippetMatcher = snippetPattern.matcher(html)
+        val linkMatcher = LINK_PATTERN.matcher(html)
+        val snippetMatcher = SNIPPET_PATTERN.matcher(html)
 
         while (linkMatcher.find() && results.size < MAX_RESULTS) {
             var rawUrl = linkMatcher.group(1) ?: ""
@@ -126,21 +131,17 @@ object WebSearchClient {
         return text.take(MAX_SNIPPET_LENGTH).trim()
     }
 
-    // removes html tags and decodes entities :3
+    // removes html tags and decodes entities using precompiled patterns and fast literal replacement :3
     private fun cleanText(htmlText: String): String {
-        return htmlText
-            .replaceAll("<[^>]*>", " ")
-            .replaceAll("&quot;", "\"")
-            .replaceAll("&amp;", "&")
-            .replaceAll("&lt;", "<")
-            .replaceAll("&gt;", ">")
-            .replaceAll("&#39;", "'")
-            .replaceAll("&nbsp;", " ")
-            .replaceAll("\\s+", " ")
-            .trim()
-    }
+        val strippedTags = HTML_TAG_PATTERN.matcher(htmlText).replaceAll(" ")
+        val unescaped = strippedTags
+            .replace("&quot;", "\"")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&#39;", "'")
+            .replace("&nbsp;", " ")
 
-    private fun String.replaceAll(regex: String, replacement: String): String {
-        return Pattern.compile(regex).matcher(this).replaceAll(replacement)
+        return WHITESPACE_PATTERN.matcher(unescaped).replaceAll(" ").trim()
     }
 }

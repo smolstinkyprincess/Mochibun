@@ -17,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.tnyemii.m120launcher.ui.theme.M120LauncherTheme
-import android.view.View
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -45,9 +44,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // unregister broadcast receiver when activity is destroyed :3
+    // unregister broadcast receiver safely when activity is destroyed :3
     override fun onDestroy() {
-        unregisterReceiver(packageChangeReceiver)
+        try {
+            unregisterReceiver(packageChangeReceiver)
+        } catch (_: IllegalArgumentException) {}
         super.onDestroy()
     }
 

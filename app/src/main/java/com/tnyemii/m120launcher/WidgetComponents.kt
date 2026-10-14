@@ -64,10 +64,12 @@ fun WidgetPage(
     }
 
     fun saveIds(ids: List<Int>) {
-        savedWidgetIdsList = ids
-        preferences.edit()
-            .putString("widget_ids", ids.joinToString(","))
-            .apply()
+        if (savedWidgetIdsList != ids) {
+            savedWidgetIdsList = ids
+            preferences.edit()
+                .putString("widget_ids", ids.joinToString(","))
+                .apply()
+        }
     }
 
     var pendingWidgetId by remember { mutableStateOf<Int?>(null) }
@@ -255,6 +257,11 @@ fun WidgetPage(
                             saveIds(savedWidgetIdsList.filter { it != widgetId })
                         }
                     } else {
+                        // cache resolved widget label to prevent repeated Binder IPC to package manager on recomposition <3
+                        val widgetLabel = remember(widgetId, info) {
+                            info.loadLabel(context.packageManager) ?: "Widget"
+                        }
+
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -273,7 +280,7 @@ fun WidgetPage(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = info.loadLabel(context.packageManager) ?: "Widget",
+                                        text = widgetLabel,
                                         color = cardTextColor,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp

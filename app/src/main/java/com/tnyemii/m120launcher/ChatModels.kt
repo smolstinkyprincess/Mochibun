@@ -14,7 +14,7 @@ data class ChatMessage(
     val id: String = java.util.UUID.randomUUID().toString()
 )
 
-// saves chat history list to json file in app private storage <3
+// saves chat history list to json file atomically in app private storage <3
 fun saveChatHistory(context: Context, messages: List<ChatMessage>) {
     try {
         val jsonArray = JSONArray()
@@ -36,7 +36,14 @@ fun saveChatHistory(context: Context, messages: List<ChatMessage>) {
             }
             jsonArray.put(obj)
         }
-        File(context.filesDir, "chat_history.json").writeText(jsonArray.toString())
+        val targetFile = File(context.filesDir, "chat_history.json")
+        val tempFile = File(context.filesDir, "chat_history.json.tmp")
+        tempFile.writeText(jsonArray.toString())
+        if (!tempFile.renameTo(targetFile)) {
+            // fallback if atomic rename fails
+            targetFile.writeText(tempFile.readText())
+            tempFile.delete()
+        }
     } catch (e: Exception) {
         e.printStackTrace()
     }
@@ -77,7 +84,6 @@ fun loadChatHistory(context: Context): List<ChatMessage> {
 }
 
 // formats messages and web search snippets into chatml prompt format for llm <3
-
 fun buildChatMLPrompt(
     messages: List<ChatMessage>,
     searchEvidence: List<SearchResult>
@@ -125,4 +131,3 @@ data class OllamaResponse(
     val content: String? = null,
     val error: String? = null
 )
-

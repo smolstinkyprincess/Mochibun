@@ -87,6 +87,15 @@ val MidnightMochiTheme = LauncherTheme(
     cardRoundnessDp = 24f
 )
 
+// container tint for selected/highlighted items based on theme :3
+val LauncherTheme.selectedContainerColor: Color
+    get() = when (name) {
+        "midnight_mochi" -> Color(0xFF5A3673)
+        "strawberry_milk" -> Color(0xFFFFB3D9)
+        "lavender_dream" -> Color(0xFFD8B4FE)
+        else -> Color(0xFFFFD1F0)
+    }
+
 // data class for user-made custom presets :3
 data class CustomPreset(
     val id: String,
