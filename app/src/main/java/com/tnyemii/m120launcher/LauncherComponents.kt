@@ -1073,6 +1073,9 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     var selectedDrawerIndex by remember { mutableIntStateOf(0) }
     // 0 = center not pressed, 1 = pressed, 2 = held long (menu already opened) :3
     var centerKeyState by remember { mutableIntStateOf(0) }
+    var t9Key by remember { mutableStateOf<Int?>(null) }
+    var t9Index by remember { mutableIntStateOf(0) }
+    var t9Time by remember { mutableStateOf(0L) }
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(favoriteApps) {
@@ -1175,6 +1178,50 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     }
                 } else if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN && nativeEvent.repeatCount == 0) {
                     when (nativeEvent.keyCode) {
+                        android.view.KeyEvent.KEYCODE_2, android.view.KeyEvent.KEYCODE_NUMPAD_2,
+                        android.view.KeyEvent.KEYCODE_3, android.view.KeyEvent.KEYCODE_NUMPAD_3,
+                        android.view.KeyEvent.KEYCODE_4, android.view.KeyEvent.KEYCODE_NUMPAD_4,
+                        android.view.KeyEvent.KEYCODE_5, android.view.KeyEvent.KEYCODE_NUMPAD_5,
+                        android.view.KeyEvent.KEYCODE_6, android.view.KeyEvent.KEYCODE_NUMPAD_6,
+                        android.view.KeyEvent.KEYCODE_7, android.view.KeyEvent.KEYCODE_NUMPAD_7,
+                        android.view.KeyEvent.KEYCODE_8, android.view.KeyEvent.KEYCODE_NUMPAD_8,
+                        android.view.KeyEvent.KEYCODE_9, android.view.KeyEvent.KEYCODE_NUMPAD_9 -> {
+                            val t9Letters = when (nativeEvent.keyCode) {
+                                android.view.KeyEvent.KEYCODE_2, android.view.KeyEvent.KEYCODE_NUMPAD_2 -> listOf('A', 'B', 'C')
+                                android.view.KeyEvent.KEYCODE_3, android.view.KeyEvent.KEYCODE_NUMPAD_3 -> listOf('D', 'E', 'F')
+                                android.view.KeyEvent.KEYCODE_4, android.view.KeyEvent.KEYCODE_NUMPAD_4 -> listOf('G', 'H', 'I')
+                                android.view.KeyEvent.KEYCODE_5, android.view.KeyEvent.KEYCODE_NUMPAD_5 -> listOf('J', 'K', 'L')
+                                android.view.KeyEvent.KEYCODE_6, android.view.KeyEvent.KEYCODE_NUMPAD_6 -> listOf('M', 'N', 'O')
+                                android.view.KeyEvent.KEYCODE_7, android.view.KeyEvent.KEYCODE_NUMPAD_7 -> listOf('P', 'Q', 'R', 'S')
+                                android.view.KeyEvent.KEYCODE_8, android.view.KeyEvent.KEYCODE_NUMPAD_8 -> listOf('T', 'U', 'V')
+                                android.view.KeyEvent.KEYCODE_9, android.view.KeyEvent.KEYCODE_NUMPAD_9 -> listOf('W', 'X', 'Y', 'Z')
+                                else -> emptyList()
+                            }
+                            if (t9Letters.isNotEmpty()) {
+                                val now = System.currentTimeMillis()
+                                val currentKey = nativeEvent.keyCode
+                                val idx = if (t9Key == currentKey && (now - t9Time) < 1000L) {
+                                    (t9Index + 1) % t9Letters.size
+                                } else {
+                                    0
+                                }
+                                t9Key = currentKey
+                                t9Index = idx
+                                t9Time = now
+
+                                val letter = t9Letters[idx]
+                                drawerOpen = true
+                                val target = letterStarts[letter]
+                                    ?: letterStarts.entries.firstOrNull { it.key > letter }?.value
+                                    ?: (visibleApps.size - 1)
+                                if (target >= 0 && visibleApps.isNotEmpty()) {
+                                    selectedDrawerIndex = target
+                                    scope.launch { listState.scrollToItem(target) }
+                                }
+                            }
+                            true
+                        }
+
                         android.view.KeyEvent.KEYCODE_DPAD_UP -> {
                             if (drawerOpen) {
                                 if (selectedDrawerIndex == 0) { drawerOpen = false }
