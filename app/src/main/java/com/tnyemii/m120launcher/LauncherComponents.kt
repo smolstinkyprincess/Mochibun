@@ -7,13 +7,15 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -991,7 +993,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     }
 
     var drawerOpen by remember { mutableStateOf(false) }
-    var chatPageOpen by remember { mutableStateOf(false) }
+    val pagerState = rememberPagerState(initialPage = 1) { 3 }
     var selectedApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconEditingApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconPickerOpen by remember { mutableStateOf(false) }
@@ -1157,8 +1159,8 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     }
 
     // focus requester handling for physical hardware key navigation <3
-    LaunchedEffect(drawerOpen, chatPageOpen, selectedApp, wallpaperMenuOpen, iconPickerOpen, hiddenManagerOpen) {
-        if (!drawerOpen && !chatPageOpen && selectedApp == null && !wallpaperMenuOpen && !iconPickerOpen && !hiddenManagerOpen) {
+    LaunchedEffect(drawerOpen, pagerState.currentPage, selectedApp, wallpaperMenuOpen, iconPickerOpen, hiddenManagerOpen) {
+        if (!drawerOpen && pagerState.currentPage == 1 && selectedApp == null && !wallpaperMenuOpen && !iconPickerOpen && !hiddenManagerOpen) {
             focusRequester.requestFocus()
         } else if (drawerOpen) {
             focusRequester.requestFocus()
@@ -1170,6 +1172,13 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         if (homePressCount > 0) {
             drawerOpen = false
             selectedApp = null
+            wallpaperMenuOpen = false
+            themeStudioOpen = false
+            iconPickerOpen = false
+            hiddenManagerOpen = false
+            scope.launch {
+                pagerState.animateScrollToPage(1)
+            }
         }
     }
 
@@ -1191,7 +1200,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             if (nativeEvent.repeatCount == 0) {
                                 // just pressed down :3
                                 centerKeyState = 1
-                            } else if (centerKeyState == 1 && !chatPageOpen) {
+                            } else if (centerKeyState == 1 && pagerState.currentPage == 1) {
                                 // still held on the home screen -> remember it was a long hold, menu opens on release <3
                                 centerKeyState = 2
                             }
@@ -1217,7 +1226,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 // quick tap -> launch the selected app :3
                                 val appToLaunch = when {
                                     drawerOpen -> visibleApps.getOrNull(selectedDrawerIndex)
-                                    !chatPageOpen -> favoriteApps.getOrNull(selectedFavoriteIndex)
+                                    pagerState.currentPage == 1 -> favoriteApps.getOrNull(selectedFavoriteIndex)
                                     else -> null
                                 }
                                 if (appToLaunch != null) {
@@ -1235,6 +1244,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     }
                 } else if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN && nativeEvent.repeatCount == 0) {
                     when (nativeEvent.keyCode) {
+                        android.view.KeyEvent.KEYCODE_1, android.view.KeyEvent.KEYCODE_NUMPAD_1,
                         android.view.KeyEvent.KEYCODE_2, android.view.KeyEvent.KEYCODE_NUMPAD_2,
                         android.view.KeyEvent.KEYCODE_3, android.view.KeyEvent.KEYCODE_NUMPAD_3,
                         android.view.KeyEvent.KEYCODE_4, android.view.KeyEvent.KEYCODE_NUMPAD_4,
@@ -1243,6 +1253,23 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         android.view.KeyEvent.KEYCODE_7, android.view.KeyEvent.KEYCODE_NUMPAD_7,
                         android.view.KeyEvent.KEYCODE_8, android.view.KeyEvent.KEYCODE_NUMPAD_8,
                         android.view.KeyEvent.KEYCODE_9, android.view.KeyEvent.KEYCODE_NUMPAD_9 -> {
+                            if (!drawerOpen) {
+                                when (nativeEvent.keyCode) {
+                                    android.view.KeyEvent.KEYCODE_1, android.view.KeyEvent.KEYCODE_NUMPAD_1 -> {
+                                        scope.launch { pagerState.animateScrollToPage(0) }
+                                        return@onPreviewKeyEvent true
+                                    }
+                                    android.view.KeyEvent.KEYCODE_2, android.view.KeyEvent.KEYCODE_NUMPAD_2 -> {
+                                        scope.launch { pagerState.animateScrollToPage(1) }
+                                        return@onPreviewKeyEvent true
+                                    }
+                                    android.view.KeyEvent.KEYCODE_3, android.view.KeyEvent.KEYCODE_NUMPAD_3 -> {
+                                        scope.launch { pagerState.animateScrollToPage(2) }
+                                        return@onPreviewKeyEvent true
+                                    }
+                                    else -> return@onPreviewKeyEvent false
+                                }
+                            }
                             val t9Letters = when (nativeEvent.keyCode) {
                                 android.view.KeyEvent.KEYCODE_2, android.view.KeyEvent.KEYCODE_NUMPAD_2 -> listOf('A', 'B', 'C')
                                 android.view.KeyEvent.KEYCODE_3, android.view.KeyEvent.KEYCODE_NUMPAD_3 -> listOf('D', 'E', 'F')
@@ -1267,7 +1294,6 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 t9Time = now
 
                                 val letter = t9Letters[idx]
-                                drawerOpen = true
                                 val target = letterStarts[letter]
                                     ?: letterStarts.entries.firstOrNull { it.key > letter }?.value
                                     ?: (visibleApps.size - 1)
@@ -1286,7 +1312,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     selectedDrawerIndex =
                                         (selectedDrawerIndex - 1).coerceAtLeast(0)
                                 }
-                            } else if (!chatPageOpen) {
+                            } else if (pagerState.currentPage == 1) {
                                 drawerOpen = true
                             }
                             true
@@ -1305,7 +1331,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 if (visibleApps.isNotEmpty()) {
                                     selectedDrawerIndex = (selectedDrawerIndex - 1).coerceAtLeast(0)
                                 }
-                            } else if (!chatPageOpen) {
+                            } else if (pagerState.currentPage == 1) {
                                 if (favoriteApps.isNotEmpty()) {
                                     selectedFavoriteIndex = (selectedFavoriteIndex - 1).coerceAtLeast(0)
                                 }
@@ -1317,7 +1343,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 if (visibleApps.isNotEmpty()) {
                                     selectedDrawerIndex = (selectedDrawerIndex + 1).coerceIn(0, visibleApps.size - 1)
                                 }
-                            } else if (!chatPageOpen) {
+                            } else if (pagerState.currentPage == 1) {
                                 if (favoriteApps.isNotEmpty()) {
                                     selectedFavoriteIndex = (selectedFavoriteIndex + 1).coerceIn(0, (favoriteApps.size - 1).coerceAtLeast(0))
                                 }
@@ -1333,7 +1359,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             .combinedClickable(
                 onClick = {},
                 onLongClick = {
-                    if (!chatPageOpen && !drawerOpen) {
+                    if (pagerState.currentPage == 1 && !drawerOpen) {
                         wallpaperMenuOpen = true
                     }
                 }
@@ -1349,326 +1375,342 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         }
 
         // cute sticker decorations :3
-        if (!drawerOpen && !chatPageOpen) {
+        if (!drawerOpen && pagerState.currentPage == 1) {
             StickerExplosion()
         }
 
-        Column(
+        val keyboardController = LocalSoftwareKeyboardController.current
+        LaunchedEffect(pagerState.currentPage) {
+            if (pagerState.currentPage != 2) {
+                keyboardController?.hide()
+            }
+        }
+
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Transparent)
-                .padding(16.dp)
-                .pointerInput(drawerOpen, chatPageOpen) {
+                .pointerInput(drawerOpen, pagerState.currentPage) {
                     detectVerticalDragGestures { _, dragAmount ->
-                        if (!drawerOpen && !chatPageOpen && dragAmount < -32) {
+                        if (!drawerOpen && pagerState.currentPage == 1 && dragAmount < -32) {
                             drawerOpen = true
                         }
                     }
+                },
+            userScrollEnabled = !drawerOpen && selectedApp == null && !wallpaperMenuOpen && !themeStudioOpen && !hiddenManagerOpen && !iconPickerOpen
+        ) { page ->
+            when (page) {
+                0 -> {
+                    if (pagerState.currentPage == 0 || pagerState.targetPage == 0) {
+                        WidgetPage(
+                            context = context,
+                            cardBgColor = cardBgColor,
+                            cardTextColor = cardTextColor,
+                            appActionColor = appActionColor,
+                            cardRoundness = cardRoundness
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize())
+                    }
                 }
-                .pointerInput(drawerOpen, chatPageOpen) {
-                    var totalDrag = 0f
-
-                    detectHorizontalDragGestures(
-                        onHorizontalDrag = { change, dragAmount ->
-                            totalDrag += dragAmount
-                            change.consume()
-                        },
-                        onDragEnd = {
-                            if (!drawerOpen) {
-                                if (totalDrag < -80f) {
-                                    chatPageOpen = true
-                                } else if (totalDrag > 80f) {
-                                    chatPageOpen = false
+                1 -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        GreetingCard(context = context, isOnline = isOnline, isLowBattery = isLowBattery)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        StatusCard(
+                            context = context,
+                            cardBgColor = cardBgColor,
+                            cardTextColor = cardTextColor,
+                            outlineColor = greetingOutlineColor,
+                            onWifiChanged = { isOnline = it },
+                            onLowBatteryChanged = { isLowBattery = it }
+                        )
+                        FavoritesCard(
+                            context = context,
+                            favoriteApps = favoriteApps,
+                            selectedIndex = selectedFavoriteIndex,
+                            onAppLongClick = { app ->
+                                selectedApp = app
+                            }
+                        )
+                    }
+                }
+                2 -> {
+                    if (pagerState.currentPage == 2 || pagerState.targetPage == 2) {
+                        ChatPlaceholderPage(
+                            onBack = {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(1)
                                 }
                             }
-                            totalDrag = 0f
-                        },
-                        onDragCancel = {
-                            totalDrag = 0f
-                        }
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize())
+                    }
+                }
+            }
+        }
+
+        // long-press wallpaper menu dialog :3
+        if (wallpaperMenuOpen) {
+            AlertDialog(
+                onDismissRequest = {
+                    wallpaperMenuOpen = false
+                },
+                containerColor = cardBgColor,
+                shape = RoundedCornerShape(cardRoundness),
+                title = {
+                    Text(
+                        text = "♡ launcher options ♡",
+                        fontWeight = FontWeight.Bold,
+                        color = appActionColor
                     )
                 },
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // main launcher cards on home screen <3
-            if (!drawerOpen && !chatPageOpen) {
-                GreetingCard(context = context, isOnline = isOnline, isLowBattery = isLowBattery)
-                Spacer(modifier = Modifier.height(8.dp))
-                StatusCard(
-                    context = context,
-                    cardBgColor = cardBgColor,
-                    cardTextColor = cardTextColor,
-                    outlineColor = greetingOutlineColor,
-                    onWifiChanged = { isOnline = it },
-                    onLowBatteryChanged = { isLowBattery = it }
-                )
-                FavoritesCard(
-                    context = context,
-                    favoriteApps = favoriteApps,
-                    selectedIndex = selectedFavoriteIndex,
-                    onAppLongClick = { app ->
-                        selectedApp = app
-                    }
-                )
-            }
-
-            // long-press wallpaper menu dialog :3
-            if (wallpaperMenuOpen) {
-                AlertDialog(
-                    onDismissRequest = {
-                        wallpaperMenuOpen = false
-                    },
-                    containerColor = cardBgColor,
-                    shape = RoundedCornerShape(cardRoundness),
-                    title = {
-                        Text(
-                            text = "♡ launcher options ♡",
-                            fontWeight = FontWeight.Bold,
-                            color = appActionColor
-                        )
-                    },
-                    text = {
-                        Column {
-                            TextButton(
-                                onClick = {
-                                    wallpaperMenuOpen = false
-                                    hiddenManagerOpen = true
-                                }
-                            ) {
-                                Text(
-                                    text = "🙈 Hidden apps",
-                                    color = appActionColor,
-                                    fontSize = 15.sp
-                                )
-                            }
-                            TextButton(
-                                onClick = {
-                                    wallpaperMenuOpen = false
-                                    themeStudioOpen = true
-                                }
-                            ) {
-                                Text(
-                                    text = "🎨 Theme Studio",
-                                    color = appActionColor,
-                                    fontSize = 15.sp
-                                )
-                            }
-                            TextButton(
-                                onClick = {
-                                    wallpaperMenuOpen = false
-                                    try {
-                                        wallpaperPicker.launch(arrayOf("image/*"))
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                    }
-                                }
-                            ) {
-                                Text(
-                                    text = "🖼 Pick wallpaper from gallery",
-                                    color = appActionColor,
-                                    fontSize = 15.sp
-                                )
-                            }
-
-                            if (wallpaperUri != null) {
-                                TextButton(
-                                    onClick = {
-                                        wallpaperMenuOpen = false
-                                        wallpaperUri = null
-                                        preferences.edit()
-                                            .remove("wallpaper_uri")
-                                            .apply()
-                                    }
-                                ) {
-                                    Text(
-                                        text = "↩ Reset to default wallpaper",
-                                        color = appActionColor,
-                                        fontSize = 15.sp
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
+                text = {
+                    Column {
                         TextButton(
                             onClick = {
                                 wallpaperMenuOpen = false
+                                hiddenManagerOpen = true
                             }
                         ) {
                             Text(
-                                text = "Cancel",
+                                text = "🙈 Hidden apps",
                                 color = appActionColor,
-                                fontWeight = FontWeight.Bold
+                                fontSize = 15.sp
                             )
                         }
-                    }
-                )
-            }
-
-            if (themeStudioOpen) {
-                ThemeStudioDialog(
-                    currentTheme = currentTheme,
-                    onDismiss = {
-                        themeStudioOpen = false
-                    },
-                    onApply = { newTheme ->
-                        currentTheme = newTheme
-                        saveTheme(preferences, newTheme)
-                        themeStudioOpen = false
-                    }
-                )
-            }
-
-            // AI assistant chat page overlay <3
-            if (chatPageOpen && !drawerOpen) {
-                ChatPlaceholderPage(
-                    onBack = {
-                        chatPageOpen = false
-                    }
-                )
-            }
-
-            // app options long-press dialog :3
-            if (selectedApp != null) {
-                AppActionDialog(
-                    app = selectedApp!!,
-                    favoritePackages = favoritePackages,
-                    cardBgColor = cardBgColor,
-                    cardTextColor = cardTextColor,
-                    appActionColor = appActionColor,
-                    cardRoundness = cardRoundness,
-                    onDismiss = {
-                        selectedApp = null
-                    },
-                    onMoveFavoriteLeft = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
-                        val list = favoritePackages.toMutableList()
-                        val index = list.indexOf(pkgName)
-                        if (index > 0) {
-                            list.removeAt(index)
-                            list.add(index - 1, pkgName)
-                            favoritePackages = list
-                            preferences.edit()
-                                .putString("favorite_packages_ordered", list.joinToString("|"))
-                                .apply()
+                        TextButton(
+                            onClick = {
+                                wallpaperMenuOpen = false
+                                themeStudioOpen = true
+                            }
+                        ) {
+                            Text(
+                                text = "🎨 Theme Studio",
+                                color = appActionColor,
+                                fontSize = 15.sp
+                            )
                         }
-                        selectedApp = null
-                    },
-                    onMoveFavoriteRight = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
-                        val list = favoritePackages.toMutableList()
-                        val index = list.indexOf(pkgName)
-                        if (index >= 0 && index < list.lastIndex) {
-                            list.removeAt(index)
-                            list.add(index + 1, pkgName)
-                            favoritePackages = list
-                            preferences.edit()
-                                .putString("favorite_packages_ordered", list.joinToString("|"))
-                                .apply()
+                        TextButton(
+                            onClick = {
+                                wallpaperMenuOpen = false
+                                try {
+                                    wallpaperPicker.launch(arrayOf("image/*"))
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+                        ) {
+                            Text(
+                                text = "🖼 Pick wallpaper from gallery",
+                                color = appActionColor,
+                                fontSize = 15.sp
+                            )
                         }
-                        selectedApp = null
-                    },
-                    onToggleFavorite = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
-                        val list = favoritePackages.toMutableList()
-                        if (pkgName in list) {
-                            list.remove(pkgName)
-                        } else {
-                            list.add(pkgName)
+
+                        if (wallpaperUri != null) {
+                            TextButton(
+                                onClick = {
+                                    wallpaperMenuOpen = false
+                                    wallpaperUri = null
+                                    preferences.edit()
+                                        .remove("wallpaper_uri")
+                                        .apply()
+                                }
+                            ) {
+                                Text(
+                                    text = "↩ Reset to default wallpaper",
+                                    color = appActionColor,
+                                    fontSize = 15.sp
+                                )
+                            }
                         }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            wallpaperMenuOpen = false
+                        }
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            color = appActionColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            )
+        }
+
+        if (themeStudioOpen) {
+            ThemeStudioDialog(
+                currentTheme = currentTheme,
+                onDismiss = {
+                    themeStudioOpen = false
+                },
+                onApply = { newTheme ->
+                    currentTheme = newTheme
+                    saveTheme(preferences, newTheme)
+                    themeStudioOpen = false
+                }
+            )
+        }
+
+        // app options long-press dialog :3
+        if (selectedApp != null) {
+            AppActionDialog(
+                app = selectedApp!!,
+                favoritePackages = favoritePackages,
+                cardBgColor = cardBgColor,
+                cardTextColor = cardTextColor,
+                appActionColor = appActionColor,
+                cardRoundness = cardRoundness,
+                onDismiss = {
+                    selectedApp = null
+                },
+                onMoveFavoriteLeft = {
+                    val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                    val list = favoritePackages.toMutableList()
+                    val index = list.indexOf(pkgName)
+                    if (index > 0) {
+                        list.removeAt(index)
+                        list.add(index - 1, pkgName)
                         favoritePackages = list
                         preferences.edit()
                             .putString("favorite_packages_ordered", list.joinToString("|"))
                             .apply()
-                        selectedApp = null
-                    },
-                    onAppInfo = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
-                        val intent = Intent(
-                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.parse("package:$pkgName")
-                        )
-                        context.startActivity(intent)
-                        selectedApp = null
-                    },
-                    onChangeIcon = {
-                        iconEditingApp = selectedApp
-                        iconPickerOpen = true
-                        selectedApp = null
-                    },
-                    onResetIcon = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
-                        preferences.edit()
-                            .remove("custom_icon_$pkgName")
-                            .apply()
-                        iconRefreshKey++
-                        selectedApp = null
-                    },
-                    onHideApp = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
-                        val newHidden = hiddenPackages.toMutableSet().apply {
-                            add(pkgName)
-                        }
-                        hiddenPackages = newHidden
-                        preferences.edit()
-                            .putStringSet("hidden_apps", newHidden)
-                            .apply()
-                        selectedApp = null
                     }
-                )
-            }
-
-            // custom KawaiiIconPack icon picker dialog <3
-            if (iconPickerOpen && iconEditingApp != null) {
-                KawaiiIconPicker(
-                    context = context,
-                    iconNames = kawaiiIconNames,
-                    onIconSelected = { selectedIconName ->
-                        val pkgName = iconEditingApp!!.resolveInfo.activityInfo.packageName
+                    selectedApp = null
+                },
+                onMoveFavoriteRight = {
+                    val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                    val list = favoritePackages.toMutableList()
+                    val index = list.indexOf(pkgName)
+                    if (index >= 0 && index < list.lastIndex) {
+                        list.removeAt(index)
+                        list.add(index + 1, pkgName)
+                        favoritePackages = list
                         preferences.edit()
-                            .putString("custom_icon_$pkgName", selectedIconName)
+                            .putString("favorite_packages_ordered", list.joinToString("|"))
                             .apply()
-
-                        iconRefreshKey++
-                        iconPickerOpen = false
-                        iconEditingApp = null
-                        kawaiiIconNames = emptyList()
-                    },
-                    onDismiss = {
-                        iconPickerOpen = false
-                        iconEditingApp = null
-                        kawaiiIconNames = emptyList()
                     }
-                )
-            }
+                    selectedApp = null
+                },
+                onToggleFavorite = {
+                    val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                    val list = favoritePackages.toMutableList()
+                    if (pkgName in list) {
+                        list.remove(pkgName)
+                    } else {
+                        list.add(pkgName)
+                    }
+                    favoritePackages = list
+                    preferences.edit()
+                        .putString("favorite_packages_ordered", list.joinToString("|"))
+                        .apply()
+                    selectedApp = null
+                },
+                onAppInfo = {
+                    val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                    val intent = Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$pkgName")
+                    )
+                    context.startActivity(intent)
+                    selectedApp = null
+                },
+                onChangeIcon = {
+                    iconEditingApp = selectedApp
+                    iconPickerOpen = true
+                    selectedApp = null
+                },
+                onResetIcon = {
+                    val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                    preferences.edit()
+                        .remove("custom_icon_$pkgName")
+                        .apply()
+                    iconRefreshKey++
+                    selectedApp = null
+                },
+                onHideApp = {
+                    val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                    val newHidden = hiddenPackages.toMutableSet().apply {
+                        add(pkgName)
+                    }
+                    hiddenPackages = newHidden
+                    preferences.edit()
+                        .putStringSet("hidden_apps", newHidden)
+                        .apply()
+                    selectedApp = null
+                }
+            )
+        }
 
-            // hidden apps manager dialog :3
-            if (hiddenManagerOpen) {
-                HiddenAppsDialog(
-                    hiddenApps = hiddenApps,
-                    onUnhide = { app ->
-                        val pkgName = app.resolveInfo.activityInfo.packageName
-                        val newHidden = hiddenPackages.toMutableSet().apply { remove(pkgName) }
-                        hiddenPackages = newHidden
-                        preferences.edit()
-                            .putStringSet("hidden_apps", newHidden)
-                            .apply()
-                    },
-                    onDismiss = { hiddenManagerOpen = false }
-                )
-            }
+        // custom KawaiiIconPack icon picker dialog <3
+        if (iconPickerOpen && iconEditingApp != null) {
+            KawaiiIconPicker(
+                context = context,
+                iconNames = kawaiiIconNames,
+                onIconSelected = { selectedIconName ->
+                    val pkgName = iconEditingApp!!.resolveInfo.activityInfo.packageName
+                    preferences.edit()
+                        .putString("custom_icon_$pkgName", selectedIconName)
+                        .apply()
 
-            // app drawer view overlay :3
-            if (drawerOpen) {
+                    iconRefreshKey++
+                    iconPickerOpen = false
+                    iconEditingApp = null
+                    kawaiiIconNames = emptyList()
+                },
+                onDismiss = {
+                    iconPickerOpen = false
+                    iconEditingApp = null
+                    kawaiiIconNames = emptyList()
+                }
+            )
+        }
+
+        // hidden apps manager dialog :3
+        if (hiddenManagerOpen) {
+            HiddenAppsDialog(
+                hiddenApps = hiddenApps,
+                onUnhide = { app ->
+                    val pkgName = app.resolveInfo.activityInfo.packageName
+                    val newHidden = hiddenPackages.toMutableSet().apply { remove(pkgName) }
+                    hiddenPackages = newHidden
+                    preferences.edit()
+                        .putStringSet("hidden_apps", newHidden)
+                        .apply()
+                },
+                onDismiss = { hiddenManagerOpen = false }
+            )
+        }
+
+        // app drawer view overlay :3
+        if (drawerOpen) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(cardBgColor.copy(alpha = 0.95f))
+                    .padding(16.dp)
+            ) {
                 AppDrawerHeader(
                     onSwipeDown = { drawerOpen = false }
                 )
 
                 Row(
                     modifier = Modifier
-                        .weight(1f)
                         .fillMaxWidth()
+                        .weight(1f)
                 ) {
                     LazyColumn(
                         state = listState,
