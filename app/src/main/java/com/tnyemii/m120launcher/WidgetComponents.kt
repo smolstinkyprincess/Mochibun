@@ -94,31 +94,37 @@ fun WidgetPage(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val id = pendingWidgetId
-        if (id != null) {
-            if (result.resultCode == Activity.RESULT_OK) {
-                val info = appWidgetManager.getAppWidgetInfo(id)
-                if (info?.configure != null) {
-                    pendingWidgetId = id
-                    val configIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
-                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
-                    }
-                    try {
-                        configLauncher.launch(configIntent)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        appWidgetHost.deleteAppWidgetId(id)
-                        pendingWidgetId = null
-                    }
-                } else {
-                    pendingWidgetId = null
-                    if (id !in savedWidgetIdsList) {
-                        saveIds(savedWidgetIdsList + id)
-                    }
-                }
+
+        android.util.Log.d(
+            "MochibunWidgets",
+            "BIND CALLBACK: result=${result.resultCode}, id=$id, data=${result.data}"
+        )
+
+        if (result.resultCode == Activity.RESULT_OK && id != null) {
+            val info = appWidgetManager.getAppWidgetInfo(id)
+
+            android.util.Log.d(
+                "MochibunWidgets",
+                "BIND INFO: id=$id, info=$info"
+            )
+
+            if (info != null) {
+                saveIds(savedWidgetIdsList + id)
+                android.util.Log.d(
+                    "MochibunWidgets",
+                    "SAVED IDS: ${savedWidgetIdsList}"
+                )
             } else {
-                appWidgetHost.deleteAppWidgetId(id)
-                pendingWidgetId = null
+                android.util.Log.e(
+                    "MochibunWidgets",
+                    "Widget info is null for id=$id"
+                )
             }
+        } else {
+            android.util.Log.e(
+                "MochibunWidgets",
+                "Binding failed or pending ID is null"
+            )
         }
     }
 
