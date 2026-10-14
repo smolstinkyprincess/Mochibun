@@ -52,6 +52,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -248,6 +249,11 @@ fun StatusCard(
 // top greeting card header with decorative ribbon bow sticker <3
 @Composable
 fun GreetingCard(context: Context, isOnline: Boolean = true, isLowBattery: Boolean = false) {
+    val theme = LocalLauncherTheme.current
+    val cardRoundness = theme.cardRoundnessDp.dp
+    val greetingOutlineColor = theme.greetingOutlineColor
+    val greetingBgColor = theme.greetingBgColor
+    val greetingColor = theme.greetingColor
 
     // bunny cheers for a moment when tapped :3
     var cheering by remember { mutableStateOf(false) }
@@ -324,7 +330,7 @@ fun GreetingCard(context: Context, isOnline: Boolean = true, isLowBattery: Boole
 
         BowSticker(
             size = 52.dp,
-            color = Color(0xFFD8A9D9),
+            color = greetingColor,
             rotation = 0f,
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -338,9 +344,16 @@ fun GreetingCard(context: Context, isOnline: Boolean = true, isLowBattery: Boole
 fun FavoritesCard(
     context: Context,
     favoriteApps: List<LauncherApp>,
-     selectedIndex: Int = 0,
+    selectedIndex: Int = 0,
     onAppLongClick: (LauncherApp) -> Unit
 ) {
+    val theme = LocalLauncherTheme.current
+    val cardRoundness = theme.cardRoundnessDp.dp
+    val cardBgColor = theme.cardBgColor
+    val cardTextColor = theme.cardTextColor
+    val greetingOutlineColor = theme.greetingOutlineColor
+    val appActionColor = theme.appActionColor
+
     val lazyRowState = rememberLazyListState()
 
     // auto scroll to selected favorite item when navigating with DPAD <3
@@ -365,7 +378,7 @@ fun FavoritesCard(
                     color = greetingOutlineColor,
                     shape = RoundedCornerShape(cardRoundness)
                 ),
-            colors = CardDefaults.cardColors(containerColor = Color(0xD9CEBAFF)),
+            colors = CardDefaults.cardColors(containerColor = cardBgColor),
             shape = RoundedCornerShape(cardRoundness)
         ) {
             Column(
@@ -390,16 +403,23 @@ fun FavoritesCard(
                             animationSpec = tween(durationMillis = 150)
                         )
 
+                        val selectedContainerColor = when (theme.name) {
+                            "midnight_mochi" -> Color(0xFF5A3673)
+                            "strawberry_milk" -> Color(0xFFFFB3D9)
+                            "lavender_dream" -> Color(0xFFD8B4FE)
+                            else -> Color(0xFFFFD1F0)
+                        }
+
                         Column(
                             modifier = Modifier
                                 .graphicsLayer(scaleX = scale, scaleY = scale)
                                 .background(
-                                    color = if (isSelected) Color(0xFFFFD1F0) else Color.Transparent,
+                                    color = if (isSelected) selectedContainerColor else Color.Transparent,
                                     shape = RoundedCornerShape(10.dp)
                                 )
                                 .border(
                                     width = if (isSelected) 2.5.dp else 0.dp,
-                                    color = if (isSelected) Color(0xFF9B5FA5) else Color.Transparent,
+                                    color = if (isSelected) appActionColor else Color.Transparent,
                                     shape = RoundedCornerShape(10.dp)
                                 )
                                 .combinedClickable(
@@ -441,6 +461,9 @@ fun AlphabetIndex(
     onLetterTap: (Char) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val theme = LocalLauncherTheme.current
+    val fgTextColor = theme.fgTextColor
+
     val letters = remember { ('A'..'Z').toList() + '#' }
     Column(
         modifier = modifier
@@ -462,7 +485,7 @@ fun AlphabetIndex(
                 Text(
                     text = letter.toString(),
                     fontSize = 11.sp,
-                    color = Color(0xFF9B5FA5).copy(
+                    color = fgTextColor.copy(
                         alpha = if (letter in availableLetters) 1f else 0.35f
                     )
                 )
@@ -480,6 +503,19 @@ fun AppDrawerGridItem(
     isSelected: Boolean = false,
     onAppLongClick: (LauncherApp) -> Unit
 ) {
+    val theme = LocalLauncherTheme.current
+    val cardRoundness = theme.cardRoundnessDp.dp
+    val cardTextColor = theme.cardTextColor
+    val cardBgColor = theme.cardBgColor
+    val appActionColor = theme.appActionColor
+
+    val selectedContainerColor = when (theme.name) {
+        "midnight_mochi" -> Color(0xFF5A3673)
+        "strawberry_milk" -> Color(0xFFFFB3D9)
+        "lavender_dream" -> Color(0xFFD8B4FE)
+        else -> Color(0xFFFFD1F0)
+    }
+
     val packageName = app.resolveInfo.activityInfo.packageName
     val scale by animateFloatAsState(
         targetValue = if (isSelected) 1.08f else 1.0f,
@@ -501,7 +537,7 @@ fun AppDrawerGridItem(
             ),
         shape = RoundedCornerShape(cardRoundness),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFFFFD1F0) else Color(0xFFCEBAFF)
+            containerColor = if (isSelected) selectedContainerColor else cardBgColor
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -532,7 +568,7 @@ fun AppDrawerGridItem(
             if (isSelected) {
                 Text(
                     text = "♡",
-                    color = Color(0xFF9B5FA5),
+                    color = appActionColor,
                     fontSize = 32.sp
                 )
             }
@@ -543,6 +579,9 @@ fun AppDrawerGridItem(
 // app drawer header bar showing title and swipe down button :3
 @Composable
 fun AppDrawerHeader(onSwipeDown: () -> Unit) {
+    val theme = LocalLauncherTheme.current
+    val cardTextColor = theme.cardTextColor
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -878,6 +917,23 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             Context.MODE_PRIVATE
         )
     }
+
+    var currentTheme by remember {
+        mutableStateOf(loadSavedTheme(preferences))
+    }
+    var themeStudioOpen by remember { mutableStateOf(false) }
+
+    val theme = currentTheme
+    val cardRoundness = theme.cardRoundnessDp.dp
+    val cardBgColor = theme.cardBgColor
+    val cardTextColor = theme.cardTextColor
+    val appActionColor = theme.appActionColor
+    val greetingOutlineColor = theme.greetingOutlineColor
+    val greetingBgColor = theme.greetingBgColor
+    val greetingColor = theme.greetingColor
+    val bgColor = theme.bgColor
+    val fgTextColor = theme.fgTextColor
+
     val intent = Intent(Intent.ACTION_MAIN).apply {
         addCategory(Intent.CATEGORY_LAUNCHER)
     }
@@ -1117,12 +1173,13 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .focusable()
-            .focusRequester(focusRequester)
-            .onPreviewKeyEvent { event ->
+    CompositionLocalProvider(LocalLauncherTheme provides currentTheme) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .focusable()
+                .focusRequester(focusRequester)
+                .onPreviewKeyEvent { event ->
                 val nativeEvent = event.nativeKeyEvent
                 val isCenterKey = nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
                         nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
@@ -1388,6 +1445,18 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             TextButton(
                                 onClick = {
                                     wallpaperMenuOpen = false
+                                    themeStudioOpen = true
+                                }
+                            ) {
+                                Text(
+                                    text = "🎨 Theme Studio",
+                                    color = appActionColor,
+                                    fontSize = 15.sp
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    wallpaperMenuOpen = false
                                     try {
                                         wallpaperPicker.launch(arrayOf("image/*"))
                                     } catch (e: Exception) {
@@ -1433,6 +1502,20 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                    }
+                )
+            }
+
+            if (themeStudioOpen) {
+                ThemeStudioDialog(
+                    currentTheme = currentTheme,
+                    onDismiss = {
+                        themeStudioOpen = false
+                    },
+                    onApply = { newTheme ->
+                        currentTheme = newTheme
+                        saveTheme(preferences, newTheme)
+                        themeStudioOpen = false
                     }
                 )
             }
@@ -1628,4 +1711,5 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             }
         }
     }
+}
 }
