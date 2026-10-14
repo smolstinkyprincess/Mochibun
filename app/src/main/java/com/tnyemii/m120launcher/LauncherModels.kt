@@ -6,14 +6,22 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import org.xmlpull.v1.XmlPullParser
+import java.io.BufferedInputStream
 
 // holds installed app information and resolved bitmap icon :3
 data class LauncherApp(
     val resolveInfo: ResolveInfo,
     val name: String,
     val iconBitmap: Bitmap
-)
+) {
+    // cached Compose ImageBitmap avoids rewrapping on every recomposition/scroll frame <3
+    val imageBitmap: ImageBitmap by lazy(LazyThreadSafetyMode.NONE) {
+        iconBitmap.asImageBitmap()
+    }
+}
 
 @Volatile
 private var cachedIconMap: Map<String, String>? = null
@@ -136,8 +144,10 @@ fun loadWallpaperBitmap(
     val resolver = context.contentResolver
     val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
 
-    resolver.openInputStream(uri)?.use { stream ->
-        android.graphics.BitmapFactory.decodeStream(stream, null, bounds)
+    resolver.openInputStream(uri)?.use { rawStream ->
+        BufferedInputStream(rawStream).use { stream ->
+            android.graphics.BitmapFactory.decodeStream(stream, null, bounds)
+        }
     }
 
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
@@ -158,7 +168,9 @@ fun loadWallpaperBitmap(
         inPreferredConfig = Bitmap.Config.RGB_565
     }
 
-    return resolver.openInputStream(uri)?.use { stream ->
-        android.graphics.BitmapFactory.decodeStream(stream, null, options)
+    return resolver.openInputStream(uri)?.use { rawStream ->
+        BufferedInputStream(rawStream).use { stream ->
+            android.graphics.BitmapFactory.decodeStream(stream, null, options)
+        }
     }
 }

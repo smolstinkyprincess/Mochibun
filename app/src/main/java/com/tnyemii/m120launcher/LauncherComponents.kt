@@ -170,12 +170,6 @@ fun StatusCard(
                 } else {
                     "Wi-Fi"
                 }
-
-                android.util.Log.d(
-                    "M120Wifi",
-                    "connected=$wifiConnected, ssid=$wifiSsid, rawSsid=$rawSsid"
-                )
-
             } else {
                 wifiSsid = null
             }
@@ -186,6 +180,8 @@ fun StatusCard(
 
     val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val dateFormat = remember { SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()) }
+    val formattedTime = remember(currentTime) { timeFormat.format(currentTime) }
+    val formattedDate = remember(currentTime) { dateFormat.format(currentTime) }
 
     Card(
         modifier = Modifier
@@ -202,14 +198,14 @@ fun StatusCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = timeFormat.format(currentTime),
+                text = formattedTime,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = cardTextColor
             )
 
             Text(
-                text = dateFormat.format(currentTime),
+                text = formattedDate,
                 fontSize = 14.sp,
                 color = cardTextColor
             )
@@ -355,6 +351,7 @@ fun FavoritesCard(
     val cardTextColor = theme.cardTextColor
     val greetingOutlineColor = theme.greetingOutlineColor
     val appActionColor = theme.appActionColor
+    val selectedContainerColor = theme.selectedContainerColor
 
     val lazyRowState = rememberLazyListState()
 
@@ -405,13 +402,6 @@ fun FavoritesCard(
                             animationSpec = tween(durationMillis = 150)
                         )
 
-                        val selectedContainerColor = when (theme.name) {
-                            "midnight_mochi" -> Color(0xFF5A3673)
-                            "strawberry_milk" -> Color(0xFFFFB3D9)
-                            "lavender_dream" -> Color(0xFFD8B4FE)
-                            else -> Color(0xFFFFD1F0)
-                        }
-
                         Column(
                             modifier = Modifier
                                 .graphicsLayer(scaleX = scale, scaleY = scale)
@@ -439,7 +429,7 @@ fun FavoritesCard(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Image(
-                                bitmap = app.iconBitmap.asImageBitmap(),
+                                bitmap = app.imageBitmap,
                                 contentDescription = appName,
                                 modifier = Modifier.size(52.dp)
                             )
@@ -510,13 +500,7 @@ fun AppDrawerGridItem(
     val cardTextColor = theme.cardTextColor
     val cardBgColor = theme.cardBgColor
     val appActionColor = theme.appActionColor
-
-    val selectedContainerColor = when (theme.name) {
-        "midnight_mochi" -> Color(0xFF5A3673)
-        "strawberry_milk" -> Color(0xFFFFB3D9)
-        "lavender_dream" -> Color(0xFFD8B4FE)
-        else -> Color(0xFFFFD1F0)
-    }
+    val selectedContainerColor = theme.selectedContainerColor
 
     val packageName = app.resolveInfo.activityInfo.packageName
     val scale by animateFloatAsState(
@@ -551,7 +535,7 @@ fun AppDrawerGridItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(
-                bitmap = app.iconBitmap.asImageBitmap(),
+                bitmap = app.imageBitmap,
                 contentDescription = app.name,
                 modifier = Modifier.size(52.dp)
             )
@@ -638,7 +622,7 @@ fun AppActionDialog(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
-                    bitmap = app.iconBitmap.asImageBitmap(),
+                    bitmap = app.imageBitmap,
                     contentDescription = null,
                     modifier = Modifier.size(36.dp)
                 )
@@ -779,8 +763,9 @@ fun KawaiiIconPicker(
                         }
 
                         if (resId != 0 && iconPackContext != null) {
-                            val drawable = remember(resId) {
-                                iconPackContext.resources.getDrawable(resId, null)
+                            val iconBitmap = remember(resId) {
+                                val drawable = iconPackContext.resources.getDrawable(resId, null)
+                                drawableToBitmap(drawable, 96).asImageBitmap()
                             }
 
                             Box(
@@ -791,7 +776,7 @@ fun KawaiiIconPicker(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Image(
-                                    bitmap = drawableToBitmap(drawable).asImageBitmap(),
+                                    bitmap = iconBitmap,
                                     contentDescription = iconName,
                                     modifier = Modifier.size(40.dp)
                                 )
@@ -837,7 +822,7 @@ fun HiddenAppsDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Image(
-                                bitmap = app.iconBitmap.asImageBitmap(),
+                                bitmap = app.imageBitmap,
                                 contentDescription = app.name,
                                 modifier = Modifier.size(36.dp)
                             )
@@ -1086,7 +1071,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     var favoriteApps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
 
     // fast async loader for favorite apps (~20ms) so favorites card displays instantly <3
-    LaunchedEffect(favoritePackages, hiddenPackages, appListRefreshCount, iconRefreshKey) {
+    LaunchedEffect(favoritePackages, hiddenPackages, appListRefreshCount, iconRefreshKey, apps) {
         favoriteApps = withContext(Dispatchers.Default) {
             val kawaiiIconContext = try {
                 context.createPackageContext("kawaii.icon.pack", Context.CONTEXT_IGNORE_SECURITY)
@@ -1096,6 +1081,11 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             favoritePackages
                 .filter { it !in hiddenPackages }
                 .mapNotNull { pkgName ->
+                    val existingApp = apps.firstOrNull { it.resolveInfo.activityInfo.packageName == pkgName }
+                    if (existingApp != null) {
+                        return@mapNotNull existingApp
+                    }
+
                     val launchIntent = context.packageManager.getLaunchIntentForPackage(pkgName) ?: return@mapNotNull null
                     val resolveInfo = context.packageManager.resolveActivity(launchIntent, 0) ?: return@mapNotNull null
                     val activityName = resolveInfo.activityInfo.name
@@ -1402,7 +1392,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         ) { page ->
             when (page) {
                 0 -> {
-                    if (pagerState.currentPage == 0 || pagerState.targetPage == 0) {
+                    if (!drawerOpen && (pagerState.currentPage == 0 || pagerState.targetPage == 0)) {
                         WidgetPage(
                             context = context,
                             cardBgColor = cardBgColor,
@@ -1415,35 +1405,39 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     }
                 }
                 1 -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        GreetingCard(context = context, isOnline = isOnline, isLowBattery = isLowBattery)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        StatusCard(
-                            context = context,
-                            cardBgColor = cardBgColor,
-                            cardTextColor = cardTextColor,
-                            outlineColor = greetingOutlineColor,
-                            onWifiChanged = { isOnline = it },
-                            onLowBatteryChanged = { isLowBattery = it }
-                        )
-                        FavoritesCard(
-                            context = context,
-                            favoriteApps = favoriteApps,
-                            selectedIndex = selectedFavoriteIndex,
-                            onAppLongClick = { app ->
-                                selectedApp = app
-                            }
-                        )
+                    if (!drawerOpen) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            GreetingCard(context = context, isOnline = isOnline, isLowBattery = isLowBattery)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            StatusCard(
+                                context = context,
+                                cardBgColor = cardBgColor,
+                                cardTextColor = cardTextColor,
+                                outlineColor = greetingOutlineColor,
+                                onWifiChanged = { isOnline = it },
+                                onLowBatteryChanged = { isLowBattery = it }
+                            )
+                            FavoritesCard(
+                                context = context,
+                                favoriteApps = favoriteApps,
+                                selectedIndex = selectedFavoriteIndex,
+                                onAppLongClick = { app ->
+                                    selectedApp = app
+                                }
+                            )
+                        }
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize())
                     }
                 }
                 2 -> {
-                    if (pagerState.currentPage == 2 || pagerState.targetPage == 2) {
+                    if (!drawerOpen && (pagerState.currentPage == 2 || pagerState.targetPage == 2)) {
                         ChatPlaceholderPage(
                             onBack = {
                                 scope.launch {
@@ -1700,7 +1694,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(cardBgColor.copy(alpha = 0.95f))
+                    .background(cardBgColor.copy(alpha = 0.64f))
                     .padding(16.dp)
             ) {
                 AppDrawerHeader(

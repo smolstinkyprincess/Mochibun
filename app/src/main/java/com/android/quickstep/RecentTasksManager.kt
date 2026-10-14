@@ -1,14 +1,14 @@
 /*
  * Copyright (C) 2025 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License\");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * distributed under the License is distributed on an \"AS IS\" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -106,67 +106,47 @@ class RecentTasksManager(private val context: Context) {
     }
 
     // attempts to extract hardware buffer task snapshot bitmap via reflection <3
-
     @SuppressLint("BlockedPrivateApi")
     private fun getTaskThumbnail(taskId: Int): ImageBitmap? {
         return try {
-            // Get the ActivityTaskManager service
-            val taskManagerClass =
-                Class.forName("android.app.ActivityTaskManager")
-
-            val getServiceMethod =
-                taskManagerClass.getDeclaredMethod("getService")
-            getServiceMethod.isAccessible = true
-
-            val service = getServiceMethod.invoke(null)
-
-            // Request the snapshot using the method we found in Logcat
-            val getTaskSnapshotMethod = service.javaClass.getMethod(
-                "getTaskSnapshot",
-                Int::class.javaPrimitiveType,
-                Boolean::class.javaPrimitiveType
-            )
+            val service = getAtmService() ?: return null
+            val getTaskSnapshotMethod = getTaskSnapshotMethod ?: return null
 
             val snapshot = getTaskSnapshotMethod.invoke(
                 service,
                 taskId,
                 false
-            )
+            ) ?: return null
 
-            if (snapshot == null) return null
+            val getHardwareBufferMethod = getHardwareBufferMethod
+                ?: snapshot.javaClass.getMethod("getHardwareBuffer").also { getHardwareBufferMethod = it }
 
-            // Extract the hardware buffer from the snapshot
-            val getHardwareBufferMethod =
-                snapshot.javaClass.getMethod("getHardwareBuffer")
+            val hardwareBuffer = getHardwareBufferMethod.invoke(snapshot)
+                    as? android.hardware.HardwareBuffer ?: return null
 
-            val hardwareBuffer =
-                getHardwareBufferMethod.invoke(snapshot)
-                        as? android.hardware.HardwareBuffer
+            try {
+                val getColorSpaceMethod = getColorSpaceMethod
+                    ?: snapshot.javaClass.getMethod("getColorSpace").also { getColorSpaceMethod = it }
+                val colorSpace = getColorSpaceMethod.invoke(snapshot)
+                        as? android.graphics.ColorSpace
+                    ?: return null
 
+                // Convert the hardware buffer into a bitmap
+                if (android.os.Build.VERSION.SDK_INT < 29) {
+                    return null
+                }
 
-            if (hardwareBuffer == null) return null
+                val bitmap = Bitmap.wrapHardwareBuffer(
+                    hardwareBuffer,
+                    colorSpace
+                ) ?: return null
 
-
-            val getColorSpaceMethod =
-                snapshot.javaClass.getMethod("getColorSpace")
-            val colorSpace = getColorSpaceMethod.invoke(snapshot)
-                    as? android.graphics.ColorSpace
-                ?: return null
-
-            // Convert the hardware buffer into a bitmap
-            if (android.os.Build.VERSION.SDK_INT < 29) {
-                return null
+                val copyBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                copyBitmap?.asImageBitmap()
+            } finally {
+                // explicitly close the hardware buffer to avoid native graphics buffer memory leaks <3
+                hardwareBuffer.close()
             }
-
-            val bitmap = Bitmap.wrapHardwareBuffer(
-                hardwareBuffer,
-                colorSpace
-            )
-
-            if (bitmap == null) return null
-
-            val copyBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-            copyBitmap?.asImageBitmap()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get thumbnail for task $taskId", e)
             null
@@ -176,20 +156,10 @@ class RecentTasksManager(private val context: Context) {
     // switches back to selected recent task or opens app intent :3
     fun launchTask(task: RecentTaskInfo): Boolean {
         try {
-            // attempt reflection method startActivityFromRecents <3
-            val startActivityFromRecentsMethod: Method? = try {
-                ActivityManager::class.java.getMethod(
-                    "startActivityFromRecents",
-                    Int::class.javaPrimitiveType,
-                    android.os.Bundle::class.java
-                )
-            } catch (e: Exception) {
-                null
-            }
-
-            if (startActivityFromRecentsMethod != null) {
+            val method = startActivityFromRecentsMethod
+            if (method != null) {
                 val opts = ActivityOptions.makeCustomAnimation(context, 0, 0)
-                startActivityFromRecentsMethod.invoke(activityManager, task.taskId, opts.toBundle())
+                method.invoke(activityManager, task.taskId, opts.toBundle())
                 return true
             }
 
@@ -210,27 +180,21 @@ class RecentTasksManager(private val context: Context) {
     @SuppressLint("BlockedPrivateApi")
     fun removeTask(taskId: Int): Boolean {
         return try {
-            val activityTaskManagerClass =
-                Class.forName("android.app.ActivityTaskManager")
+            val service = getAtmService() ?: return false
+            val removeTaskMethod = removeTaskMethod
+                ?: service.javaClass.methods.firstOrNull {
+                    it.name == "removeTask" &&
+                            it.parameterTypes.size == 1 &&
+                            it.parameterTypes[0] == Int::class.javaPrimitiveType
+                }?.also {
+                    it.isAccessible = true
+                    removeTaskMethod = it
+                } ?: run {
+                    Log.e(TAG, "No removeTask(int) method found on task service")
+                    return false
+                }
 
-            val getServiceMethod =
-                activityTaskManagerClass.getDeclaredMethod("getService")
-
-            getServiceMethod.isAccessible = true
-            val service = getServiceMethod.invoke(null)
-
-            val removeTaskMethod = service.javaClass.methods.firstOrNull {
-                it.name == "removeTask" &&
-                        it.parameterTypes.size == 1 &&
-                        it.parameterTypes[0] == Int::class.javaPrimitiveType
-            } ?: run {
-                Log.e(TAG, "No removeTask(int) method found on task service")
-                return false
-            }
-
-            removeTaskMethod.isAccessible = true
             val result = removeTaskMethod.invoke(service, taskId)
-
             Log.i(TAG, "removeTask($taskId) returned: $result")
             result as? Boolean ?: true
         } catch (e: Exception) {
@@ -239,9 +203,53 @@ class RecentTasksManager(private val context: Context) {
         }
     }
 
-
-
     companion object {
         private const val TAG = "RecentTasksManager"
+
+        @Volatile
+        private var atmService: Any? = null
+        @Volatile
+        private var getTaskSnapshotMethod: Method? = null
+        @Volatile
+        private var getHardwareBufferMethod: Method? = null
+        @Volatile
+        private var getColorSpaceMethod: Method? = null
+        @Volatile
+        private var removeTaskMethod: Method? = null
+
+        private val startActivityFromRecentsMethod: Method? by lazy {
+            try {
+                ActivityManager::class.java.getMethod(
+                    "startActivityFromRecents",
+                    Int::class.javaPrimitiveType,
+                    android.os.Bundle::class.java
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        @Synchronized
+        private fun getAtmService(): Any? {
+            if (atmService != null) return atmService
+            return try {
+                val taskManagerClass = Class.forName("android.app.ActivityTaskManager")
+                val getServiceMethod = taskManagerClass.getDeclaredMethod("getService")
+                getServiceMethod.isAccessible = true
+                val service = getServiceMethod.invoke(null)
+                if (service != null) {
+                    getTaskSnapshotMethod = service.javaClass.getMethod(
+                        "getTaskSnapshot",
+                        Int::class.javaPrimitiveType,
+                        Boolean::class.javaPrimitiveType
+                    )
+                }
+                atmService = service
+                service
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize ActivityTaskManager service reflection", e)
+                null
+            }
+        }
     }
 }

@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tnyemii.m120launcher.ui.theme.cardTextColor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -151,30 +152,32 @@ fun ChatPlaceholderPage(
     }
 
     val refreshModels: () -> Unit = {
-        isRefreshingModels = true
-        modelFetchStatus = "Fetching models from PC..."
-        coroutineScope.launch(Dispatchers.IO) {
-            val fetched = fetchOllamaModels()
-            withContext(Dispatchers.Main) {
-                isRefreshingModels = false
-                if (fetched.isNotEmpty()) {
-                    // Only show names confirmed by /api/tags. Never keep a stale selection
-                    // in the installed-model menu after a successful refresh.
-                    ollamaModels = fetched.distinct()
-                    if (selectedOllamaModel !in ollamaModels) {
-                        val replacement = when {
-                            "qwen3-fast:latest" in ollamaModels -> "qwen3-fast:latest"
-                            else -> ollamaModels.first()
+        if (!isRefreshingModels) {
+            isRefreshingModels = true
+            modelFetchStatus = "Fetching models from PC..."
+            coroutineScope.launch(Dispatchers.IO) {
+                val fetched = fetchOllamaModels()
+                withContext(Dispatchers.Main) {
+                    isRefreshingModels = false
+                    if (fetched.isNotEmpty()) {
+                        // Only show names confirmed by /api/tags. Never keep a stale selection
+                        // in the installed-model menu after a successful refresh.
+                        ollamaModels = fetched.distinct()
+                        if (selectedOllamaModel !in ollamaModels) {
+                            val replacement = when {
+                                "qwen3-fast:latest" in ollamaModels -> "qwen3-fast:latest"
+                                else -> ollamaModels.first()
+                            }
+                            updateOllamaModel(replacement)
+                            modelFetchStatus = "${ollamaModels.size} model(s) found • selected $replacement ♡"
+                        } else {
+                            modelFetchStatus = "Connected • ${ollamaModels.size} model(s) found ♡"
                         }
-                        updateOllamaModel(replacement)
-                        modelFetchStatus = "${ollamaModels.size} model(s) found • selected $replacement ♡"
                     } else {
-                        modelFetchStatus = "Connected • ${ollamaModels.size} model(s) found ♡"
+                        // An empty list can mean unreachable, an HTTP/JSON error, or no installed models.
+                        ollamaModels = emptyList()
+                        modelFetchStatus = "No models found, or PC is offline/unreachable ♡"
                     }
-                } else {
-                    // An empty list can mean unreachable, an HTTP/JSON error, or no installed models.
-                    ollamaModels = emptyList()
-                    modelFetchStatus = "No models found, or PC is offline/unreachable ♡"
                 }
             }
         }
@@ -744,13 +747,15 @@ fun ChatPlaceholderPage(
                                     )
                                 }
                             } finally {
-                                withContext(Dispatchers.Main) {
-                                    activeStatus = null
-                                    isGenerating = false
-                                    // Read Compose state on the main thread; persist an immutable snapshot off-thread.
-                                    historySnapshot = messages.toList()
+                                withContext(NonCancellable) {
+                                    withContext(Dispatchers.Main) {
+                                        activeStatus = null
+                                        isGenerating = false
+                                        // Read Compose state on the main thread; persist an immutable snapshot off-thread.
+                                        historySnapshot = messages.toList()
+                                    }
+                                    saveChatHistory(context, historySnapshot)
                                 }
-                                saveChatHistory(context, historySnapshot)
                             }
                         }
                     }
@@ -786,8 +791,9 @@ fun ChatPlaceholderPage(
             },
             onDelete = {
                 messages.remove(selectedMsg)
+                val snapshot = messages.toList()
                 coroutineScope.launch(Dispatchers.IO) {
-                    saveChatHistory(context, messages)
+                    saveChatHistory(context, snapshot)
                 }
                 Toast.makeText(context, "Message deleted ♡", Toast.LENGTH_SHORT).show()
                 selectedMessageForOptions = null
@@ -902,7 +908,7 @@ fun MessageOptionsMenu(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "📋 Copy text",
@@ -1047,7 +1053,7 @@ fun ChatSettingsDialog(
     onBackendChange: (String) -> Unit,
     selectedOllamaModel: String,
     onOllamaModelChange: (String) -> Unit,
-    ollamaModels: List<String>,
+    ollamaModels: List<String> ,
     onRefreshModels: () -> Unit,
     isRefreshingModels: Boolean,
     modelFetchStatus: String?,
@@ -1138,7 +1144,7 @@ fun ChatSettingsDialog(
                                 enabled = !isRefreshingModels
                             ) {
                                 Text(
-                                    text = if (isRefreshingModels) "Fetching..." else "Refresh ↻",
+                                    text = if (isRefreshingModels) "Fetching..." else "Refresh ↺",
                                     fontSize = 11.sp,
                                     color = Color(0xFFB77BBF)
                                 )
@@ -1478,5 +1484,3 @@ fun tryOllama(
         connection?.disconnect()
     }
 }
-
-
