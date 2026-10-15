@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "M120Launcher"
+rootProject.name = "Mochibun"
 include(":app")
  

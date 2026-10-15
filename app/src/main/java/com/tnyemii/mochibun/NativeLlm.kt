@@ -1,4 +1,4 @@
-package com.tnyemii.m120launcher
+package com.tnyemii.mochibun
 
 // bridges kotlin to our native llama.cpp c++ library :3
 object NativeLlm {
