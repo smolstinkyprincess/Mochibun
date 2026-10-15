@@ -1,4 +1,4 @@
-package com.tnyemii.m120launcher.ui.theme
+package com.tnyemii.mochibun.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

@@ -1,4 +1,4 @@
-package com.tnyemii.m120launcher
+package com.tnyemii.mochibun
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -14,6 +14,6 @@ class ExampleInstrumentedTest {
     @Test
     fun useAppContext() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("com.tnyemii.m120launcher", appContext.packageName)
+        assertEquals("com.tnyemii.mochibun", appContext.packageName)
     }
 }

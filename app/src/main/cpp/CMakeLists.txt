@@ -8,6 +8,13 @@ if(ANDROID_ABI STREQUAL "armeabi-v7a")
     add_compile_options(-O3 -ffast-math -mfpu=neon-vfpv4)
 endif()
 
+# llama.cpp lives in the home directory on both Windows and Linux
+if(WIN32)
+    set(LLAMA_CPP_ROOT "$ENV{USERPROFILE}/llama.cpp")
+else()
+    set(LLAMA_CPP_ROOT "$ENV{HOME}/llama.cpp")
+endif()
+
 add_library(ggml-base SHARED IMPORTED)
 set_target_properties(ggml-base PROPERTIES
     IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/armeabi-v7a/libggml-base.so")
@@ -27,7 +34,7 @@ set_target_properties(llama PROPERTIES
 add_library(m120llama SHARED native-llama.cpp)
 
 target_include_directories(m120llama PRIVATE
-    "$ENV{USERPROFILE}/llama.cpp/include"
-    "$ENV{USERPROFILE}/llama.cpp/ggml/include")
+    "${LLAMA_CPP_ROOT}/include"
+    "${LLAMA_CPP_ROOT}/ggml/include")
 
 target_link_libraries(m120llama PRIVATE llama ggml ggml-cpu ggml-base log android)

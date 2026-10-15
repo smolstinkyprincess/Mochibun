@@ -1,4 +1,4 @@
-package com.tnyemii.m120launcher
+package com.tnyemii.mochibun
 
 import android.content.Context
 import org.json.JSONArray

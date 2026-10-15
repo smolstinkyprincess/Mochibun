@@ -1,4 +1,4 @@
-package com.tnyemii.m120launcher
+package com.tnyemii.mochibun
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -13,6 +13,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.Dp
@@ -609,6 +610,49 @@ fun StickerExplosion() {
             modifier = Modifier
                 .offset(x = 195.dp, y = 510.dp)
                 .rotate(20f)
+        )
+    }
+}
+
+// custom vector drawn Wi-Fi status icon for StatusCard :3
+@Composable
+fun TinyWifiIcon(
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified
+) {
+    Canvas(
+        modifier = modifier.size(16.dp)
+    ) {
+        val strokeWidth = 2.dp.toPx()
+
+        drawArc(
+            color = color,
+            startAngle = 225f,
+            sweepAngle = 90f,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = strokeWidth,
+                cap = StrokeCap.Round
+            )
+        )
+
+        drawArc(
+            color = color,
+            startAngle = 225f,
+            sweepAngle = 90f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.2f, size.height * 0.2f),
+            size = Size(size.width * 0.6f, size.height * 0.6f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = strokeWidth,
+                cap = StrokeCap.Round
+            )
+        )
+
+        drawCircle(
+            color = color,
+            radius = strokeWidth * 0.8f,
+            center = Offset(size.width / 2f, size.height * 0.78f)
         )
     }
 }
