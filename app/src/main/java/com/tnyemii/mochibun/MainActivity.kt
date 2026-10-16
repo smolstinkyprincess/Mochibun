@@ -27,6 +27,14 @@ class MainActivity : ComponentActivity() {
     var homePressCount by mutableStateOf(0)
         private set
 
+    // tracks external requests to switch pages (e.g. from Button Remapper service)
+    var requestedPage by mutableStateOf<Int?>(null)
+        private set
+
+    fun consumeRequestedPage() {
+        requestedPage = null
+    }
+
     // counter to trigger app list refresh when apps change :3
     var appListRefreshCount by mutableIntStateOf(0)
 
@@ -56,6 +64,10 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
 
+        if (intent.hasExtra("OPEN_PAGE")) {
+            requestedPage = intent.getIntExtra("OPEN_PAGE", 1)
+        }
+
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
             homePressCount++
         }
@@ -64,6 +76,10 @@ class MainActivity : ComponentActivity() {
     // sets up edge-to-edge system bars and sets root compose content :3
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (intent?.hasExtra("OPEN_PAGE") == true) {
+            requestedPage = intent.getIntExtra("OPEN_PAGE", 1)
+        }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(
@@ -91,7 +107,9 @@ class MainActivity : ComponentActivity() {
                         name = "Android",
                         modifier = Modifier.padding(innerPadding),
                         homePressCount = homePressCount,
-                        appListRefreshCount = appListRefreshCount
+                        appListRefreshCount = appListRefreshCount,
+                        requestedPage = requestedPage,
+                        onPageConsumed = ::consumeRequestedPage
                     )
                 }
             }

@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Mochibun</string>
+    <string name="accessibility_service_label">Mochibun Button Remapper</string>
+    <string name="accessibility_service_description">Enables system-wide physical button actions (launching apps, AI chat, shortcuts, double-tap, long-press) for Mochibun on AT-M120.</string>
 </resources>
