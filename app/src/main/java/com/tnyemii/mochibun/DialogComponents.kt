@@ -1,6 +1,9 @@
 package com.tnyemii.mochibun
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +28,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -51,6 +56,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -58,6 +64,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
 import com.tnyemii.mochibun.ui.theme.appActionColor
 import com.tnyemii.mochibun.ui.theme.cardBgColor
 import com.tnyemii.mochibun.ui.theme.cardTextColor
@@ -547,21 +555,81 @@ fun FavoriteFolderDialog(
     }
 
     LaunchedEffect(folder.id) {
-        folderFocusRequester.requestFocus()
+        repeat(10) {
+            try {
+                folderFocusRequester.requestFocus()
+                return@LaunchedEffect
+            } catch (_: Exception) {
+                delay(50)
+            }
+        }
     }
+
+    BackHandler(onBack = {
+        if (editingName) {
+            editingName = false
+        } else if (managing) {
+            managing = false
+        } else {
+            onDismiss()
+        }
+    })
 
     BasicAlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
         modifier = Modifier
             .focusRequester(folderFocusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 val keyEvent = event.nativeKeyEvent
 
-                if (
-                    event.type != KeyEventType.KeyDown ||
-                    editingName
-                ) {
+                if (editingName) {
+                    if (event.type == KeyEventType.KeyDown &&
+                        (keyEvent.keyCode == android.view.KeyEvent.KEYCODE_BACK ||
+                                keyEvent.keyCode == android.view.KeyEvent.KEYCODE_ESCAPE)
+                    ) {
+                        editingName = false
+                        return@onPreviewKeyEvent true
+                    }
+                    return@onPreviewKeyEvent false
+                }
+
+                val isBackKey =
+                    keyEvent.keyCode == android.view.KeyEvent.KEYCODE_BACK ||
+                            keyEvent.keyCode == android.view.KeyEvent.KEYCODE_ESCAPE
+
+                if (isBackKey) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        if (managing) {
+                            managing = false
+                        } else {
+                            onDismiss()
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                val isCenterKey =
+                    keyEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
+                            keyEvent.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+                            keyEvent.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER ||
+                            keyEvent.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_A
+
+                if (isCenterKey) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        folderApps.getOrNull(selectedFolderAppIndex)?.let {
+                            onLaunchApp(it)
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type != KeyEventType.KeyDown) {
                     return@onPreviewKeyEvent false
                 }
 
@@ -586,20 +654,21 @@ fun FavoriteFolderDialog(
                         true
                     }
 
-                    android.view.KeyEvent.KEYCODE_DPAD_CENTER,
-                    android.view.KeyEvent.KEYCODE_ENTER,
-                    android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                        folderApps.getOrNull(selectedFolderAppIndex)?.let {
-                            onLaunchApp(it)
-                        }
-                        true
-                    }
-
                     else -> false
                 }
             }
     ) {
         val theme = LocalLauncherTheme.current
+        val folderListState = rememberLazyListState()
+
+        LaunchedEffect(selectedFolderAppIndex, folderApps.size) {
+            if (folderApps.isNotEmpty() && selectedFolderAppIndex in folderApps.indices) {
+                val visibleIndices = folderListState.layoutInfo.visibleItemsInfo.map { it.index }
+                if (selectedFolderAppIndex !in visibleIndices) {
+                    folderListState.animateScrollToItem(selectedFolderAppIndex)
+                }
+            }
+        }
 
         Surface(
             modifier = Modifier
@@ -616,13 +685,32 @@ fun FavoriteFolderDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 // Folder title
-                Text(
-                    text = "📁 ${folder.name}",
-                    color = theme.appActionColor,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📁 ${folder.name}",
+                        color = theme.appActionColor,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { editingName = !editingName },
+                        maxLines = 2
+                    )
+
+                    TextButton(
+                        onClick = { managing = !managing }
+                    ) {
+                        Text(
+                            text = if (managing) "Done" else "⚙",
+                            color = theme.appActionColor,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
 
                 Spacer(Modifier.height(10.dp))
 
@@ -634,30 +722,40 @@ fun FavoriteFolderDialog(
                     )
                 } else {
                     LazyColumn(
+                        state = folderListState,
                         modifier = Modifier
+                            .fillMaxWidth()
                             .heightIn(max = 220.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(
+                        itemsIndexed(
                             folderApps,
-                            key = {
-                                it.resolveInfo.activityInfo.packageName
+                            key = { _, app ->
+                                app.resolveInfo.activityInfo.packageName
                             }
-                        ) { app ->
+                        ) { index, app ->
                             val pkg =
                                 app.resolveInfo.activityInfo.packageName
 
-                            val isSelected =
-                                folderApps.indexOf(app) ==
-                                        selectedFolderAppIndex
+                            val isSelected = index == selectedFolderAppIndex
+
+                            val scale by animateFloatAsState(
+                                targetValue = if (isSelected) 1.04f else 1f,
+                                animationSpec = tween(150),
+                                label = "folderAppScale"
+                            )
 
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(56.dp)
+                                    .graphicsLayer(
+                                        scaleX = scale,
+                                        scaleY = scale
+                                    )
                                     .background(
                                         color = if (isSelected) {
-                                            appActionColor.copy(alpha = 0.15f)
+                                            theme.selectedContainerColor
                                         } else {
                                             Color.Transparent
                                         },
@@ -666,7 +764,7 @@ fun FavoriteFolderDialog(
                                     .border(
                                         width = if (isSelected) 2.dp else 0.dp,
                                         color = if (isSelected) {
-                                            appActionColor
+                                            theme.appActionColor
                                         } else {
                                             Color.Transparent
                                         },
@@ -674,9 +772,11 @@ fun FavoriteFolderDialog(
                                     )
                                     .combinedClickable(
                                         onClick = {
+                                            selectedFolderAppIndex = index
                                             onLaunchApp(app)
                                         },
                                         onLongClick = {
+                                            selectedFolderAppIndex = index
                                             onRemoveApp(pkg)
                                         }
                                     )
@@ -758,7 +858,6 @@ fun FavoriteFolderDialog(
                 Spacer(Modifier.height(8.dp))
 
                 // Close button
-                /*
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -768,11 +867,11 @@ fun FavoriteFolderDialog(
                     ) {
                         Text(
                             text = "Close",
-                            color = appActionColor,
+                            color = theme.appActionColor,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                }*/
+                }
             }
         }
     }
