@@ -11,22 +11,35 @@ import android.os.Build
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.tnyemii.mochibun.ui.theme.destructiveBgColor
+import com.tnyemii.mochibun.ui.theme.destructiveColor
+import kotlinx.coroutines.delay
 
 const val APP_WIDGET_HOST_ID = 1024
 
@@ -38,8 +51,11 @@ fun WidgetPage(
     cardTextColor: Color,
     appActionColor: Color,
     cardRoundness: androidx.compose.ui.unit.Dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isActivePage: Boolean = true,
+    onNavigateHome: () -> Unit = {}
 ) {
+    val theme = LocalLauncherTheme.current
     val preferences = remember {
         context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
     }
@@ -155,7 +171,6 @@ fun WidgetPage(
         }
     }
 
-
     val bindLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -163,9 +178,6 @@ fun WidgetPage(
         if (id == null) {
             Log.w(TAG, "Bind result arrived but no widget is pending")
         } else {
-            // Android may return RESULT_OK with a null Intent, and getAppWidgetInfo()
-            // can still be null right after the bind screen closes. So: accept RESULT_OK
-            // outright, and only fall back to querying the manager when it is not OK.
             val ok = result.resultCode == Activity.RESULT_OK
             val bound = ok || appWidgetManager.getAppWidgetInfo(id) != null
             Log.d(TAG, "Bind result=${result.resultCode}, id=$id, bound=$bound")
@@ -177,10 +189,9 @@ fun WidgetPage(
         }
     }
 
-
     val pickLauncher = rememberLauncherForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-            ) { result ->
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
         val id = pendingWidgetId ?: return@rememberLauncherForActivityResult
         if (result.resultCode != Activity.RESULT_OK) {
             appWidgetHost.deleteAppWidgetId(id)
@@ -224,9 +235,140 @@ fun WidgetPage(
         }
     }
 
+    val launchWidgetPicker: () -> Unit = {
+        try {
+            val newWidgetId = appWidgetHost.allocateAppWidgetId()
+            pendingWidgetId = newWidgetId
+            val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, newWidgetId)
+            }
+            pickLauncher.launch(pickIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // D-pad focus state:
+    // focusIndex == 0:Header row (headerCol 0 = "+ Add Widget", headerCol 1 = "Home ▶")
+    // focusIndex in 1..savedWidgetIdsList.size: Widget card (pressing OK toggles remove strip or removes)
+    var focusIndex by remember { mutableIntStateOf(0) }
+    var headerCol by remember { mutableIntStateOf(0) }
+    var removingWidgetId by remember { mutableStateOf<Int?>(null) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    val pageFocusRequester = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(savedWidgetIdsList.size) {
+        focusIndex = focusIndex.coerceIn(0, savedWidgetIdsList.size)
+    }
+
+    LaunchedEffect(focusIndex, savedWidgetIdsList.size) {
+        val listIdx = focusIndex - 1
+        if (listIdx in savedWidgetIdsList.indices) {
+            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == listIdx }
+            if (!isVisible) {
+                listState.animateScrollToItem(listIdx)
+            }
+        }
+    }
+
+    LaunchedEffect(isActivePage) {
+        if (isActivePage) {
+            repeat(6) {
+                try {
+                    pageFocusRequester.requestFocus()
+                    return@LaunchedEffect
+                } catch (_: Exception) {
+                    delay(35)
+                }
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
+            .focusRequester(pageFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (!isActivePage) return@onPreviewKeyEvent false
+                val native = event.nativeKeyEvent
+
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        if (removingWidgetId != null) {
+                            removingWidgetId = null
+                        } else {
+                            onNavigateHome()
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        if (focusIndex == 0) {
+                            if (headerCol == 0) {
+                                launchWidgetPicker()
+                            } else {
+                                onNavigateHome()
+                            }
+                        } else {
+                            val widgetId = savedWidgetIdsList.getOrNull(focusIndex - 1)
+                            if (widgetId != null) {
+                                if (removingWidgetId == widgetId) {
+                                    appWidgetHost.deleteAppWidgetId(widgetId)
+                                    saveIds(savedWidgetIdsList.filter { it != widgetId })
+                                    removingWidgetId = null
+                                } else {
+                                    removingWidgetId = widgetId
+                                }
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                when (native.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                        removingWidgetId = null
+                        focusIndex = (focusIndex - 1).coerceAtLeast(0)
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        removingWidgetId = null
+                        focusIndex = (focusIndex + 1).coerceAtMost(savedWidgetIdsList.size)
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        if (focusIndex == 0) {
+                            headerCol = 0
+                        } else {
+                            removingWidgetId = null
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        if (focusIndex == 0) {
+                            if (headerCol == 0) {
+                                headerCol = 1
+                            } else {
+                                onNavigateHome()
+                            }
+                        } else {
+                            onNavigateHome()
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -239,29 +381,32 @@ fun WidgetPage(
                 text = "♡ Widgets ♡",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = cardTextColor
+                color = theme.fgTextColor
             )
 
-            Button(
-                onClick = {
-                    try {
-                        val newWidgetId = appWidgetHost.allocateAppWidgetId()
-                        pendingWidgetId = newWidgetId
-                        val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, newWidgetId)
-                        }
-                        pickLauncher.launch(pickIntent)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = cardBgColor),
-                shape = RoundedCornerShape(cardRoundness)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
+                KawaiiDialogPillButton(
                     text = "+ Add Widget",
-                    color = appActionColor,
-                    fontWeight = FontWeight.Bold
+                    isFocused = focusIndex == 0 && headerCol == 0,
+                    isPrimary = true,
+                    onClick = {
+                        focusIndex = 0
+                        headerCol = 0
+                        launchWidgetPicker()
+                    }
+                )
+
+                KawaiiDialogPillButton(
+                    text = "Home ▶",
+                    isFocused = focusIndex == 0 && headerCol == 1,
+                    onClick = {
+                        focusIndex = 0
+                        headerCol = 1
+                        onNavigateHome()
+                    }
                 )
             }
         }
@@ -269,27 +414,38 @@ fun WidgetPage(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (savedWidgetIdsList.isEmpty()) {
-            Box(
+            Card(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .border(2.5.dp, theme.greetingOutlineColor, RoundedCornerShape(cardRoundness)),
+                colors = CardDefaults.cardColors(containerColor = theme.cardBgColor.copy(alpha = 0.85f)),
+                shape = RoundedCornerShape(cardRoundness)
             ) {
-                Text(
-                    text = "♡ No widgets yet! Tap '+ Add Widget' to add your favorite Android widgets ♡",
-                    color = cardTextColor.copy(alpha = 0.8f),
-                    fontSize = 15.sp,
-                    modifier = Modifier.padding(24.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "♡ No widgets yet!\nPress OK on '+ Add Widget' to add your favorite Android widgets ♡",
+                        color = theme.fgTextColor,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(savedWidgetIdsList, key = { it }) { widgetId ->
+                itemsIndexed(savedWidgetIdsList, key = { _, id -> id }) { idx, widgetId ->
                     val info = remember(widgetId) { appWidgetManager.getAppWidgetInfo(widgetId) }
                     if (info == null) {
                         LaunchedEffect(widgetId) {
@@ -297,11 +453,9 @@ fun WidgetPage(
                             saveIds(savedWidgetIdsList.filter { it != widgetId })
                         }
                     } else {
-                        val widgetLabel = remember(widgetId, info) {
-                            info.loadLabel(context.packageManager) ?: "Widget"
-                        }
-
-                        var showRemove by remember(widgetId) { mutableStateOf(false) }
+                        val isWidgetFocused = focusIndex == idx + 1
+                        val showRemove = removingWidgetId == widgetId
+                        val cardShape = RoundedCornerShape(16.dp)
 
                         Box(
                             modifier = Modifier
@@ -311,6 +465,12 @@ fun WidgetPage(
                                         (info.minHeight.takeIf { it > 0 } ?: 100).dp
                                     }
                                 )
+                                .clip(cardShape)
+                                .border(
+                                    width = if (isWidgetFocused) 3.dp else 1.5.dp,
+                                    color = if (isWidgetFocused) theme.appActionColor else theme.greetingOutlineColor,
+                                    shape = cardShape
+                                )
                         ) {
                             AndroidView(
                                 factory = { ctx ->
@@ -318,7 +478,7 @@ fun WidgetPage(
                                         appWidgetHost.createView(ctx, widgetId, info).apply {
                                             setAppWidget(widgetId, info)
                                         }
-                                    } catch (ex: Exception) {
+                                    } catch (_: Exception) {
                                         android.widget.TextView(ctx).apply {
                                             text = "Error loading widget ♡"
                                             setTextColor(android.graphics.Color.MAGENTA)
@@ -328,39 +488,55 @@ fun WidgetPage(
                                 modifier = Modifier.fillMaxSize()
                             )
 
-                            // tiny always-visible handle in the corner — tap to reveal remove strip
-                            TextButton(
-                                onClick = { showRemove = !showRemove },
+                            // corner handle — tap or press OK when focused to reveal remove button
+                            Box(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(4.dp),
-                                contentPadding = PaddingValues(4.dp),
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = cardTextColor.copy(alpha = 0.6f)
-                                )
+                                    .padding(6.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (isWidgetFocused) theme.selectedContainerColor else theme.cardBgColor.copy(alpha = 0.85f)
+                                    )
+                                    .border(
+                                        1.5.dp,
+                                        if (isWidgetFocused) theme.appActionColor else theme.greetingOutlineColor,
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable {
+                                        focusIndex = idx + 1
+                                        removingWidgetId = if (showRemove) null else widgetId
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text(text = "⋯", fontSize = 18.sp)
+                                Text(
+                                    text = "⋯",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = theme.fgTextColor
+                                )
                             }
 
-                            // remove strip, revealed on tap
                             if (showRemove) {
-                                Column(
+                                Box(
                                     modifier = Modifier
                                         .align(Alignment.TopEnd)
-                                        .padding(top = 32.dp, end = 4.dp)
-                                ) {
-                                    TextButton(
-                                        onClick = {
+                                        .padding(top = 36.dp, end = 6.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(destructiveBgColor)
+                                        .border(2.dp, destructiveColor, RoundedCornerShape(10.dp))
+                                        .clickable {
                                             appWidgetHost.deleteAppWidgetId(widgetId)
                                             saveIds(savedWidgetIdsList.filter { it != widgetId })
-                                        },
-                                        contentPadding = PaddingValues(4.dp),
-                                        colors = ButtonDefaults.textButtonColors(
-                                            contentColor = cardTextColor
-                                        )
-                                    ) {
-                                        Text(text = "✖ remove", fontSize = 14.sp)
-                                    }
+                                            removingWidgetId = null
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "✖ Remove (OK)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = destructiveColor
+                                    )
                                 }
                             }
                         }

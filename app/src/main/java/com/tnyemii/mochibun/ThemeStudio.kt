@@ -2,9 +2,11 @@ package com.tnyemii.mochibun
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,13 +16,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
+import com.tnyemii.mochibun.ui.theme.destructiveColor
+import com.tnyemii.mochibun.ui.theme.softSurfaceColor
+import kotlinx.coroutines.delay
 
 data class LauncherTheme(
     val name: String = "original",
@@ -90,9 +103,9 @@ val MidnightMochiTheme = LauncherTheme(
 val LauncherTheme.selectedContainerColor: Color
     get() = when (name) {
         "midnight_mochi" -> Color(0xFF5A3673)
-        "strawberry_milk" -> Color(0xFFFFB3D9)
-        "lavender_dream" -> Color(0xFFD8B4FE)
-        else -> Color(0xFFFFD1F0)
+        "strawberry_milk" -> Color(0xFFFFCCE6)
+        "lavender_dream" -> Color(0xFFE9D5FF)
+        else -> Color(0xFFFFDEF5)
     }
 
 data class CustomPreset(
@@ -104,7 +117,7 @@ data class CustomPreset(
 fun loadCustomPresets(prefs: SharedPreferences): List<CustomPreset> {
     val ids = prefs.getStringSet("custom_preset_ids", emptySet()) ?: emptySet()
 
-    return ids.mapNotNull { id ->
+    return ids.sorted().mapNotNull { id ->
         val title = prefs.getString("custom_preset_title_$id", id) ?: id
         val name = "custom_$id"
 
@@ -170,8 +183,8 @@ fun saveCustomPreset(
     theme: LauncherTheme
 ) {
     val currentIds = (
-            prefs.getStringSet("custom_preset_ids", emptySet()) ?: emptySet()
-            ).toMutableSet()
+        prefs.getStringSet("custom_preset_ids", emptySet()) ?: emptySet()
+        ).toMutableSet()
 
     val id = System.currentTimeMillis().toString()
     currentIds.add(id)
@@ -193,8 +206,8 @@ fun saveCustomPreset(
 
 fun deleteCustomPreset(prefs: SharedPreferences, id: String) {
     val currentIds = (
-            prefs.getStringSet("custom_preset_ids", emptySet()) ?: emptySet()
-            ).toMutableSet()
+        prefs.getStringSet("custom_preset_ids", emptySet()) ?: emptySet()
+        ).toMutableSet()
 
     currentIds.remove(id)
 
@@ -300,6 +313,15 @@ val kawaiiSwatches = listOf(
     Color(0xFFE879F9), Color(0xFFF472B6), Color(0xFFFF80BF)
 )
 
+private val COLOR_FIELD_DEFS = listOf(
+    "bg" to "Main Background",
+    "cardBg" to "Card Background",
+    "cardText" to "Card Text",
+    "accent" to "Accent / Action",
+    "outline" to "Card Outline",
+    "fg" to "Primary Text"
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ThemeStudioDialog(
@@ -309,6 +331,7 @@ fun ThemeStudioDialog(
     onApply: (LauncherTheme) -> Unit
 ) {
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val prefs = remember {
         context.getSharedPreferences(
             "launcher_preferences",
@@ -324,23 +347,337 @@ fun ThemeStudioDialog(
     var showSaveDialog by remember { mutableStateOf(false) }
     var newPresetTitle by remember { mutableStateOf("") }
 
+    // Main dialog focus state:
+    // Row 0: Save as Preset button
+    // Row 1: Built-in presets row 1 (col 0 = Original, col 1 = Strawberry)
+    // Row 2: Built-in presets row 2 (col 0 = Lavender, col 1 = Midnight)
+    // Row 3: Custom presets (index 0 until customPresets.size; subCol 0 = select, 1 = delete)
+    // Row 4: Card Roundness slider (LEFT/RIGHT adjusts by 1dp)
+    // Row 5..10: Individual Color rows (0..5)
+    // Row 11: Footer buttons (col 0 = Cancel, col 1 = Apply)
+    var focusRow by remember { mutableIntStateOf(1) }
+    var focusCol by remember { mutableIntStateOf(0) }
+    var customPresetIndex by remember { mutableIntStateOf(0) }
+    var customPresetDeleteCol by remember { mutableIntStateOf(0) }
+    var selectedSwatchIndex by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    // Save Preset sub-dialog focus state:
+    // 0 = Name field, 1 = Cancel, 2 = Save
+    var saveDialogZone by remember { mutableIntStateOf(0) }
+
+    val studioFocusRequester = remember { FocusRequester() }
+    val saveDialogFocusRequester = remember { FocusRequester() }
+    val saveNameFocusRequester = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(customPresets.size) {
+        customPresetIndex = customPresetIndex.coerceIn(0, (customPresets.size - 1).coerceAtLeast(0))
+        if (customPresets.isEmpty() && focusRow == 3) {
+            focusRow = 4
+        }
+    }
+
+    LaunchedEffect(focusRow, editingColorField) {
+        val targetScroll = when {
+            editingColorField != null -> scrollState.maxValue
+            focusRow <= 1 -> 0
+            focusRow in 2..4 -> (scrollState.maxValue * 0.35f).toInt()
+            focusRow in 5..10 -> (scrollState.maxValue * 0.78f).toInt()
+            else -> scrollState.maxValue
+        }
+        scrollState.animateScrollTo(targetScroll)
+    }
+
+    LaunchedEffect(showSaveDialog, saveDialogZone, editingColorField) {
+        if (showSaveDialog) {
+            if (saveDialogZone == 0) {
+                repeat(6) {
+                    try {
+                        saveNameFocusRequester.requestFocus()
+                        return@LaunchedEffect
+                    } catch (_: Exception) {
+                        delay(35)
+                    }
+                }
+            } else {
+                keyboardController?.hide()
+                repeat(6) {
+                    try {
+                        saveDialogFocusRequester.requestFocus()
+                        return@LaunchedEffect
+                    } catch (_: Exception) {
+                        delay(35)
+                    }
+                }
+            }
+        } else {
+            keyboardController?.hide()
+            repeat(6) {
+                try {
+                    studioFocusRequester.requestFocus()
+                    return@LaunchedEffect
+                } catch (_: Exception) {
+                    delay(35)
+                }
+            }
+        }
+    }
+
+    val applySwatch: (Color) -> Unit = { swatch ->
+        draft = when (editingColorField) {
+            "bg" -> draft.copy(bgColor = swatch)
+            "cardBg" -> draft.copy(cardBgColor = swatch)
+            "cardText" -> draft.copy(cardTextColor = swatch)
+            "accent" -> draft.copy(appActionColor = swatch, greetingColor = swatch)
+            "outline" -> draft.copy(greetingOutlineColor = swatch)
+            "fg" -> draft.copy(fgTextColor = swatch)
+            else -> draft
+        }
+        editingColorField = null
+    }
+
+    BackHandler {
+        when {
+            showSaveDialog -> showSaveDialog = false
+            editingColorField != null -> editingColorField = null
+            else -> onDismiss()
+        }
+    }
+
     BasicAlertDialog(
-        onDismissRequest = onDismiss
+        onDismissRequest = {
+            when {
+                showSaveDialog -> showSaveDialog = false
+                editingColorField != null -> editingColorField = null
+                else -> onDismiss()
+            }
+        },
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
+        modifier = Modifier
+            .focusRequester(studioFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (showSaveDialog) return@onPreviewKeyEvent false
+                val native = event.nativeKeyEvent
+
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        if (editingColorField != null) {
+                            editingColorField = null
+                        } else {
+                            onDismiss()
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                // Swatch picker active
+                if (editingColorField != null) {
+                    if (isCenterActivateKey(native.keyCode)) {
+                        if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                            sawCenterDown = true
+                        } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                            sawCenterDown = false
+                            if (selectedSwatchIndex == kawaiiSwatches.size) {
+                                editingColorField = null
+                            } else {
+                                kawaiiSwatches.getOrNull(selectedSwatchIndex)?.let(applySwatch)
+                            }
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val cols = 6
+                    when (native.keyCode) {
+                        android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            if (selectedSwatchIndex > 0) selectedSwatchIndex--
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            if (selectedSwatchIndex < kawaiiSwatches.size) selectedSwatchIndex++
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                            if (selectedSwatchIndex == kawaiiSwatches.size) {
+                                selectedSwatchIndex = kawaiiSwatches.lastIndex
+                            } else if (selectedSwatchIndex >= cols) {
+                                selectedSwatchIndex -= cols
+                            } else {
+                                selectedSwatchIndex = kawaiiSwatches.size
+                            }
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            if (selectedSwatchIndex == kawaiiSwatches.size) {
+                                selectedSwatchIndex = 0
+                            } else if (selectedSwatchIndex + cols < kawaiiSwatches.size) {
+                                selectedSwatchIndex += cols
+                            } else {
+                                selectedSwatchIndex = kawaiiSwatches.size
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                } else {
+                    // Main Theme Studio navigation
+                    if (isCenterActivateKey(native.keyCode)) {
+                        if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                            sawCenterDown = true
+                        } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                            sawCenterDown = false
+                            when (focusRow) {
+                                0 -> {
+                                    saveDialogZone = 0
+                                    showSaveDialog = true
+                                }
+                                1 -> {
+                                    draft = if (focusCol == 0) OriginalTheme else StrawberryMilkTheme
+                                }
+                                2 -> {
+                                    draft = if (focusCol == 0) LavenderDreamTheme else MidnightMochiTheme
+                                }
+                                3 -> {
+                                    customPresets.getOrNull(customPresetIndex)?.let { preset ->
+                                        if (customPresetDeleteCol == 1) {
+                                            deleteCustomPreset(prefs, preset.id)
+                                            customPresets = loadCustomPresets(prefs)
+                                            customPresetDeleteCol = 0
+                                        } else {
+                                            draft = preset.theme
+                                        }
+                                    }
+                                }
+                                4 -> {
+                                    // Cycle common roundness values or step up on OK
+                                    val next = if (draft.cardRoundnessDp >= 32f) 8f else (draft.cardRoundnessDp + 4f).coerceAtMost(32f)
+                                    draft = draft.copy(cardRoundnessDp = next)
+                                }
+                                in 5..10 -> {
+                                    val fieldKey = COLOR_FIELD_DEFS[focusRow - 5].first
+                                    selectedSwatchIndex = 0
+                                    editingColorField = fieldKey
+                                }
+                                11 -> {
+                                    if (focusCol == 0) {
+                                        onDismiss()
+                                    } else {
+                                        onApply(draft)
+                                    }
+                                }
+                            }
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                    when (native.keyCode) {
+                        android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                            when (focusRow) {
+                                0 -> {
+                                    focusRow = 11
+                                    focusCol = 1
+                                }
+                                3 -> {
+                                    if (customPresetIndex > 0) {
+                                        customPresetIndex--
+                                    } else {
+                                        focusRow = 2
+                                    }
+                                }
+                                4 -> {
+                                    if (customPresets.isNotEmpty()) {
+                                        focusRow = 3
+                                        customPresetIndex = customPresets.lastIndex
+                                    } else {
+                                        focusRow = 2
+                                    }
+                                }
+                                else -> {
+                                    focusRow = (focusRow - 1).coerceAtLeast(0)
+                                }
+                            }
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            when (focusRow) {
+                                2 -> {
+                                    if (customPresets.isNotEmpty()) {
+                                        focusRow = 3
+                                        customPresetIndex = 0
+                                    } else {
+                                        focusRow = 4
+                                    }
+                                }
+                                3 -> {
+                                    if (customPresetIndex < customPresets.lastIndex) {
+                                        customPresetIndex++
+                                    } else {
+                                        focusRow = 4
+                                    }
+                                }
+                                11 -> {
+                                    focusRow = 0
+                                }
+                                else -> {
+                                    focusRow = (focusRow + 1).coerceAtMost(11)
+                                }
+                            }
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            when (focusRow) {
+                                1, 2, 11 -> focusCol = 0
+                                3 -> customPresetDeleteCol = 0
+                                4 -> {
+                                    draft = draft.copy(
+                                        cardRoundnessDp = (draft.cardRoundnessDp - 2f).coerceIn(8f, 32f)
+                                    )
+                                }
+                            }
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            when (focusRow) {
+                                1, 2, 11 -> focusCol = 1
+                                3 -> customPresetDeleteCol = 1
+                                4 -> {
+                                    draft = draft.copy(
+                                        cardRoundnessDp = (draft.cardRoundnessDp + 2f).coerceIn(8f, 32f)
+                                    )
+                                }
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            }
     ) {
+        val shape = RoundedCornerShape(draft.cardRoundnessDp.dp)
         Surface(
             modifier = Modifier
                 .width(dialogWidth)
-                .heightIn(max = 620.dp),
-            shape = RoundedCornerShape(draft.cardRoundnessDp.dp),
-            color = draft.cardBgColor
+                .heightIn(max = 580.dp)
+                .border(2.5.dp, draft.greetingOutlineColor, shape),
+            shape = shape,
+            color = draft.cardBgColor,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
         ) {
             Column(
-                modifier = Modifier.padding(12.dp)
+                modifier = Modifier.padding(14.dp)
             ) {
                 Text(
                     text = "🎨 Theme Studio ♡",
                     fontWeight = FontWeight.Bold,
-                    color = draft.appActionColor,
+                    color = draft.fgTextColor,
                     fontSize = 18.sp
                 )
 
@@ -350,21 +687,21 @@ fun ThemeStudioDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
                         "Live Preview ✨",
                         fontWeight = FontWeight.Bold,
                         color = draft.fgTextColor,
-                        fontSize = 14.sp
+                        fontSize = 13.sp
                     )
 
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(
-                                1.5.dp,
+                                2.dp,
                                 draft.greetingOutlineColor,
                                 RoundedCornerShape(draft.cardRoundnessDp.dp)
                             ),
@@ -429,20 +766,18 @@ fun ThemeStudioDialog(
                             "Presets 🌸",
                             fontWeight = FontWeight.Bold,
                             color = draft.fgTextColor,
-                            fontSize = 14.sp
+                            fontSize = 13.sp
                         )
 
-                        TextButton(
-                            onClick = { showSaveDialog = true },
-                            contentPadding = PaddingValues(4.dp)
-                        ) {
-                            Text(
-                                "💾 Save as Preset",
-                                fontSize = 12.sp,
-                                color = draft.appActionColor,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        KawaiiDialogPillButton(
+                            text = "💾 Save Preset",
+                            isFocused = focusRow == 0 && editingColorField == null,
+                            onClick = {
+                                focusRow = 0
+                                saveDialogZone = 0
+                                showSaveDialog = true
+                            }
+                        )
                     }
 
                     Row(
@@ -450,18 +785,24 @@ fun ThemeStudioDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         PresetButton(
-                            "Original",
-                            draft.name == "original",
-                            draft
+                            text = "Original",
+                            isSelected = draft.name == "original",
+                            isFocused = editingColorField == null && focusRow == 1 && focusCol == 0,
+                            theme = draft
                         ) {
+                            focusRow = 1
+                            focusCol = 0
                             draft = OriginalTheme
                         }
 
                         PresetButton(
-                            "Strawberry",
-                            draft.name == "strawberry_milk",
-                            draft
+                            text = "Strawberry",
+                            isSelected = draft.name == "strawberry_milk",
+                            isFocused = editingColorField == null && focusRow == 1 && focusCol == 1,
+                            theme = draft
                         ) {
+                            focusRow = 1
+                            focusCol = 1
                             draft = StrawberryMilkTheme
                         }
                     }
@@ -471,18 +812,24 @@ fun ThemeStudioDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         PresetButton(
-                            "Lavender",
-                            draft.name == "lavender_dream",
-                            draft
+                            text = "Lavender",
+                            isSelected = draft.name == "lavender_dream",
+                            isFocused = editingColorField == null && focusRow == 2 && focusCol == 0,
+                            theme = draft
                         ) {
+                            focusRow = 2
+                            focusCol = 0
                             draft = LavenderDreamTheme
                         }
 
                         PresetButton(
-                            "Midnight",
-                            draft.name == "midnight_mochi",
-                            draft
+                            text = "Midnight",
+                            isSelected = draft.name == "midnight_mochi",
+                            isFocused = editingColorField == null && focusRow == 2 && focusCol == 1,
+                            theme = draft
                         ) {
+                            focusRow = 2
+                            focusCol = 1
                             draft = MidnightMochiTheme
                         }
                     }
@@ -493,123 +840,155 @@ fun ThemeStudioDialog(
                             fontWeight = FontWeight.Bold,
                             color = draft.fgTextColor,
                             fontSize = 13.sp,
-                            modifier = Modifier.padding(top = 4.dp)
+                            modifier = Modifier.padding(top = 2.dp)
                         )
 
-                        customPresets.chunked(2).forEach { rowPresets ->
+                        customPresets.forEachIndexed { idx, preset ->
+                            val isRowFocused = editingColorField == null && focusRow == 3 && customPresetIndex == idx
+                            val selectFocused = isRowFocused && customPresetDeleteCol == 0
+                            val deleteFocused = isRowFocused && customPresetDeleteCol == 1
+                            val isSelected = draft.name == preset.theme.name
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                rowPresets.forEach { preset ->
-                                    Row(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(
-                                                if (draft.name == preset.theme.name) {
-                                                    draft.selectedContainerColor
-                                                } else {
-                                                    draft.cardBgColor
-                                                }
-                                            )
-                                            .clickable {
-                                                draft = preset.theme
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            if (selectFocused || isSelected) {
+                                                draft.selectedContainerColor
+                                            } else {
+                                                draft.greetingBgColor.copy(alpha = 0.65f)
                                             }
-                                            .padding(
-                                                horizontal = 8.dp,
-                                                vertical = 6.dp
-                                            ),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            preset.title,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = draft.fgTextColor,
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f)
                                         )
+                                        .border(
+                                            width = if (selectFocused) 2.dp else 1.dp,
+                                            color = if (selectFocused) draft.appActionColor else draft.greetingOutlineColor,
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .clickable {
+                                            focusRow = 3
+                                            customPresetIndex = idx
+                                            customPresetDeleteCol = 0
+                                            draft = preset.theme
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 7.dp)
+                                ) {
+                                    Text(
+                                        text = if (isSelected) "✓ ${preset.title}" else preset.title,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = draft.fgTextColor,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
 
-                                        Text(
-                                            "✕",
-                                            fontSize = 12.sp,
-                                            color = draft.appActionColor,
-                                            modifier = Modifier
-                                                .clickable {
-                                                    deleteCustomPreset(
-                                                        prefs,
-                                                        preset.id
-                                                    )
-                                                    customPresets =
-                                                        loadCustomPresets(prefs)
-                                                }
-                                                .padding(2.dp)
-                                        )
+                                KawaiiDialogPillButton(
+                                    text = "✕",
+                                    isFocused = deleteFocused,
+                                    isDestructive = true,
+                                    onClick = {
+                                        deleteCustomPreset(prefs, preset.id)
+                                        customPresets = loadCustomPresets(prefs)
                                     }
-                                }
-
-                                if (rowPresets.size == 1) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                }
+                                )
                             }
                         }
                     }
 
-                    Text(
-                        "Card Roundness: ${draft.cardRoundnessDp.toInt()} dp",
-                        fontWeight = FontWeight.Bold,
-                        color = draft.fgTextColor,
-                        fontSize = 14.sp
-                    )
+                    val sliderFocused = editingColorField == null && focusRow == 4
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (sliderFocused) draft.selectedContainerColor else Color.Transparent
+                            )
+                            .border(
+                                width = if (sliderFocused) 2.dp else 0.dp,
+                                color = if (sliderFocused) draft.appActionColor else Color.Transparent,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Card Roundness: ${draft.cardRoundnessDp.toInt()} dp",
+                                fontWeight = FontWeight.Bold,
+                                color = draft.fgTextColor,
+                                fontSize = 13.sp
+                            )
+                            if (sliderFocused) {
+                                Text(
+                                    "◀ / ▶",
+                                    fontWeight = FontWeight.Bold,
+                                    color = draft.appActionColor,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
 
-                    Slider(
-                        value = draft.cardRoundnessDp,
-                        onValueChange = {
-                            draft = draft.copy(cardRoundnessDp = it)
-                        },
-                        valueRange = 8f..32f,
-                        steps = 23,
-                        colors = SliderDefaults.colors(
-                            thumbColor = draft.appActionColor,
-                            activeTrackColor = draft.cardTextColor
+                        Slider(
+                            value = draft.cardRoundnessDp,
+                            onValueChange = {
+                                focusRow = 4
+                                draft = draft.copy(cardRoundnessDp = it)
+                            },
+                            valueRange = 8f..32f,
+                            steps = 23,
+                            colors = SliderDefaults.colors(
+                                thumbColor = draft.appActionColor,
+                                activeTrackColor = draft.cardTextColor
+                            )
                         )
-                    )
+                    }
 
                     Text(
                         "Individual Colors 🎨",
                         fontWeight = FontWeight.Bold,
                         color = draft.fgTextColor,
-                        fontSize = 14.sp
+                        fontSize = 13.sp
                     )
 
-                    ColorRow("Main Background", draft.bgColor, draft) {
-                        editingColorField = "bg"
-                    }
-                    ColorRow("Card Background", draft.cardBgColor, draft) {
-                        editingColorField = "cardBg"
-                    }
-                    ColorRow("Card Text", draft.cardTextColor, draft) {
-                        editingColorField = "cardText"
-                    }
-                    ColorRow("Accent / Action", draft.appActionColor, draft) {
-                        editingColorField = "accent"
-                    }
-                    ColorRow("Card Outline", draft.greetingOutlineColor, draft) {
-                        editingColorField = "outline"
-                    }
-                    ColorRow("Primary Text", draft.fgTextColor, draft) {
-                        editingColorField = "fg"
+                    COLOR_FIELD_DEFS.forEachIndexed { idx, (key, label) ->
+                        val colorVal = when (key) {
+                            "bg" -> draft.bgColor
+                            "cardBg" -> draft.cardBgColor
+                            "cardText" -> draft.cardTextColor
+                            "accent" -> draft.appActionColor
+                            "outline" -> draft.greetingOutlineColor
+                            else -> draft.fgTextColor
+                        }
+                        ColorRow(
+                            label = label,
+                            color = colorVal,
+                            isFocused = editingColorField == null && focusRow == 5 + idx,
+                            theme = draft
+                        ) {
+                            focusRow = 5 + idx
+                            selectedSwatchIndex = 0
+                            editingColorField = key
+                        }
                     }
 
                     if (editingColorField != null) {
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(2.dp, draft.appActionColor, RoundedCornerShape(14.dp)),
                             colors = CardDefaults.cardColors(
                                 containerColor = draft.greetingBgColor
                             ),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(14.dp)
                         ) {
                             Column(
                                 modifier = Modifier.padding(10.dp),
@@ -621,64 +1000,44 @@ fun ThemeStudioDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        "Select swatch for $editingColorField",
+                                        "Pick swatch ($editingColorField)",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = draft.fgTextColor
                                     )
 
-                                    TextButton(
+                                    KawaiiDialogPillButton(
+                                        text = "Close",
+                                        isFocused = selectedSwatchIndex == kawaiiSwatches.size,
                                         onClick = { editingColorField = null }
-                                    ) {
-                                        Text(
-                                            "Close",
-                                            fontSize = 12.sp,
-                                            color = draft.appActionColor
-                                        )
-                                    }
+                                    )
                                 }
 
-                                kawaiiSwatches.chunked(6).forEach { rowSwatches ->
+                                kawaiiSwatches.chunked(6).forEachIndexed { rIdx, rowSwatches ->
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        rowSwatches.forEach { swatch ->
+                                        rowSwatches.forEachIndexed { cIdx, swatch ->
+                                            val swatchIndex = rIdx * 6 + cIdx
+                                            val isSwatchFocused = selectedSwatchIndex == swatchIndex
                                             Box(
                                                 modifier = Modifier
-                                                    .size(28.dp)
-                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .size(30.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
                                                     .background(swatch)
                                                     .border(
-                                                        1.dp,
-                                                        Color.Gray.copy(alpha = 0.5f),
-                                                        RoundedCornerShape(6.dp)
+                                                        width = if (isSwatchFocused) 3.dp else 1.dp,
+                                                        color = if (isSwatchFocused) {
+                                                            draft.fgTextColor
+                                                        } else {
+                                                            Color.Gray.copy(alpha = 0.5f)
+                                                        },
+                                                        shape = RoundedCornerShape(8.dp)
                                                     )
                                                     .clickable {
-                                                        draft = when (editingColorField) {
-                                                            "bg" -> draft.copy(
-                                                                bgColor = swatch
-                                                            )
-                                                            "cardBg" -> draft.copy(
-                                                                cardBgColor = swatch
-                                                            )
-                                                            "cardText" -> draft.copy(
-                                                                cardTextColor = swatch
-                                                            )
-                                                            "accent" -> draft.copy(
-                                                                appActionColor = swatch,
-                                                                greetingColor = swatch
-                                                            )
-                                                            "outline" -> draft.copy(
-                                                                greetingOutlineColor = swatch
-                                                            )
-                                                            "fg" -> draft.copy(
-                                                                fgTextColor = swatch
-                                                            )
-                                                            else -> draft
-                                                        }
-
-                                                        editingColorField = null
+                                                        selectedSwatchIndex = swatchIndex
+                                                        applySwatch(swatch)
                                                     }
                                             )
                                         }
@@ -691,32 +1050,26 @@ fun ThemeStudioDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                HorizontalDivider(color = draft.appActionColor.copy(alpha = 0.22f))
+
+                Spacer(modifier = Modifier.height(6.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(
-                            "Cancel",
-                            color = draft.appActionColor,
-                            fontSize = 13.sp
-                        )
-                    }
+                    KawaiiDialogPillButton(
+                        text = "Cancel",
+                        isFocused = editingColorField == null && focusRow == 11 && focusCol == 0,
+                        onClick = onDismiss
+                    )
 
-                    Button(
-                        onClick = { onApply(draft) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = draft.appActionColor
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            "Apply ♡",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                    }
+                    KawaiiDialogPillButton(
+                        text = "Apply ♡",
+                        isFocused = editingColorField == null && focusRow == 11 && focusCol == 1,
+                        isPrimary = true,
+                        onClick = { onApply(draft) }
+                    )
                 }
             }
         }
@@ -724,14 +1077,86 @@ fun ThemeStudioDialog(
 
     if (showSaveDialog) {
         BasicAlertDialog(
-            onDismissRequest = { showSaveDialog = false }
+            onDismissRequest = { showSaveDialog = false },
+            properties = DialogProperties(
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+                usePlatformDefaultWidth = false
+            ),
+            modifier = Modifier
+                .focusRequester(saveDialogFocusRequester)
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    if (isBackDismissKey(native.keyCode)) {
+                        if (event.type == KeyEventType.KeyUp) {
+                            keyboardController?.hide()
+                            showSaveDialog = false
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                    if (saveDialogZone == 0) {
+                        if (event.type == KeyEventType.KeyDown) {
+                            when (native.keyCode) {
+                                android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                                android.view.KeyEvent.KEYCODE_ENTER,
+                                android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                    saveDialogZone = if (newPresetTitle.isNotBlank()) 2 else 1
+                                    return@onPreviewKeyEvent true
+                                }
+                                android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                                    saveDialogZone = 1
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                        }
+                        return@onPreviewKeyEvent false
+                    }
+                    if (isCenterActivateKey(native.keyCode)) {
+                        if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                            sawCenterDown = true
+                        } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                            sawCenterDown = false
+                            if (saveDialogZone == 1) {
+                                showSaveDialog = false
+                            } else if (saveDialogZone == 2 && newPresetTitle.isNotBlank()) {
+                                saveCustomPreset(prefs, newPresetTitle.trim(), draft)
+                                customPresets = loadCustomPresets(prefs)
+                                showSaveDialog = false
+                                newPresetTitle = ""
+                            }
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (native.keyCode) {
+                        android.view.KeyEvent.KEYCODE_DPAD_UP,
+                        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            saveDialogZone = 0
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            saveDialogZone = 1
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            saveDialogZone = 2
+                            true
+                        }
+                        else -> false
+                    }
+                }
         ) {
+            val shape = RoundedCornerShape(draft.cardRoundnessDp.dp)
             Surface(
                 modifier = Modifier
                     .width(dialogWidth)
-                    .heightIn(max = 300.dp),
-                shape = RoundedCornerShape(draft.cardRoundnessDp.dp),
-                color = draft.cardBgColor
+                    .heightIn(max = 300.dp)
+                    .border(2.5.dp, draft.greetingOutlineColor, shape),
+                shape = shape,
+                color = draft.cardBgColor,
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -740,30 +1165,46 @@ fun ThemeStudioDialog(
                     Text(
                         "Save Custom Preset ♡",
                         fontWeight = FontWeight.Bold,
-                        color = draft.appActionColor
+                        color = draft.fgTextColor,
+                        fontSize = 17.sp
                     )
 
                     OutlinedTextField(
                         value = newPresetTitle,
-                        onValueChange = { newPresetTitle = it },
+                        onValueChange = { newPresetTitle = it.take(24) },
                         placeholder = {
                             Text("Preset name (e.g. Kitty Pink)")
                         },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = draft.appActionColor,
+                            unfocusedBorderColor = draft.greetingOutlineColor,
+                            focusedTextColor = draft.fgTextColor,
+                            unfocusedTextColor = draft.fgTextColor,
+                            focusedContainerColor = softSurfaceColor,
+                            unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.7f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(saveNameFocusRequester)
                     )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                     ) {
-                        TextButton(
+                        KawaiiDialogPillButton(
+                            text = "Cancel",
+                            isFocused = saveDialogZone == 1,
                             onClick = { showSaveDialog = false }
-                        ) {
-                            Text("Cancel", color = draft.appActionColor)
-                        }
+                        )
 
-                        Button(
+                        KawaiiDialogPillButton(
+                            text = "Save ♡",
+                            isFocused = saveDialogZone == 2,
+                            enabled = newPresetTitle.isNotBlank(),
+                            isPrimary = true,
                             onClick = {
                                 if (newPresetTitle.isNotBlank()) {
                                     saveCustomPreset(
@@ -775,18 +1216,8 @@ fun ThemeStudioDialog(
                                     showSaveDialog = false
                                     newPresetTitle = ""
                                 }
-                            },
-                            enabled = newPresetTitle.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = draft.appActionColor
-                            )
-                        ) {
-                            Text(
-                                "Save",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                            }
+                        )
                     }
                 }
             }
@@ -798,27 +1229,37 @@ fun ThemeStudioDialog(
 fun RowScope.PresetButton(
     text: String,
     isSelected: Boolean,
+    isFocused: Boolean = false,
     theme: LauncherTheme,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.weight(1f),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isSelected) {
-                theme.selectedContainerColor
-            } else {
-                theme.cardBgColor
-            }
-        ),
-        shape = RoundedCornerShape(10.dp),
-        contentPadding = PaddingValues(4.dp)
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .clip(shape)
+            .background(
+                if (isFocused || isSelected) {
+                    theme.selectedContainerColor
+                } else {
+                    theme.greetingBgColor.copy(alpha = 0.65f)
+                }
+            )
+            .border(
+                width = if (isFocused) 2.5.dp else if (isSelected) 1.5.dp else 1.dp,
+                color = if (isFocused || isSelected) theme.appActionColor else theme.greetingOutlineColor,
+                shape = shape
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 6.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
-            text = text,
+            text = if (isSelected) "✓ $text" else text,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
-            color = theme.fgTextColor
+            color = theme.fgTextColor,
+            maxLines = 1
         )
     }
 }
@@ -827,22 +1268,32 @@ fun RowScope.PresetButton(
 fun ColorRow(
     label: String,
     color: Color,
+    isFocused: Boolean = false,
     theme: LauncherTheme,
     onClick: () -> Unit
 ) {
+    val shape = RoundedCornerShape(10.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(shape)
+            .background(
+                if (isFocused) theme.selectedContainerColor else Color.Transparent
+            )
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) theme.appActionColor else Color.Transparent,
+                shape = shape
+            )
             .clickable(onClick = onClick)
-            .padding(vertical = 6.dp, horizontal = 4.dp),
+            .padding(vertical = 6.dp, horizontal = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
             fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium,
             color = theme.fgTextColor
         )
 
@@ -852,9 +1303,9 @@ fun ColorRow(
                 .clip(RoundedCornerShape(6.dp))
                 .background(color)
                 .border(
-                    1.dp,
-                    Color.Gray.copy(alpha = 0.5f),
-                    RoundedCornerShape(6.dp)
+                    width = if (isFocused) 2.dp else 1.dp,
+                    color = if (isFocused) theme.fgTextColor else Color.Gray.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(6.dp)
                 )
         )
     }

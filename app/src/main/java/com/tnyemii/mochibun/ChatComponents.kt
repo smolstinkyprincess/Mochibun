@@ -17,9 +17,10 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,25 +39,28 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,17 +69,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import com.tnyemii.mochibun.ui.theme.cardTextColor
+import com.tnyemii.mochibun.ui.theme.destructiveBgColor
+import com.tnyemii.mochibun.ui.theme.destructiveColor
+import com.tnyemii.mochibun.ui.theme.softSurfaceColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -89,10 +104,13 @@ import java.net.URL
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatPlaceholderPage(
+    isActivePage: Boolean = true,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val theme = LocalLauncherTheme.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val coroutineScope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("chat_settings", Context.MODE_PRIVATE) }
 
@@ -102,7 +120,7 @@ fun ChatPlaceholderPage(
     var isGenerating by remember { mutableStateOf(false) }
     var activeStatus by remember { mutableStateOf<String?>(null) }
 
-    // Selected message for options dialog (long-press)
+    // Selected message for options dialog (long-press or OK on focused message)
     var selectedMessageForOptions by remember { mutableStateOf<ChatMessage?>(null) }
 
     // Chat settings state
@@ -164,8 +182,6 @@ fun ChatPlaceholderPage(
                 withContext(Dispatchers.Main) {
                     isRefreshingModels = false
                     if (fetched.isNotEmpty()) {
-                        // Only show names confirmed by /api/tags. Never keep a stale selection
-                        // in the installed-model menu after a successful refresh.
                         ollamaModels = fetched.distinct()
                         if (selectedOllamaModel !in ollamaModels) {
                             val replacement = when {
@@ -178,7 +194,6 @@ fun ChatPlaceholderPage(
                             modelFetchStatus = "Connected • ${ollamaModels.size} model(s) found ♡"
                         }
                     } else {
-                        // An empty list can mean unreachable, an HTTP/JSON error, or no installed models.
                         ollamaModels = emptyList()
                         modelFetchStatus = "No models found, or PC is offline/unreachable ♡"
                     }
@@ -355,59 +370,436 @@ fun ChatPlaceholderPage(
         }
     }
 
+    val sendMessageAction: () -> Unit = {
+        val sent = messageText.trim()
+        if (sent.isNotEmpty() && !isGenerating) {
+            messages.add(ChatMessage(isUser = true, text = sent))
+            val userMessageSnapshot = messages.toList()
+            coroutineScope.launch(Dispatchers.IO) {
+                saveChatHistory(context, userMessageSnapshot)
+            }
+            messageText = ""
+            isGenerating = true
+
+            val needSearch = WebSearchClassifier.shouldSearchWeb(sent)
+            val isOnline = WebSearchClient.isNetworkAvailable(context)
+
+            coroutineScope.launch(Dispatchers.IO) {
+                var searchResults = emptyList<SearchResult>()
+                var webStatus: String? = null
+                var historySnapshot: List<ChatMessage> = emptyList()
+
+                try {
+                    if (needSearch) {
+                        if (isOnline) {
+                            withContext(Dispatchers.Main) { activeStatus = "Searching the web..." }
+                            val query = WebSearchClassifier.extractSearchQuery(sent)
+                            searchResults = WebSearchClient.search(query)
+                            if (searchResults.isNotEmpty()) {
+                                webStatus = "Web results used"
+                            } else {
+                                webStatus = "Search unavailable"
+                            }
+                        } else {
+                            webStatus = "Offline answer"
+                        }
+                    }
+
+                    var reply: String? = null
+                    var backendTag = "PC · Ollama"
+
+                    when (selectedBackend) {
+                        "Auto" -> {
+                            withContext(Dispatchers.Main) { activeStatus = "Connecting to PC..." }
+                            val ollamaRes = tryOllama(
+                                messages = messages,
+                                searchEvidence = searchResults,
+                                modelName = selectedOllamaModel,
+                                enableReasoning = enableReasoning,
+                                showReasoning = showReasoning
+                            )
+                            if (!ollamaRes.content.isNullOrBlank()) {
+                                reply = ollamaRes.content
+                                backendTag = "PC · Ollama ($selectedOllamaModel)"
+                                withContext(Dispatchers.Main) {
+                                    activeStatus = "Writing a reply..."
+                                    ollamaConnected = true
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    activeStatus = "Using local SmolLM2..."
+                                    ollamaConnected = false
+                                }
+                                if (resolvedModelPath.isNotBlank()) {
+                                    val file = java.io.File(resolvedModelPath)
+                                    if (file.exists() && file.length() > 0) {
+                                        val fullPrompt = buildChatMLPrompt(messages, searchResults)
+                                        reply = try {
+                                            NativeLlm.generateText(resolvedModelPath, fullPrompt)
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                            null
+                                        }
+                                        backendTag = "Offline · SmolLM2"
+                                    }
+                                }
+                                if (reply == null) {
+                                    backendTag = "Offline · Error"
+                                    val err = ollamaRes.error ?: "Could not reach Ollama on PC"
+                                    reply = if (resolvedModelPath.isEmpty()) {
+                                        "Ollama PC error: $err. No local SmolLM2 model selected. ♡"
+                                    } else {
+                                        "Ollama PC error: $err. Local SmolLM2 inference also failed. ♡"
+                                    }
+                                }
+                            }
+                        }
+                        "PC Ollama" -> {
+                            withContext(Dispatchers.Main) { activeStatus = "Connecting to PC..." }
+                            val ollamaRes = tryOllama(
+                                messages = messages,
+                                searchEvidence = searchResults,
+                                modelName = selectedOllamaModel,
+                                enableReasoning = enableReasoning,
+                                showReasoning = showReasoning
+                            )
+                            if (!ollamaRes.content.isNullOrBlank()) {
+                                reply = ollamaRes.content
+                                backendTag = "PC · Ollama ($selectedOllamaModel)"
+                                withContext(Dispatchers.Main) {
+                                    activeStatus = "Writing a reply..."
+                                    ollamaConnected = true
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) { ollamaConnected = false }
+                                backendTag = "PC · Error"
+                                val err = ollamaRes.error ?: "Could not reach Ollama on PC at 100.103.158.68:11434"
+                                reply = "Ollama error ($selectedOllamaModel):\n$err\n\nPlease verify Tailscale is connected and Ollama is running. ♡"
+                            }
+                        }
+                        "Local SmolLM2" -> {
+                            withContext(Dispatchers.Main) { activeStatus = "Using local SmolLM2..." }
+                            if (resolvedModelPath.isNotBlank()) {
+                                val file = java.io.File(resolvedModelPath)
+                                if (file.exists() && file.length() > 0) {
+                                    val fullPrompt = buildChatMLPrompt(messages, searchResults)
+                                    reply = try {
+                                        NativeLlm.generateText(resolvedModelPath, fullPrompt)
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                        null
+                                    }
+                                    backendTag = "Offline · SmolLM2"
+                                }
+                            }
+                            if (reply == null) {
+                                backendTag = "Offline · Error"
+                                reply = if (resolvedModelPath.isEmpty()) {
+                                    "No local SmolLM2 model file selected. Please tap above to select a model file. ♡"
+                                } else {
+                                    "Local SmolLM2 model file not found or inference failed. ♡"
+                                }
+                            }
+                        }
+                    }
+
+                    val finalStatus = if (webStatus != null) "$backendTag • $webStatus" else backendTag
+
+                    withContext(Dispatchers.Main) {
+                        messages.add(
+                            ChatMessage(
+                                isUser = false,
+                                text = reply ?: "An error occurred while generating response. ♡",
+                                status = finalStatus,
+                                sources = searchResults
+                            )
+                        )
+                    }
+                } finally {
+                    withContext(NonCancellable) {
+                        withContext(Dispatchers.Main) {
+                            activeStatus = null
+                            isGenerating = false
+                            historySnapshot = messages.toList()
+                        }
+                        saveChatHistory(context, historySnapshot)
+                    }
+                }
+            }
+        }
+    }
+
+    // D-pad focus zones on ChatPlaceholderPage:
+    // 0 = Header (headerCol: 0 = "◀ Home", 1 = "⋮" Menu)
+    // 1 = Select model file prompt (when shown)
+    // 2 = Messages list (selectedMsgIndex)
+    // 3 = Message Input TextField
+    // 4 = Send button
+    val showModelPrompt = resolvedModelPath.isEmpty() && selectedBackend == "Local SmolLM2"
+    var focusZone by remember { mutableIntStateOf(3) }
+    var headerCol by remember { mutableIntStateOf(1) }
+    var selectedMsgIndex by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    val pageFocusRequester = remember { FocusRequester() }
+    val inputFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(messages.size) {
+        selectedMsgIndex = (messages.size - 1).coerceAtLeast(0)
+    }
+
+    LaunchedEffect(selectedMsgIndex, messages.size, focusZone) {
+        if (focusZone == 2 && messages.isNotEmpty() && selectedMsgIndex in messages.indices) {
+            val isVisible = chatListState.layoutInfo.visibleItemsInfo.any {
+                it.index == selectedMsgIndex
+            }
+            if (!isVisible) {
+                chatListState.animateScrollToItem(selectedMsgIndex)
+            }
+        }
+    }
+
+    val anyChatDialogOpen = selectedMessageForOptions != null || settingsDialogOpen
+
+    LaunchedEffect(isActivePage, focusZone, anyChatDialogOpen) {
+        if (!isActivePage || anyChatDialogOpen) return@LaunchedEffect
+        if (focusZone == 3 && !isGenerating) {
+            repeat(6) {
+                try {
+                    inputFocusRequester.requestFocus()
+                    return@LaunchedEffect
+                } catch (_: Exception) {
+                    delay(35)
+                }
+            }
+        } else {
+            keyboardController?.hide()
+            repeat(6) {
+                try {
+                    pageFocusRequester.requestFocus()
+                    return@LaunchedEffect
+                } catch (_: Exception) {
+                    delay(35)
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xAEEECFFF))
-            .padding(16.dp)
+            .clip(RoundedCornerShape(theme.cardRoundnessDp.dp))
+            .background(theme.cardBgColor.copy(alpha = 0.85f))
+            .focusRequester(pageFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (!isActivePage || anyChatDialogOpen) return@onPreviewKeyEvent false
+                val native = event.nativeKeyEvent
+
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        if (settingsMenuOpen) {
+                            settingsMenuOpen = false
+                        } else {
+                            keyboardController?.hide()
+                            onBack()
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                // When input TextField is focused, allow normal typing!
+                // Only intercept UP/DOWN or ENTER (to move to Send button).
+                if (focusZone == 3) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (native.keyCode) {
+                            android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                                focusZone = when {
+                                    messages.isNotEmpty() -> {
+                                        selectedMsgIndex = messages.lastIndex
+                                        2
+                                    }
+                                    showModelPrompt -> 1
+                                    else -> 0
+                                }
+                                return@onPreviewKeyEvent true
+                            }
+                            android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                focusZone = 4
+                                return@onPreviewKeyEvent true
+                            }
+                            android.view.KeyEvent.KEYCODE_ENTER,
+                            android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                if (messageText.isNotBlank() && !isGenerating) {
+                                    focusZone = 4
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent false
+                }
+
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        when (focusZone) {
+                            0 -> {
+                                if (headerCol == 0) {
+                                    onBack()
+                                } else {
+                                    settingsDialogOpen = true
+                                }
+                            }
+                            1 -> {
+                                try {
+                                    modelPicker.launch(arrayOf("*/*"))
+                                } catch (e: Exception) {
+                                    messages.add(ChatMessage(isUser = false, text = "Could not open file picker: ${e.localizedMessage} ♡"))
+                                }
+                            }
+                            2 -> {
+                                messages.getOrNull(selectedMsgIndex)?.let { msg ->
+                                    selectedMessageForOptions = msg
+                                }
+                            }
+                            4 -> {
+                                sendMessageAction()
+                                focusZone = 3
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                when (native.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                        when (focusZone) {
+                            0 -> focusZone = 4
+                            1 -> focusZone = 0
+                            2 -> {
+                                if (selectedMsgIndex > 0) {
+                                    selectedMsgIndex--
+                                } else if (showModelPrompt) {
+                                    focusZone = 1
+                                } else {
+                                    focusZone = 0
+                                }
+                            }
+                            4 -> focusZone = 3
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        when (focusZone) {
+                            0 -> {
+                                focusZone = when {
+                                    showModelPrompt -> 1
+                                    messages.isNotEmpty() -> {
+                                        selectedMsgIndex = 0
+                                        2
+                                    }
+                                    else -> 3
+                                }
+                            }
+                            1 -> {
+                                focusZone = if (messages.isNotEmpty()) {
+                                    selectedMsgIndex = 0
+                                    2
+                                } else {
+                                    3
+                                }
+                            }
+                            2 -> {
+                                if (selectedMsgIndex < messages.lastIndex) {
+                                    selectedMsgIndex++
+                                } else {
+                                    focusZone = 3
+                                }
+                            }
+                            4 -> focusZone = 0
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        when (focusZone) {
+                            0 -> {
+                                if (headerCol == 1) {
+                                    headerCol = 0
+                                } else {
+                                    onBack()
+                                }
+                            }
+                            4 -> focusZone = 3
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        when (focusZone) {
+                            0 -> headerCol = 1
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
+            .padding(14.dp)
     ) {
-        // top header with title, mascot, and three-dot settings menu <3
+        // top header with Home button, mascot, title, and settings button <3
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-
-            Spacer(modifier = Modifier.weight(1f))
+            KawaiiDialogPillButton(
+                text = "◀ Home",
+                isFocused = focusZone == 0 && headerCol == 0,
+                onClick = {
+                    focusZone = 0
+                    headerCol = 0
+                    onBack()
+                }
+            )
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                PixelArtMascot(expression = mascotExpression, size = 64.dp)
+                PixelArtMascot(expression = mascotExpression, size = 48.dp)
                 Text(
                     text = when (selectedBackend) {
-                        "PC Ollama" -> "✧･ﾟ remote llm ✧˖°"
-                        "Local SmolLM2" -> "✧･ﾟ local llm ✧˖°"
-                        else -> if (ollamaConnected == true) "✧･ﾟ remote llm ✧˖°" else "✧･ﾟ local llm ✧˖°"
+                        "PC Ollama" -> "✧ remote llm ✧"
+                        "Local SmolLM2" -> "✧ local llm ✧"
+                        else -> if (ollamaConnected == true) "✧ remote llm ✧" else "✧ local llm ✧"
                     },
-                    fontSize = 18.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = cardTextColor
+                    color = theme.fgTextColor
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Three-dot menu button
+            // Three-dot menu / settings button
             Box {
-                TextButton(
-                    onClick = { settingsMenuOpen = true }
-                ) {
-                    Text(
-                        text = "⋮",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFB77BBF)
-                    )
-                }
+                KawaiiDialogPillButton(
+                    text = "⚙",
+                    isFocused = focusZone == 0 && headerCol == 1,
+                    onClick = {
+                        focusZone = 0
+                        headerCol = 1
+                        settingsMenuOpen = true
+                    }
+                )
 
                 DropdownMenu(
                     expanded = settingsMenuOpen,
                     onDismissRequest = { settingsMenuOpen = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Chat settings ♡", color = Color(0xFF684A7C)) },
+                        text = { Text("Chat settings ♡", color = theme.fgTextColor) },
                         onClick = {
                             settingsMenuOpen = false
                             settingsDialogOpen = true
@@ -417,7 +809,7 @@ fun ChatPlaceholderPage(
                         text = {
                             Text(
                                 "Clear chat ♡",
-                                color = if (!isGenerating && messages.isNotEmpty()) Color(0xFFB77BBF) else Color.LightGray
+                                color = if (!isGenerating && messages.isNotEmpty()) destructiveColor else Color.LightGray
                             )
                         },
                         enabled = !isGenerating && messages.isNotEmpty(),
@@ -444,13 +836,13 @@ fun ChatPlaceholderPage(
                 }
             },
             modifier = Modifier.align(Alignment.CenterHorizontally),
-            fontSize = 12.sp,
-            color = Color(0xFFB77BBF),
+            fontSize = 11.sp,
+            color = theme.appActionColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // scrollable chat conversation lazy column :3
         LazyColumn(
@@ -458,29 +850,39 @@ fun ChatPlaceholderPage(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (resolvedModelPath.isEmpty() && selectedBackend == "Local SmolLM2") {
+            if (showModelPrompt) {
                 item(key = "select_model_prompt") {
+                    val promptFocused = focusZone == 1
+                    val promptShape = RoundedCornerShape(16.dp)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .border(
+                                width = if (promptFocused) 2.5.dp else 1.5.dp,
+                                color = if (promptFocused) theme.appActionColor else theme.greetingOutlineColor,
+                                shape = promptShape
+                            )
                             .clickable {
+                                focusZone = 1
                                 try {
                                     modelPicker.launch(arrayOf("*/*"))
                                 } catch (e: Exception) {
                                     messages.add(ChatMessage(isUser = false, text = "Could not open file picker: ${e.localizedMessage} ♡"))
                                 }
                             },
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE9D9FF))
+                        shape = promptShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (promptFocused) theme.selectedContainerColor else theme.greetingBgColor
+                        )
                     ) {
                         Text(
-                            text = "📁 Tap here to select your SmolLM2 .gguf model file ♡",
-                            modifier = Modifier.padding(16.dp),
-                            color = Color(0xFF684A7C),
+                            text = "📁 Press OK or tap here to select your SmolLM2 .gguf model file ♡",
+                            modifier = Modifier.padding(14.dp),
+                            color = theme.fgTextColor,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = 13.sp
                         )
                     }
                 }
@@ -490,7 +892,7 @@ fun ChatPlaceholderPage(
                 item(key = "welcome_prompt") {
                     Text(
                         text = "♡ send me a message to try the chat ♡",
-                        color = Color(0xFF684A7C),
+                        color = theme.fgTextColor,
                         modifier = Modifier.padding(8.dp)
                     )
                 }
@@ -498,6 +900,8 @@ fun ChatPlaceholderPage(
 
             items(messages.size, key = { index -> messages[index].id }) { index ->
                 val msg = messages[index]
+                val isMsgFocused = focusZone == 2 && selectedMsgIndex == index
+                val bubbleShape = RoundedCornerShape(18.dp)
 
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -507,7 +911,7 @@ fun ChatPlaceholderPage(
                         Text(
                             text = "🌐 ${msg.status}",
                             fontSize = 11.sp,
-                            color = Color(0xFFB77BBF),
+                            color = theme.appActionColor,
                             modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
                         )
                     }
@@ -515,22 +919,37 @@ fun ChatPlaceholderPage(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth(if (msg.isUser) 0.88f else 1f)
+                            .border(
+                                width = if (isMsgFocused) 2.5.dp else 1.dp,
+                                color = if (isMsgFocused) theme.appActionColor else theme.greetingOutlineColor,
+                                shape = bubbleShape
+                            )
                             .pointerInput(msg.id) {
                                 detectTapGestures(
+                                    onTap = {
+                                        focusZone = 2
+                                        selectedMsgIndex = index
+                                    },
                                     onLongPress = {
+                                        focusZone = 2
+                                        selectedMsgIndex = index
                                         selectedMessageForOptions = msg
                                     }
                                 )
                             },
-                        shape = RoundedCornerShape(18.dp),
+                        shape = bubbleShape,
                         colors = CardDefaults.cardColors(
-                            containerColor = if (msg.isUser) Color(0xFFFFC3FA) else Color.White
+                            containerColor = when {
+                                isMsgFocused -> theme.selectedContainerColor
+                                msg.isUser -> theme.greetingBgColor
+                                else -> softSurfaceColor
+                            }
                         )
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
                                 text = msg.text,
-                                color = Color(0xFF684A7C),
+                                color = theme.fgTextColor,
                                 fontSize = chatFontSize.sp
                             )
 
@@ -540,19 +959,19 @@ fun ChatPlaceholderPage(
                                     text = "Sources:",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF9C6DF5)
+                                    color = theme.appActionColor
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 msg.sources.forEach { src ->
                                     Text(
                                         text = "• ${src.title}",
                                         fontSize = 11.sp,
-                                        color = Color(0xFF9C6DF5),
+                                        color = theme.appActionColor,
                                         modifier = Modifier
                                             .clickable {
                                                 try {
-                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(src.url))
-                                                    context.startActivity(intent)
+                                                    val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(src.url))
+                                                    context.startActivity(viewIntent)
                                                 } catch (e: Exception) {
                                                     e.printStackTrace()
                                                 }
@@ -583,208 +1002,57 @@ fun ChatPlaceholderPage(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val fieldShape = RoundedCornerShape(18.dp)
             TextField(
                 value = messageText,
                 onValueChange = { messageText = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .border(
+                        width = if (focusZone == 3) 2.5.dp else 1.dp,
+                        color = if (focusZone == 3) theme.appActionColor else theme.greetingOutlineColor,
+                        shape = fieldShape
+                    )
+                    .focusRequester(inputFocusRequester),
                 placeholder = { Text(if (isGenerating) "thinking..." else "say something...") },
                 enabled = !isGenerating,
-                shape = RoundedCornerShape(20.dp),
+                shape = fieldShape,
                 textStyle = TextStyle(
-                    color = Color(0xFF684A7C),
+                    color = theme.fgTextColor,
                     fontSize = 14.sp
                 ),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedTextColor = Color(0xFFD36BFF),
-                    unfocusedTextColor = Color(0xFF8658A1),
-                    // Make placeholder text darker and easier to read
-                    focusedPlaceholderColor = Color(0xFF89549A),
-                    unfocusedPlaceholderColor = Color(0xFF89549A),
-                    disabledPlaceholderColor = Color(0xFF89549A),
+                    focusedContainerColor = softSurfaceColor,
+                    unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.85f),
+                    focusedTextColor = theme.fgTextColor,
+                    unfocusedTextColor = theme.fgTextColor,
+                    focusedPlaceholderColor = theme.fgTextColor.copy(alpha = 0.6f),
+                    unfocusedPlaceholderColor = theme.fgTextColor.copy(alpha = 0.6f),
+                    disabledPlaceholderColor = theme.fgTextColor.copy(alpha = 0.45f),
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
-                    disabledContainerColor = Color.White,
-                    disabledTextColor = Color(0xFF684A7C),
+                    disabledContainerColor = softSurfaceColor.copy(alpha = 0.6f),
+                    disabledTextColor = theme.fgTextColor,
                 ),
                 maxLines = 3
             )
 
             Spacer(modifier = Modifier.width(6.dp))
 
-            TextButton(
+            KawaiiDialogPillButton(
+                text = "Send",
+                isFocused = focusZone == 4,
+                enabled = !isGenerating && messageText.isNotBlank(),
+                isPrimary = true,
                 onClick = {
-                    val sent = messageText.trim()
-                    if (sent.isNotEmpty() && !isGenerating) {
-                        messages.add(ChatMessage(isUser = true, text = sent))
-                        val userMessageSnapshot = messages.toList()
-                        coroutineScope.launch(Dispatchers.IO) {
-                            saveChatHistory(context, userMessageSnapshot)
-                        }
-                        messageText = ""
-                        isGenerating = true
-
-                        val needSearch = WebSearchClassifier.shouldSearchWeb(sent)
-                        val isOnline = WebSearchClient.isNetworkAvailable(context)
-
-                        coroutineScope.launch(Dispatchers.IO) {
-                            var searchResults = emptyList<SearchResult>()
-                            var webStatus: String? = null
-                            var historySnapshot: List<ChatMessage> = emptyList()
-
-                            try {
-                                if (needSearch) {
-                                    if (isOnline) {
-                                        withContext(Dispatchers.Main) { activeStatus = "Searching the web..." }
-                                        val query = WebSearchClassifier.extractSearchQuery(sent)
-                                        searchResults = WebSearchClient.search(query)
-                                        if (searchResults.isNotEmpty()) {
-                                            webStatus = "Web results used"
-                                        } else {
-                                            webStatus = "Search unavailable"
-                                        }
-                                    } else {
-                                        webStatus = "Offline answer"
-                                    }
-                                }
-
-                                var reply: String? = null
-                                var backendTag = "PC · Ollama"
-
-                                when (selectedBackend) {
-                                    "Auto" -> {
-                                        withContext(Dispatchers.Main) { activeStatus = "Connecting to PC..." }
-                                        val ollamaRes = tryOllama(
-                                            messages = messages,
-                                            searchEvidence = searchResults,
-                                            modelName = selectedOllamaModel,
-                                            enableReasoning = enableReasoning,
-                                            showReasoning = showReasoning
-                                        )
-                                        if (!ollamaRes.content.isNullOrBlank()) {
-                                            reply = ollamaRes.content
-                                            backendTag = "PC · Ollama ($selectedOllamaModel)"
-                                            withContext(Dispatchers.Main) {
-                                                activeStatus = "Writing a reply..."
-                                                ollamaConnected = true
-                                            }
-                                        } else {
-                                            withContext(Dispatchers.Main) {
-                                                activeStatus = "Using local SmolLM2..."
-                                                ollamaConnected = false
-                                            }
-                                            if (resolvedModelPath.isNotBlank()) {
-                                                val file = java.io.File(resolvedModelPath)
-                                                if (file.exists() && file.length() > 0) {
-                                                    val fullPrompt = buildChatMLPrompt(messages, searchResults)
-                                                    reply = try {
-                                                        NativeLlm.generateText(resolvedModelPath, fullPrompt)
-                                                    } catch (e: Exception) {
-                                                        e.printStackTrace()
-                                                        null
-                                                    }
-                                                    backendTag = "Offline · SmolLM2"
-                                                }
-                                            }
-                                            if (reply == null) {
-                                                backendTag = "Offline · Error"
-                                                val err = ollamaRes.error ?: "Could not reach Ollama on PC"
-                                                reply = if (resolvedModelPath.isEmpty()) {
-                                                    "Ollama PC error: $err. No local SmolLM2 model selected. ♡"
-                                                } else {
-                                                    "Ollama PC error: $err. Local SmolLM2 inference also failed. ♡"
-                                                }
-                                            }
-                                        }
-                                    }
-                                    "PC Ollama" -> {
-                                        withContext(Dispatchers.Main) { activeStatus = "Connecting to PC..." }
-                                        val ollamaRes = tryOllama(
-                                            messages = messages,
-                                            searchEvidence = searchResults,
-                                            modelName = selectedOllamaModel,
-                                            enableReasoning = enableReasoning,
-                                            showReasoning = showReasoning
-                                        )
-                                        if (!ollamaRes.content.isNullOrBlank()) {
-                                            reply = ollamaRes.content
-                                            backendTag = "PC · Ollama ($selectedOllamaModel)"
-                                            withContext(Dispatchers.Main) {
-                                                activeStatus = "Writing a reply..."
-                                                ollamaConnected = true
-                                            }
-                                        } else {
-                                            withContext(Dispatchers.Main) { ollamaConnected = false }
-                                            backendTag = "PC · Error"
-                                            val err = ollamaRes.error ?: "Could not reach Ollama on PC at 100.103.158.68:11434"
-                                            reply = "Ollama error ($selectedOllamaModel):\n$err\n\nPlease verify Tailscale is connected and Ollama is running. ♡"
-                                        }
-                                    }
-                                    "Local SmolLM2" -> {
-                                        withContext(Dispatchers.Main) { activeStatus = "Using local SmolLM2..." }
-                                        if (resolvedModelPath.isNotBlank()) {
-                                            val file = java.io.File(resolvedModelPath)
-                                            if (file.exists() && file.length() > 0) {
-                                                val fullPrompt = buildChatMLPrompt(messages, searchResults)
-                                                reply = try {
-                                                    NativeLlm.generateText(resolvedModelPath, fullPrompt)
-                                                } catch (e: Exception) {
-                                                    e.printStackTrace()
-                                                    null
-                                                }
-                                                backendTag = "Offline · SmolLM2"
-                                            }
-                                        }
-                                        if (reply == null) {
-                                            backendTag = "Offline · Error"
-                                            reply = if (resolvedModelPath.isEmpty()) {
-                                                "No local SmolLM2 model file selected. Please tap above to select a model file. ♡"
-                                            } else {
-                                                "Local SmolLM2 model file not found or inference failed. ♡"
-                                            }
-                                        }
-                                    }
-                                }
-
-                                val finalStatus = if (webStatus != null) "$backendTag • $webStatus" else backendTag
-
-                                withContext(Dispatchers.Main) {
-                                    messages.add(
-                                        ChatMessage(
-                                            isUser = false,
-                                            text = reply ?: "An error occurred while generating response. ♡",
-                                            status = finalStatus,
-                                            sources = searchResults
-                                        )
-                                    )
-                                }
-                            } finally {
-                                withContext(NonCancellable) {
-                                    withContext(Dispatchers.Main) {
-                                        activeStatus = null
-                                        isGenerating = false
-                                        // Read Compose state on the main thread; persist an immutable snapshot off-thread.
-                                        historySnapshot = messages.toList()
-                                    }
-                                    saveChatHistory(context, historySnapshot)
-                                }
-                            }
-                        }
-                    }
-                },
-                enabled = !isGenerating
-            ) {
-                Text(
-                    text = "Send",
-                    color = if (isGenerating) Color.LightGray else Color(0xFF9C6DF5),
-                    fontWeight = FontWeight.Bold
-                )
-            }
+                    focusZone = 4
+                    sendMessageAction()
+                }
+            )
         }
     }
 
-    // Message options dialog (triggered on long press)
+    // Message options dialog (triggered on long press or OK on a focused message)
     if (selectedMessageForOptions != null) {
         val selectedMsg = selectedMessageForOptions!!
         MessageOptionsMenu(
@@ -793,6 +1061,7 @@ fun ChatPlaceholderPage(
             onResend = {
                 messageText = selectedMsg.text
                 selectedMessageForOptions = null
+                focusZone = 3
                 Toast.makeText(context, "Text loaded into input box ♡", Toast.LENGTH_SHORT).show()
             },
             onCopy = {
@@ -818,6 +1087,14 @@ fun ChatPlaceholderPage(
     if (settingsDialogOpen) {
         ChatSettingsDialog(
             onDismiss = { settingsDialogOpen = false },
+            onClearChat = {
+                messages.clear()
+                coroutineScope.launch(Dispatchers.IO) {
+                    saveChatHistory(context, emptyList())
+                }
+                settingsDialogOpen = false
+            },
+            canClearChat = !isGenerating && messages.isNotEmpty(),
             selectedBackend = selectedBackend,
             onBackendChange = updateBackend,
             selectedOllamaModel = selectedOllamaModel,
@@ -837,6 +1114,7 @@ fun ChatPlaceholderPage(
 }
 
 // Dialog for message long-press options (resend, copy, delete) ♡
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageOptionsMenu(
     msg: ChatMessage,
@@ -845,120 +1123,120 @@ fun MessageOptionsMenu(
     onCopy: () -> Unit,
     onDelete: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel ♡", color = Color(0xFFB77BBF), fontWeight = FontWeight.Bold)
+    val theme = LocalLauncherTheme.current
+    val focusRequester = remember { FocusRequester() }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    val actions = remember(msg.isUser) {
+        buildList<Triple<String, Boolean, () -> Unit>> {
+            if (msg.isUser) {
+                add(Triple("🔄 Resend / Edit text", false, onResend))
             }
-        },
-        title = {
-            Text(
-                text = if (msg.isUser) "Message Options ♡" else "Response Options ♡",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF684A7C)
-            )
-        },
-        text = {
+            add(Triple("📋 Copy text", false, onCopy))
+            add(Triple("🗑️ Delete message", true, onDelete))
+            add(Triple("Cancel ♡", false, onDismiss))
+        }
+    }
+
+    var selectedIndex by remember { mutableIntStateOf(0) }
+    requestFocusSafely(focusRequester)
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) onDismiss()
+                    return@onPreviewKeyEvent true
+                }
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        actions.getOrNull(selectedIndex)?.third?.invoke()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (native.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_UP,
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        selectedIndex = if (selectedIndex > 0) selectedIndex - 1 else actions.lastIndex
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        selectedIndex = if (selectedIndex < actions.lastIndex) selectedIndex + 1 else 0
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+        Surface(
+            modifier = Modifier
+                .width(dialogWidth)
+                .border(2.5.dp, theme.greetingOutlineColor, shape),
+            shape = shape,
+            color = theme.cardBgColor,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
+        ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Text snippet preview
+                Text(
+                    text = if (msg.isUser) "Message Options ♡" else "Response Options ♡",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = theme.fgTextColor
+                )
+
                 Card(
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = softSurfaceColor),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = msg.text,
                         fontSize = 12.sp,
-                        color = Color(0xFF684A7C),
+                        color = theme.fgTextColor,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(10.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
 
-                // Resend / Edit (if user message)
-                if (msg.isUser) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onResend() },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE9D9FF))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "🔄 Resend / Edit text",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF684A7C)
-                            )
+                actions.forEachIndexed { idx, (label, isDestructive, action) ->
+                    KawaiiDialogItem(
+                        text = label,
+                        isFocused = selectedIndex == idx,
+                        isDestructive = isDestructive,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            selectedIndex = idx
+                            action()
                         }
-                    }
-                }
-
-                // Copy Text
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onCopy() },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE9D9FF))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "📋 Copy text",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF684A7C)
-                            )
-                        }
-                    }
-
-                // Delete Message
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onDelete() },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF0F5))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🗑️ Delete message",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFD36BFF)
-                        )
-                    }
+                    )
                 }
             }
-        },
-        containerColor = Color(0xFFFFF4FA),
-        shape = RoundedCornerShape(20.dp)
-    )
+        }
+    }
 }
 
 // Compact, animated typing indicator positioned right above the input box <3
@@ -968,6 +1246,7 @@ fun AnimatedTypingIndicator(
     showReasoning: Boolean,
     reasoningText: String? = null
 ) {
+    val theme = LocalLauncherTheme.current
     val infiniteTransition = rememberInfiniteTransition(label = "typing_dots_transition")
 
     val dot1Alpha by infiniteTransition.animateFloat(
@@ -1003,7 +1282,7 @@ fun AnimatedTypingIndicator(
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = 2.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFA7FA).copy(alpha = 0.85f))
+        colors = CardDefaults.cardColors(containerColor = theme.selectedContainerColor.copy(alpha = 0.9f))
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(
@@ -1018,26 +1297,26 @@ fun AnimatedTypingIndicator(
                         modifier = Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF9C6DF5).copy(alpha = dot1Alpha))
+                            .background(theme.appActionColor.copy(alpha = dot1Alpha))
                     )
                     Box(
                         modifier = Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF9C6DF5).copy(alpha = dot2Alpha))
+                            .background(theme.appActionColor.copy(alpha = dot2Alpha))
                     )
                     Box(
                         modifier = Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF9C6DF5).copy(alpha = dot3Alpha))
+                            .background(theme.appActionColor.copy(alpha = dot3Alpha))
                     )
                 }
 
                 Text(
                     text = statusText,
                     fontSize = 12.sp,
-                    color = Color(0xFF684A7C),
+                    color = theme.fgTextColor,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1049,7 +1328,7 @@ fun AnimatedTypingIndicator(
                 Text(
                     text = "💭 $reasoningText",
                     fontSize = 11.sp,
-                    color = Color(0xFF8658A1),
+                    color = theme.fgTextColor,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1058,15 +1337,18 @@ fun AnimatedTypingIndicator(
     }
 }
 
-// Compact scrollable settings dialog for 480x800 display ♡
+// Compact scrollable settings dialog for 480x800 display with full D-pad support ♡
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatSettingsDialog(
     onDismiss: () -> Unit,
+    onClearChat: () -> Unit = {},
+    canClearChat: Boolean = false,
     selectedBackend: String,
     onBackendChange: (String) -> Unit,
     selectedOllamaModel: String,
     onOllamaModelChange: (String) -> Unit,
-    ollamaModels: List<String> ,
+    ollamaModels: List<String>,
     onRefreshModels: () -> Unit,
     isRefreshingModels: Boolean,
     modelFetchStatus: String?,
@@ -1077,100 +1359,270 @@ fun ChatSettingsDialog(
     showReasoning: Boolean,
     onShowReasoningChange: (Boolean) -> Unit
 ) {
-    var modelMenuExpanded by remember { mutableStateOf(false) }
+    val theme = LocalLauncherTheme.current
+    val focusRequester = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
+    var sawCenterDown by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    val showOllamaSection = selectedBackend == "Auto" || selectedBackend == "PC Ollama"
+    val displayModels = remember(ollamaModels, selectedOllamaModel) {
+        if (ollamaModels.isEmpty()) listOf(selectedOllamaModel) else ollamaModels
+    }
+
+    // Focus rows:
+    // 0: Backend "Auto"
+    // 1: Backend "PC Ollama"
+    // 2: Backend "Local SmolLM2"
+    // 3: Refresh Ollama models button (when showOllamaSection)
+    // 4: Cycle Ollama model selector (when showOllamaSection; LEFT/RIGHT/OK cycles models)
+    // 5: Font size slider (LEFT/RIGHT adjusts font size)
+    // 6: Enable reasoning switch
+    // 7: Show reasoning in chat switch
+    // 8: Clear chat button
+    // 9: Done button
+    var focusRow by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(focusRow) {
+        val target = ((focusRow / 9f) * scrollState.maxValue).toInt()
+        scrollState.animateScrollTo(target)
+    }
+
+    requestFocusSafely(focusRequester)
+
+    BasicAlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Done ♡", color = Color(0xFF9C6DF5), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) onDismiss()
+                    return@onPreviewKeyEvent true
+                }
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        when (focusRow) {
+                            0 -> onBackendChange("Auto")
+                            1 -> onBackendChange("PC Ollama")
+                            2 -> onBackendChange("Local SmolLM2")
+                            3 -> if (!isRefreshingModels) onRefreshModels()
+                            4 -> {
+                                if (displayModels.isNotEmpty()) {
+                                    val idx = displayModels.indexOf(selectedOllamaModel)
+                                    val next = displayModels[(idx + 1).mod(displayModels.size)]
+                                    onOllamaModelChange(next)
+                                }
+                            }
+                            5 -> {
+                                val next = if (chatFontSize >= 22f) 11f else (chatFontSize + 1f).coerceAtMost(22f)
+                                onFontSizeChange(next)
+                            }
+                            6 -> onEnableReasoningChange(!enableReasoning)
+                            7 -> onShowReasoningChange(!showReasoning)
+                            8 -> if (canClearChat) onClearChat()
+                            9 -> onDismiss()
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                when (native.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                        focusRow = when {
+                            focusRow == 0 -> 9
+                            focusRow == 5 && !showOllamaSection -> 2
+                            focusRow == 9 && !canClearChat -> 7
+                            else -> focusRow - 1
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        focusRow = when {
+                            focusRow == 2 && !showOllamaSection -> 5
+                            focusRow == 7 && !canClearChat -> 9
+                            focusRow == 9 -> 0
+                            else -> focusRow + 1
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        when (focusRow) {
+                            4 -> {
+                                if (displayModels.isNotEmpty()) {
+                                    val idx = displayModels.indexOf(selectedOllamaModel).coerceAtLeast(0)
+                                    val prev = displayModels[(idx - 1).mod(displayModels.size)]
+                                    onOllamaModelChange(prev)
+                                }
+                            }
+                            5 -> {
+                                onFontSizeChange((chatFontSize - 1f).coerceIn(11f, 22f))
+                            }
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        when (focusRow) {
+                            4 -> {
+                                if (displayModels.isNotEmpty()) {
+                                    val idx = displayModels.indexOf(selectedOllamaModel).coerceAtLeast(0)
+                                    val next = displayModels[(idx + 1).mod(displayModels.size)]
+                                    onOllamaModelChange(next)
+                                }
+                            }
+                            5 -> {
+                                onFontSizeChange((chatFontSize + 1f).coerceIn(11f, 22f))
+                            }
+                        }
+                        true
+                    }
+                    else -> false
+                }
             }
-        },
-        title = {
-            Text(
-                text = "✧ Chat Settings ✧",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF684A7C)
-            )
-        },
-        text = {
+    ) {
+        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+        Surface(
+            modifier = Modifier
+                .width(dialogWidth)
+                .heightIn(max = 520.dp)
+                .border(2.5.dp, theme.greetingOutlineColor, shape),
+            shape = shape,
+            color = theme.cardBgColor,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .padding(14.dp)
             ) {
-                // Section 1: Backend selection
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "AI Backend",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF9C6DF5)
-                    )
+                Text(
+                    text = "✧ Chat Settings ✧",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = theme.fgTextColor
+                )
 
-                    listOf("Auto", "PC Ollama", "Local SmolLM2").forEach { backend ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onBackendChange(backend) }
-                                .padding(vertical = 2.dp)
-                        ) {
-                            RadioButton(
-                                selected = (selectedBackend == backend),
-                                onClick = { onBackendChange(backend) },
-                                colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF9C6DF5))
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = when (backend) {
-                                    "Auto" -> "Auto (PC first, local fallback)"
-                                    "PC Ollama" -> "PC Ollama (Tailscale)"
-                                    else -> "Local SmolLM2 (Offline)"
-                                },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF684A7C)
-                            )
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.height(8.dp))
 
-                // Section 2: Ollama model selection (if Auto or PC Ollama)
-                if (selectedBackend == "Auto" || selectedBackend == "PC Ollama") {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "Ollama Model",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF9C6DF5),
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(
-                                onClick = onRefreshModels,
-                                enabled = !isRefreshingModels
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Section 1: Backend selection
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "AI Backend",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = theme.appActionColor
+                        )
+
+                        listOf("Auto", "PC Ollama", "Local SmolLM2").forEachIndexed { idx, backend ->
+                            val isRowFocused = focusRow == idx
+                            val rowShape = RoundedCornerShape(10.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(rowShape)
+                                    .background(
+                                        if (isRowFocused) theme.selectedContainerColor else Color.Transparent,
+                                        rowShape
+                                    )
+                                    .border(
+                                        width = if (isRowFocused) 2.dp else 0.dp,
+                                        color = if (isRowFocused) theme.appActionColor else Color.Transparent,
+                                        shape = rowShape
+                                    )
+                                    .clickable {
+                                        focusRow = idx
+                                        onBackendChange(backend)
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
                             ) {
+                                RadioButton(
+                                    selected = (selectedBackend == backend),
+                                    onClick = {
+                                        focusRow = idx
+                                        onBackendChange(backend)
+                                    },
+                                    colors = RadioButtonDefaults.colors(selectedColor = theme.appActionColor)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (isRefreshingModels) "Fetching..." else "Refresh ↺",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFFB77BBF)
+                                    text = when (backend) {
+                                        "Auto" -> "Auto (PC first, local fallback)"
+                                        "PC Ollama" -> "PC Ollama (Tailscale)"
+                                        else -> "Local SmolLM2 (Offline)"
+                                    },
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isRowFocused) FontWeight.Bold else FontWeight.SemiBold,
+                                    color = theme.fgTextColor
                                 )
                             }
                         }
+                    }
 
-                        Box(modifier = Modifier.fillMaxWidth()) {
+                    // Section 2: Ollama model selection (if Auto or PC Ollama)
+                    if (showOllamaSection) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "Ollama Model",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = theme.appActionColor,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                KawaiiDialogPillButton(
+                                    text = if (isRefreshingModels) "Fetching..." else "Refresh ↺",
+                                    isFocused = focusRow == 3,
+                                    enabled = !isRefreshingModels,
+                                    onClick = {
+                                        focusRow = 3
+                                        onRefreshModels()
+                                    }
+                                )
+                            }
+
+                            val modelRowFocused = focusRow == 4
+                            val modelShape = RoundedCornerShape(12.dp)
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { modelMenuExpanded = true },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    .border(
+                                        width = if (modelRowFocused) 2.5.dp else 1.dp,
+                                        color = if (modelRowFocused) theme.appActionColor else theme.greetingOutlineColor,
+                                        shape = modelShape
+                                    )
+                                    .clickable {
+                                        focusRow = 4
+                                        if (displayModels.isNotEmpty()) {
+                                            val idx = displayModels.indexOf(selectedOllamaModel)
+                                            val next = displayModels[(idx + 1).mod(displayModels.size)]
+                                            onOllamaModelChange(next)
+                                        }
+                                    },
+                                shape = modelShape,
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (modelRowFocused) theme.selectedContainerColor else softSurfaceColor
+                                )
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -1181,147 +1633,218 @@ fun ChatSettingsDialog(
                                     Text(
                                         text = selectedOllamaModel,
                                         fontSize = 12.sp,
-                                        color = Color(0xFF684A7C),
-                                        fontWeight = FontWeight.Medium,
+                                        color = theme.fgTextColor,
+                                        fontWeight = FontWeight.Bold,
                                         modifier = Modifier.weight(1f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Text("▼", fontSize = 10.sp, color = Color(0xFFB77BBF))
-                                }
-                            }
-
-                            DropdownMenu(
-                                expanded = modelMenuExpanded,
-                                onDismissRequest = { modelMenuExpanded = false }
-                            ) {
-                                val displayModels = if (ollamaModels.isEmpty()) {
-                                    listOf(selectedOllamaModel)
-                                } else {
-                                    ollamaModels
-                                }
-                                displayModels.forEach { modelName ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = modelName,
-                                                fontSize = 12.sp,
-                                                color = Color(0xFF684A7C)
-                                            )
-                                        },
-                                        onClick = {
-                                            onOllamaModelChange(modelName)
-                                            modelMenuExpanded = false
-                                        }
+                                    Text(
+                                        text = "◀ / ▶",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = theme.appActionColor
                                     )
                                 }
                             }
+
+                            if (!modelFetchStatus.isNullOrBlank()) {
+                                Text(
+                                    text = modelFetchStatus,
+                                    fontSize = 11.sp,
+                                    color = theme.fgTextColor
+                                )
+                            }
+                        }
+                    }
+
+                    // Section 3: Font size
+                    val sliderFocused = focusRow == 5
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (sliderFocused) theme.selectedContainerColor else Color.Transparent
+                            )
+                            .border(
+                                width = if (sliderFocused) 2.dp else 0.dp,
+                                color = if (sliderFocused) theme.appActionColor else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Chat font size: ${chatFontSize.toInt()} sp",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = theme.appActionColor
+                            )
+                            if (sliderFocused) {
+                                Text(
+                                    text = "◀ / ▶",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = theme.appActionColor
+                                )
+                            }
+                        }
+                        Slider(
+                            value = chatFontSize,
+                            onValueChange = {
+                                focusRow = 5
+                                onFontSizeChange(it)
+                            },
+                            valueRange = 11f..22f,
+                            steps = 10,
+                            colors = SliderDefaults.colors(
+                                thumbColor = theme.appActionColor,
+                                activeTrackColor = theme.cardTextColor
+                            )
+                        )
+                    }
+
+                    // Section 4: Reasoning controls
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Reasoning / Thinking",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = theme.appActionColor
+                        )
+
+                        val row6Focused = focusRow == 6
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (row6Focused) theme.selectedContainerColor else Color.Transparent
+                                )
+                                .border(
+                                    width = if (row6Focused) 2.dp else 0.dp,
+                                    color = if (row6Focused) theme.appActionColor else Color.Transparent,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable {
+                                    focusRow = 6
+                                    onEnableReasoningChange(!enableReasoning)
+                                }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Enable reasoning",
+                                    fontSize = 12.sp,
+                                    color = theme.fgTextColor,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Ask model to think before answering",
+                                    fontSize = 10.sp,
+                                    color = theme.fgTextColor.copy(alpha = 0.7f)
+                                )
+                            }
+                            Switch(
+                                checked = enableReasoning,
+                                onCheckedChange = {
+                                    focusRow = 6
+                                    onEnableReasoningChange(it)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = theme.appActionColor
+                                )
+                            )
                         }
 
-                        if (!modelFetchStatus.isNullOrBlank()) {
-                            Text(
-                                text = modelFetchStatus,
-                                fontSize = 11.sp,
-                                color = Color(0xFFB77BBF)
+                        val row7Focused = focusRow == 7
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (row7Focused) theme.selectedContainerColor else Color.Transparent
+                                )
+                                .border(
+                                    width = if (row7Focused) 2.dp else 0.dp,
+                                    color = if (row7Focused) theme.appActionColor else Color.Transparent,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable {
+                                    focusRow = 7
+                                    onShowReasoningChange(!showReasoning)
+                                }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Show reasoning in chat",
+                                    fontSize = 12.sp,
+                                    color = theme.fgTextColor,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Display thinking process in bubbles",
+                                    fontSize = 10.sp,
+                                    color = theme.fgTextColor.copy(alpha = 0.7f)
+                                )
+                            }
+                            Switch(
+                                checked = showReasoning,
+                                onCheckedChange = {
+                                    focusRow = 7
+                                    onShowReasoningChange(it)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = theme.appActionColor
+                                )
+                            )
+                        }
+
+                        if (canClearChat) {
+                            KawaiiDialogItem(
+                                text = "🗑 Clear chat history",
+                                isFocused = focusRow == 8,
+                                isDestructive = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = {
+                                    focusRow = 8
+                                    onClearChat()
+                                }
                             )
                         }
                     }
                 }
 
-                // Section 3: Font size
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Chat font size: ${chatFontSize.toInt()} sp",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF9C6DF5)
-                    )
-                    Slider(
-                        value = chatFontSize,
-                        onValueChange = onFontSizeChange,
-                        valueRange = 11f..22f,
-                        steps = 10,
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color(0xFF9C6DF5),
-                            activeTrackColor = Color(0xFFE9D9FF)
-                        )
-                    )
-                }
+                Spacer(modifier = Modifier.height(8.dp))
 
-                // Section 4: Reasoning controls
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "Reasoning / Thinking",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF9C6DF5)
-                    )
+                HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Enable reasoning",
-                                fontSize = 12.sp,
-                                color = Color(0xFF684A7C),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Ask model to think before answering",
-                                fontSize = 10.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(
-                            checked = enableReasoning,
-                            onCheckedChange = onEnableReasoningChange,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF9C6DF5)
-                            )
-                        )
-                    }
+                Spacer(modifier = Modifier.height(6.dp))
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Show reasoning in chat",
-                                fontSize = 12.sp,
-                                color = Color(0xFF684A7C),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Display thinking process in bubbles",
-                                fontSize = 10.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(
-                            checked = showReasoning,
-                            onCheckedChange = onShowReasoningChange,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF9C6DF5)
-                            )
-                        )
-                    }
-
-                    Text(
-                        text = "* Reasoning depends on model and Ollama API support.",
-                        fontSize = 10.sp,
-                        color = Color(0xFFB77BBF)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    KawaiiDialogPillButton(
+                        text = "Done ♡",
+                        isFocused = focusRow == 9,
+                        isPrimary = true,
+                        onClick = onDismiss
                     )
                 }
             }
-        },
-        containerColor = Color(0xFFFFF4FA),
-        shape = RoundedCornerShape(20.dp)
-    )
+        }
+    }
 }
 
 // checks if PC Ollama API is reachable :3
@@ -1402,8 +1925,6 @@ fun tryOllama(
         val jsonBody = JSONObject().apply {
             put("model", modelName)
             put("stream", false)
-            // Ollama versions/models that support thinking can honor this option.
-            // If unsupported, the API may reject it; that failure is surfaced to the caller.
             put("think", enableReasoning)
 
             val messagesArray = JSONArray()
@@ -1411,10 +1932,10 @@ fun tryOllama(
             val systemContent = StringBuilder()
             systemContent.append(
                 "You are a friendly, caring, concise assistant. " +
-                        "Answer the user's latest message directly. " +
-                        "Do not repeat these instructions or describe yourself instead of answering. " +
-                        "Be warm and playful when appropriate, but prioritize accuracy. " +
-                        "If you do not know something, say so."
+                    "Answer the user's latest message directly. " +
+                    "Do not repeat these instructions or describe yourself instead of answering. " +
+                    "Be warm and playful when appropriate, but prioritize accuracy. " +
+                    "If you do not know something, say so."
             )
             if (enableReasoning) {
                 systemContent.append("\nConsider the question carefully before answering.")
