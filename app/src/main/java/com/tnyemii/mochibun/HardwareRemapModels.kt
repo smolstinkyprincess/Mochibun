@@ -27,7 +27,8 @@ enum class PhysicalKey(
     F4(62, KeyEvent.KEYCODE_F4, "Side Key (F4)", "Physical side button (gpio-keys)", false),
     CAMERA(212, KeyEvent.KEYCODE_CAMERA, "Camera Key", "Dedicated camera shutter key", true),
     STAR(522, KeyEvent.KEYCODE_STAR, "Star Key (*)", "Numeric keypad star key", true),
-    POUND(523, KeyEvent.KEYCODE_POUND, "Pound Key (#)", "Numeric keypad pound key", true);
+    POUND(523, KeyEvent.KEYCODE_POUND, "Pound Key (#)", "Numeric keypad pound key", true),
+    APP_SWITCH(580, KeyEvent.KEYCODE_APP_SWITCH, "Recents Key", "Dedicated physical Recents / Overview button", false);
 
     companion object {
         fun fromKeyCode(keyCode: Int): PhysicalKey? = entries.firstOrNull { it.defaultKeyCode == keyCode }
@@ -45,6 +46,7 @@ sealed class ActionType {
     object OpenAiChat : ActionType()
     object GlobalBack : ActionType()
     object GlobalRecents : ActionType()
+    object OpenRecentsSystem : ActionType()
     object GlobalNotifications : ActionType()
     object ToggleFlashlight : ActionType()
 
@@ -54,6 +56,7 @@ sealed class ActionType {
         is OpenAiChat -> "Open Mochibun AI Chat"
         is GlobalBack -> "Global Back"
         is GlobalRecents -> "Overview / Recents"
+        is OpenRecentsSystem -> "Open Recents (System)"
         is GlobalNotifications -> "Open Notifications"
         is ToggleFlashlight -> "Toggle Flashlight"
     }
@@ -64,6 +67,7 @@ sealed class ActionType {
         is OpenAiChat -> "OPEN_AI_CHAT"
         is GlobalBack -> "GLOBAL_BACK"
         is GlobalRecents -> "GLOBAL_RECENTS"
+        is OpenRecentsSystem -> "OPEN_RECENTS_SYSTEM"
         is GlobalNotifications -> "GLOBAL_NOTIFICATIONS"
         is ToggleFlashlight -> "TOGGLE_FLASHLIGHT"
     }
@@ -83,6 +87,7 @@ sealed class ActionType {
                 "OPEN_AI_CHAT" -> OpenAiChat
                 "GLOBAL_BACK" -> GlobalBack
                 "GLOBAL_RECENTS" -> GlobalRecents
+                "OPEN_RECENTS_SYSTEM" -> OpenRecentsSystem
                 "GLOBAL_NOTIFICATIONS" -> GlobalNotifications
                 "TOGGLE_FLASHLIGHT" -> ToggleFlashlight
                 else -> None

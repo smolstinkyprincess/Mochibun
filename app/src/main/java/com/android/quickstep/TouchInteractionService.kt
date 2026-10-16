@@ -104,6 +104,10 @@ class TouchInteractionService : Service() {
 
     // launches RecentsActivity on the main thread <3
     private fun showRecentsActivity() {
+        if (RecentsActivity.shouldThrottleLaunch()) {
+            Log.d(TAG, "Throttling duplicate showRecentsActivity call")
+            return
+        }
         mainHandler.post {
             try {
                 val recentsIntent = Intent(this, RecentsActivity::class.java).apply {

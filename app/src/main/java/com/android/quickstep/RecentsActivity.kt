@@ -106,6 +106,26 @@ class RecentsActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
     }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+    }
+
+    companion object {
+        private const val DEBOUNCE_MS = 600L
+
+        @Volatile
+        private var lastLaunchTime: Long = 0L
+
+        @Synchronized
+        fun shouldThrottleLaunch(now: Long = android.os.SystemClock.uptimeMillis()): Boolean {
+            if (now - lastLaunchTime < DEBOUNCE_MS) {
+                return true
+            }
+            lastLaunchTime = now
+            return false
+        }
+    }
 }
 
 // composable UI container for recent app cards, clear-all action, and backdrop tap to close <3
@@ -195,7 +215,7 @@ fun RecentsScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (isBackDismissKey(native.keyCode) || native.keyCode == android.view.KeyEvent.KEYCODE_APP_SWITCH) {
                     if (event.type == KeyEventType.KeyUp) {
                         onDismissActivity()
                     }
