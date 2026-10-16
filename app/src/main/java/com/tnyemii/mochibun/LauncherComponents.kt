@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -36,19 +38,18 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import com.tnyemii.mochibun.ui.theme.appActionColor
-import com.tnyemii.mochibun.ui.theme.cardBgColor
-import com.tnyemii.mochibun.ui.theme.cardTextColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -65,9 +66,14 @@ fun StatusCard(
     cardBgColor: Color,
     cardTextColor: Color,
     outlineColor: Color,
+    isFocused: Boolean = false,
+    onClick: (() -> Unit)? = null,
     onWifiChanged: (Boolean) -> Unit = {},
     onLowBatteryChanged: (Boolean) -> Unit = {},
 ) {
+    val theme = LocalLauncherTheme.current
+    val roundness = theme.cardRoundnessDp.dp
+    val shape = RoundedCornerShape(roundness)
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnWifiChanged by rememberUpdatedState(onWifiChanged)
     val currentOnLowBatteryChanged by rememberUpdatedState(onLowBatteryChanged)
@@ -147,7 +153,7 @@ fun StatusCard(
                         null
                     }
 
-                     QuadStatus(level, lowBat, isWifi, ssid)
+                    QuadStatus(level, lowBat, isWifi, ssid)
                 }
 
                 if (batteryLevel != status.batteryLevel) batteryLevel = status.batteryLevel
@@ -164,12 +170,23 @@ fun StatusCard(
     Card(
         modifier = Modifier
             .border(
-                width = 4.dp,
-                color = outlineColor,
-                shape = RoundedCornerShape(cardRoundness)
+                width = if (isFocused) 3.5.dp else 4.dp,
+                color = if (isFocused) theme.appActionColor else outlineColor,
+                shape = shape
+            )
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .clip(shape)
+                        .clickable { onClick() }
+                } else {
+                    Modifier
+                }
             ),
-        colors = CardDefaults.cardColors(containerColor = cardBgColor),
-        shape = RoundedCornerShape(cardRoundness)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isFocused) theme.selectedContainerColor else cardBgColor
+        ),
+        shape = shape
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -179,13 +196,13 @@ fun StatusCard(
                 text = formattedTime,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = cardTextColor
+                color = if (isFocused) theme.fgTextColor else cardTextColor
             )
 
             Text(
                 text = formattedDate,
                 fontSize = 14.sp,
-                color = cardTextColor
+                color = if (isFocused) theme.fgTextColor else cardTextColor
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -194,29 +211,39 @@ fun StatusCard(
                 Text(
                     text = "🔋 $batteryLevel%   ",
                     fontSize = 14.sp,
-                    color = cardTextColor
+                    color = if (isFocused) theme.fgTextColor else cardTextColor
                 )
 
                 if (wifiConnected) {
                     Text(
                         text = wifiSsid ?: "Wi-Fi",
                         fontSize = 14.sp,
-                        color = cardTextColor
+                        color = if (isFocused) theme.fgTextColor else cardTextColor
                     )
 
                     Spacer(modifier = Modifier.width(3.dp))
 
                     TinyWifiIcon(
                         modifier = Modifier.size(14.dp),
-                        color = cardTextColor
+                        color = if (isFocused) theme.fgTextColor else cardTextColor
                     )
                 } else {
                     Text(
                         text = "♡ offline",
                         fontSize = 14.sp,
-                        color = cardTextColor
+                        color = if (isFocused) theme.fgTextColor else cardTextColor
                     )
                 }
+            }
+
+            if (isFocused) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "◀ widgets  •  OK options  •  chat ▶",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = theme.appActionColor
+                )
             }
         }
     }
@@ -332,13 +359,14 @@ fun GreetingCard(
     }
 }
 
-// horizontal row displaying pinned favorite app icons with selection scale animation :3
+// horizontal row displaying pinned favorite app icons and folders with selection scale animation :3
 @Composable
 fun FavoritesCard(
     context: Context,
     favoriteApps: List<LauncherApp>,
     favoriteFolders: List<FavoriteFolder>,
     selectedIndex: Int = 0,
+    isCardFocused: Boolean = true,
     folderIconRefreshKey: Int = 0,
     onAppClick: ((LauncherApp) -> Unit)? = null,
     onAppLongClick: (LauncherApp) -> Unit,
@@ -346,6 +374,7 @@ fun FavoritesCard(
     onFolderLongClick: (FavoriteFolder) -> Unit
 ) {
     val theme = LocalLauncherTheme.current
+    val roundness = theme.cardRoundnessDp.dp
     val lazyRowState = rememberLazyListState()
     val itemCount = favoriteApps.size + favoriteFolders.size
     val preferences = remember(context) {
@@ -354,15 +383,17 @@ fun FavoritesCard(
 
     LaunchedEffect(selectedIndex, itemCount) {
         if (itemCount > 0) {
-            val selectedIsVisible =
-                lazyRowState.layoutInfo.visibleItemsInfo.any {
-                    it.index == selectedIndex
-                }
+            val targetIndex = selectedIndex.coerceIn(0, itemCount - 1)
+            val selectedItemInfo = lazyRowState.layoutInfo.visibleItemsInfo.firstOrNull {
+                it.index == targetIndex
+            }
+            val viewportEnd = lazyRowState.layoutInfo.viewportEndOffset
+            val isFullyVisible = selectedItemInfo != null &&
+                selectedItemInfo.offset >= 0 &&
+                (selectedItemInfo.offset + selectedItemInfo.size) <= viewportEnd
 
-            if (!selectedIsVisible) {
-                lazyRowState.animateScrollToItem(
-                    selectedIndex.coerceIn(0, itemCount - 1)
-                )
+            if (!isFullyVisible) {
+                lazyRowState.animateScrollToItem(targetIndex)
             }
         }
     }
@@ -375,12 +406,12 @@ fun FavoritesCard(
                 .border(
                     width = 4.dp,
                     color = theme.greetingOutlineColor,
-                    shape = RoundedCornerShape(cardRoundness)
+                    shape = RoundedCornerShape(roundness)
                 ),
             colors = CardDefaults.cardColors(
-                containerColor = cardBgColor
+                containerColor = theme.cardBgColor
             ),
-            shape = RoundedCornerShape(cardRoundness)
+            shape = RoundedCornerShape(roundness)
         ) {
             Column(
                 modifier = Modifier.padding(
@@ -393,23 +424,27 @@ fun FavoritesCard(
                     text = "♡ favorites ♡",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = cardTextColor
+                    color = theme.cardTextColor
                 )
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 LazyRow(
                     state = lazyRowState,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     itemsIndexed(
                         favoriteApps,
                         key = { _, app -> app.favoriteKey }
                     ) { index, app ->
-                        val isSelected = index == selectedIndex
+                        val isSelected = isCardFocused && index == selectedIndex
                         val scale by animateFloatAsState(
                             targetValue = if (isSelected) 1.06f else 1f,
                             animationSpec = tween(150),
                             label = "favoriteAppScale"
                         )
+                        val itemShape = RoundedCornerShape(12.dp)
 
                         Box(
                             modifier = Modifier
@@ -423,16 +458,16 @@ fun FavoritesCard(
                                     } else {
                                         Color.Transparent
                                     },
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = itemShape
                                 )
                                 .border(
                                     width = if (isSelected) 2.5.dp else 0.dp,
                                     color = if (isSelected) {
-                                        appActionColor
+                                        theme.appActionColor
                                     } else {
                                         Color.Transparent
                                     },
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = itemShape
                                 )
                                 .combinedClickable(
                                     onClick = {
@@ -462,12 +497,14 @@ fun FavoritesCard(
                         key = { _, folder -> "folder:${folder.id}" }
                     ) { folderIndex, folder ->
                         val index = favoriteApps.size + folderIndex
-                        val isSelected = index == selectedIndex
+                        val isSelected = isCardFocused && index == selectedIndex
                         val scale by animateFloatAsState(
                             targetValue = if (isSelected) 1.06f else 1f,
                             animationSpec = tween(150),
                             label = "favoriteFolderScale"
                         )
+                        val itemShape = RoundedCornerShape(12.dp)
+
                         Column(
                             modifier = Modifier
                                 .graphicsLayer {
@@ -480,16 +517,16 @@ fun FavoritesCard(
                                     } else {
                                         Color.Transparent
                                     },
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = itemShape
                                 )
                                 .border(
                                     width = if (isSelected) 2.5.dp else 0.dp,
                                     color = if (isSelected) {
-                                        appActionColor
+                                        theme.appActionColor
                                     } else {
                                         Color.Transparent
                                     },
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = itemShape
                                 )
                                 .combinedClickable(
                                     onClick = {
@@ -499,7 +536,7 @@ fun FavoritesCard(
                                         onFolderLongClick(folder)
                                     }
                                 )
-                                .padding(8.dp),
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             val folderIconName = remember(
@@ -519,22 +556,33 @@ fun FavoritesCard(
                             }
 
                             Box(
-                                modifier = Modifier.size(52.dp),
+                                modifier = Modifier.size(44.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (folderIconBitmap != null) {
                                     Image(
                                         bitmap = folderIconBitmap,
                                         contentDescription = "${folder.name} folder icon",
-                                        modifier = Modifier.size(48.dp)
+                                        modifier = Modifier.size(42.dp)
                                     )
                                 } else {
                                     Text(
                                         text = "📁",
-                                        fontSize = 36.sp
+                                        fontSize = 32.sp
                                     )
                                 }
                             }
+
+                            Text(
+                                text = folder.name,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) theme.fgTextColor else theme.cardTextColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.widthIn(max = 64.dp)
+                            )
                         }
                     }
                 }
