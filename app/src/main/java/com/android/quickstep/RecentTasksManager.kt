@@ -1,14 +1,14 @@
 /*
  * Copyright (C) 2025 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License\");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an \"AS IS\" BASIS,
+ * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -52,6 +52,7 @@ class RecentTasksManager(private val context: Context) {
             // query active recent tasks from system ActivityManager :3
             val recentTasks = activityManager.getRecentTasks(maxNum, ActivityManager.RECENT_IGNORE_UNAVAILABLE)
             val currentPackage = context.packageName
+            Log.d(TAG, "getRecentTasks queried: received ${recentTasks?.size ?: 0} raw tasks from system (currentPackage=$currentPackage)")
 
             for (rawInfo in recentTasks) {
                 // get persistent task ID depending on SDK version
@@ -65,9 +66,20 @@ class RecentTasksManager(private val context: Context) {
                 val baseIntent = rawInfo.baseIntent ?: continue
                 val component = baseIntent.component ?: rawInfo.origActivity
                 val pkgName = component?.packageName ?: baseIntent.`package` ?: continue
+                val isHomeCategory = baseIntent.hasCategory(Intent.CATEGORY_HOME)
+                val className = component?.className ?: ""
 
-                // exclude our launcher home activity from recents overview <3
-                if (pkgName == currentPackage && baseIntent.hasCategory(Intent.CATEGORY_HOME)) {
+                // exclude our launcher activities (home screen and recents overview) from recents switcher <3
+                val isLauncherActivity = (pkgName == currentPackage && (
+                    isHomeCategory ||
+                    className == RecentsActivity::class.java.name ||
+                    className == "com.android.quickstep.RecentsActivity" ||
+                    className.endsWith("MainActivity") ||
+                    className.endsWith("RecentsActivity")
+                ))
+
+                if (isLauncherActivity) {
+                    Log.d(TAG, "Filtered out launcher task: id=$taskId, pkg=$pkgName, component=$component, isHome=$isHomeCategory")
                     continue
                 }
 
@@ -88,6 +100,8 @@ class RecentTasksManager(private val context: Context) {
                 // fetch task snapshot thumbnail using reflection if supported
                 val thumbnailBitmap = getTaskThumbnail(taskId)
 
+                Log.d(TAG, "Added task to recents: id=$taskId, title=$title, pkg=$pkgName, component=$component")
+
                 result.add(
                     RecentTaskInfo(
                         taskId = taskId,
@@ -99,6 +113,7 @@ class RecentTasksManager(private val context: Context) {
                     )
                 )
             }
+            Log.d(TAG, "getRecentTasks completed: ${result.size} tasks survived filtering")
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching recent tasks", e)
         }
@@ -155,25 +170,34 @@ class RecentTasksManager(private val context: Context) {
 
     // switches back to selected recent task or opens app intent :3
     fun launchTask(task: RecentTaskInfo): Boolean {
-        try {
-            val method = startActivityFromRecentsMethod
-            if (method != null) {
+        // First try restoring the existing task stack via reflection
+        val method = startActivityFromRecentsMethod
+        if (method != null) {
+            try {
                 val opts = ActivityOptions.makeCustomAnimation(context, 0, 0)
                 method.invoke(activityManager, task.taskId, opts.toBundle())
                 return true
+            } catch (e: Exception) {
+                Log.w(TAG, "startActivityFromRecents reflection failed for task ${task.taskId}, falling back to intent launch", e)
             }
+        }
 
-            // fallback: launch app via standard launch intent
-            val intent = task.baseIntent ?: packageManager.getLaunchIntentForPackage(task.packageName)
+        // Fallback: launch app via standard launch intent or task baseIntent
+        return try {
+            val intent = task.baseIntent?.cloneFilter()
+                ?: packageManager.getLaunchIntentForPackage(task.packageName)
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                 context.startActivity(intent)
-                return true
+                true
+            } else {
+                Log.e(TAG, "No launch intent available for ${task.packageName} (task ${task.taskId})")
+                false
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch task ${task.taskId}", e)
+            Log.e(TAG, "Failed to launch task fallback for ${task.packageName}", e)
+            false
         }
-        return false
     }
 
     // removes task from recents stack via androids task management service
@@ -209,6 +233,8 @@ class RecentTasksManager(private val context: Context) {
         @Volatile
         private var atmService: Any? = null
         @Volatile
+        private var atmServiceInitialized = false
+        @Volatile
         private var getTaskSnapshotMethod: Method? = null
         @Volatile
         private var getHardwareBufferMethod: Method? = null
@@ -231,7 +257,8 @@ class RecentTasksManager(private val context: Context) {
 
         @Synchronized
         private fun getAtmService(): Any? {
-            if (atmService != null) return atmService
+            if (atmServiceInitialized) return atmService
+            atmServiceInitialized = true
             return try {
                 val taskManagerClass = Class.forName("android.app.ActivityTaskManager")
                 val getServiceMethod = taskManagerClass.getDeclaredMethod("getService")

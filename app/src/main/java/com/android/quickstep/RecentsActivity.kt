@@ -158,8 +158,10 @@ fun RecentsScreen(
                         TaskCard(
                             task = task,
                             onLaunch = {
-                                tasksManager.launchTask(task)
-                                onDismissActivity()
+                                val launched = tasksManager.launchTask(task)
+                                if (launched) {
+                                    onDismissActivity()
+                                }
                             },
                             onDismiss = {
                                 tasksManager.removeTask(task.taskId)
