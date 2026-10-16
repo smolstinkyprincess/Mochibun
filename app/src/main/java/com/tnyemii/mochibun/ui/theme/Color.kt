@@ -18,6 +18,11 @@ val favoritesColor = Color(0xFFE675FF)
 val accentColor = Color(0xFFFFFFFF)
 val appActionColor = Color(0xFF9B5FA5)
 
+// cohesive semantic accents for focus, destructive actions, and surfaces <3
+val destructiveColor = Color(0xFFD94680)
+val destructiveBgColor = Color(0xFFFFE0EE)
+val softSurfaceColor = Color(0xFFFFF5FB)
+
 // material design 3 color definitions <3
 val PinkPrimary = Color(0xFFD791E3)
 val PinkOnPrimary = Color(0xFF4E2858)
