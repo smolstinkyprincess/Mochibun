@@ -18,18 +18,8 @@ static void free_cached_model_nolock() {
     }
 }
 
-extern "C" {
-
-JNIEXPORT jboolean JNICALL
-Java_com_tnyemii_m120launcher_NativeLlm_unloadModel(JNIEnv*, jobject) {
-    std::lock_guard<std::mutex> lock(g_llm_mutex);
-    free_cached_model_nolock();
-    return JNI_TRUE;
-}
-
-JNIEXPORT jstring JNICALL
-Java_com_tnyemii_m120launcher_NativeLlm_generate(
-        JNIEnv* env, jobject, jstring jModelPath, jstring jPrompt) {
+static jstring run_generate_internal(
+        JNIEnv* env, jstring jModelPath, jstring jPrompt) {
     if (!jModelPath || !jPrompt) {
         return env->NewStringUTF("Invalid arguments.");
     }
@@ -148,6 +138,34 @@ Java_com_tnyemii_m120launcher_NativeLlm_generate(
     env->ReleaseStringUTFChars(jModelPath, modelPath);
     env->ReleaseStringUTFChars(jPrompt, promptText);
     return env->NewStringUTF(result.c_str());
+}
+
+extern "C" {
+
+JNIEXPORT jboolean JNICALL
+Java_com_tnyemii_mochibun_NativeLlm_unloadModel(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(g_llm_mutex);
+    free_cached_model_nolock();
+    return JNI_TRUE;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_tnyemii_mochibun_NativeLlm_generate(
+        JNIEnv* env, jobject, jstring jModelPath, jstring jPrompt) {
+    return run_generate_internal(env, jModelPath, jPrompt);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_tnyemii_m120launcher_NativeLlm_unloadModel(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(g_llm_mutex);
+    free_cached_model_nolock();
+    return JNI_TRUE;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_tnyemii_m120launcher_NativeLlm_generate(
+        JNIEnv* env, jobject, jstring jModelPath, jstring jPrompt) {
+    return run_generate_internal(env, jModelPath, jPrompt);
 }
 
 } // extern "C"

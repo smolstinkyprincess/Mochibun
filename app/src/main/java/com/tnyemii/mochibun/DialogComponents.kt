@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -55,7 +54,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -162,21 +160,6 @@ fun LauncherMenuDialog(
                         onClick = onResetWallpaperClick
                     )
                 }
-                /*
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(
-                            text = "Cancel",
-                            color = theme.appActionColor,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }*/
             }
         }
     }
@@ -233,9 +216,7 @@ fun HiddenAppsDialog(
                     ) {
                         items(
                             hiddenApps,
-                            key = {
-                                it.resolveInfo.activityInfo.packageName
-                            }
+                            key = { it.packageName }
                         ) { app ->
                             Row(
                                 modifier = Modifier
@@ -325,7 +306,7 @@ fun AppActionDialog(
     onHideApp: () -> Unit,
     onCreateFolder: () -> Unit
 ) {
-    val pkgName = app.resolveInfo.activityInfo.packageName
+    val pkgName = app.packageName
     val isFav = pkgName in favoritePackages
 
     BasicAlertDialog(
@@ -483,30 +464,6 @@ fun AppActionDialog(
                         fontSize = 14.sp
                     )
                 }
-
-                /* commenting out cancel button for now
-                Spacer(modifier = Modifier.height(4.dp))
-
-                HorizontalDivider(
-                    color = appActionColor.copy(alpha = 0.25f)
-                )
-
-                // Cancel
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(
-                        onClick = onDismiss
-                    ) {
-                        Text(
-                            text = "Cancel",
-                            color = theme.appActionColor,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }*/
             }
         }
     }
@@ -540,7 +497,7 @@ fun FavoriteFolderDialog(
     val folderApps = remember(folder.appPackages, apps) {
         folder.appPackages.mapNotNull { pkg ->
             apps.firstOrNull {
-                it.resolveInfo.activityInfo.packageName == pkg
+                it.packageName == pkg
             }
         }
     }
@@ -663,8 +620,10 @@ fun FavoriteFolderDialog(
 
         LaunchedEffect(selectedFolderAppIndex, folderApps.size) {
             if (folderApps.isNotEmpty() && selectedFolderAppIndex in folderApps.indices) {
-                val visibleIndices = folderListState.layoutInfo.visibleItemsInfo.map { it.index }
-                if (selectedFolderAppIndex !in visibleIndices) {
+                val isVisible = folderListState.layoutInfo.visibleItemsInfo.any {
+                    it.index == selectedFolderAppIndex
+                }
+                if (!isVisible) {
                     folderListState.animateScrollToItem(selectedFolderAppIndex)
                 }
             }
@@ -730,12 +689,9 @@ fun FavoriteFolderDialog(
                     ) {
                         itemsIndexed(
                             folderApps,
-                            key = { _, app ->
-                                app.resolveInfo.activityInfo.packageName
-                            }
+                            key = { _, app -> app.packageName }
                         ) { index, app ->
-                            val pkg =
-                                app.resolveInfo.activityInfo.packageName
+                            val pkg = app.packageName
 
                             val isSelected = index == selectedFolderAppIndex
 
@@ -749,10 +705,10 @@ fun FavoriteFolderDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(56.dp)
-                                    .graphicsLayer(
-                                        scaleX = scale,
+                                    .graphicsLayer {
+                                        scaleX = scale
                                         scaleY = scale
-                                    )
+                                    }
                                     .background(
                                         color = if (isSelected) {
                                             theme.selectedContainerColor
@@ -890,17 +846,11 @@ fun CreateFavoriteFolderDialog(
     onDismiss: () -> Unit,
     onCreate: (String, List<String>) -> Unit
 ) {
-    val initialPackage = initialApp.resolveInfo.activityInfo.packageName
+    val initialPackage = initialApp.packageName
 
     var folderName by remember { mutableStateOf("") }
     var selectedPackages by remember {
         mutableStateOf(setOf(initialPackage))
-    }
-
-    val availablePackages = remember(availableApps) {
-        availableApps.associateBy {
-            it.resolveInfo.activityInfo.packageName
-        }
     }
 
     val duplicateName = existingFolders.any {
@@ -974,12 +924,9 @@ fun CreateFavoriteFolderDialog(
                 ) {
                     items(
                         availableApps,
-                        key = {
-                            it.resolveInfo.activityInfo.packageName
-                        }
+                        key = { it.componentKey }
                     ) { app ->
-                        val pkg =
-                            app.resolveInfo.activityInfo.packageName
+                        val pkg = app.packageName
 
                         val checked = pkg in selectedPackages
 
@@ -1098,25 +1045,15 @@ fun KawaiiIconPicker(
     var searchQuery by remember { mutableStateOf("") }
 
     val filteredIcons = remember(searchQuery, iconNames) {
-        if (searchQuery.isBlank()) {
+        val trimmed = searchQuery.trim()
+        if (trimmed.isEmpty()) {
             iconNames.take(60)
         } else {
             iconNames
-                .filter {
-                    it.contains(searchQuery.trim(), ignoreCase = true)
-                }
+                .asSequence()
+                .filter { it.contains(trimmed, ignoreCase = true) }
                 .take(60)
-        }
-    }
-
-    val iconPackContext = remember {
-        try {
-            context.createPackageContext(
-                "kawaii.icon.pack",
-                Context.CONTEXT_IGNORE_SECURITY
-            )
-        } catch (e: Exception) {
-            null
+                .toList()
         }
     }
 
@@ -1174,28 +1111,11 @@ fun KawaiiIconPicker(
                         items = filteredIcons,
                         key = { it }
                     ) { iconName ->
-
-                        val resId = remember(iconName, iconPackContext) {
-                            iconPackContext
-                                ?.resources
-                                ?.getIdentifier(
-                                    iconName,
-                                    "drawable",
-                                    "kawaii.icon.pack"
-                                ) ?: 0
+                        val iconBitmap = remember(iconName, context) {
+                            getCachedKawaiiImageBitmap(context, iconName, 96)
                         }
 
-                        if (resId != 0 && iconPackContext != null) {
-                            val iconBitmap = remember(resId, iconPackContext) {
-                                val drawable =
-                                    iconPackContext.resources.getDrawable(
-                                        resId,
-                                        null
-                                    )
-
-                                drawableToBitmap(drawable, 96).asImageBitmap()
-                            }
-
+                        if (iconBitmap != null) {
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)
@@ -1216,22 +1136,6 @@ fun KawaiiIconPicker(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-
-                // Cancel button
-                /*
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(
-                        onClick = onDismiss
-                    ) {
-                        Text(
-                            text = "Cancel",
-                            color = appActionColor
-                        )
-                    }
-                }*/
             }
         }
     }

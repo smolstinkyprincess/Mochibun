@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.tnyemii.mochibun.ui.theme.cardTextColor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -59,7 +60,7 @@ class RecentsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        tasksManager = RecentTasksManager(this)
+        tasksManager = RecentTasksManager(applicationContext)
 
         setContent {
             RecentsScreen(
@@ -82,18 +83,15 @@ fun RecentsScreen(
 ) {
     var tasks by remember { mutableStateOf<List<RecentTaskInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-
-
+    val scope = rememberCoroutineScope()
 
     // asynchronously load recent tasks list on IO thread :3
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            val fetchedTasks = tasksManager.getRecentTasks()
-            withContext(Dispatchers.Main) {
-                tasks = fetchedTasks
-                isLoading = false
-            }
+        val fetchedTasks = withContext(Dispatchers.IO) {
+            tasksManager.getRecentTasks()
         }
+        tasks = fetchedTasks
+        isLoading = false
     }
 
     Box(
@@ -164,8 +162,11 @@ fun RecentsScreen(
                                 }
                             },
                             onDismiss = {
-                                tasksManager.removeTask(task.taskId)
-                                tasks = tasks.filter { it.taskId != task.taskId }
+                                val dismissedId = task.taskId
+                                tasks = tasks.filter { it.taskId != dismissedId }
+                                scope.launch(Dispatchers.IO) {
+                                    tasksManager.removeTask(dismissedId)
+                                }
                                 if (tasks.isEmpty()) {
                                     onDismissActivity()
                                 }
@@ -183,8 +184,11 @@ fun RecentsScreen(
                 if (tasks.isNotEmpty()) {
                     Button(
                         onClick = {
-                            tasks.forEach { tasksManager.removeTask(it.taskId) }
+                            val idsToRemove = tasks.map { it.taskId }
                             tasks = emptyList()
+                            scope.launch(Dispatchers.IO) {
+                                idsToRemove.forEach { tasksManager.removeTask(it) }
+                            }
                             onDismissActivity()
                         },
                         colors = ButtonDefaults.buttonColors(
@@ -263,9 +267,15 @@ fun TaskCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    task.icon?.let { drawable ->
+                    if (task.iconBitmap != null) {
+                        Image(
+                            bitmap = task.iconBitmap,
+                            contentDescription = task.title,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else if (task.icon != null) {
                         DrawableImage(
-                            drawable = drawable,
+                            drawable = task.icon,
                             contentDescription = task.title,
                             modifier = Modifier.size(24.dp)
                         )
@@ -316,9 +326,15 @@ fun TaskCard(
                         verticalArrangement = Arrangement.Center,
                         modifier = Modifier.padding(16.dp)
                     ) {
-                        task.icon?.let { drawable ->
+                        if (task.iconBitmap != null) {
+                            Image(
+                                bitmap = task.iconBitmap,
+                                contentDescription = task.title,
+                                modifier = Modifier.size(56.dp)
+                            )
+                        } else if (task.icon != null) {
                             DrawableImage(
-                                drawable = drawable,
+                                drawable = task.icon,
                                 contentDescription = task.title,
                                 modifier = Modifier.size(56.dp)
                             )

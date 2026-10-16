@@ -58,7 +58,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.collections.plus
 
 // main launcher composable managing focus, gestures, state, and page navigation <3
 @Composable
@@ -88,8 +87,10 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     var folderIconMenuOpen by remember { mutableStateOf(false) }
 
 
-    val intent = Intent(Intent.ACTION_MAIN).apply {
-        addCategory(Intent.CATEGORY_LAUNCHER)
+    val intent = remember {
+        Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
     }
 
     // wallpaper selection and persistence state :3
@@ -102,6 +103,9 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     }
     var wallpaperBitmap by remember {
         mutableStateOf<Bitmap?>(null)
+    }
+    val wallpaperImageBitmap = remember(wallpaperBitmap) {
+        wallpaperBitmap?.asImageBitmap()
     }
     val wallpaperPicker =
         rememberLauncherForActivityResult(contract = ActivityResultContracts.OpenDocument()) { uri ->
@@ -154,7 +158,8 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     var iconEditingApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconPickerOpen by remember { mutableStateOf(false) }
     var kawaiiIconNames by remember { mutableStateOf<List<String>>(emptyList()) }
-    var iconRefreshKey by remember { mutableStateOf(0) }
+    var iconRefreshKey by remember { mutableIntStateOf(0) }
+    var folderIconRefreshKey by remember { mutableIntStateOf(0) }
     var launcherMenuOpen by remember { mutableStateOf(false) }
     var hiddenManagerOpen by remember { mutableStateOf(false) }
     var isOnline by remember { mutableStateOf(true) }
@@ -169,57 +174,51 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     val scope = rememberCoroutineScope()
 
     var apps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
+    var earlyFavoriteApps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
 
-    // queries installed apps, applies KawaiiIconPack automatic mappings & custom icon overrides, and loads bitmaps in background :3
+    // sequential two-phase loader: loads pinned favorites first (~20ms) for instant home screen, then full app list reusing cached icons :3
     LaunchedEffect(appListRefreshCount, iconRefreshKey) {
-        apps = withContext(Dispatchers.Default) {
-            val kawaiiIconContext = try {
-                context.createPackageContext("kawaii.icon.pack", Context.CONTEXT_IGNORE_SECURITY)
-            } catch (e: Exception) {
-                null
+        if (apps.isEmpty() && favoritePackages.isNotEmpty()) {
+            val fastFavs = withContext(Dispatchers.Default) {
+                val kawaiiIconContext = getKawaiiIconPackContext(context)
+                val kawaiiIconMap = loadKawaiiIconMap(context)
+
+                favoritePackages
+                    .filter { it !in hiddenPackages }
+                    .mapNotNull { pkgName ->
+                        val launchIntent = context.packageManager.getLaunchIntentForPackage(pkgName)
+                            ?: return@mapNotNull null
+                        val resolveInfo = context.packageManager.resolveActivity(launchIntent, 0)
+                            ?: return@mapNotNull null
+
+                        getOrLoadLauncherApp(
+                            context = context,
+                            preferences = preferences,
+                            resolveInfo = resolveInfo,
+                            kawaiiIconContext = kawaiiIconContext,
+                            kawaiiIconMap = kawaiiIconMap
+                        )
+                    }
             }
+            earlyFavoriteApps = fastFavs
+        }
+
+        apps = withContext(Dispatchers.Default) {
+            val kawaiiIconContext = getKawaiiIconPackContext(context)
             val kawaiiIconMap = loadKawaiiIconMap(context)
 
             context.packageManager
                 .queryIntentActivities(intent, 0)
                 .map { app ->
-                    val pkgName = app.activityInfo.packageName
-                    val customIconName = preferences.getString("custom_icon_$pkgName", null)
-
-                    val drawable = if (customIconName != null && kawaiiIconContext != null) {
-                        val resourceId = kawaiiIconContext.resources.getIdentifier(
-                            customIconName,
-                            "drawable",
-                            "kawaii.icon.pack"
-                        )
-                        if (resourceId != 0) {
-                            kawaiiIconContext.resources.getDrawable(resourceId, null)
-                        } else {
-                            getKawaiiIcon(
-                                kawaiiIconContext,
-                                kawaiiIconMap,
-                                pkgName,
-                                app.activityInfo.name
-                            )
-                                ?: app.loadIcon(context.packageManager)
-                        }
-                    } else {
-                        getKawaiiIcon(
-                            kawaiiIconContext,
-                            kawaiiIconMap,
-                            pkgName,
-                            app.activityInfo.name
-                        )
-                            ?: app.loadIcon(context.packageManager)
-                    }
-
-                    LauncherApp(
+                    getOrLoadLauncherApp(
+                        context = context,
+                        preferences = preferences,
                         resolveInfo = app,
-                        name = app.loadLabel(context.packageManager).toString(),
-                        iconBitmap = drawableToBitmap(drawable, 96)
+                        kawaiiIconContext = kawaiiIconContext,
+                        kawaiiIconMap = kawaiiIconMap
                     )
                 }
-                .sortedBy { it.name.lowercase() }
+                .sortedBy { it.lowercaseName }
         }
     }
 
@@ -235,16 +234,24 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     }
 
     val visibleApps = remember(apps, hiddenPackages) {
-        apps.filter { app ->
-            app.resolveInfo.activityInfo.packageName !in hiddenPackages
+        if (hiddenPackages.isEmpty()) {
+            apps
+        } else {
+            apps.filter { app ->
+                app.packageName !in hiddenPackages
+            }
         }
     }
 
     // hidden apps shown in the hidden apps manager (one entry per package) :3
     val hiddenApps = remember(apps, hiddenPackages) {
-        apps
-            .filter { it.resolveInfo.activityInfo.packageName in hiddenPackages }
-            .distinctBy { it.resolveInfo.activityInfo.packageName }
+        if (hiddenPackages.isEmpty()) {
+            emptyList()
+        } else {
+            apps
+                .filter { it.packageName in hiddenPackages }
+                .distinctBy { it.packageName }
+        }
     }
 
     // remembers the list position where each starting letter first appears :3
@@ -256,56 +263,23 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
         map
     }
 
-    var favoriteApps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
-
-    // fast async loader for favorite apps (~20ms) so favorites card displays instantly <3
-    LaunchedEffect(favoritePackages, hiddenPackages, appListRefreshCount, iconRefreshKey, apps) {
-        favoriteApps = withContext(Dispatchers.Default) {
-            val kawaiiIconContext = try {
-                context.createPackageContext("kawaii.icon.pack", Context.CONTEXT_IGNORE_SECURITY)
-            } catch (e: Exception) {
-                null
+    val appsByPackage = remember(apps) {
+        buildMap(apps.size) {
+            for (app in apps) {
+                putIfAbsent(app.packageName, app)
             }
-            val kawaiiIconMap = loadKawaiiIconMap(context)
+        }
+    }
 
+    val favoriteApps = remember(apps, appsByPackage, earlyFavoriteApps, favoritePackages, hiddenPackages) {
+        if (apps.isEmpty()) {
+            earlyFavoriteApps.filter { it.packageName !in hiddenPackages }
+        } else {
+            val earlyByPkg = earlyFavoriteApps.associateBy { it.packageName }
             favoritePackages
                 .filter { it !in hiddenPackages }
                 .mapNotNull { pkgName ->
-                    val existingApp =
-                        apps.firstOrNull { it.resolveInfo.activityInfo.packageName == pkgName }
-                    if (existingApp != null) {
-                        return@mapNotNull existingApp
-                    }
-
-                    val launchIntent = context.packageManager.getLaunchIntentForPackage(pkgName)
-                        ?: return@mapNotNull null
-                    val resolveInfo = context.packageManager.resolveActivity(launchIntent, 0)
-                        ?: return@mapNotNull null
-                    val activityName = resolveInfo.activityInfo.name
-                    val customIconName = preferences.getString("custom_icon_$pkgName", null)
-
-                    val drawable = if (customIconName != null && kawaiiIconContext != null) {
-                        val resourceId = kawaiiIconContext.resources.getIdentifier(
-                            customIconName,
-                            "drawable",
-                            "kawaii.icon.pack"
-                        )
-                        if (resourceId != 0) {
-                            kawaiiIconContext.resources.getDrawable(resourceId, null)
-                        } else {
-                            getKawaiiIcon(kawaiiIconContext, kawaiiIconMap, pkgName, activityName)
-                                ?: resolveInfo.loadIcon(context.packageManager)
-                        }
-                    } else {
-                        getKawaiiIcon(kawaiiIconContext, kawaiiIconMap, pkgName, activityName)
-                            ?: resolveInfo.loadIcon(context.packageManager)
-                    }
-
-                    LauncherApp(
-                        resolveInfo = resolveInfo,
-                        name = resolveInfo.loadLabel(context.packageManager).toString(),
-                        iconBitmap = drawableToBitmap(drawable, 96)
-                    )
+                    appsByPackage[pkgName] ?: earlyByPkg[pkgName]
                 }
         }
     }
@@ -335,12 +309,11 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     // auto scroll to highlighted item in app drawer :3
     LaunchedEffect(selectedDrawerIndex, drawerOpen, visibleApps.size) {
         if (drawerOpen && visibleApps.isNotEmpty()) {
-            val visibleItems = listState.layoutInfo.visibleItemsInfo
-            val selectedItem = visibleItems.firstOrNull {
+            val isVisible = listState.layoutInfo.visibleItemsInfo.any {
                 it.index == selectedDrawerIndex
             }
 
-            if (selectedItem == null) {
+            if (!isVisible) {
                 listState.animateScrollToItem(selectedDrawerIndex)
             }
         }
@@ -444,7 +417,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     if (drawerOpen) {
                                         visibleApps.getOrNull(selectedDrawerIndex)?.let { app ->
                                             context.packageManager.getLaunchIntentForPackage(
-                                                app.resolveInfo.activityInfo.packageName
+                                                app.packageName
                                             )?.let(context::startActivity)
                                         }
                                     } else if (pagerState.currentPage == 1) {
@@ -452,7 +425,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                             favoriteApps.getOrNull(selectedFavoriteIndex)
                                                 ?.let { app ->
                                                     context.packageManager.getLaunchIntentForPackage(
-                                                        app.resolveInfo.activityInfo.packageName
+                                                        app.packageName
                                                     )?.let(context::startActivity)
                                                 }
                                         } else {
@@ -677,16 +650,16 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 openedFolderId = null
             }
 
-            if (wallpaperBitmap != null) {
+            if (wallpaperImageBitmap != null) {
                 Image(
-                    bitmap = wallpaperBitmap!!.asImageBitmap(),
+                    bitmap = wallpaperImageBitmap,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
             }
 
-            // cute sticker decorations :3
+            // cute sticker decorations only on main home page when drawer is closed :3
             if (!drawerOpen && pagerState.currentPage == 1) {
                 StickerExplosion()
             }
@@ -754,11 +727,11 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     context = context,
                                     favoriteApps = favoriteApps,
                                     favoriteFolders = favoriteFolders,
-                                    folderIconRefreshKey = iconRefreshKey,
+                                    folderIconRefreshKey = folderIconRefreshKey,
                                     selectedIndex = selectedFavoriteIndex,
                                     onAppClick = { app ->
                                         val appIdx = favoriteApps.indexOfFirst {
-                                            it.resolveInfo.activityInfo.packageName == app.resolveInfo.activityInfo.packageName
+                                            it.packageName == app.packageName
                                         }
                                         if (appIdx != -1) {
                                             selectedFavoriteIndex = appIdx
@@ -766,7 +739,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     },
                                     onAppLongClick = { app ->
                                         val appIdx = favoriteApps.indexOfFirst {
-                                            it.resolveInfo.activityInfo.packageName == app.resolveInfo.activityInfo.packageName
+                                            it.packageName == app.packageName
                                         }
                                         if (appIdx != -1) {
                                             selectedFavoriteIndex = appIdx
@@ -791,8 +764,6 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     }
                                 )
                             }
-                        } else {
-                            Box(modifier = Modifier.fillMaxSize())
                         }
                     }
 
@@ -873,7 +844,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         selectedApp = null
                     },
                     onMoveFavoriteLeft = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                        val pkgName = selectedApp!!.packageName
                         val list = favoritePackages.toMutableList()
                         val index = list.indexOf(pkgName)
                         if (index > 0) {
@@ -887,7 +858,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         selectedApp = null
                     },
                     onMoveFavoriteRight = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                        val pkgName = selectedApp!!.packageName
                         val list = favoritePackages.toMutableList()
                         val index = list.indexOf(pkgName)
                         if (index >= 0 && index < list.lastIndex) {
@@ -901,7 +872,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         selectedApp = null
                     },
                     onToggleFavorite = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                        val pkgName = selectedApp!!.packageName
                         val list = favoritePackages.toMutableList()
                         if (pkgName in list) {
                             list.remove(pkgName)
@@ -915,7 +886,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         selectedApp = null
                     },
                     onAppInfo = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                        val pkgName = selectedApp!!.packageName
                         val intent = Intent(
                             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                             Uri.parse("package:$pkgName")
@@ -929,15 +900,16 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         selectedApp = null
                     },
                     onResetIcon = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                        val pkgName = selectedApp!!.packageName
                         preferences.edit()
                             .remove("custom_icon_$pkgName")
                             .apply()
+                        invalidateCachedAppIcon(pkgName)
                         iconRefreshKey++
                         selectedApp = null
                     },
                     onHideApp = {
-                        val pkgName = selectedApp!!.resolveInfo.activityInfo.packageName
+                        val pkgName = selectedApp!!.packageName
                         val newHidden = hiddenPackages.toMutableSet().apply {
                             add(pkgName)
                         }
@@ -1057,7 +1029,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                         .remove("custom_folder_icon_${targetFolder.id}")
                                         .apply()
 
-                                    iconRefreshKey++
+                                    folderIconRefreshKey++
                                     folderIconMenuOpen = false
                                     iconEditingFolder = null
                                 }
@@ -1095,12 +1067,13 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
                         when {
                             editingApp != null -> {
-                                val pkgName =
-                                    editingApp.resolveInfo.activityInfo.packageName
+                                val pkgName = editingApp.packageName
 
                                 preferences.edit()
                                     .putString("custom_icon_$pkgName", selectedIconName)
                                     .apply()
+                                invalidateCachedAppIcon(pkgName)
+                                iconRefreshKey++
                             }
 
                             editingFolder != null -> {
@@ -1110,10 +1083,10 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                         selectedIconName
                                     )
                                     .apply()
+                                folderIconRefreshKey++
                             }
                         }
 
-                        iconRefreshKey++
                         iconPickerOpen = false
                         iconEditingApp = null
                         iconEditingFolder = null
@@ -1133,7 +1106,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 HiddenAppsDialog(
                     hiddenApps = hiddenApps,
                     onUnhide = { app ->
-                        val pkgName = app.resolveInfo.activityInfo.packageName
+                        val pkgName = app.packageName
                         val newHidden = hiddenPackages.toMutableSet().apply { remove(pkgName) }
                         hiddenPackages = newHidden
                         preferences.edit()
@@ -1157,7 +1130,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     cardRoundness = cardRoundness,
                     onLaunchApp = { app ->
                         context.packageManager.getLaunchIntentForPackage(
-                            app.resolveInfo.activityInfo.packageName
+                            app.packageName
                         )?.let(context::startActivity)
                     },
                     onRemoveApp = { packageName ->
@@ -1291,9 +1264,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         ) {
                             itemsIndexed(
                                 visibleApps,
-                                key = { _, app ->
-                                    "${app.resolveInfo.activityInfo.packageName}/${app.resolveInfo.activityInfo.name}"
-                                }
+                                key = { _, app -> app.componentKey }
                             ) { index, app ->
                                 AppDrawerGridItem(
                                     context = context,
@@ -1320,7 +1291,5 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 }
             }
         }
-
-
     }
 }

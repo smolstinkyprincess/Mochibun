@@ -53,6 +53,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -65,11 +66,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.tnyemii.mochibun.ui.theme.cardTextColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -88,6 +92,7 @@ fun ChatPlaceholderPage(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("chat_settings", Context.MODE_PRIVATE) }
 
@@ -182,12 +187,9 @@ fun ChatPlaceholderPage(
         }
     }
 
-    // load saved chat history from local json file <3
-    val messages = remember {
-        mutableStateListOf<ChatMessage>().apply {
-            addAll(loadChatHistory(context))
-        }
-    }
+    // load saved chat history and check model paths off the main thread <3
+    val messages = remember { mutableStateListOf<ChatMessage>() }
+    var resolvedModelPath by remember { mutableStateOf("") }
 
     val chatListState = rememberLazyListState()
 
@@ -196,29 +198,6 @@ fun ChatPlaceholderPage(
         if (messages.isNotEmpty()) {
             chatListState.animateScrollToItem(messages.size - 1)
         }
-    }
-
-    // check if model exists in internal storage or sdcard path :3
-    var resolvedModelPath by remember {
-        mutableStateOf(
-            run {
-                val internalFile = java.io.File(context.filesDir, "smol_model.gguf")
-                val legacyInternal = java.io.File(context.filesDir, "SmolLM2-360M-Instruct.Q4_K_M.gguf")
-                val externalPath = "/sdcard/SmolLM2/SmolLM2-360M-Instruct.Q4_K_M.gguf"
-                if (internalFile.exists() && internalFile.length() > 0) {
-                    internalFile.absolutePath
-                } else if (legacyInternal.exists() && legacyInternal.length() > 0) {
-                    legacyInternal.absolutePath
-                } else {
-                    val extFile = java.io.File(externalPath)
-                    if (extFile.exists() && extFile.canRead()) {
-                        externalPath
-                    } else {
-                        ""
-                    }
-                }
-            }
-        )
     }
 
     var mascotExpression by remember { mutableStateOf(MascotExpression.IDLE) }
@@ -247,39 +226,72 @@ fun ChatPlaceholderPage(
         }
     }
 
-    // auto copy model file from sdcard to app private storage on startup <3
+    // release any loaded native model when leaving the chat page <3
+    DisposableEffect(Unit) {
+        onDispose {
+            NativeLlm.unloadModelIfLoaded()
+        }
+    }
+
+    // load saved history, resolve model path, and auto copy model file from sdcard on IO thread <3
     LaunchedEffect(Unit) {
-        val internalFile = java.io.File(context.filesDir, "smol_model.gguf")
-        val externalPath = "/sdcard/SmolLM2/SmolLM2-360M-Instruct.Q4_K_M.gguf"
-        if ((!internalFile.exists() || internalFile.length() == 0L)) {
-            val extFile = java.io.File(externalPath)
-            if (extFile.exists()) {
-                isGenerating = true
-                activeStatus = "Auto-loading SmolLM2 model..."
-                coroutineScope.launch(Dispatchers.IO) {
-                    try {
-                        extFile.inputStream().use { input ->
-                            internalFile.outputStream().use { output ->
-                                val buffer = ByteArray(128 * 1024)
-                                var bytesRead: Int
-                                while (input.read(buffer).also { bytesRead = it } != -1) {
-                                    output.write(buffer, 0, bytesRead)
-                                }
+        val (loadedHistory, initialPath) = withContext(Dispatchers.IO) {
+            val history = loadChatHistory(context)
+            val internalFile = java.io.File(context.filesDir, "smol_model.gguf")
+            val legacyInternal = java.io.File(context.filesDir, "SmolLM2-360M-Instruct.Q4_K_M.gguf")
+            val externalPath = "/sdcard/SmolLM2/SmolLM2-360M-Instruct.Q4_K_M.gguf"
+            val path = if (internalFile.exists() && internalFile.length() > 0) {
+                internalFile.absolutePath
+            } else if (legacyInternal.exists() && legacyInternal.length() > 0) {
+                legacyInternal.absolutePath
+            } else {
+                val extFile = java.io.File(externalPath)
+                if (extFile.exists() && extFile.canRead()) {
+                    externalPath
+                } else {
+                    ""
+                }
+            }
+            history to path
+        }
+        if (messages.isEmpty() && loadedHistory.isNotEmpty()) {
+            messages.addAll(loadedHistory)
+        }
+        resolvedModelPath = initialPath
+
+        val needCopy = withContext(Dispatchers.IO) {
+            val internalFile = java.io.File(context.filesDir, "smol_model.gguf")
+            val extFile = java.io.File("/sdcard/SmolLM2/SmolLM2-360M-Instruct.Q4_K_M.gguf")
+            (!internalFile.exists() || internalFile.length() == 0L) && extFile.exists()
+        }
+        if (needCopy) {
+            val internalFile = java.io.File(context.filesDir, "smol_model.gguf")
+            val extFile = java.io.File("/sdcard/SmolLM2/SmolLM2-360M-Instruct.Q4_K_M.gguf")
+            isGenerating = true
+            activeStatus = "Auto-loading SmolLM2 model..."
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    extFile.inputStream().use { input ->
+                        internalFile.outputStream().use { output ->
+                            val buffer = ByteArray(128 * 1024)
+                            var bytesRead: Int
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
                             }
                         }
-                        resolvedModelPath = internalFile.absolutePath
-                        withContext(Dispatchers.Main) {
-                            messages.add(ChatMessage(isUser = false, text = "Model auto-loaded successfully! ♡ Ready to chat."))
-                        }
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            messages.add(ChatMessage(isUser = false, text = "Auto-load failed: ${e.localizedMessage ?: e.toString()} ♡"))
-                        }
-                    } finally {
-                        withContext(Dispatchers.Main) {
-                            isGenerating = false
-                            activeStatus = null
-                        }
+                    }
+                    resolvedModelPath = internalFile.absolutePath
+                    withContext(Dispatchers.Main) {
+                        messages.add(ChatMessage(isUser = false, text = "Model auto-loaded successfully! ♡ Ready to chat."))
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        messages.add(ChatMessage(isUser = false, text = "Auto-load failed: ${e.localizedMessage ?: e.toString()} ♡"))
+                    }
+                } finally {
+                    withContext(Dispatchers.Main) {
+                        isGenerating = false
+                        activeStatus = null
                     }
                 }
             }
@@ -323,14 +335,16 @@ fun ChatPlaceholderPage(
         }
     }
 
-    // periodic background connection check
-    LaunchedEffect(Unit) {
-        while (true) {
-            val connected = withContext(Dispatchers.IO) {
-                checkOllamaConnection()
+    // periodic background connection check only while resumed
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                val connected = withContext(Dispatchers.IO) {
+                    checkOllamaConnection()
+                }
+                ollamaConnected = connected
+                delay(5 * 60 * 1000L)
             }
-            ollamaConnected = connected
-            delay(5 * 60 * 1000L)
         }
     }
 
@@ -665,7 +679,7 @@ fun ChatPlaceholderPage(
                                                 if (file.exists() && file.length() > 0) {
                                                     val fullPrompt = buildChatMLPrompt(messages, searchResults)
                                                     reply = try {
-                                                        NativeLlm.generate(resolvedModelPath, fullPrompt)
+                                                        NativeLlm.generateText(resolvedModelPath, fullPrompt)
                                                     } catch (e: Exception) {
                                                         e.printStackTrace()
                                                         null
@@ -714,7 +728,7 @@ fun ChatPlaceholderPage(
                                             if (file.exists() && file.length() > 0) {
                                                 val fullPrompt = buildChatMLPrompt(messages, searchResults)
                                                 reply = try {
-                                                    NativeLlm.generate(resolvedModelPath, fullPrompt)
+                                                    NativeLlm.generateText(resolvedModelPath, fullPrompt)
                                                 } catch (e: Exception) {
                                                     e.printStackTrace()
                                                     null
@@ -900,23 +914,23 @@ fun MessageOptionsMenu(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onCopy() },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE9D9FF))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE9D9FF))
                     ) {
-                        Text(
-                            text = "📋 Copy text",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF684A7C)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "📋 Copy text",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF684A7C)
+                            )
+                        }
                     }
-                }
 
                 // Delete Message
                 Card(
