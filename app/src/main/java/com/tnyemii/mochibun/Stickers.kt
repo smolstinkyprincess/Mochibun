@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
@@ -20,6 +21,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+private class CachedSinglePath {
+    val path = Path()
+    var lastSize = Size.Zero
+}
+
+private class CachedBowPaths {
+    val leftLoop = Path()
+    val rightLoop = Path()
+    val leftTail = Path()
+    val rightTail = Path()
+    var lastSize = Size.Zero
+}
+
 // vector-drawn heart sticker with thick white border outline :3
 @Composable
 fun HeartSticker(
@@ -28,6 +42,8 @@ fun HeartSticker(
     rotation: Float = 0f,
     modifier: Modifier = Modifier
 ) {
+    val cached = remember { CachedSinglePath() }
+
     Canvas(
         modifier = modifier
             .size(size)
@@ -36,37 +52,41 @@ fun HeartSticker(
         val w = this.size.width
         val h = this.size.height
 
-        val path = Path().apply {
-            moveTo(w * 0.50f, h * 0.90f)
+        if (cached.lastSize != this.size) {
+            cached.lastSize = this.size
+            cached.path.rewind()
+            cached.path.apply {
+                moveTo(w * 0.50f, h * 0.90f)
 
-            cubicTo(
-                w * 0.10f, h * 0.62f,
-                w * 0.05f, h * 0.22f,
-                w * 0.27f, h * 0.14f
-            )
+                cubicTo(
+                    w * 0.10f, h * 0.62f,
+                    w * 0.05f, h * 0.22f,
+                    w * 0.27f, h * 0.14f
+                )
 
-            cubicTo(
-                w * 0.40f, h * 0.08f,
-                w * 0.48f, h * 0.20f,
-                w * 0.50f, h * 0.30f
-            )
+                cubicTo(
+                    w * 0.40f, h * 0.08f,
+                    w * 0.48f, h * 0.20f,
+                    w * 0.50f, h * 0.30f
+                )
 
-            cubicTo(
-                w * 0.52f, h * 0.20f,
-                w * 0.60f, h * 0.08f,
-                w * 0.73f, h * 0.14f
-            )
+                cubicTo(
+                    w * 0.52f, h * 0.20f,
+                    w * 0.60f, h * 0.08f,
+                    w * 0.73f, h * 0.14f
+                )
 
-            cubicTo(
-                w * 0.95f, h * 0.22f,
-                w * 0.90f, h * 0.62f,
-                w * 0.50f, h * 0.90f
-            )
+                cubicTo(
+                    w * 0.95f, h * 0.22f,
+                    w * 0.90f, h * 0.62f,
+                    w * 0.50f, h * 0.90f
+                )
+            }
         }
 
         // white sticker border <3
         drawPath(
-            path = path,
+            path = cached.path,
             color = Color.White
         )
 
@@ -77,7 +97,7 @@ fun HeartSticker(
             pivot = center
         ) {
             drawPath(
-                path = path,
+                path = cached.path,
                 color = color
             )
         }
@@ -92,72 +112,82 @@ fun BowSticker(
     rotation: Float = 0f,
     modifier: Modifier = Modifier
 ) {
+    val cached = remember { CachedBowPaths() }
+
     Canvas(
         modifier = modifier
             .size(size)
             .rotate(rotation)
-    ){
+    ) {
         val w = this.size.width
         val h = this.size.height
 
-        // left bow loop :3
-        val leftLoop = Path().apply {
-            moveTo(w * 0.46f, h * 0.45f)
+        if (cached.lastSize != this.size) {
+            cached.lastSize = this.size
 
-            cubicTo(
-                w * 0.25f, h * 0.12f,
-                w * 0.02f, h * 0.18f,
-                w * 0.08f, h * 0.50f
-            )
+            // left bow loop :3
+            cached.leftLoop.rewind()
+            cached.leftLoop.apply {
+                moveTo(w * 0.46f, h * 0.45f)
 
-            cubicTo(
-                w * 0.12f, h * 0.75f,
-                w * 0.34f, h * 0.70f,
-                w * 0.46f, h * 0.55f
-            )
+                cubicTo(
+                    w * 0.25f, h * 0.12f,
+                    w * 0.02f, h * 0.18f,
+                    w * 0.08f, h * 0.50f
+                )
 
-            close()
-        }
+                cubicTo(
+                    w * 0.12f, h * 0.75f,
+                    w * 0.34f, h * 0.70f,
+                    w * 0.46f, h * 0.55f
+                )
 
-        // right bow loop <3
-        val rightLoop = Path().apply {
-            moveTo(w * 0.54f, h * 0.45f)
+                close()
+            }
 
-            cubicTo(
-                w * 0.75f, h * 0.12f,
-                w * 0.98f, h * 0.18f,
-                w * 0.92f, h * 0.50f
-            )
+            // right bow loop <3
+            cached.rightLoop.rewind()
+            cached.rightLoop.apply {
+                moveTo(w * 0.54f, h * 0.45f)
 
-            cubicTo(
-                w * 0.88f, h * 0.75f,
-                w * 0.66f, h * 0.70f,
-                w * 0.54f, h * 0.55f
-            )
+                cubicTo(
+                    w * 0.75f, h * 0.12f,
+                    w * 0.98f, h * 0.18f,
+                    w * 0.92f, h * 0.50f
+                )
 
-            close()
-        }
+                cubicTo(
+                    w * 0.88f, h * 0.75f,
+                    w * 0.66f, h * 0.70f,
+                    w * 0.54f, h * 0.55f
+                )
 
-        // ribbon tails :3
-        val leftTail = Path().apply {
-            moveTo(w * 0.43f, h * 0.55f)
-            lineTo(w * 0.20f, h * 0.95f)
-            lineTo(w * 0.45f, h * 0.82f)
-            close()
-        }
+                close()
+            }
 
-        val rightTail = Path().apply {
-            moveTo(w * 0.57f, h * 0.55f)
-            lineTo(w * 0.80f, h * 0.95f)
-            lineTo(w * 0.55f, h * 0.82f)
-            close()
+            // ribbon tails :3
+            cached.leftTail.rewind()
+            cached.leftTail.apply {
+                moveTo(w * 0.43f, h * 0.55f)
+                lineTo(w * 0.20f, h * 0.95f)
+                lineTo(w * 0.45f, h * 0.82f)
+                close()
+            }
+
+            cached.rightTail.rewind()
+            cached.rightTail.apply {
+                moveTo(w * 0.57f, h * 0.55f)
+                lineTo(w * 0.80f, h * 0.95f)
+                lineTo(w * 0.55f, h * 0.82f)
+                close()
+            }
         }
 
         // white sticker outline <3
-        drawPath(leftLoop, Color.White)
-        drawPath(rightLoop, Color.White)
-        drawPath(leftTail, Color.White)
-        drawPath(rightTail, Color.White)
+        drawPath(cached.leftLoop, Color.White)
+        drawPath(cached.rightLoop, Color.White)
+        drawPath(cached.leftTail, Color.White)
+        drawPath(cached.rightTail, Color.White)
 
         // colored bow loops and tails :3
         scale(
@@ -165,10 +195,10 @@ fun BowSticker(
             scaleY = 0.80f,
             pivot = center
         ) {
-            drawPath(leftLoop, color)
-            drawPath(rightLoop, color)
-            drawPath(leftTail, color)
-            drawPath(rightTail, color)
+            drawPath(cached.leftLoop, color)
+            drawPath(cached.rightLoop, color)
+            drawPath(cached.leftTail, color)
+            drawPath(cached.rightTail, color)
         }
 
         // center knot <3
@@ -194,6 +224,8 @@ fun SparkleSticker(
     rotation: Float = 0f,
     modifier: Modifier = Modifier
 ) {
+    val cached = remember { CachedSinglePath() }
+
     Canvas(
         modifier = modifier
             .size(size)
@@ -202,21 +234,25 @@ fun SparkleSticker(
         val w = this.size.width
         val h = this.size.height
 
-        val sparkle = Path().apply {
-            moveTo(w * 0.50f, 0f)
-            lineTo(w * 0.63f, h * 0.37f)
-            lineTo(w, h * 0.50f)
-            lineTo(w * 0.63f, h * 0.63f)
-            lineTo(w * 0.50f, h)
-            lineTo(w * 0.37f, h * 0.63f)
-            lineTo(0f, h * 0.50f)
-            lineTo(w * 0.37f, h * 0.37f)
-            close()
+        if (cached.lastSize != this.size) {
+            cached.lastSize = this.size
+            cached.path.rewind()
+            cached.path.apply {
+                moveTo(w * 0.50f, 0f)
+                lineTo(w * 0.63f, h * 0.37f)
+                lineTo(w, h * 0.50f)
+                lineTo(w * 0.63f, h * 0.63f)
+                lineTo(w * 0.50f, h)
+                lineTo(w * 0.37f, h * 0.63f)
+                lineTo(0f, h * 0.50f)
+                lineTo(w * 0.37f, h * 0.37f)
+                close()
+            }
         }
 
         // white sticker border <3
         drawPath(
-            path = sparkle,
+            path = cached.path,
             color = Color.White
         )
 
@@ -227,7 +263,7 @@ fun SparkleSticker(
             pivot = center
         ) {
             drawPath(
-                path = sparkle,
+                path = cached.path,
                 color = color
             )
         }
@@ -243,6 +279,8 @@ fun CloudSticker(
     rotation: Float = 0f,
     modifier: Modifier = Modifier
 ) {
+    val cached = remember { CachedSinglePath() }
+
     Canvas(
         modifier = modifier
             .size(width = width, height = height)
@@ -251,43 +289,47 @@ fun CloudSticker(
         val w = size.width
         val h = size.height
 
-        val cloud = Path().apply {
-            moveTo(w * 0.15f, h * 0.70f)
+        if (cached.lastSize != this.size) {
+            cached.lastSize = this.size
+            cached.path.rewind()
+            cached.path.apply {
+                moveTo(w * 0.15f, h * 0.70f)
 
-            // left bump :3
-            cubicTo(
-                w * 0.02f, h * 0.45f,
-                w * 0.15f, h * 0.20f,
-                w * 0.35f, h * 0.32f
-            )
+                // left bump :3
+                cubicTo(
+                    w * 0.02f, h * 0.45f,
+                    w * 0.15f, h * 0.20f,
+                    w * 0.35f, h * 0.32f
+                )
 
-            // top middle bump <3
-            cubicTo(
-                w * 0.38f, h * 0.02f,
-                w * 0.68f, h * 0.02f,
-                w * 0.72f, h * 0.34f
-            )
+                // top middle bump <3
+                cubicTo(
+                    w * 0.38f, h * 0.02f,
+                    w * 0.68f, h * 0.02f,
+                    w * 0.72f, h * 0.34f
+                )
 
-            // right bump :3
-            cubicTo(
-                w * 0.95f, h * 0.25f,
-                w * 1.02f, h * 0.52f,
-                w * 0.88f, h * 0.70f
-            )
+                // right bump :3
+                cubicTo(
+                    w * 0.95f, h * 0.25f,
+                    w * 1.02f, h * 0.52f,
+                    w * 0.88f, h * 0.70f
+                )
 
-            // bottom edge <3
-            cubicTo(
-                w * 0.72f, h * 0.88f,
-                w * 0.30f, h * 0.88f,
-                w * 0.15f, h * 0.70f
-            )
+                // bottom edge <3
+                cubicTo(
+                    w * 0.72f, h * 0.88f,
+                    w * 0.30f, h * 0.88f,
+                    w * 0.15f, h * 0.70f
+                )
 
-            close()
+                close()
+            }
         }
 
         // white sticker border :3
         drawPath(
-            path = cloud,
+            path = cached.path,
             color = Color.White
         )
 
@@ -298,7 +340,7 @@ fun CloudSticker(
             pivot = center
         ) {
             drawPath(
-                path = cloud,
+                path = cached.path,
                 color = color
             )
         }

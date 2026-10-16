@@ -12,8 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 
 // mascot assistant expression states :3
@@ -160,49 +163,62 @@ private val BLINK_RUNS: List<PixelRun> =
 fun PixelArtMascot(
     expression: MascotExpression,
     modifier: Modifier = Modifier,
-    size: Dp = 40.dp
+    size: Dp = 40.dp,
+    enabled: Boolean = true
 ) {
-    val shouldHop = expression == MascotExpression.IDLE ||
-            expression == MascotExpression.THINKING
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val shouldHop = enabled && (expression == MascotExpression.IDLE ||
+            expression == MascotExpression.THINKING)
 
-    // simple timer hop: flips up/down every second (works even if system animations are off) :3
+    // simple timer hop: flips up/down every second only while visible & resumed :3
     var hopUp by remember { mutableStateOf(false) }
-    LaunchedEffect(shouldHop) {
+    LaunchedEffect(shouldHop, lifecycleOwner) {
         hopUp = false
-        while (shouldHop) {
-            delay(1000)
-            hopUp = !hopUp
-        }
-    }
-
-    // random blink every few seconds, only when idle :3
-    var blinking by remember { mutableStateOf(false) }
-    LaunchedEffect(expression) {
-        blinking = false
-        if (expression == MascotExpression.IDLE) {
-            while (true) {
-                delay((3000L..6000L).random())   // wait 3 to 6 seconds
-                blinking = true
-                delay(180)                       // eyes shut for a moment
-                blinking = false
+        if (shouldHop) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (true) {
+                    delay(1000)
+                    hopUp = !hopUp
+                }
             }
         }
     }
 
-    val runs = if (blinking && expression == MascotExpression.IDLE) {
-        BLINK_RUNS
-    } else {
+    // random blink every few seconds, only when idle, visible, and resumed :3
+    var blinking by remember { mutableStateOf(false) }
+    LaunchedEffect(expression, enabled, lifecycleOwner) {
+        blinking = false
+        if (enabled && expression == MascotExpression.IDLE) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (true) {
+                    delay((3000L..6000L).random())   // wait 3 to 6 seconds
+                    blinking = true
+                    delay(180)                       // eyes shut for a moment
+                    blinking = false
+                }
+            }
+        }
+    }
+
+    val baseExpressionRuns = remember(expression) {
         EXPRESSION_RUNS[expression] ?: BASE_RUNS
     }
 
     Canvas(modifier = modifier.size(size)) {
+        // Read hopUp and blinking inside draw scope so state flips only redraw Canvas without recomposition <3
+        val activeRuns = if (blinking && expression == MascotExpression.IDLE) {
+            BLINK_RUNS
+        } else {
+            baseExpressionRuns
+        }
+
         // every pixel is a whole number of screen pixels so the edges stay crisp :3
         val cell = (this.size.minDimension / GRID_W).toInt().coerceAtLeast(1).toFloat()
         val left = ((this.size.width - cell * GRID_W) / 2f).toInt().toFloat()
         val top = ((this.size.height - cell * GRID_H) / 2f).toInt().toFloat() +
                 (if (hopUp) -cell else 0f)
 
-        runs.forEach { run ->
+        activeRuns.forEach { run ->
             drawRect(
                 color = run.color,
                 topLeft = Offset(left + run.x * cell, top + run.y * cell),

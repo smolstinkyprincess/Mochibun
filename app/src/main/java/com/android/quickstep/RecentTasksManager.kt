@@ -23,27 +23,38 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
-import android.os.Process
 import android.util.Log
+import android.util.LruCache
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import java.lang.reflect.Method
 
 // holds information about a recent app task to display in recents switcher :3
+@Immutable
 data class RecentTaskInfo(
     val taskId: Int,
     val title: String,
     val packageName: String,
     val icon: Drawable?,
+    val iconBitmap: ImageBitmap? = null,
     val thumbnail: ImageBitmap?,
     val baseIntent: Intent?
 )
 
-// manages querying, launching, and dismissing recent tasks via system services <3
-class RecentTasksManager(private val context: Context) {
+private data class CachedAppTaskMeta(
+    val label: String,
+    val icon: Drawable,
+    val iconBitmap: ImageBitmap
+)
 
-    private val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-    private val packageManager = context.packageManager
+// manages querying, launching, and dismissing recent tasks via system services <3
+class RecentTasksManager(context: Context) {
+
+    private val appContext = context.applicationContext
+    private val activityManager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    private val packageManager = appContext.packageManager
 
     // fetches up to maxNum recent tasks using ActivityManager <3
     fun getRecentTasks(maxNum: Int = 15): List<RecentTaskInfo> {
@@ -51,7 +62,7 @@ class RecentTasksManager(private val context: Context) {
         try {
             // query active recent tasks from system ActivityManager :3
             val recentTasks = activityManager.getRecentTasks(maxNum, ActivityManager.RECENT_IGNORE_UNAVAILABLE)
-            val currentPackage = context.packageName
+            val currentPackage = appContext.packageName
             Log.d(TAG, "getRecentTasks queried: received ${recentTasks?.size ?: 0} raw tasks from system (currentPackage=$currentPackage)")
 
             for (rawInfo in recentTasks) {
@@ -85,16 +96,16 @@ class RecentTasksManager(private val context: Context) {
 
                 var title = rawInfo.description?.toString() ?: ""
                 var icon: Drawable? = null
+                var iconBitmap: ImageBitmap? = null
 
-                // load label and icon for app package :3
-                try {
-                    val appInfo = packageManager.getApplicationInfo(pkgName, 0)
-                    if (title.isEmpty()) {
-                        title = packageManager.getApplicationLabel(appInfo).toString()
-                    }
-                    icon = packageManager.getApplicationIcon(appInfo)
-                } catch (e: Exception) {
-                    if (title.isEmpty()) title = pkgName
+                // load cached label and icon bitmap for app package off the UI thread :3
+                val cachedMeta = getOrLoadAppMeta(pkgName)
+                if (cachedMeta != null) {
+                    if (title.isEmpty()) title = cachedMeta.label
+                    icon = cachedMeta.icon
+                    iconBitmap = cachedMeta.iconBitmap
+                } else if (title.isEmpty()) {
+                    title = pkgName
                 }
 
                 // fetch task snapshot thumbnail using reflection if supported
@@ -108,6 +119,7 @@ class RecentTasksManager(private val context: Context) {
                         title = title,
                         packageName = pkgName,
                         icon = icon,
+                        iconBitmap = iconBitmap,
                         thumbnail = thumbnailBitmap,
                         baseIntent = baseIntent
                     )
@@ -120,6 +132,30 @@ class RecentTasksManager(private val context: Context) {
         return result
     }
 
+    private fun getOrLoadAppMeta(pkgName: String): CachedAppTaskMeta? {
+        synchronized(appMetaCache) {
+            appMetaCache.get(pkgName)?.let { return it }
+        }
+        return try {
+            val appInfo = packageManager.getApplicationInfo(pkgName, 0)
+            val label = packageManager.getApplicationLabel(appInfo).toString()
+            val drawable = packageManager.getApplicationIcon(appInfo)
+            val bmp = drawable.toBitmap(84, 84, Bitmap.Config.ARGB_8888)
+            bmp.prepareToDraw()
+            val meta = CachedAppTaskMeta(
+                label = label,
+                icon = drawable,
+                iconBitmap = bmp.asImageBitmap()
+            )
+            synchronized(appMetaCache) {
+                appMetaCache.put(pkgName, meta)
+            }
+            meta
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     // attempts to extract hardware buffer task snapshot bitmap via reflection <3
     @SuppressLint("BlockedPrivateApi")
     private fun getTaskThumbnail(taskId: Int): ImageBitmap? {
@@ -127,7 +163,12 @@ class RecentTasksManager(private val context: Context) {
             val service = getAtmService() ?: return null
             val getTaskSnapshotMethod = getTaskSnapshotMethod ?: return null
 
+            // Request low-resolution reduced snapshot (true) first if supported by system
             val snapshot = getTaskSnapshotMethod.invoke(
+                service,
+                taskId,
+                true
+            ) ?: getTaskSnapshotMethod.invoke(
                 service,
                 taskId,
                 false
@@ -151,13 +192,33 @@ class RecentTasksManager(private val context: Context) {
                     return null
                 }
 
-                val bitmap = Bitmap.wrapHardwareBuffer(
+                val wrappedBitmap = Bitmap.wrapHardwareBuffer(
                     hardwareBuffer,
                     colorSpace
                 ) ?: return null
 
-                val copyBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-                copyBitmap?.asImageBitmap()
+                try {
+                    val rawCopy = wrappedBitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return null
+                    // Downscale snapshot to fit the 220dp card width on the 480x800 hdpi screen
+                    val finalBitmap = if (rawCopy.width > 300) {
+                        val targetWidth = 240
+                        val targetHeight = ((rawCopy.height.toFloat() / rawCopy.width.toFloat()) * targetWidth)
+                            .toInt()
+                            .coerceAtLeast(1)
+                        val scaled = Bitmap.createScaledBitmap(rawCopy, targetWidth, targetHeight, true)
+                        if (scaled !== rawCopy) {
+                            rawCopy.recycle()
+                        }
+                        scaled
+                    } else {
+                        rawCopy
+                    }
+                    finalBitmap.prepareToDraw()
+                    finalBitmap.asImageBitmap()
+                } finally {
+                    // Recycle the HardwareBuffer-backed Bitmap immediately to release its native AHardwareBuffer reference
+                    wrappedBitmap.recycle()
+                }
             } finally {
                 // explicitly close the hardware buffer to avoid native graphics buffer memory leaks <3
                 hardwareBuffer.close()
@@ -174,7 +235,7 @@ class RecentTasksManager(private val context: Context) {
         val method = startActivityFromRecentsMethod
         if (method != null) {
             try {
-                val opts = ActivityOptions.makeCustomAnimation(context, 0, 0)
+                val opts = ActivityOptions.makeCustomAnimation(appContext, 0, 0)
                 method.invoke(activityManager, task.taskId, opts.toBundle())
                 return true
             } catch (e: Exception) {
@@ -188,7 +249,7 @@ class RecentTasksManager(private val context: Context) {
                 ?: packageManager.getLaunchIntentForPackage(task.packageName)
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                context.startActivity(intent)
+                appContext.startActivity(intent)
                 true
             } else {
                 Log.e(TAG, "No launch intent available for ${task.packageName} (task ${task.taskId})")
@@ -229,6 +290,8 @@ class RecentTasksManager(private val context: Context) {
 
     companion object {
         private const val TAG = "RecentTasksManager"
+
+        private val appMetaCache = LruCache<String, CachedAppTaskMeta>(32)
 
         @Volatile
         private var atmService: Any? = null

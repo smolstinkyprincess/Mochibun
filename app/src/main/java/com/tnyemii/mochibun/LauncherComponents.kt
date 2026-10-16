@@ -1,103 +1,60 @@
 package com.tnyemii.mochibun
 
 import android.content.Context
-import android.content.Intent
-import android.graphics.Bitmap
-import android.net.Uri
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.tnyemii.mochibun.ui.theme.appActionColor
 import com.tnyemii.mochibun.ui.theme.cardBgColor
 import com.tnyemii.mochibun.ui.theme.cardTextColor
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.time.Duration.Companion.milliseconds
 
 val cardRoundness = 24.dp
 
@@ -111,74 +68,98 @@ fun StatusCard(
     onWifiChanged: (Boolean) -> Unit = {},
     onLowBatteryChanged: (Boolean) -> Unit = {},
 ) {
-    var currentTime by remember { mutableStateOf(Date()) }
-    var batteryLevel by remember { mutableStateOf(0) }
-    var wifiConnected by remember { mutableStateOf(false) }
-    var wifiSsid by remember { mutableStateOf<String?>(null) }
-
-    // clock ticker coroutine updates every 10 seconds <3
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = Date()
-            kotlinx.coroutines.delay(10000.milliseconds)
-        }
-    }
-
-    // periodic background status reader for battery and Wi-Fi SSID :3
-    LaunchedEffect(Unit) {
-        while (true) {
-            val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
-            batteryLevel = batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            onLowBatteryChanged(batteryLevel in 0..20 && !batteryManager.isCharging)
-
-            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-            val network = connectivityManager.activeNetwork
-            val capabilities = connectivityManager.getNetworkCapabilities(network)
-            val isWifi = capabilities?.hasTransport(
-                android.net.NetworkCapabilities.TRANSPORT_WIFI
-            ) == true
-
-            wifiConnected = isWifi
-            onWifiChanged(isWifi)
-
-            if (isWifi) {
-                var rawSsid: String? = null
-
-                // modern Android 10+ transport info path <3
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    val wifiInfo = capabilities?.transportInfo as? android.net.wifi.WifiInfo
-                    rawSsid = wifiInfo?.ssid
-                }
-
-                // fallback for older API or MTK hardware :3
-                if (rawSsid.isNullOrBlank() || rawSsid == "<unknown ssid>") {
-                    try {
-                        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
-                        rawSsid = wifiManager?.connectionInfo?.ssid
-                    } catch (_: Exception) {
-                        rawSsid = null
-                    }
-                }
-
-                rawSsid = rawSsid?.removeSurrounding("\"")
-
-                wifiSsid = if (!rawSsid.isNullOrBlank() && rawSsid != "<unknown ssid>") {
-                    rawSsid
-                } else {
-                    "Wi-Fi"
-                }
-            } else {
-                wifiSsid = null
-            }
-
-            kotlinx.coroutines.delay(30000.milliseconds)
-        }
-    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentOnWifiChanged by rememberUpdatedState(onWifiChanged)
+    val currentOnLowBatteryChanged by rememberUpdatedState(onLowBatteryChanged)
 
     val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val dateFormat = remember { SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()) }
-    val formattedTime = remember(currentTime) { timeFormat.format(currentTime) }
-    val formattedDate = remember(currentTime) { dateFormat.format(currentTime) }
+
+    val initialNow = remember { Date() }
+    var formattedTime by remember { mutableStateOf(timeFormat.format(initialNow)) }
+    var formattedDate by remember { mutableStateOf(dateFormat.format(initialNow)) }
+    var batteryLevel by remember { mutableIntStateOf(0) }
+    var wifiConnected by remember { mutableStateOf(false) }
+    var wifiSsid by remember { mutableStateOf<String?>(null) }
+
+    // clock ticker coroutine updates on minute boundaries only while launcher is RESUMED <3
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                val nowMs = System.currentTimeMillis()
+                val nowDate = Date(nowMs)
+                val newTime = timeFormat.format(nowDate)
+                val newDate = dateFormat.format(nowDate)
+                if (formattedTime != newTime) formattedTime = newTime
+                if (formattedDate != newDate) formattedDate = newDate
+
+                val delayToNextMinute = (60_000L - (nowMs % 60_000L)).coerceIn(1_000L, 60_000L)
+                delay(delayToNextMinute)
+            }
+        }
+    }
+
+    // periodic background status reader for battery and Wi-Fi SSID only while RESUMED :3
+    LaunchedEffect(lifecycleOwner, context) {
+        val appContext = context.applicationContext ?: context
+        val batteryManager = appContext.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+        val connectivityManager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                val status = withContext(Dispatchers.IO) {
+                    val level = batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                    val lowBat = level in 0..20 && !batteryManager.isCharging
+
+                    val network = connectivityManager.activeNetwork
+                    val capabilities = connectivityManager.getNetworkCapabilities(network)
+                    val isWifi = capabilities?.hasTransport(
+                        android.net.NetworkCapabilities.TRANSPORT_WIFI
+                    ) == true
+
+                    val ssid = if (isWifi) {
+                        var rawSsid: String? = null
+
+                        // modern Android 10+ transport info path <3
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            val wifiInfo = capabilities?.transportInfo as? android.net.wifi.WifiInfo
+                            rawSsid = wifiInfo?.ssid
+                        }
+
+                        // fallback for older API or MTK hardware :3
+                        if (rawSsid.isNullOrBlank() || rawSsid == "<unknown ssid>") {
+                            try {
+                                val wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+                                rawSsid = wifiManager?.connectionInfo?.ssid
+                            } catch (_: Exception) {
+                                rawSsid = null
+                            }
+                        }
+
+                        rawSsid = rawSsid?.removeSurrounding("\"")
+
+                        if (!rawSsid.isNullOrBlank() && rawSsid != "<unknown ssid>") {
+                            rawSsid
+                        } else {
+                            "Wi-Fi"
+                        }
+                    } else {
+                        null
+                    }
+
+                     QuadStatus(level, lowBat, isWifi, ssid)
+                }
+
+                if (batteryLevel != status.batteryLevel) batteryLevel = status.batteryLevel
+                currentOnLowBatteryChanged(status.isLowBattery)
+                if (wifiConnected != status.isWifi) wifiConnected = status.isWifi
+                currentOnWifiChanged(status.isWifi)
+                if (wifiSsid != status.wifiSsid) wifiSsid = status.wifiSsid
+
+                delay(30_000L)
+            }
+        }
+    }
 
     Card(
         modifier = Modifier
@@ -241,9 +222,22 @@ fun StatusCard(
     }
 }
 
+private data class QuadStatus(
+    val batteryLevel: Int,
+    val isLowBattery: Boolean,
+    val isWifi: Boolean,
+    val wifiSsid: String?
+)
+
 // top greeting card header with decorative ribbon bow sticker <3
 @Composable
-fun GreetingCard(context: Context, isOnline: Boolean = true, isLowBattery: Boolean = false) {
+fun GreetingCard(
+    context: Context,
+    isOnline: Boolean = true,
+    isLowBattery: Boolean = false,
+    mascotEnabled: Boolean = true
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
     val theme = LocalLauncherTheme.current
     val cardRoundness = theme.cardRoundnessDp.dp
     val greetingOutlineColor = theme.greetingOutlineColor
@@ -254,19 +248,22 @@ fun GreetingCard(context: Context, isOnline: Boolean = true, isLowBattery: Boole
     var cheering by remember { mutableStateOf(false) }
     LaunchedEffect(cheering) {
         if (cheering) {
-            kotlinx.coroutines.delay(1500)
+            delay(1500)
             cheering = false
         }
     }
 
-    // what hour is it? checked once a minute so the greeting changes by itself <3
+    // what hour is it? checked once a minute while RESUMED so the greeting changes by itself <3
     var hour by remember {
         mutableIntStateOf(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))
     }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(60_000)
-            hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                val currentHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                if (hour != currentHour) hour = currentHour
+                delay(60_000L)
+            }
         }
     }
     // custom greetings based on time of day
@@ -293,6 +290,7 @@ fun GreetingCard(context: Context, isOnline: Boolean = true, isLowBattery: Boole
                 else -> MascotExpression.IDLE
             },
             size = 64.dp,
+            enabled = mascotEnabled,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset(x = (-16).dp, y = (-24).dp)
@@ -350,6 +348,9 @@ fun FavoritesCard(
     val theme = LocalLauncherTheme.current
     val lazyRowState = rememberLazyListState()
     val itemCount = favoriteApps.size + favoriteFolders.size
+    val preferences = remember(context) {
+        context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
+    }
 
     LaunchedEffect(selectedIndex, itemCount) {
         if (itemCount > 0) {
@@ -401,9 +402,7 @@ fun FavoritesCard(
                 ) {
                     itemsIndexed(
                         favoriteApps,
-                        key = { _, app ->
-                            "app:${app.resolveInfo.activityInfo.packageName}"
-                        }
+                        key = { _, app -> app.favoriteKey }
                     ) { index, app ->
                         val isSelected = index == selectedIndex
                         val scale by animateFloatAsState(
@@ -414,10 +413,10 @@ fun FavoritesCard(
 
                         Box(
                             modifier = Modifier
-                                .graphicsLayer(
-                                    scaleX = scale,
+                                .graphicsLayer {
+                                    scaleX = scale
                                     scaleY = scale
-                                )
+                                }
                                 .background(
                                     color = if (isSelected) {
                                         theme.selectedContainerColor
@@ -439,9 +438,8 @@ fun FavoritesCard(
                                     onClick = {
                                         onAppClick?.invoke(app)
                                         context.packageManager
-                                            .getLaunchIntentForPackage(
-                                                app.resolveInfo.activityInfo.packageName
-                                            )?.let(context::startActivity)
+                                            .getLaunchIntentForPackage(app.packageName)
+                                            ?.let(context::startActivity)
                                     },
                                     onLongClick = {
                                         onAppClick?.invoke(app)
@@ -472,10 +470,10 @@ fun FavoritesCard(
                         )
                         Column(
                             modifier = Modifier
-                                .graphicsLayer(
-                                    scaleX = scale,
+                                .graphicsLayer {
+                                    scaleX = scale
                                     scaleY = scale
-                                )
+                                }
                                 .background(
                                     color = if (isSelected) {
                                         theme.selectedContainerColor
@@ -505,14 +503,11 @@ fun FavoritesCard(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             val folderIconName = remember(
-                                context,
+                                preferences,
                                 folder.id,
                                 folderIconRefreshKey
                             ) {
-                                context.getSharedPreferences(
-                                    "launcher_preferences",
-                                    Context.MODE_PRIVATE
-                                ).getString("custom_folder_icon_${folder.id}", null)
+                                preferences.getString("custom_folder_icon_${folder.id}", null)
                             }
 
                             val folderIconBitmap = remember(
@@ -520,33 +515,7 @@ fun FavoritesCard(
                                 folderIconName,
                                 folderIconRefreshKey
                             ) {
-                                if (folderIconName == null) {
-                                    null
-                                } else {
-                                    try {
-                                        val iconContext = context.createPackageContext(
-                                            "kawaii.icon.pack",
-                                            Context.CONTEXT_IGNORE_SECURITY
-                                        )
-
-                                        val resourceId = iconContext.resources.getIdentifier(
-                                            folderIconName,
-                                            "drawable",
-                                            "kawaii.icon.pack"
-                                        )
-
-                                        if (resourceId != 0) {
-                                            drawableToBitmap(
-                                                iconContext.resources.getDrawable(resourceId, null),
-                                                96
-                                            ).asImageBitmap()
-                                        } else {
-                                            null
-                                        }
-                                    } catch (_: Exception) {
-                                        null
-                                    }
-                                }
+                                getCachedKawaiiImageBitmap(context, folderIconName, 96)
                             }
 
                             Box(
