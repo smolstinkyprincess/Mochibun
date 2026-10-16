@@ -342,6 +342,7 @@ fun FavoritesCard(
     favoriteFolders: List<FavoriteFolder>,
     selectedIndex: Int = 0,
     folderIconRefreshKey: Int = 0,
+    onAppClick: ((LauncherApp) -> Unit)? = null,
     onAppLongClick: (LauncherApp) -> Unit,
     onFolderClick: (FavoriteFolder) -> Unit,
     onFolderLongClick: (FavoriteFolder) -> Unit
@@ -398,6 +399,66 @@ fun FavoritesCard(
                     state = lazyRowState,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    itemsIndexed(
+                        favoriteApps,
+                        key = { _, app ->
+                            "app:${app.resolveInfo.activityInfo.packageName}"
+                        }
+                    ) { index, app ->
+                        val isSelected = index == selectedIndex
+                        val scale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.06f else 1f,
+                            animationSpec = tween(150),
+                            label = "favoriteAppScale"
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .graphicsLayer(
+                                    scaleX = scale,
+                                    scaleY = scale
+                                )
+                                .background(
+                                    color = if (isSelected) {
+                                        theme.selectedContainerColor
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .border(
+                                    width = if (isSelected) 2.5.dp else 0.dp,
+                                    color = if (isSelected) {
+                                        appActionColor
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .combinedClickable(
+                                    onClick = {
+                                        onAppClick?.invoke(app)
+                                        context.packageManager
+                                            .getLaunchIntentForPackage(
+                                                app.resolveInfo.activityInfo.packageName
+                                            )?.let(context::startActivity)
+                                    },
+                                    onLongClick = {
+                                        onAppClick?.invoke(app)
+                                        onAppLongClick(app)
+                                    }
+                                )
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = app.imageBitmap,
+                                contentDescription = app.name,
+                                modifier = Modifier.size(52.dp)
+                            )
+                        }
+                    }
+
                     itemsIndexed(
                         favoriteFolders,
                         key = { _, folder -> "folder:${folder.id}" }
@@ -505,64 +566,6 @@ fun FavoritesCard(
                                     )
                                 }
                             }
-                        }
-                    }
-
-                    itemsIndexed(
-                        favoriteApps,
-                        key = { _, app ->
-                            "app:${app.resolveInfo.activityInfo.packageName}"
-                        }
-                    ) { index, app ->
-                        val isSelected = index == selectedIndex
-                        val scale by animateFloatAsState(
-                            targetValue = if (isSelected) 1.06f else 1f,
-                            animationSpec = tween(150),
-                            label = "favoriteAppScale"
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .graphicsLayer(
-                                    scaleX = scale,
-                                    scaleY = scale
-                                )
-                                .background(
-                                    color = if (isSelected) {
-                                        theme.selectedContainerColor
-                                    } else {
-                                        Color.Transparent
-                                    },
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                .border(
-                                    width = if (isSelected) 2.5.dp else 0.dp,
-                                    color = if (isSelected) {
-                                        appActionColor
-                                    } else {
-                                        Color.Transparent
-                                    },
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                .combinedClickable(
-                                    onClick = {
-                                        context.packageManager
-                                            .getLaunchIntentForPackage(
-                                                app.resolveInfo.activityInfo.packageName
-                                            )?.let(context::startActivity)
-                                    },
-                                    onLongClick = {
-                                        onAppLongClick(app)
-                                    }
-                                )
-                                .padding(8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                bitmap = app.imageBitmap,
-                                contentDescription = app.name,
-                                modifier = Modifier.size(52.dp)
-                            )
                         }
                     }
                 }

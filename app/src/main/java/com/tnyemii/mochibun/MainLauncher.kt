@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -162,6 +163,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     var favoriteFolders by remember { mutableStateOf(loadFavoriteFolders(context)) }
     var folderToCreateFrom by remember { mutableStateOf<LauncherApp?>(null) }
     var openedFolderId by remember { mutableStateOf<String?>(null) }
+    var lastOpenedFolderId by remember { mutableStateOf<String?>(null) }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -383,6 +385,9 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             themeStudioOpen = false
             iconPickerOpen = false
             hiddenManagerOpen = false
+            openedFolderId = null
+            folderToCreateFrom = null
+            folderIconMenuOpen = false
             scope.launch {
                 pagerState.animateScrollToPage(1)
             }
@@ -403,7 +408,8 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     val isCenterKey =
                         nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
                                 nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
-                                nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+                                nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER ||
+                                nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_A
 
                     if (isCenterKey) {
                         when (nativeEvent.action) {
@@ -453,6 +459,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                             favoriteFolders.getOrNull(
                                                 selectedFavoriteIndex - favoriteApps.size
                                             )?.let { folder ->
+                                                lastOpenedFolderId = folder.id
                                                 openedFolderId = folder.id
                                             }
                                         }
@@ -628,6 +635,19 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 true
                             }
 
+                            android.view.KeyEvent.KEYCODE_BACK,
+                            android.view.KeyEvent.KEYCODE_ESCAPE -> {
+                                if (drawerOpen) {
+                                    drawerOpen = false
+                                    true
+                                } else if (pagerState.currentPage != 1) {
+                                    scope.launch { pagerState.animateScrollToPage(1) }
+                                    true
+                                } else {
+                                    true
+                                }
+                            }
+
                             else -> false
                         }
                     } else {
@@ -643,6 +663,20 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     }
                 )
         ) {
+            BackHandler(enabled = drawerOpen) {
+                drawerOpen = false
+            }
+
+            BackHandler(enabled = openedFolderId != null) {
+                lastOpenedFolderId?.let { id ->
+                    val folderIdx = favoriteFolders.indexOfFirst { it.id == id }
+                    if (folderIdx != -1) {
+                        selectedFavoriteIndex = favoriteApps.size + folderIdx
+                    }
+                }
+                openedFolderId = null
+            }
+
             if (wallpaperBitmap != null) {
                 Image(
                     bitmap = wallpaperBitmap!!.asImageBitmap(),
@@ -722,13 +756,36 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     favoriteFolders = favoriteFolders,
                                     folderIconRefreshKey = iconRefreshKey,
                                     selectedIndex = selectedFavoriteIndex,
+                                    onAppClick = { app ->
+                                        val appIdx = favoriteApps.indexOfFirst {
+                                            it.resolveInfo.activityInfo.packageName == app.resolveInfo.activityInfo.packageName
+                                        }
+                                        if (appIdx != -1) {
+                                            selectedFavoriteIndex = appIdx
+                                        }
+                                    },
                                     onAppLongClick = { app ->
+                                        val appIdx = favoriteApps.indexOfFirst {
+                                            it.resolveInfo.activityInfo.packageName == app.resolveInfo.activityInfo.packageName
+                                        }
+                                        if (appIdx != -1) {
+                                            selectedFavoriteIndex = appIdx
+                                        }
                                         selectedApp = app
                                     },
                                     onFolderClick = { folder ->
+                                        val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
+                                        if (folderIdx != -1) {
+                                            selectedFavoriteIndex = favoriteApps.size + folderIdx
+                                        }
+                                        lastOpenedFolderId = folder.id
                                         openedFolderId = folder.id
                                     },
                                     onFolderLongClick = { folder ->
+                                        val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
+                                        if (folderIdx != -1) {
+                                            selectedFavoriteIndex = favoriteApps.size + folderIdx
+                                        }
                                         iconEditingFolder = folder
                                         folderIconMenuOpen = true
                                     }
@@ -1137,14 +1194,27 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         }
                     },
                     onDeleteFolder = {
+                        val deletedId = openedFolder.id
                         favoriteFolders = favoriteFolders.filterNot {
-                            it.id == openedFolder.id
+                            it.id == deletedId
                         }
 
                         saveFavoriteFolders(context, favoriteFolders)
+                        val newCount = favoriteApps.size + favoriteFolders.size
+                        selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
+                            0,
+                            (newCount - 1).coerceAtLeast(0)
+                        )
                         openedFolderId = null
+                        lastOpenedFolderId = null
                     },
                     onDismiss = {
+                        lastOpenedFolderId?.let { id ->
+                            val folderIdx = favoriteFolders.indexOfFirst { it.id == id }
+                            if (folderIdx != -1) {
+                                selectedFavoriteIndex = favoriteApps.size + folderIdx
+                            }
+                        }
                         openedFolderId = null
                     }
                 )
@@ -1184,7 +1254,6 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             )
                             .apply()
 
-                        folderToCreateFrom = null
                         folderToCreateFrom = null
                         selectedFavoriteIndex =
                             (favoriteApps.size + favoriteFolders.size - 1)
