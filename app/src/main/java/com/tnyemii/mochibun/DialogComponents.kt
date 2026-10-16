@@ -248,16 +248,20 @@ fun LauncherMenuDialog(
     onPickWallpaperClick: () -> Unit,
     onResetWallpaperClick: () -> Unit,
     showResetWallpaper: Boolean,
-    onCreateFolderClick: (() -> Unit)? = null
+    onCreateFolderClick: (() -> Unit)? = null,
+    onHardwareButtonsClick: (() -> Unit)? = null
 ) {
     val theme = LocalLauncherTheme.current
     val focusRequester = remember { FocusRequester() }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val actions = remember(showResetWallpaper, onCreateFolderClick) {
+    val actions = remember(showResetWallpaper, onCreateFolderClick, onHardwareButtonsClick) {
         buildList<Pair<String, () -> Unit>> {
             if (onCreateFolderClick != null) {
                 add("📁 Make folder" to onCreateFolderClick)
+            }
+            if (onHardwareButtonsClick != null) {
+                add("🎮 Hardware buttons" to onHardwareButtonsClick)
             }
             add("🙈 Hidden apps" to onHiddenAppsClick)
             add("🎨 Theme Studio" to onThemeStudioClick)

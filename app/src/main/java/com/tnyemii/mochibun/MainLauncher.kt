@@ -63,7 +63,9 @@ fun MainLauncher(
     name: String,
     modifier: Modifier = Modifier,
     homePressCount: Int = 0,
-    appListRefreshCount: Int = 0
+    appListRefreshCount: Int = 0,
+    requestedPage: Int? = null,
+    onPageConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -163,8 +165,16 @@ fun MainLauncher(
     var folderIconRefreshKey by remember { mutableIntStateOf(0) }
     var launcherMenuOpen by remember { mutableStateOf(false) }
     var hiddenManagerOpen by remember { mutableStateOf(false) }
+    var hardwareButtonsDialogOpen by remember { mutableStateOf(false) }
     var isOnline by remember { mutableStateOf(true) }
     var isLowBattery by remember { mutableStateOf(false) }
+
+    LaunchedEffect(requestedPage) {
+        requestedPage?.let { target ->
+            pagerState.animateScrollToPage(target)
+            onPageConsumed()
+        }
+    }
 
     var favoriteFolders by remember { mutableStateOf(loadFavoriteFolders(context)) }
     var folderToCreateFrom by remember { mutableStateOf<LauncherApp?>(null) }
@@ -306,6 +316,7 @@ fun MainLauncher(
         iconPickerOpen ||
         hiddenManagerOpen ||
         themeStudioOpen ||
+        hardwareButtonsDialogOpen ||
         openedFolderId != null ||
         createFolderDialogOpen ||
         folderToCreateFrom != null ||
@@ -920,6 +931,10 @@ fun MainLauncher(
                         folderToCreateFrom = null
                         createFolderDialogOpen = true
                     },
+                    onHardwareButtonsClick = {
+                        launcherMenuOpen = false
+                        hardwareButtonsDialogOpen = true
+                    },
                     onHiddenAppsClick = {
                         launcherMenuOpen = false
                         hiddenManagerOpen = true
@@ -958,6 +973,15 @@ fun MainLauncher(
                         currentTheme = newTheme
                         saveTheme(preferences, newTheme)
                         themeStudioOpen = false
+                    }
+                )
+            }
+
+            if (hardwareButtonsDialogOpen) {
+                HardwareButtonsDialog(
+                    installedApps = apps.map { AppInfo(it.packageName, it.name) },
+                    onDismiss = {
+                        hardwareButtonsDialogOpen = false
                     }
                 )
             }
