@@ -10,6 +10,12 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
+import com.android.quickstep.RecentsActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class MochibunAccessibilityService : AccessibilityService() {
 
@@ -28,6 +34,7 @@ class MochibunAccessibilityService : AccessibilityService() {
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var prefs: SharedPreferences
 
     // In-memory mapping of Android KeyCode -> Action Configuration
@@ -58,6 +65,7 @@ class MochibunAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
         clearPendingHandlers()
+        serviceScope.cancel()
         isServiceRunning = false
         instance = null
         super.onDestroy()
@@ -74,11 +82,7 @@ class MochibunAccessibilityService : AccessibilityService() {
     fun loadConfiguration() {
         activeMappings.clear()
         for (key in PhysicalKey.entries) {
-            val single = ActionType.deserialize(prefs.getString("action_single_${key.scancode}", null))
-            val double = ActionType.deserialize(prefs.getString("action_double_${key.scancode}", null))
-            val long = ActionType.deserialize(prefs.getString("action_long_${key.scancode}", null))
-
-            val config = ButtonActionConfig(single, double, long)
+            val config = HardwareRemapManager.getButtonActionConfig(this, key)
             if (config.hasAnyAction()) {
                 activeMappings[key.defaultKeyCode] = config
             }
@@ -197,7 +201,10 @@ class MochibunAccessibilityService : AccessibilityService() {
                 performGlobalAction(GLOBAL_ACTION_BACK)
             }
             is ActionType.GlobalRecents -> {
-                performGlobalAction(GLOBAL_ACTION_RECENTS)
+                handleRecentsAction()
+            }
+            is ActionType.OpenRecentsSystem -> {
+                executeRootRecents()
             }
             is ActionType.GlobalNotifications -> {
                 performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
@@ -227,5 +234,55 @@ class MochibunAccessibilityService : AccessibilityService() {
         longPressFired = false
         lastTapTime = 0L
         lastTapKeyCode = -1
+    }
+
+    private fun handleRecentsAction() {
+        val useFallback = HardwareRemapManager.isRootRecentsFallbackEnabled(this)
+        if (useFallback) {
+            android.util.Log.d("MochibunA11y", "Recents action: using root-shell fallback")
+            executeRootRecents()
+        } else {
+            android.util.Log.d("MochibunA11y", "Recents action: using native implementation")
+            executeNativeRecents()
+        }
+    }
+
+    private fun executeNativeRecents() {
+        if (RecentsActivity.shouldThrottleLaunch()) {
+            android.util.Log.d("MochibunA11y", "Throttling duplicate native Recents launch")
+            return
+        }
+        try {
+            val intent = Intent(this, RecentsActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(intent)
+            android.util.Log.d("MochibunA11y", "Successfully started native RecentsActivity")
+        } catch (e: Exception) {
+            android.util.Log.e("MochibunA11y", "Failed to launch native RecentsActivity", e)
+        }
+    }
+
+    private fun executeRootRecents() {
+        if (RecentsActivity.shouldThrottleLaunch()) {
+            android.util.Log.d("MochibunA11y", "Throttling duplicate root Recents launch")
+            return
+        }
+        serviceScope.launch {
+            if (!RootShell.isSuBinaryPresent()) {
+                android.util.Log.e("MochibunA11y", "Cannot execute OpenRecentsSystem: su binary not available")
+                return@launch
+            }
+            val result = RootShell.execute("am start -n com.tnyemii.mochibun/com.android.quickstep.RecentsActivity")
+            val hasError = !result.isSuccess ||
+                    result.stdout.any { it.startsWith("Error:") } ||
+                    result.stderr.any { it.startsWith("Error:") }
+            if (hasError) {
+                val errDetails = (result.stderr + result.stdout).joinToString("; ").ifBlank { "Exit code ${result.exitCode}" }
+                android.util.Log.e("MochibunA11y", "Failed to launch RecentsActivity via root shell: $errDetails")
+            } else {
+                android.util.Log.d("MochibunA11y", "Successfully started RecentsActivity via root shell")
+            }
+        }
     }
 }

@@ -24,8 +24,26 @@ object HardwareRemapManager {
     const val LIVE_KL_VENDOR = "/system/usr/keylayout/Vendor_2454_Product_6500.kl"
     const val LIVE_KL_NAME = "/system/usr/keylayout/mtk-kpd.kl"
 
+    const val KEY_USE_ROOT_RECENTS_FALLBACK = "use_root_recents_fallback"
+
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    /**
+     * Reads whether the optional root-shell Recents fallback is enabled.
+     * Defaults to false (OFF).
+     */
+    fun isRootRecentsFallbackEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_USE_ROOT_RECENTS_FALLBACK, false)
+    }
+
+    /**
+     * Persists the root-shell Recents fallback setting and reloads active configuration.
+     */
+    fun setRootRecentsFallbackEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_USE_ROOT_RECENTS_FALLBACK, enabled).apply()
+        MochibunAccessibilityService.reloadActiveConfig(context)
     }
 
     /**
@@ -61,10 +79,13 @@ object HardwareRemapManager {
 
     /**
      * Reads configured High-Level Action for a physical key.
+     * PhysicalKey.APP_SWITCH defaults to ActionType.GlobalRecents.
      */
     fun getButtonActionConfig(context: Context, key: PhysicalKey): ButtonActionConfig {
         val prefs = getPrefs(context)
-        val single = ActionType.deserialize(prefs.getString("action_single_${key.scancode}", null))
+        val defaultSingle = if (key == PhysicalKey.APP_SWITCH) ActionType.GlobalRecents else ActionType.None
+        val singleRaw = prefs.getString("action_single_${key.scancode}", null)
+        val single = if (singleRaw == null) defaultSingle else ActionType.deserialize(singleRaw)
         val double = ActionType.deserialize(prefs.getString("action_double_${key.scancode}", null))
         val long = ActionType.deserialize(prefs.getString("action_long_${key.scancode}", null))
         return ButtonActionConfig(single, double, long)

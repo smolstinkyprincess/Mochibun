@@ -30,6 +30,21 @@ class HardwareRemapUnitTest {
         val back = ActionType.GlobalBack
         assertEquals("GLOBAL_BACK", back.serialize())
         assertEquals(ActionType.GlobalBack, ActionType.deserialize(back.serialize()))
+
+        val recentsSystem = ActionType.OpenRecentsSystem
+        assertEquals("OPEN_RECENTS_SYSTEM", recentsSystem.serialize())
+        assertEquals(ActionType.OpenRecentsSystem, ActionType.deserialize(recentsSystem.serialize()))
+        assertEquals("Open Recents (System)", recentsSystem.displayName())
+    }
+
+    @Test
+    fun testAppSwitchPhysicalKey() {
+        val appSwitch = PhysicalKey.APP_SWITCH
+        assertEquals(580, appSwitch.scancode)
+        assertEquals(android.view.KeyEvent.KEYCODE_APP_SWITCH, appSwitch.defaultKeyCode)
+        assertEquals(PhysicalKey.APP_SWITCH, PhysicalKey.fromKeyCode(android.view.KeyEvent.KEYCODE_APP_SWITCH))
+        assertEquals(PhysicalKey.APP_SWITCH, PhysicalKey.fromScancode(580))
+        assertFalse("APP_SWITCH must not be enabled for static Magisk .kl remapping", appSwitch.isStaticRemapSafe)
     }
 
     @Test

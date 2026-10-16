@@ -78,6 +78,10 @@ fun HardwareButtonsDialog(
     val actionConfigs = remember { mutableStateMapOf<PhysicalKey, ButtonActionConfig>() }
     val staticMappings = remember { mutableStateMapOf<Int, String>() }
 
+    var useRootRecentsFallback by remember {
+        mutableStateOf(HardwareRemapManager.isRootRecentsFallbackEnabled(context))
+    }
+
     // Sub-dialogs
     var keyForActionDialog by remember { mutableStateOf<PhysicalKey?>(null) }
     var keyForStaticDialog by remember { mutableStateOf<PhysicalKey?>(null) }
@@ -95,16 +99,19 @@ fun HardwareButtonsDialog(
         staticMappings.clear()
         staticMappings.putAll(savedStatic)
 
+        // Load root recents fallback setting (without running commands)
+        useRootRecentsFallback = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
+
         // Reconcile status
         isAccessibilityEnabled = HardwareRemapManager.isAccessibilityServiceEnabled(context)
         isKeyMapperActive = HardwareRemapManager.isKeyMapperActive(context)
         staticModuleStatus = HardwareRemapManager.reconcileModuleStatus()
 
-        // Check root status quietly (without prompting unless user clicks)
-        if (RootShell.isSuBinaryPresent()) {
-            rootStatus = RootShell.requestRoot()
-        } else {
+        // Check if su is present without prompting authorization
+        if (!RootShell.isSuBinaryPresent()) {
             rootStatus = RootStatus.NotAvailable
+        } else {
+            rootStatus = RootStatus.Unknown
         }
     }
 
@@ -158,7 +165,7 @@ fun HardwareButtonsDialog(
                         val maxIndex = when (currentTab) {
                             0 -> PhysicalKey.entries.size
                             1 -> PhysicalKey.entries.filter { it.isStaticRemapSafe }.size + 1
-                            else -> 4
+                            else -> 5
                         }
                         if (selectedIndex < maxIndex) {
                             selectedIndex++
@@ -209,6 +216,36 @@ fun HardwareButtonsDialog(
                                         }
                                     }
                                     2 -> {
+                                        // Toggle root-shell Recents fallback
+                                        val newTarget = !useRootRecentsFallback
+                                        if (newTarget) {
+                                            if (rootStatus !is RootStatus.Granted && RootShell.isSuBinaryPresent()) {
+                                                scope.launch {
+                                                    rootStatus = RootStatus.Requesting
+                                                    val res = RootShell.requestRoot()
+                                                    rootStatus = res
+                                                    if (res is RootStatus.Granted) {
+                                                        useRootRecentsFallback = true
+                                                        HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+                                                        statusMessage = "Root-shell Recents fallback enabled"
+                                                    } else {
+                                                        statusMessage = "Root access denied. Authorize Mochibun in Magisk."
+                                                    }
+                                                }
+                                            } else if (!RootShell.isSuBinaryPresent()) {
+                                                statusMessage = "su binary not found. Device is not rooted."
+                                            } else {
+                                                useRootRecentsFallback = true
+                                                HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+                                                statusMessage = "Root-shell Recents fallback enabled"
+                                            }
+                                        } else {
+                                            useRootRecentsFallback = false
+                                            HardwareRemapManager.setRootRecentsFallbackEnabled(context, false)
+                                            statusMessage = "Root-shell Recents fallback disabled"
+                                        }
+                                    }
+                                    3 -> {
                                         // Disable Magisk Module
                                         scope.launch {
                                             val res = HardwareRemapManager.disableModule()
@@ -216,7 +253,7 @@ fun HardwareButtonsDialog(
                                             statusMessage = res.getOrNull() ?: res.exceptionOrNull()?.message
                                         }
                                     }
-                                    3 -> {
+                                    4 -> {
                                         // Remove Magisk Module
                                         scope.launch {
                                             val res = HardwareRemapManager.removeModule()
@@ -330,6 +367,7 @@ fun HardwareButtonsDialog(
                         actionConfigs = actionConfigs,
                         isAccessibilityEnabled = isAccessibilityEnabled,
                         isKeyMapperActive = isKeyMapperActive,
+                        useRootRecentsFallback = useRootRecentsFallback,
                         theme = theme,
                         onKeySelected = { keyForActionDialog = it }
                     )
@@ -352,6 +390,7 @@ fun HardwareButtonsDialog(
                         selectedIndex = selectedIndex,
                         rootStatus = rootStatus,
                         isAccessibilityEnabled = isAccessibilityEnabled,
+                        useRootRecentsFallback = useRootRecentsFallback,
                         moduleStatus = staticModuleStatus,
                         theme = theme,
                         onRequestRoot = {
@@ -368,6 +407,35 @@ fun HardwareButtonsDialog(
                                 )
                             } catch (e: Exception) {
                                 statusMessage = "Cannot open settings: ${e.message}"
+                            }
+                        },
+                        onToggleRootRecentsFallback = {
+                            val newTarget = !useRootRecentsFallback
+                            if (newTarget) {
+                                if (rootStatus !is RootStatus.Granted && RootShell.isSuBinaryPresent()) {
+                                    scope.launch {
+                                        rootStatus = RootStatus.Requesting
+                                        val res = RootShell.requestRoot()
+                                        rootStatus = res
+                                        if (res is RootStatus.Granted) {
+                                            useRootRecentsFallback = true
+                                            HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+                                            statusMessage = "Root-shell Recents fallback enabled"
+                                        } else {
+                                            statusMessage = "Root access denied. Authorize Mochibun in Magisk."
+                                        }
+                                    }
+                                } else if (!RootShell.isSuBinaryPresent()) {
+                                    statusMessage = "su binary not found. Device is not rooted."
+                                } else {
+                                    useRootRecentsFallback = true
+                                    HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+                                    statusMessage = "Root-shell Recents fallback enabled"
+                                }
+                            } else {
+                                useRootRecentsFallback = false
+                                HardwareRemapManager.setRootRecentsFallbackEnabled(context, false)
+                                statusMessage = "Root-shell Recents fallback disabled"
                             }
                         },
                         onDisableModule = {
@@ -482,6 +550,7 @@ private fun ActionsTabContent(
     actionConfigs: Map<PhysicalKey, ButtonActionConfig>,
     isAccessibilityEnabled: Boolean,
     isKeyMapperActive: Boolean,
+    useRootRecentsFallback: Boolean,
     theme: LauncherTheme,
     onKeySelected: (PhysicalKey) -> Unit
 ) {
@@ -523,6 +592,25 @@ private fun ActionsTabContent(
             ) {
                 Text(
                     text = "ℹ KeyMapper Active: If a button is already mapped in KeyMapper, it consumes the key first. Unmap that button in KeyMapper or use Tab 1 (Static .kl) which runs beneath it.",
+                    color = theme.fgTextColor,
+                    fontSize = 9.sp,
+                    lineHeight = 12.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        if (useRootRecentsFallback) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF4CAF50).copy(alpha = 0.15f))
+                    .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                    .padding(6.dp)
+            ) {
+                Text(
+                    text = "⚡ Root-Shell Recents Fallback is Active: Recents launches using root shell (Tab 2 to toggle).",
                     color = theme.fgTextColor,
                     fontSize = 9.sp,
                     lineHeight = 12.sp
@@ -754,10 +842,12 @@ private fun StatusTabContent(
     selectedIndex: Int,
     rootStatus: RootStatus,
     isAccessibilityEnabled: Boolean,
+    useRootRecentsFallback: Boolean,
     moduleStatus: StaticModuleStatus,
     theme: LauncherTheme,
     onRequestRoot: () -> Unit,
     onOpenSettings: () -> Unit,
+    onToggleRootRecentsFallback: () -> Unit,
     onDisableModule: () -> Unit,
     onRemoveModule: () -> Unit
 ) {
@@ -865,9 +955,63 @@ private fun StatusTabContent(
             }
         }
 
-        // Item 2: Disable Magisk Module
+        // Item 2: Root-Shell Recents Fallback Toggle
         item {
             val isFocused = selectedIndex == 2
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
+                    .border(
+                        width = if (isFocused) 2.dp else 1.dp,
+                        color = if (isFocused) theme.appActionColor else Color.Transparent,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .clickable { onToggleRootRecentsFallback() }
+                    .padding(8.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Use root-shell Recents fallback",
+                            color = theme.fgTextColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (useRootRecentsFallback) "✔ ON" else "✖ OFF",
+                            color = if (useRootRecentsFallback) Color(0xFF4CAF50) else theme.cardTextColor.copy(alpha = 0.6f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "If normal Recents fails on this firmware, launch the known-working Recents activity using root.",
+                        color = theme.cardTextColor.copy(alpha = 0.7f),
+                        fontSize = 9.sp,
+                        lineHeight = 12.sp
+                    )
+                    if (useRootRecentsFallback && rootStatus !is RootStatus.Granted) {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "⚠ Root not granted. Open Magisk Manager -> Superuser to grant Mochibun root access.",
+                            color = Color(0xFFFF9800),
+                            fontSize = 8.5.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Item 3: Disable Magisk Module
+        item {
+            val isFocused = selectedIndex == 3
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -897,9 +1041,9 @@ private fun StatusTabContent(
             }
         }
 
-        // Item 3: Delete / Remove Magisk Module
+        // Item 4: Delete / Remove Magisk Module
         item {
-            val isFocused = selectedIndex == 3
+            val isFocused = selectedIndex == 4
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -929,7 +1073,7 @@ private fun StatusTabContent(
             }
         }
 
-        // Item 4: Emergency Recovery Documentation
+        // Item 5: Emergency Recovery Documentation
         item {
             Box(
                 modifier = Modifier
@@ -985,6 +1129,7 @@ private fun ActionConfigSubDialog(
         "Open Mochibun AI Chat" to ActionType.OpenAiChat,
         "Global Back" to ActionType.GlobalBack,
         "Recents / Overview" to ActionType.GlobalRecents,
+        "Open Recents (System)" to ActionType.OpenRecentsSystem,
         "Open Notifications" to ActionType.GlobalNotifications,
         "Toggle Flashlight" to ActionType.ToggleFlashlight,
         "Launch App..." to null
@@ -1129,9 +1274,10 @@ private fun cycleAction(
         is ActionType.OpenAiChat -> 1
         is ActionType.GlobalBack -> 2
         is ActionType.GlobalRecents -> 3
-        is ActionType.GlobalNotifications -> 4
-        is ActionType.ToggleFlashlight -> 5
-        is ActionType.LaunchApp -> 6
+        is ActionType.OpenRecentsSystem -> 4
+        is ActionType.GlobalNotifications -> 5
+        is ActionType.ToggleFlashlight -> 6
+        is ActionType.LaunchApp -> 7
     }
     val nextIndex = (currentIndex + 1) % options.size
     val nextOption = options[nextIndex].second

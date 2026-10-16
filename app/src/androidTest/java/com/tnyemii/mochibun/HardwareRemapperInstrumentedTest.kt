@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -75,5 +76,70 @@ class HardwareRemapperInstrumentedTest {
         )
         HardwareRemapManager.saveButtonActionConfig(context, PhysicalKey.F1, config)
         println("MOCHIBUN_DEVICE_TEST: Saved F1 key action -> Launch Settings")
+    }
+
+    @Test
+    fun testSaveAndReadOpenRecentsSystemAction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val config = ButtonActionConfig(
+            singlePressAction = ActionType.OpenRecentsSystem,
+            doublePressAction = ActionType.None,
+            longPressAction = ActionType.None
+        )
+        HardwareRemapManager.saveButtonActionConfig(context, PhysicalKey.APP_SWITCH, config)
+        val readBack = HardwareRemapManager.getButtonActionConfig(context, PhysicalKey.APP_SWITCH)
+        assertEquals("Single press action must be OpenRecentsSystem", ActionType.OpenRecentsSystem, readBack.singlePressAction)
+        println("MOCHIBUN_DEVICE_TEST: Successfully configured and read back OpenRecentsSystem on APP_SWITCH")
+    }
+
+    @Test
+    fun testRootRecentsCommandExecution() = runBlocking {
+        println("MOCHIBUN_DEVICE_TEST: Testing am start RecentsActivity root command...")
+        val result = RootShell.execute("am start -n com.tnyemii.mochibun/com.android.quickstep.RecentsActivity")
+        println("MOCHIBUN_DEVICE_TEST: Command exitCode=${result.exitCode}, stdout=${result.stdout}, stderr=${result.stderr}")
+        assertTrue("am start command should return exit code 0", result.isSuccess)
+        assertFalse("am start output should not report error", result.stdout.any { it.startsWith("Error:") })
+
+        // Verify debounce logic
+        val firstAllowed = !com.android.quickstep.RecentsActivity.shouldThrottleLaunch()
+        val secondThrottled = com.android.quickstep.RecentsActivity.shouldThrottleLaunch()
+        println("MOCHIBUN_DEVICE_TEST: First allowed = $firstAllowed, Second throttled = $secondThrottled")
+        assertTrue("Immediate successive launch must be throttled", secondThrottled)
+    }
+
+    @Test
+    fun testRootRecentsFallbackPreferencePersistence() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+        // Ensure default is false
+        HardwareRemapManager.getPrefs(context).edit().remove(HardwareRemapManager.KEY_USE_ROOT_RECENTS_FALLBACK).commit()
+        val defaultVal = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
+        assertFalse("Fallback toggle must default to false (OFF)", defaultVal)
+
+        // Set to true and verify persistence
+        HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+        val enabledVal = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
+        assertTrue("Fallback toggle must be true after enabling", enabledVal)
+
+        // Set back to false and verify persistence
+        HardwareRemapManager.setRootRecentsFallbackEnabled(context, false)
+        val disabledVal = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
+        assertFalse("Fallback toggle must be false after disabling", disabledVal)
+        println("MOCHIBUN_DEVICE_TEST: Verified fallback preference persistence across updates")
+    }
+
+    @Test
+    fun testAppSwitchDefaultActionIsGlobalRecents() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        // Remove explicit mapping to test default
+        HardwareRemapManager.getPrefs(context).edit().remove("action_single_${PhysicalKey.APP_SWITCH.scancode}").commit()
+
+        val config = HardwareRemapManager.getButtonActionConfig(context, PhysicalKey.APP_SWITCH)
+        assertEquals(
+            "Default single press action for APP_SWITCH must be GlobalRecents",
+            ActionType.GlobalRecents,
+            config.singlePressAction
+        )
+        println("MOCHIBUN_DEVICE_TEST: Verified APP_SWITCH defaults to GlobalRecents")
     }
 }
