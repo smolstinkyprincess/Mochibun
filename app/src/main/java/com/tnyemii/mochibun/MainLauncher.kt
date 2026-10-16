@@ -687,10 +687,8 @@ fun MainLauncher(
                                             (selectedDrawerIndex - 1).coerceAtLeast(0)
                                     }
                                 } else if (pagerState.currentPage == 1) {
-                                    if (homeFocusArea == 0 && favoriteItemCount > 0) {
-                                        selectedFavoriteIndex = (
-                                            selectedFavoriteIndex - 1
-                                            ).coerceAtLeast(0)
+                                    if (homeFocusArea == 0 && favoriteItemCount > 0 && selectedFavoriteIndex > 0) {
+                                        selectedFavoriteIndex--
                                     } else {
                                         scope.launch { pagerState.animateScrollToPage(0) }
                                     }
@@ -707,10 +705,8 @@ fun MainLauncher(
                                         )
                                     }
                                 } else if (pagerState.currentPage == 1) {
-                                    if (homeFocusArea == 0 && favoriteItemCount > 0) {
-                                        selectedFavoriteIndex = (
-                                            selectedFavoriteIndex + 1
-                                            ).coerceIn(0, favoriteItemCount - 1)
+                                    if (homeFocusArea == 0 && favoriteItemCount > 0 && selectedFavoriteIndex < favoriteItemCount - 1) {
+                                        selectedFavoriteIndex++
                                     } else {
                                         scope.launch { pagerState.animateScrollToPage(2) }
                                     }
