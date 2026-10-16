@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -387,9 +388,12 @@ fun FavoritesCard(
             val selectedItemInfo = lazyRowState.layoutInfo.visibleItemsInfo.firstOrNull {
                 it.index == targetIndex
             }
-            val viewportEnd = lazyRowState.layoutInfo.viewportEndOffset
+            val viewportStart = lazyRowState.layoutInfo.viewportStartOffset +
+                lazyRowState.layoutInfo.beforeContentPadding
+            val viewportEnd = lazyRowState.layoutInfo.viewportEndOffset -
+                lazyRowState.layoutInfo.afterContentPadding
             val isFullyVisible = selectedItemInfo != null &&
-                selectedItemInfo.offset >= 0 &&
+                selectedItemInfo.offset >= viewportStart &&
                 (selectedItemInfo.offset + selectedItemInfo.size) <= viewportEnd
 
             if (!isFullyVisible) {
@@ -415,8 +419,8 @@ fun FavoritesCard(
         ) {
             Column(
                 modifier = Modifier.padding(
-                    horizontal = 12.dp,
-                    vertical = 10.dp
+                    horizontal = 6.dp,
+                    vertical = 6.dp
                 ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -431,6 +435,7 @@ fun FavoritesCard(
 
                 LazyRow(
                     state = lazyRowState,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -451,6 +456,7 @@ fun FavoritesCard(
                                 .graphicsLayer {
                                     scaleX = scale
                                     scaleY = scale
+                                    clip = false
                                 }
                                 .background(
                                     color = if (isSelected) {
@@ -510,6 +516,7 @@ fun FavoritesCard(
                                 .graphicsLayer {
                                     scaleX = scale
                                     scaleY = scale
+                                    clip = false
                                 }
                                 .background(
                                     color = if (isSelected) {
