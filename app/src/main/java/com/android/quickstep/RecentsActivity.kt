@@ -16,19 +16,25 @@
 
 package com.android.quickstep
 
+import android.content.Context
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -37,9 +43,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,7 +60,17 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import com.tnyemii.mochibun.ui.theme.cardTextColor
+import com.tnyemii.mochibun.KawaiiDialogPillButton
+import com.tnyemii.mochibun.LocalLauncherTheme
+import com.tnyemii.mochibun.isBackDismissKey
+import com.tnyemii.mochibun.isCenterActivateKey
+import com.tnyemii.mochibun.loadSavedTheme
+import com.tnyemii.mochibun.requestFocusSafely
+import com.tnyemii.mochibun.selectedContainerColor
+import com.tnyemii.mochibun.ui.theme.M120LauncherTheme
+import com.tnyemii.mochibun.ui.theme.destructiveBgColor
+import com.tnyemii.mochibun.ui.theme.destructiveColor
+import com.tnyemii.mochibun.ui.theme.softSurfaceColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,10 +86,20 @@ class RecentsActivity : ComponentActivity() {
         tasksManager = RecentTasksManager(applicationContext)
 
         setContent {
-            RecentsScreen(
-                tasksManager = tasksManager,
-                onDismissActivity = { finish() }
-            )
+            val context = LocalContext.current
+            val prefs = remember {
+                context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
+            }
+            val savedTheme = remember { loadSavedTheme(prefs) }
+
+            M120LauncherTheme {
+                CompositionLocalProvider(LocalLauncherTheme provides savedTheme) {
+                    RecentsScreen(
+                        tasksManager = tasksManager,
+                        onDismissActivity = { finish() }
+                    )
+                }
+            }
         }
     }
 
@@ -81,9 +114,21 @@ fun RecentsScreen(
     tasksManager: RecentTasksManager,
     onDismissActivity: () -> Unit
 ) {
+    val theme = LocalLauncherTheme.current
     var tasks by remember { mutableStateOf<List<RecentTaskInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    val focusRequester = remember { FocusRequester() }
+
+    // Focus zones:
+    // 0 = Task Card dismiss "✕" button on the currently selected card
+    // 1 = Task Card body (launch task on OK, LEFT/RIGHT moves between cards)
+    // 2 = Bottom action buttons (bottomCol: 0 = Clear All, 1 = Close)
+    var focusZone by remember { mutableIntStateOf(1) }
+    var selectedTaskIndex by remember { mutableIntStateOf(0) }
+    var bottomCol by remember { mutableIntStateOf(1) }
+    var sawCenterDown by remember { mutableStateOf(false) }
 
     // asynchronously load recent tasks list on IO thread :3
     LaunchedEffect(Unit) {
@@ -92,84 +137,239 @@ fun RecentsScreen(
         }
         tasks = fetchedTasks
         isLoading = false
+        if (fetchedTasks.isEmpty()) {
+            focusZone = 2
+            bottomCol = 1
+        } else {
+            focusZone = 1
+            selectedTaskIndex = 0
+        }
+    }
+
+    LaunchedEffect(tasks.size) {
+        selectedTaskIndex = selectedTaskIndex.coerceIn(0, (tasks.size - 1).coerceAtLeast(0))
+        if (!isLoading && tasks.isEmpty()) {
+            focusZone = 2
+            bottomCol = 1
+        }
+    }
+
+    LaunchedEffect(selectedTaskIndex, tasks.size) {
+        if (tasks.isNotEmpty() && selectedTaskIndex in tasks.indices) {
+            val isVisible = listState.layoutInfo.visibleItemsInfo.any {
+                it.index == selectedTaskIndex
+            }
+            if (!isVisible) {
+                listState.animateScrollToItem(selectedTaskIndex)
+            }
+        }
+    }
+
+    requestFocusSafely(focusRequester, isLoading)
+
+    val dismissTaskAt: (RecentTaskInfo) -> Unit = { task ->
+        val dismissedId = task.taskId
+        tasks = tasks.filter { it.taskId != dismissedId }
+        scope.launch(Dispatchers.IO) {
+            tasksManager.removeTask(dismissedId)
+        }
+        if (tasks.isEmpty()) {
+            onDismissActivity()
+        }
+    }
+
+    val clearAllTasks: () -> Unit = {
+        val idsToRemove = tasks.map { it.taskId }
+        tasks = emptyList()
+        scope.launch(Dispatchers.IO) {
+            idsToRemove.forEach { tasksManager.removeTask(it) }
+        }
+        onDismissActivity()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0x88000000))
+            .background(Color(0x991A0D22))
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        onDismissActivity()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        when (focusZone) {
+                            0 -> {
+                                tasks.getOrNull(selectedTaskIndex)?.let(dismissTaskAt)
+                                focusZone = 1
+                            }
+                            1 -> {
+                                tasks.getOrNull(selectedTaskIndex)?.let { task ->
+                                    val launched = tasksManager.launchTask(task)
+                                    if (launched) {
+                                        onDismissActivity()
+                                    }
+                                }
+                            }
+                            2 -> {
+                                if (bottomCol == 0 && tasks.isNotEmpty()) {
+                                    clearAllTasks()
+                                } else {
+                                    onDismissActivity()
+                                }
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                when (native.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DEL,
+                    android.view.KeyEvent.KEYCODE_FORWARD_DEL -> {
+                        if ((focusZone == 0 || focusZone == 1) && tasks.isNotEmpty()) {
+                            tasks.getOrNull(selectedTaskIndex)?.let(dismissTaskAt)
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        when (focusZone) {
+                            0, 1 -> {
+                                if (selectedTaskIndex > 0) {
+                                    selectedTaskIndex--
+                                }
+                            }
+                            2 -> {
+                                if (tasks.isNotEmpty()) bottomCol = 0
+                            }
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        when (focusZone) {
+                            0, 1 -> {
+                                if (selectedTaskIndex < tasks.lastIndex) {
+                                    selectedTaskIndex++
+                                }
+                            }
+                            2 -> {
+                                bottomCol = 1
+                            }
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                        when (focusZone) {
+                            1 -> {
+                                if (tasks.isNotEmpty()) focusZone = 0
+                            }
+                            2 -> {
+                                if (tasks.isNotEmpty()) focusZone = 1
+                            }
+                        }
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        when (focusZone) {
+                            0 -> focusZone = 1
+                            1 -> {
+                                focusZone = 2
+                                bottomCol = if (tasks.isNotEmpty()) 0 else 1
+                            }
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
             .clickable { onDismissActivity() }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(vertical = 32.dp),
+                .padding(vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             // header title banner
+            val headerShape = RoundedCornerShape(18.dp)
             Text(
                 text = "✨ Recent Apps ✨",
-                fontSize = 20.sp,
+                fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
-                color = cardTextColor,
+                color = theme.fgTextColor,
                 modifier = Modifier
-                    .background(Color(0xFFFFF0F5), RoundedCornerShape(16.dp))
+                    .background(theme.greetingBgColor, headerShape)
+                    .border(2.dp, theme.greetingOutlineColor, headerShape)
                     .padding(horizontal = 20.dp, vertical = 8.dp)
             )
 
             if (isLoading) {
                 CircularProgressIndicator(
-                    color = Color(0xFFFFB6C1),
+                    color = theme.appActionColor,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
             } else if (tasks.isEmpty()) {
+                val emptyShape = RoundedCornerShape(theme.cardRoundnessDp.dp)
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .background(Color(0xFFFFF0F5), RoundedCornerShape(20.dp))
+                        .fillMaxWidth(0.82f)
+                        .background(theme.cardBgColor, emptyShape)
+                        .border(2.5.dp, theme.greetingOutlineColor, emptyShape)
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "No recent apps 🌸",
                         fontSize = 16.sp,
-                        color = cardTextColor,
-                        fontWeight = FontWeight.Medium
+                        color = theme.fgTextColor,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             } else {
                 // horizontal list of recent task cards :3
                 LazyRow(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .padding(vertical = 16.dp),
+                        .padding(vertical = 12.dp),
                     contentPadding = PaddingValues(horizontal = 32.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(
+                    itemsIndexed(
                         items = tasks,
-                        key = { it.taskId }
-                    ) { task ->
+                        key = { _, it -> it.taskId }
+                    ) { index, task ->
+                        val isCardSelected = index == selectedTaskIndex && (focusZone == 0 || focusZone == 1)
+                        val isDismissFocused = index == selectedTaskIndex && focusZone == 0
+
                         TaskCard(
                             task = task,
+                            isCardFocused = isCardSelected,
+                            isDismissFocused = isDismissFocused,
                             onLaunch = {
+                                selectedTaskIndex = index
+                                focusZone = 1
                                 val launched = tasksManager.launchTask(task)
                                 if (launched) {
                                     onDismissActivity()
                                 }
                             },
                             onDismiss = {
-                                val dismissedId = task.taskId
-                                tasks = tasks.filter { it.taskId != dismissedId }
-                                scope.launch(Dispatchers.IO) {
-                                    tasksManager.removeTask(dismissedId)
-                                }
-                                if (tasks.isEmpty()) {
-                                    onDismissActivity()
-                                }
+                                selectedTaskIndex = index
+                                dismissTaskAt(task)
                             }
                         )
                     }
@@ -178,50 +378,46 @@ fun RecentsScreen(
 
             // bottom action buttons (clear all / close) <3
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (tasks.isNotEmpty()) {
-                    Button(
-                        onClick = {
-                            val idsToRemove = tasks.map { it.taskId }
-                            tasks = emptyList()
-                            scope.launch(Dispatchers.IO) {
-                                idsToRemove.forEach { tasksManager.removeTask(it) }
-                            }
-                            onDismissActivity()
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFFB6C1)
-                        ),
-                        shape = RoundedCornerShape(20.dp)
-                    ) {
-                        Text("Clear All 🧹", color = Color(0xFF4A0033), fontWeight = FontWeight.Bold)
-                    }
+                    KawaiiDialogPillButton(
+                        text = "Clear All 🧹",
+                        isFocused = focusZone == 2 && bottomCol == 0,
+                        isDestructive = true,
+                        onClick = clearAllTasks
+                    )
                 }
 
-                Button(
-                    onClick = onDismissActivity,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE6E6FA)
-                    ),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text("Close 🌸", color = Color(0xFF4B0082), fontWeight = FontWeight.Bold)
-                }
+                KawaiiDialogPillButton(
+                    text = "Close 🌸",
+                    isFocused = focusZone == 2 && bottomCol == 1,
+                    isPrimary = true,
+                    onClick = onDismissActivity
+                )
             }
         }
     }
 }
 
-// individual recent app card supporting vertical drag-to-dismiss gesture <3
+// individual recent app card supporting vertical drag-to-dismiss gesture and D-pad focus <3
 @Composable
 fun TaskCard(
     task: RecentTaskInfo,
+    isCardFocused: Boolean = false,
+    isDismissFocused: Boolean = false,
     onLaunch: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val theme = LocalLauncherTheme.current
     var offsetY by remember { mutableFloatStateOf(0f) }
+
+    val scale by animateFloatAsState(
+        targetValue = if (isCardFocused) 1.03f else 1f,
+        animationSpec = tween(130),
+        label = "recentsCardScale"
+    )
 
     // vertical drag gesture handler to dismiss task when swiped up :3
     val draggableState = rememberDraggableState { delta ->
@@ -231,9 +427,15 @@ fun TaskCard(
         }
     }
 
+    val cardShape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+
     Box(
         modifier = Modifier
             .offset { IntOffset(0, offsetY.roundToInt()) }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .draggable(
                 state = draggableState,
                 orientation = Orientation.Vertical,
@@ -244,10 +446,17 @@ fun TaskCard(
                 }
             )
             .width(220.dp)
-            .fillMaxHeight(0.8f)
-            .shadow(8.dp, RoundedCornerShape(24.dp))
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFFFFF0F5))
+            .fillMaxHeight(0.82f)
+            .shadow(8.dp, cardShape)
+            .clip(cardShape)
+            .background(
+                if (isCardFocused) theme.selectedContainerColor else theme.cardBgColor
+            )
+            .border(
+                width = if (isCardFocused) 3.dp else 2.dp,
+                color = if (isCardFocused) theme.appActionColor else theme.greetingOutlineColor,
+                shape = cardShape
+            )
             .clickable { onLaunch() }
             .padding(12.dp)
     ) {
@@ -285,22 +494,34 @@ fun TaskCard(
                         text = task.title,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF4A0033),
+                        color = theme.fgTextColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // close button
+                // close button (focusable via DPAD_UP on the selected card)
                 Box(
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFFFC0CB))
+                        .background(
+                            if (isDismissFocused) destructiveColor else destructiveBgColor
+                        )
+                        .border(
+                            width = if (isDismissFocused) 2.dp else 1.dp,
+                            color = destructiveColor,
+                            shape = CircleShape
+                        )
                         .clickable { onDismiss() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("✕", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(
+                        "✕",
+                        fontSize = 11.sp,
+                        color = if (isDismissFocused) Color.White else destructiveColor,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
@@ -310,7 +531,7 @@ fun TaskCard(
                     .fillMaxWidth()
                     .weight(1f)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color.White),
+                    .background(softSurfaceColor),
                 contentAlignment = Alignment.Center
             ) {
                 if (task.thumbnail != null) {
@@ -343,7 +564,7 @@ fun TaskCard(
                         Text(
                             text = task.title,
                             fontSize = 12.sp,
-                            color = Color.Gray,
+                            color = theme.fgTextColor,
                             textAlign = TextAlign.Center,
                             maxLines = 2
                         )

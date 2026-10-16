@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -1160,6 +1161,7 @@ fun FavoriteFolderDialog(
     onDismiss: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
+    val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
     var editingName by remember(folder.id) { mutableStateOf(initialEditingName) }
@@ -1202,7 +1204,8 @@ fun FavoriteFolderDialog(
 
     // Focus states for Rename sub-view:
     // 0 = OutlinedTextField, 1 = Suggest name button, 2 = Cancel button, 3 = Save name button
-    var renameFocusZone by remember { mutableIntStateOf(0) }
+    var renameFocusZone by remember { mutableIntStateOf(1) }
+    var isEditingRenameField by remember { mutableStateOf(false) }
     val renameFieldFocusRequester = remember { FocusRequester() }
 
     // Focus states for App Picker sub-view:
@@ -1234,8 +1237,8 @@ fun FavoriteFolderDialog(
         pickerAppIndex = pickerAppIndex.coerceIn(0, (availableApps.size - 1).coerceAtLeast(0))
     }
 
-    LaunchedEffect(editingName, renameFocusZone, pickingApps, confirmingDelete) {
-        if (editingName && renameFocusZone == 0) {
+    LaunchedEffect(editingName, renameFocusZone, isEditingRenameField, pickingApps, confirmingDelete) {
+        if (editingName && renameFocusZone == 0 && isEditingRenameField) {
             repeat(6) {
                 try {
                     renameFieldFocusRequester.requestFocus()
@@ -1245,7 +1248,9 @@ fun FavoriteFolderDialog(
                 }
             }
         } else {
+            focusManager.clearFocus(force = true)
             keyboardController?.hide()
+            delay(16)
             repeat(6) {
                 try {
                     folderFocusRequester.requestFocus()
@@ -1264,8 +1269,14 @@ fun FavoriteFolderDialog(
                 draftPackages = folder.appPackages.toSet()
                 pickingApps = false
             }
+            editingName && isEditingRenameField -> {
+                isEditingRenameField = false
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+            }
             editingName -> {
                 newName = folder.name
+                isEditingRenameField = false
                 editingName = false
                 keyboardController?.hide()
             }
@@ -1298,26 +1309,35 @@ fun FavoriteFolderDialog(
                 if (editingName) {
                     if (isBackDismissKey(native.keyCode)) {
                         if (event.type == KeyEventType.KeyUp) {
-                            newName = folder.name
-                            editingName = false
-                            keyboardController?.hide()
+                            if (isEditingRenameField) {
+                                isEditingRenameField = false
+                                focusManager.clearFocus(force = true)
+                                keyboardController?.hide()
+                            } else {
+                                newName = folder.name
+                                editingName = false
+                                keyboardController?.hide()
+                            }
                         }
                         return@onPreviewKeyEvent true
                     }
-                    if (renameFocusZone == 0) {
-                        // Inside OutlinedTextField: allow normal typing; only intercept UP/DOWN/ENTER
+                    if (renameFocusZone == 0 && isEditingRenameField) {
+                        // Actively editing OutlinedTextField: allow normal typing; intercept UP/DOWN/ENTER to exit field
                         if (event.type == KeyEventType.KeyDown) {
                             when (native.keyCode) {
                                 android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                    isEditingRenameField = false
                                     renameFocusZone = 1
                                     return@onPreviewKeyEvent true
                                 }
                                 android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                                    isEditingRenameField = false
                                     renameFocusZone = 3
                                     return@onPreviewKeyEvent true
                                 }
                                 android.view.KeyEvent.KEYCODE_ENTER,
                                 android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                    isEditingRenameField = false
                                     renameFocusZone = if (newName.isNotBlank() && !duplicateRename) 3 else 1
                                     return@onPreviewKeyEvent true
                                 }
@@ -1331,6 +1351,7 @@ fun FavoriteFolderDialog(
                             } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                                 sawCenterDown = false
                                 when (renameFocusZone) {
+                                    0 -> isEditingRenameField = true
                                     1 -> {
                                         val nextSuggestion = SUGGESTED_FOLDER_NAMES.firstOrNull { candidate ->
                                             !candidate.equals(newName.trim(), ignoreCase = true) &&
@@ -1342,12 +1363,14 @@ fun FavoriteFolderDialog(
                                     }
                                     2 -> {
                                         newName = folder.name
+                                        isEditingRenameField = false
                                         editingName = false
                                     }
                                     3 -> {
                                         val trimmed = newName.trim()
                                         if (trimmed.isNotEmpty() && !duplicateRename) {
                                             onRename(trimmed)
+                                            isEditingRenameField = false
                                             editingName = false
                                         }
                                     }
@@ -1356,17 +1379,30 @@ fun FavoriteFolderDialog(
                             return@onPreviewKeyEvent true
                         }
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (renameFocusZone == 0) {
+                            if (native.keyCode == android.view.KeyEvent.KEYCODE_DEL) {
+                                if (newName.isNotEmpty()) newName = newName.dropLast(1)
+                                return@onPreviewKeyEvent true
+                            }
+                            val ch = native.unicodeChar
+                            if (ch >= 32 && newName.length < 32) {
+                                newName += ch.toChar()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
                         when (native.keyCode) {
                             android.view.KeyEvent.KEYCODE_DPAD_UP -> {
                                 renameFocusZone = when (renameFocusZone) {
                                     3, 2 -> 1
                                     1 -> 0
+                                    0 -> 3
                                     else -> 0
                                 }
                                 return@onPreviewKeyEvent true
                             }
                             android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
                                 renameFocusZone = when (renameFocusZone) {
+                                    0 -> 1
                                     1 -> if (newName.isNotBlank() && !duplicateRename) 3 else 2
                                     else -> 0
                                 }
@@ -1379,6 +1415,7 @@ fun FavoriteFolderDialog(
                             }
                             android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
                                 if (renameFocusZone == 2) renameFocusZone = 3
+                                else if (renameFocusZone == 0) renameFocusZone = 1
                                 return@onPreviewKeyEvent true
                             }
                         }

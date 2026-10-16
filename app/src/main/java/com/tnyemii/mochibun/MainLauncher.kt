@@ -29,14 +29,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,15 +51,20 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // main launcher composable managing focus, gestures, state, and page navigation <3
 @Composable
-fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: Int = 0, appListRefreshCount: Int = 0) {
+fun MainLauncher(
+    name: String,
+    modifier: Modifier = Modifier,
+    homePressCount: Int = 0,
+    appListRefreshCount: Int = 0
+) {
     val context = LocalContext.current
 
     val preferences = remember {
@@ -82,10 +85,8 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     val cardTextColor = theme.cardTextColor
     val appActionColor = theme.appActionColor
     val greetingOutlineColor = theme.greetingOutlineColor
-    var iconEditingMenu by remember { mutableStateOf<LauncherApp?>(null) }
     var iconEditingFolder by remember { mutableStateOf<FavoriteFolder?>(null) }
     var folderIconMenuOpen by remember { mutableStateOf(false) }
-
 
     val intent = remember {
         Intent(Intent.ACTION_MAIN).apply {
@@ -167,8 +168,11 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
     var favoriteFolders by remember { mutableStateOf(loadFavoriteFolders(context)) }
     var folderToCreateFrom by remember { mutableStateOf<LauncherApp?>(null) }
+    var createFolderDialogOpen by remember { mutableStateOf(false) }
     var openedFolderId by remember { mutableStateOf<String?>(null) }
     var lastOpenedFolderId by remember { mutableStateOf<String?>(null) }
+    var folderOpenStartRename by remember { mutableStateOf(false) }
+    var folderOpenStartPicker by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -287,18 +291,34 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     val favoriteItemCount = favoriteApps.size + favoriteFolders.size
     var selectedFavoriteIndex by remember { mutableIntStateOf(0) }
     var selectedDrawerIndex by remember { mutableIntStateOf(0) }
+    // Home focus area: 0 = FavoritesCard row, 1 = StatusCard (launcher options / page switcher)
+    var homeFocusArea by remember { mutableIntStateOf(0) }
+
     // 0 = center not pressed, 1 = pressed, 2 = held long (menu already opened) :3
     var centerKeyState by remember { mutableIntStateOf(0) }
     var t9Key by remember { mutableStateOf<Int?>(null) }
     var t9Index by remember { mutableIntStateOf(0) }
-    var t9Time by remember { mutableStateOf(0L) }
+    var t9Time by remember { mutableLongStateOf(0L) }
     val focusRequester = remember { FocusRequester() }
+
+    val anyModalOpen = selectedApp != null ||
+        launcherMenuOpen ||
+        iconPickerOpen ||
+        hiddenManagerOpen ||
+        themeStudioOpen ||
+        openedFolderId != null ||
+        createFolderDialogOpen ||
+        folderToCreateFrom != null ||
+        folderIconMenuOpen
 
     LaunchedEffect(favoriteApps.size, favoriteFolders.size) {
         selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
             0,
             (favoriteItemCount - 1).coerceAtLeast(0)
         )
+        if (favoriteItemCount == 0) {
+            homeFocusArea = 1
+        }
     }
 
     LaunchedEffect(visibleApps) {
@@ -308,13 +328,51 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
     // auto scroll to highlighted item in app drawer :3
     LaunchedEffect(selectedDrawerIndex, drawerOpen, visibleApps.size) {
-        if (drawerOpen && visibleApps.isNotEmpty()) {
-            val isVisible = listState.layoutInfo.visibleItemsInfo.any {
+        if (drawerOpen && visibleApps.isNotEmpty() && selectedDrawerIndex in visibleApps.indices) {
+            val selectedItem = listState.layoutInfo.visibleItemsInfo.firstOrNull {
                 it.index == selectedDrawerIndex
             }
+            val viewportEnd = listState.layoutInfo.viewportEndOffset
+            val isFullyVisible = selectedItem != null &&
+                selectedItem.offset >= 0 &&
+                (selectedItem.offset + selectedItem.size) <= viewportEnd
 
-            if (!isVisible) {
+            if (!isFullyVisible) {
                 listState.animateScrollToItem(selectedDrawerIndex)
+            }
+        }
+    }
+
+    val openContextActionForCurrentFocus: () -> Unit = {
+        if (drawerOpen) {
+            visibleApps.getOrNull(selectedDrawerIndex)?.let { app ->
+                selectedApp = app
+            }
+        } else if (pagerState.currentPage == 1) {
+            if (homeFocusArea == 0 && favoriteItemCount > 0) {
+                if (selectedFavoriteIndex < favoriteApps.size) {
+                    favoriteApps.getOrNull(selectedFavoriteIndex)?.let { app ->
+                        selectedApp = app
+                    }
+                } else {
+                    favoriteFolders.getOrNull(selectedFavoriteIndex - favoriteApps.size)?.let { folder ->
+                        iconEditingFolder = folder
+                        folderIconMenuOpen = true
+                    }
+                }
+            } else {
+                launcherMenuOpen = true
+            }
+        }
+    }
+
+    // Timed long-press detection for Center/OK button so holding OK opens menus immediately <3
+    LaunchedEffect(centerKeyState, drawerOpen, pagerState.currentPage, anyModalOpen) {
+        if (centerKeyState == 1 && !anyModalOpen && (drawerOpen || pagerState.currentPage == 1)) {
+            delay(420L)
+            if (centerKeyState == 1 && !anyModalOpen) {
+                centerKeyState = 2
+                openContextActionForCurrentFocus()
             }
         }
     }
@@ -323,29 +381,23 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
     LaunchedEffect(
         drawerOpen,
         pagerState.currentPage,
-        selectedApp,
-        launcherMenuOpen,
-        iconPickerOpen,
-        hiddenManagerOpen,
-        themeStudioOpen,
-        openedFolderId,
-        folderToCreateFrom
+        anyModalOpen
     ) {
-        // Modal dialogs must be allowed to manage their own focus.
-        if (
-            selectedApp != null ||
-            launcherMenuOpen ||
-            iconPickerOpen ||
-            hiddenManagerOpen ||
-            themeStudioOpen ||
-            openedFolderId != null ||
-            folderToCreateFrom != null
-        ) {
+        // Modal dialogs manage their own focus.
+        if (anyModalOpen) {
+            centerKeyState = 0
             return@LaunchedEffect
         }
 
         if (drawerOpen || pagerState.currentPage == 1) {
-            focusRequester.requestFocus()
+            repeat(6) {
+                try {
+                    focusRequester.requestFocus()
+                    return@LaunchedEffect
+                } catch (_: Exception) {
+                    delay(35)
+                }
+            }
         }
     }
 
@@ -360,10 +412,20 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
             hiddenManagerOpen = false
             openedFolderId = null
             folderToCreateFrom = null
+            createFolderDialogOpen = false
             folderIconMenuOpen = false
+            homeFocusArea = if (favoriteItemCount > 0) 0 else 1
             scope.launch {
                 pagerState.animateScrollToPage(1)
             }
+        }
+    }
+
+    val currentDrawerLetter = remember(drawerOpen, selectedDrawerIndex, visibleApps) {
+        if (drawerOpen && selectedDrawerIndex in visibleApps.indices) {
+            firstLetterOf(visibleApps[selectedDrawerIndex].name)
+        } else {
+            null
         }
     }
 
@@ -374,67 +436,64 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 .focusable()
                 .focusRequester(focusRequester)
                 .onPreviewKeyEvent { event ->
-                    if (openedFolderId != null || folderToCreateFrom != null) {
+                    // Let open dialogs and non-home pages (Widgets / AI Chat) handle their own keys
+                    if (anyModalOpen) {
                         return@onPreviewKeyEvent false
                     }
+                    if (!drawerOpen && pagerState.currentPage != 1) {
+                        return@onPreviewKeyEvent false
+                    }
+
                     val nativeEvent = event.nativeKeyEvent
-                    val isCenterKey =
-                        nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
-                                nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
-                                nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER ||
-                                nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_A
+                    val isCenterKey = isCenterActivateKey(nativeEvent.keyCode)
 
                     if (isCenterKey) {
                         when (nativeEvent.action) {
                             android.view.KeyEvent.ACTION_DOWN -> {
                                 if (nativeEvent.repeatCount == 0) {
-                                    // just pressed down :3
                                     centerKeyState = 1
-                                } else if (centerKeyState == 1 && pagerState.currentPage == 1) {
-                                    // still held on the home screen -> remember it was a long hold, menu opens on release <3
+                                } else if (centerKeyState == 1) {
                                     centerKeyState = 2
+                                    openContextActionForCurrentFocus()
                                 }
                                 true
                             }
 
                             android.view.KeyEvent.ACTION_UP -> {
                                 val wasShortPress = centerKeyState == 1
-                                val wasLongPress = centerKeyState == 2
                                 centerKeyState = 0
-                                if (wasLongPress) {
-                                    if (drawerOpen) {
-                                        // held long in the drawer -> open actions for the selected app <3
-                                        val app = visibleApps.getOrNull(selectedDrawerIndex)
-                                        if (app != null) {
-                                            selectedApp = app
-                                        }
-                                    } else {
-                                        // held long on the home screen -> open launcher options :3
-                                        launcherMenuOpen = true
-                                    }
-                                }
                                 if (wasShortPress) {
                                     if (drawerOpen) {
-                                        visibleApps.getOrNull(selectedDrawerIndex)?.let { app ->
-                                            context.packageManager.getLaunchIntentForPackage(
-                                                app.packageName
-                                            )?.let(context::startActivity)
+                                        if (selectedDrawerIndex == -1) {
+                                            drawerOpen = false
+                                        } else {
+                                            visibleApps.getOrNull(selectedDrawerIndex)?.let { app ->
+                                                context.packageManager.getLaunchIntentForPackage(
+                                                    app.packageName
+                                                )?.let(context::startActivity)
+                                            }
                                         }
                                     } else if (pagerState.currentPage == 1) {
-                                        if (selectedFavoriteIndex < favoriteApps.size) {
-                                            favoriteApps.getOrNull(selectedFavoriteIndex)
-                                                ?.let { app ->
-                                                    context.packageManager.getLaunchIntentForPackage(
-                                                        app.packageName
-                                                    )?.let(context::startActivity)
+                                        if (homeFocusArea == 0 && favoriteItemCount > 0) {
+                                            if (selectedFavoriteIndex < favoriteApps.size) {
+                                                favoriteApps.getOrNull(selectedFavoriteIndex)
+                                                    ?.let { app ->
+                                                        context.packageManager.getLaunchIntentForPackage(
+                                                            app.packageName
+                                                        )?.let(context::startActivity)
+                                                    }
+                                            } else {
+                                                favoriteFolders.getOrNull(
+                                                    selectedFavoriteIndex - favoriteApps.size
+                                                )?.let { folder ->
+                                                    folderOpenStartRename = false
+                                                    folderOpenStartPicker = false
+                                                    lastOpenedFolderId = folder.id
+                                                    openedFolderId = folder.id
                                                 }
-                                        } else {
-                                            favoriteFolders.getOrNull(
-                                                selectedFavoriteIndex - favoriteApps.size
-                                            )?.let { folder ->
-                                                lastOpenedFolderId = folder.id
-                                                openedFolderId = folder.id
                                             }
+                                        } else {
+                                            launcherMenuOpen = true
                                         }
                                     }
                                 }
@@ -443,8 +502,23 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
                             else -> false
                         }
-                    } else if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN && nativeEvent.repeatCount == 0) {
+                    } else if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN) {
                         when (nativeEvent.keyCode) {
+                            android.view.KeyEvent.KEYCODE_MENU,
+                            android.view.KeyEvent.KEYCODE_STAR -> {
+                                if (nativeEvent.repeatCount == 0) {
+                                    openContextActionForCurrentFocus()
+                                }
+                                true
+                            }
+
+                            android.view.KeyEvent.KEYCODE_POUND -> {
+                                if (nativeEvent.repeatCount == 0) {
+                                    launcherMenuOpen = true
+                                }
+                                true
+                            }
+
                             android.view.KeyEvent.KEYCODE_1, android.view.KeyEvent.KEYCODE_NUMPAD_1,
                             android.view.KeyEvent.KEYCODE_2, android.view.KeyEvent.KEYCODE_NUMPAD_2,
                             android.view.KeyEvent.KEYCODE_3, android.view.KeyEvent.KEYCODE_NUMPAD_3,
@@ -454,6 +528,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             android.view.KeyEvent.KEYCODE_7, android.view.KeyEvent.KEYCODE_NUMPAD_7,
                             android.view.KeyEvent.KEYCODE_8, android.view.KeyEvent.KEYCODE_NUMPAD_8,
                             android.view.KeyEvent.KEYCODE_9, android.view.KeyEvent.KEYCODE_NUMPAD_9 -> {
+                                if (nativeEvent.repeatCount > 0) return@onPreviewKeyEvent true
                                 if (!drawerOpen) {
                                     when (nativeEvent.keyCode) {
                                         android.view.KeyEvent.KEYCODE_1, android.view.KeyEvent.KEYCODE_NUMPAD_1 -> {
@@ -553,23 +628,43 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
                             android.view.KeyEvent.KEYCODE_DPAD_UP -> {
                                 if (drawerOpen) {
-                                    if (selectedDrawerIndex == 0) {
-                                        drawerOpen = false
+                                    if (selectedDrawerIndex <= 0) {
+                                        if (selectedDrawerIndex == 0) {
+                                            selectedDrawerIndex = -1 // Focus header
+                                        } else {
+                                            drawerOpen = false
+                                            selectedDrawerIndex = 0
+                                        }
                                     } else {
                                         selectedDrawerIndex =
                                             (selectedDrawerIndex - 1).coerceAtLeast(0)
                                     }
                                 } else if (pagerState.currentPage == 1) {
-                                    drawerOpen = true
+                                    if (homeFocusArea == 1 && favoriteItemCount > 0) {
+                                        homeFocusArea = 0
+                                    } else {
+                                        selectedDrawerIndex = 0
+                                        drawerOpen = true
+                                    }
                                 }
                                 true
                             }
 
                             android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
                                 if (drawerOpen) {
-                                    selectedDrawerIndex =
-                                        (selectedDrawerIndex + 1)
-                                            .coerceIn(0, (visibleApps.size - 1).coerceAtLeast(0))
+                                    if (selectedDrawerIndex < 0) {
+                                        selectedDrawerIndex = 0
+                                    } else {
+                                        selectedDrawerIndex =
+                                            (selectedDrawerIndex + 1)
+                                                .coerceIn(0, (visibleApps.size - 1).coerceAtLeast(0))
+                                    }
+                                } else if (pagerState.currentPage == 1) {
+                                    if (homeFocusArea == 0) {
+                                        homeFocusArea = 1
+                                    } else {
+                                        launcherMenuOpen = true
+                                    }
                                 }
                                 true
                             }
@@ -581,10 +676,12 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                             (selectedDrawerIndex - 1).coerceAtLeast(0)
                                     }
                                 } else if (pagerState.currentPage == 1) {
-                                    if (favoriteItemCount > 0) {
+                                    if (homeFocusArea == 0 && favoriteItemCount > 0) {
                                         selectedFavoriteIndex = (
-                                                selectedFavoriteIndex - 1
-                                                ).coerceAtLeast(0)
+                                            selectedFavoriteIndex - 1
+                                            ).coerceAtLeast(0)
+                                    } else {
+                                        scope.launch { pagerState.animateScrollToPage(0) }
                                     }
                                 }
                                 true
@@ -599,10 +696,12 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                         )
                                     }
                                 } else if (pagerState.currentPage == 1) {
-                                    if (favoriteItemCount > 0) {
+                                    if (homeFocusArea == 0 && favoriteItemCount > 0) {
                                         selectedFavoriteIndex = (
-                                                selectedFavoriteIndex + 1
-                                                ).coerceIn(0, favoriteItemCount - 1)
+                                            selectedFavoriteIndex + 1
+                                            ).coerceIn(0, favoriteItemCount - 1)
+                                    } else {
+                                        scope.launch { pagerState.animateScrollToPage(2) }
                                     }
                                 }
                                 true
@@ -613,8 +712,8 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 if (drawerOpen) {
                                     drawerOpen = false
                                     true
-                                } else if (pagerState.currentPage != 1) {
-                                    scope.launch { pagerState.animateScrollToPage(1) }
+                                } else if (homeFocusArea == 1 && favoriteItemCount > 0) {
+                                    homeFocusArea = 0
                                     true
                                 } else {
                                     true
@@ -640,14 +739,23 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 drawerOpen = false
             }
 
+            BackHandler(enabled = !drawerOpen && !anyModalOpen && pagerState.currentPage != 1) {
+                scope.launch {
+                    pagerState.animateScrollToPage(1)
+                }
+            }
+
             BackHandler(enabled = openedFolderId != null) {
                 lastOpenedFolderId?.let { id ->
                     val folderIdx = favoriteFolders.indexOfFirst { it.id == id }
                     if (folderIdx != -1) {
                         selectedFavoriteIndex = favoriteApps.size + folderIdx
+                        homeFocusArea = 0
                     }
                 }
                 openedFolderId = null
+                folderOpenStartRename = false
+                folderOpenStartPicker = false
             }
 
             if (wallpaperImageBitmap != null) {
@@ -679,11 +787,12 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     .pointerInput(drawerOpen, pagerState.currentPage) {
                         detectVerticalDragGestures { _, dragAmount ->
                             if (!drawerOpen && pagerState.currentPage == 1 && dragAmount < -32) {
+                                selectedDrawerIndex = 0
                                 drawerOpen = true
                             }
                         }
                     },
-                userScrollEnabled = !drawerOpen && selectedApp == null && !launcherMenuOpen && !themeStudioOpen && !hiddenManagerOpen && !iconPickerOpen
+                userScrollEnabled = !drawerOpen && !anyModalOpen
             ) { page ->
                 when (page) {
                     0 -> {
@@ -693,7 +802,11 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 cardBgColor = cardBgColor,
                                 cardTextColor = cardTextColor,
                                 appActionColor = appActionColor,
-                                cardRoundness = cardRoundness
+                                cardRoundness = cardRoundness,
+                                isActivePage = pagerState.currentPage == 0 && !anyModalOpen,
+                                onNavigateHome = {
+                                    scope.launch { pagerState.animateScrollToPage(1) }
+                                }
                             )
                         } else {
                             Box(modifier = Modifier.fillMaxSize())
@@ -720,6 +833,11 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     cardBgColor = cardBgColor,
                                     cardTextColor = cardTextColor,
                                     outlineColor = greetingOutlineColor,
+                                    isFocused = homeFocusArea == 1 || favoriteItemCount == 0,
+                                    onClick = {
+                                        homeFocusArea = 1
+                                        launcherMenuOpen = true
+                                    },
                                     onWifiChanged = { isOnline = it },
                                     onLowBatteryChanged = { isLowBattery = it }
                                 )
@@ -729,11 +847,13 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     favoriteFolders = favoriteFolders,
                                     folderIconRefreshKey = folderIconRefreshKey,
                                     selectedIndex = selectedFavoriteIndex,
+                                    isCardFocused = homeFocusArea == 0,
                                     onAppClick = { app ->
                                         val appIdx = favoriteApps.indexOfFirst {
                                             it.packageName == app.packageName
                                         }
                                         if (appIdx != -1) {
+                                            homeFocusArea = 0
                                             selectedFavoriteIndex = appIdx
                                         }
                                     },
@@ -742,6 +862,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                             it.packageName == app.packageName
                                         }
                                         if (appIdx != -1) {
+                                            homeFocusArea = 0
                                             selectedFavoriteIndex = appIdx
                                         }
                                         selectedApp = app
@@ -749,14 +870,18 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     onFolderClick = { folder ->
                                         val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
                                         if (folderIdx != -1) {
+                                            homeFocusArea = 0
                                             selectedFavoriteIndex = favoriteApps.size + folderIdx
                                         }
+                                        folderOpenStartRename = false
+                                        folderOpenStartPicker = false
                                         lastOpenedFolderId = folder.id
                                         openedFolderId = folder.id
                                     },
                                     onFolderLongClick = { folder ->
                                         val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
                                         if (folderIdx != -1) {
+                                            homeFocusArea = 0
                                             selectedFavoriteIndex = favoriteApps.size + folderIdx
                                         }
                                         iconEditingFolder = folder
@@ -770,6 +895,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     2 -> {
                         if (!drawerOpen && (pagerState.currentPage == 2 || pagerState.targetPage == 2)) {
                             ChatPlaceholderPage(
+                                isActivePage = pagerState.currentPage == 2 && !anyModalOpen,
                                 onBack = {
                                     scope.launch {
                                         pagerState.animateScrollToPage(1)
@@ -788,6 +914,11 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 LauncherMenuDialog(
                     onDismiss = {
                         launcherMenuOpen = false
+                    },
+                    onCreateFolderClick = {
+                        launcherMenuOpen = false
+                        folderToCreateFrom = null
+                        createFolderDialogOpen = true
                     },
                     onHiddenAppsClick = {
                         launcherMenuOpen = false
@@ -833,8 +964,9 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
             // app options long-press dialog :3
             if (selectedApp != null) {
+                val targetApp = selectedApp!!
                 AppActionDialog(
-                    app = selectedApp!!,
+                    app = targetApp,
                     favoritePackages = favoritePackages,
                     cardBgColor = cardBgColor,
                     cardTextColor = cardTextColor,
@@ -844,7 +976,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         selectedApp = null
                     },
                     onMoveFavoriteLeft = {
-                        val pkgName = selectedApp!!.packageName
+                        val pkgName = targetApp.packageName
                         val list = favoritePackages.toMutableList()
                         val index = list.indexOf(pkgName)
                         if (index > 0) {
@@ -854,11 +986,13 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             preferences.edit()
                                 .putString("favorite_packages_ordered", list.joinToString("|"))
                                 .apply()
+                            selectedFavoriteIndex = (index - 1).coerceAtLeast(0)
+                            homeFocusArea = 0
                         }
                         selectedApp = null
                     },
                     onMoveFavoriteRight = {
-                        val pkgName = selectedApp!!.packageName
+                        val pkgName = targetApp.packageName
                         val list = favoritePackages.toMutableList()
                         val index = list.indexOf(pkgName)
                         if (index >= 0 && index < list.lastIndex) {
@@ -868,11 +1002,13 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             preferences.edit()
                                 .putString("favorite_packages_ordered", list.joinToString("|"))
                                 .apply()
+                            selectedFavoriteIndex = index + 1
+                            homeFocusArea = 0
                         }
                         selectedApp = null
                     },
                     onToggleFavorite = {
-                        val pkgName = selectedApp!!.packageName
+                        val pkgName = targetApp.packageName
                         val list = favoritePackages.toMutableList()
                         if (pkgName in list) {
                             list.remove(pkgName)
@@ -886,21 +1022,21 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         selectedApp = null
                     },
                     onAppInfo = {
-                        val pkgName = selectedApp!!.packageName
-                        val intent = Intent(
+                        val pkgName = targetApp.packageName
+                        val appInfoIntent = Intent(
                             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                             Uri.parse("package:$pkgName")
                         )
-                        context.startActivity(intent)
+                        context.startActivity(appInfoIntent)
                         selectedApp = null
                     },
                     onChangeIcon = {
-                        iconEditingApp = selectedApp
+                        iconEditingApp = targetApp
                         iconPickerOpen = true
                         selectedApp = null
                     },
                     onResetIcon = {
-                        val pkgName = selectedApp!!.packageName
+                        val pkgName = targetApp.packageName
                         preferences.edit()
                             .remove("custom_icon_$pkgName")
                             .apply()
@@ -909,7 +1045,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         selectedApp = null
                     },
                     onHideApp = {
-                        val pkgName = selectedApp!!.packageName
+                        val pkgName = targetApp.packageName
                         val newHidden = hiddenPackages.toMutableSet().apply {
                             add(pkgName)
                         }
@@ -920,136 +1056,124 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         selectedApp = null
                     },
                     onCreateFolder = {
-                        folderToCreateFrom = selectedApp
+                        folderToCreateFrom = targetApp
+                        createFolderDialogOpen = true
                         selectedApp = null
+                    },
+                    onOpenLauncherOptions = {
+                        selectedApp = null
+                        launcherMenuOpen = true
                     }
                 )
             }
 
-            // folder icon customization menu ♡
+            // folder customization & action menu ♡
             if (folderIconMenuOpen && iconEditingFolder != null) {
-                val targetFolder = iconEditingFolder!!
+                val targetFolder = favoriteFolders.firstOrNull {
+                    it.id == iconEditingFolder!!.id
+                } ?: iconEditingFolder!!
+                val folderIndex = favoriteFolders.indexOfFirst {
+                    it.id == targetFolder.id
+                }
 
-                AlertDialog(
-                    onDismissRequest = {
+                FolderActionDialog(
+                    folder = targetFolder,
+                    canMoveLeft = folderIndex > 0,
+                    canMoveRight = folderIndex >= 0 && folderIndex < favoriteFolders.lastIndex,
+                    onMoveLeft = {
+                        if (folderIndex > 0) {
+                            val reordered = favoriteFolders.toMutableList()
+                            val folder = reordered.removeAt(folderIndex)
+                            reordered.add(folderIndex - 1, folder)
+                            favoriteFolders = reordered
+                            saveFavoriteFolders(context, reordered)
+                            selectedFavoriteIndex = favoriteApps.size + folderIndex - 1
+                            homeFocusArea = 0
+                        }
                         folderIconMenuOpen = false
                         iconEditingFolder = null
                     },
-                    containerColor = cardBgColor,
-                    shape = RoundedCornerShape(cardRoundness),
-                    title = {
-                        Text(
-                            text = "♡ Folder icon ♡",
-                            color = appActionColor,
-                            fontWeight = FontWeight.Bold
+                    onMoveRight = {
+                        if (folderIndex >= 0 && folderIndex < favoriteFolders.lastIndex) {
+                            val reordered = favoriteFolders.toMutableList()
+                            val folder = reordered.removeAt(folderIndex)
+                            reordered.add(folderIndex + 1, folder)
+                            favoriteFolders = reordered
+                            saveFavoriteFolders(context, reordered)
+                            selectedFavoriteIndex = favoriteApps.size + folderIndex + 1
+                            homeFocusArea = 0
+                        }
+                        folderIconMenuOpen = false
+                        iconEditingFolder = null
+                    },
+                    onOpenFolder = {
+                        folderIconMenuOpen = false
+                        iconEditingFolder = null
+                        folderOpenStartRename = false
+                        folderOpenStartPicker = false
+                        lastOpenedFolderId = targetFolder.id
+                        openedFolderId = targetFolder.id
+                    },
+                    onRenameFolder = {
+                        folderIconMenuOpen = false
+                        iconEditingFolder = null
+                        folderOpenStartRename = true
+                        folderOpenStartPicker = false
+                        lastOpenedFolderId = targetFolder.id
+                        openedFolderId = targetFolder.id
+                    },
+                    onEditFolderApps = {
+                        folderIconMenuOpen = false
+                        iconEditingFolder = null
+                        folderOpenStartRename = false
+                        folderOpenStartPicker = true
+                        lastOpenedFolderId = targetFolder.id
+                        openedFolderId = targetFolder.id
+                    },
+                    onChangeIcon = {
+                        folderIconMenuOpen = false
+                        iconPickerOpen = true
+                    },
+                    onResetIcon = {
+                        preferences.edit()
+                            .remove("custom_folder_icon_${targetFolder.id}")
+                            .apply()
+                        folderIconRefreshKey++
+                        folderIconMenuOpen = false
+                        iconEditingFolder = null
+                    },
+                    onDeleteFolder = {
+                        val deletedId = targetFolder.id
+                        favoriteFolders = favoriteFolders.filterNot { it.id == deletedId }
+                        preferences.edit()
+                            .remove("custom_folder_icon_$deletedId")
+                            .apply()
+                        saveFavoriteFolders(context, favoriteFolders)
+                        val newCount = favoriteApps.size + favoriteFolders.size
+                        selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
+                            0,
+                            (newCount - 1).coerceAtLeast(0)
                         )
-                    },
-                    text = {
-                        Column {
-                            Text(
-                                text = targetFolder.name,
-                                color = cardTextColor
-                            )
-
-                            val folderIndex = favoriteFolders.indexOfFirst {
-                                it.id == targetFolder.id
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                TextButton(
-                                    enabled = folderIndex > 0,
-                                    onClick = {
-                                        val index = favoriteFolders.indexOfFirst {
-                                            it.id == targetFolder.id
-                                        }
-
-                                        if (index > 0) {
-                                            val reordered = favoriteFolders.toMutableList()
-                                            val folder = reordered.removeAt(index)
-                                            reordered.add(index - 1, folder)
-
-                                            favoriteFolders = reordered
-                                            saveFavoriteFolders(context, reordered)
-
-                                            selectedFavoriteIndex = favoriteApps.size + index - 1
-
-                                            folderIconMenuOpen = false
-                                            iconEditingFolder = null
-                                        }
-                                    }
-                                ) {
-                                    Text("◀ Move Left", color = appActionColor)
-                                }
-
-                                TextButton(
-                                    enabled = folderIndex >= 0 &&
-                                            folderIndex < favoriteFolders.lastIndex,
-                                    onClick = {
-                                        val index = favoriteFolders.indexOfFirst {
-                                            it.id == targetFolder.id
-                                        }
-
-                                        if (index >= 0 && index < favoriteFolders.lastIndex) {
-                                            val reordered = favoriteFolders.toMutableList()
-                                            val folder = reordered.removeAt(index)
-                                            reordered.add(index + 1, folder)
-
-                                            favoriteFolders = reordered
-                                            saveFavoriteFolders(context, reordered)
-
-                                            selectedFavoriteIndex = favoriteApps.size + index + 1
-
-                                            folderIconMenuOpen = false
-                                            iconEditingFolder = null
-                                        }
-                                    }
-                                ) {
-                                    Text("Move Right ▶", color = appActionColor)
-                                }
-                            }
-
-                            TextButton(
-                                onClick = {
-                                    folderIconMenuOpen = false
-                                    iconPickerOpen = true
-                                }
-                            ) {
-                                Text(
-                                    "🎨 Change folder icon",
-                                    color = appActionColor
-                                )
-                            }
-
-                            TextButton(
-                                onClick = {
-                                    preferences.edit()
-                                        .remove("custom_folder_icon_${targetFolder.id}")
-                                        .apply()
-
-                                    folderIconRefreshKey++
-                                    folderIconMenuOpen = false
-                                    iconEditingFolder = null
-                                }
-                            ) {
-                                Text(
-                                    "↺ Reset folder icon",
-                                    color = appActionColor
-                                )
-                            }
+                        homeFocusArea = if (newCount > 0) 0 else 1
+                        folderIconMenuOpen = false
+                        iconEditingFolder = null
+                        if (openedFolderId == deletedId) {
+                            openedFolderId = null
                         }
                     },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                folderIconMenuOpen = false
-                                iconEditingFolder = null
-                            }
-                        ) {
-                            Text("Close", color = appActionColor)
+                    onOpenLauncherOptions = {
+                        folderIconMenuOpen = false
+                        iconEditingFolder = null
+                        launcherMenuOpen = true
+                    },
+                    onDismiss = {
+                        val idx = favoriteFolders.indexOfFirst { it.id == targetFolder.id }
+                        if (idx != -1) {
+                            selectedFavoriteIndex = favoriteApps.size + idx
+                            homeFocusArea = 0
                         }
+                        folderIconMenuOpen = false
+                        iconEditingFolder = null
                     }
                 )
             }
@@ -1116,6 +1240,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     onDismiss = { hiddenManagerOpen = false }
                 )
             }
+
             val openedFolder = favoriteFolders.firstOrNull {
                 it.id == openedFolderId
             }
@@ -1124,6 +1249,10 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 FavoriteFolderDialog(
                     folder = openedFolder,
                     apps = apps,
+                    availableApps = visibleApps,
+                    existingFolders = favoriteFolders,
+                    initialEditingName = folderOpenStartRename,
+                    initialPickingApps = folderOpenStartPicker,
                     cardBgColor = cardBgColor,
                     cardTextColor = cardTextColor,
                     appActionColor = appActionColor,
@@ -1148,10 +1277,35 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
 
                         saveFavoriteFolders(context, favoriteFolders)
                     },
+                    onUpdateApps = { updatedPackages ->
+                        val distinctPackages = updatedPackages.distinct()
+                        favoriteFolders = favoriteFolders.map { folder ->
+                            if (folder.id == openedFolder.id) {
+                                folder.copy(appPackages = distinctPackages)
+                            } else {
+                                folder
+                            }
+                        }
+                        saveFavoriteFolders(context, favoriteFolders)
+
+                        // Keep apps added to the folder from appearing twice in standalone favorites
+                        val updatedFavorites = favoritePackages.filterNot {
+                            it in distinctPackages
+                        }
+                        if (updatedFavorites != favoritePackages) {
+                            favoritePackages = updatedFavorites
+                            preferences.edit()
+                                .putString(
+                                    "favorite_packages_ordered",
+                                    updatedFavorites.joinToString("|")
+                                )
+                                .apply()
+                        }
+                    },
                     onRename = { newName ->
                         val duplicateName = favoriteFolders.any {
                             it.id != openedFolder.id &&
-                                    it.name.equals(newName, ignoreCase = true)
+                                it.name.equals(newName, ignoreCase = true)
                         }
 
                         if (!duplicateName && newName.isNotBlank()) {
@@ -1171,6 +1325,9 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         favoriteFolders = favoriteFolders.filterNot {
                             it.id == deletedId
                         }
+                        preferences.edit()
+                            .remove("custom_folder_icon_$deletedId")
+                            .apply()
 
                         saveFavoriteFolders(context, favoriteFolders)
                         val newCount = favoriteApps.size + favoriteFolders.size
@@ -1178,24 +1335,37 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             0,
                             (newCount - 1).coerceAtLeast(0)
                         )
+                        homeFocusArea = if (newCount > 0) 0 else 1
                         openedFolderId = null
                         lastOpenedFolderId = null
+                        folderOpenStartRename = false
+                        folderOpenStartPicker = false
+                    },
+                    onOpenFolderOptions = {
+                        iconEditingFolder = openedFolder
+                        folderIconMenuOpen = true
+                        openedFolderId = null
+                        folderOpenStartRename = false
+                        folderOpenStartPicker = false
                     },
                     onDismiss = {
                         lastOpenedFolderId?.let { id ->
                             val folderIdx = favoriteFolders.indexOfFirst { it.id == id }
                             if (folderIdx != -1) {
                                 selectedFavoriteIndex = favoriteApps.size + folderIdx
+                                homeFocusArea = 0
                             }
                         }
                         openedFolderId = null
+                        folderOpenStartRename = false
+                        folderOpenStartPicker = false
                     }
                 )
             }
 
-            if (folderToCreateFrom != null) {
+            if (createFolderDialogOpen || folderToCreateFrom != null) {
                 CreateFavoriteFolderDialog(
-                    initialApp = folderToCreateFrom!!,
+                    initialApp = folderToCreateFrom,
                     availableApps = visibleApps,
                     existingFolders = favoriteFolders,
                     cardBgColor = cardBgColor,
@@ -1204,11 +1374,12 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                     cardRoundness = cardRoundness,
                     onDismiss = {
                         folderToCreateFrom = null
+                        createFolderDialogOpen = false
                     },
-                    onCreate = { name, packages ->
+                    onCreate = { folderName, packages ->
                         val folder = FavoriteFolder(
                             id = java.util.UUID.randomUUID().toString(),
-                            name = name,
+                            name = folderName,
                             appPackages = packages.distinct()
                         )
 
@@ -1216,9 +1387,10 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                         saveFavoriteFolders(context, favoriteFolders)
 
                         // Keep apps contained in the new folder from appearing twice.
-                        favoritePackages = favoritePackages.filterNot {
-                            it in folder.appPackages
+                        val remainingFavApps = favoritePackages.filterNot {
+                            it in folder.appPackages && it !in hiddenPackages
                         }
+                        favoritePackages = remainingFavApps
 
                         preferences.edit()
                             .putString(
@@ -1227,10 +1399,14 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                             )
                             .apply()
 
-                        folderToCreateFrom = null
+                        val newFavAppCount = remainingFavApps.count { it !in hiddenPackages }
                         selectedFavoriteIndex =
-                            (favoriteApps.size + favoriteFolders.size - 1)
+                            (newFavAppCount + favoriteFolders.size - 1)
                                 .coerceAtLeast(0)
+                        homeFocusArea = 0
+                        drawerOpen = false
+                        folderToCreateFrom = null
+                        createFolderDialogOpen = false
                     }
                 )
             }
@@ -1240,10 +1416,11 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(cardBgColor.copy(alpha = 0.64f))
+                        .background(theme.bgColor.copy(alpha = 0.88f))
                         .padding(16.dp)
                 ) {
                     AppDrawerHeader(
+                        isFocused = selectedDrawerIndex == -1,
                         onSwipeDown = { drawerOpen = false }
                     )
 
@@ -1259,7 +1436,7 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(cardRoundness))
                                 .background(Color.Transparent)
-                                .padding(8.dp),
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             itemsIndexed(
@@ -1270,13 +1447,18 @@ fun MainLauncher(name: String, modifier: Modifier = Modifier, homePressCount: In
                                     context = context,
                                     app = app,
                                     isSelected = index == selectedDrawerIndex,
-                                    onAppLongClick = { selectedApp = it }
+                                    onAppClick = { selectedDrawerIndex = index },
+                                    onAppLongClick = {
+                                        selectedDrawerIndex = index
+                                        selectedApp = it
+                                    }
                                 )
                             }
                         }
 
                         AlphabetIndex(
                             availableLetters = letterStarts.keys,
+                            activeLetter = currentDrawerLetter,
                             onLetterTap = { letter ->
                                 val target = letterStarts[letter]
                                     ?: letterStarts.entries.firstOrNull { it.key > letter }?.value
