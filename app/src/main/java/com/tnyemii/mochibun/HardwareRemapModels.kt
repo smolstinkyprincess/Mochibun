@@ -9,9 +9,9 @@ data class AppInfo(
 
 /**
  * Verified physical keys on Chinoe AT-M120 (mtk-kpd and gpio-keys).
- * Only low-risk keys are enabled for remapping to prevent bricking or locking out the device.
- * Critical navigation/system keys (POWER, HOME, BACK, APP_SWITCH, ENTER, DPAD, VOLUME)
- * are deliberately omitted from remapping targets.
+ * Keys with isStaticRemapSafe = true can be statically remapped via Magisk .kl module.
+ * Critical system navigation keys (such as KEY_ENTER and APP_SWITCH) have isStaticRemapSafe = false
+ * to prevent bricking or lockout, but are fully supported for dynamic accessibility actions.
  */
 enum class PhysicalKey(
     val scancode: Int,
@@ -20,19 +20,49 @@ enum class PhysicalKey(
     val description: String,
     val isStaticRemapSafe: Boolean = true
 ) {
+    F1(59, KeyEvent.KEYCODE_F1, "Upper-left (F1)", "Upper-left physical button (KEY_F1 / 0x003B)", true),
+    CAMERA(212, KeyEvent.KEYCODE_CAMERA, "Upper-right (Camera)", "Upper-right physical button (KEY_CAMERA / 0x00D4)", true),
+    KEY_ENTER(28, KeyEvent.KEYCODE_ENTER, "Center / Enter", "Center physical select button (KEY_ENTER / 0x001C)", false),
+    F2(60, KeyEvent.KEYCODE_F2, "Lower-left (F2)", "Lower-left physical button (KEY_F2 / 0x003C)", true),
+    F3(61, KeyEvent.KEYCODE_F3, "Lower-right (F3)", "Lower-right physical button (KEY_F3 / 0x003D)", true),
     CALL(169, KeyEvent.KEYCODE_CALL, "Call Key", "Dedicated physical green call button", true),
-    F1(59, KeyEvent.KEYCODE_F1, "Left Softkey (F1)", "Top-left physical menu softkey", true),
-    F2(60, KeyEvent.KEYCODE_F2, "Right Softkey (F2)", "Top-right physical softkey", true),
-    F3(61, KeyEvent.KEYCODE_F3, "Center Softkey (F3)", "Center physical function key", true),
+    APP_SWITCH(580, KeyEvent.KEYCODE_APP_SWITCH, "Recents Key", "Dedicated physical Recents / Overview button", false),
     F4(62, KeyEvent.KEYCODE_F4, "Side Key (F4)", "Physical side button (gpio-keys)", false),
-    CAMERA(212, KeyEvent.KEYCODE_CAMERA, "Camera Key", "Dedicated camera shutter key", true),
     STAR(522, KeyEvent.KEYCODE_STAR, "Star Key (*)", "Numeric keypad star key", true),
-    POUND(523, KeyEvent.KEYCODE_POUND, "Pound Key (#)", "Numeric keypad pound key", true),
-    APP_SWITCH(580, KeyEvent.KEYCODE_APP_SWITCH, "Recents Key", "Dedicated physical Recents / Overview button", false);
+    POUND(523, KeyEvent.KEYCODE_POUND, "Pound Key (#)", "Numeric keypad pound key", true);
+
+    val hexScancode: String
+        get() = "0x" + scancode.toString(16).uppercase().padStart(4, '0')
+
+    val linuxKeyName: String
+        get() = when (this) {
+            F1 -> "KEY_F1"
+            CAMERA -> "KEY_CAMERA"
+            KEY_ENTER -> "KEY_ENTER"
+            F2 -> "KEY_F2"
+            F3 -> "KEY_F3"
+            CALL -> "KEY_CALL"
+            APP_SWITCH -> "KEY_APP_SWITCH"
+            F4 -> "KEY_F4"
+            STAR -> "KEY_STAR"
+            POUND -> "KEY_POUND"
+        }
 
     companion object {
-        fun fromKeyCode(keyCode: Int): PhysicalKey? = entries.firstOrNull { it.defaultKeyCode == keyCode }
+        val ENTER: PhysicalKey get() = KEY_ENTER
+        val CENTER: PhysicalKey get() = KEY_ENTER
+
+        fun fromKeyCode(keyCode: Int): PhysicalKey? = entries.firstOrNull {
+            it.defaultKeyCode == keyCode || (it == KEY_ENTER && keyCode == KeyEvent.KEYCODE_DPAD_CENTER)
+        }
+
         fun fromScancode(scancode: Int): PhysicalKey? = entries.firstOrNull { it.scancode == scancode }
+
+        fun fromLinuxName(name: String): PhysicalKey? = entries.firstOrNull {
+            it.linuxKeyName.equals(name, ignoreCase = true) ||
+                it.name.equals(name, ignoreCase = true) ||
+                (it == KEY_ENTER && (name.equals("CENTER", ignoreCase = true) || name.equals("ENTER", ignoreCase = true) || name.equals("KEY_ENTER", ignoreCase = true)))
+        }
     }
 }
 

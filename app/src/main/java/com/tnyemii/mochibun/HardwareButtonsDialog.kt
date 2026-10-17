@@ -163,9 +163,9 @@ fun HardwareButtonsDialog(
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
                         val maxIndex = when (currentTab) {
-                            0 -> PhysicalKey.entries.size
+                            0 -> PhysicalKey.entries.lastIndex
                             1 -> PhysicalKey.entries.filter { it.isStaticRemapSafe }.size + 1
-                            else -> 5
+                            else -> 4
                         }
                         if (selectedIndex < maxIndex) {
                             selectedIndex++
@@ -653,7 +653,7 @@ private fun ActionsTabContent(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Code ${key.defaultKeyCode}",
+                                text = "${key.hexScancode} • Code ${key.defaultKeyCode}",
                                 color = theme.cardTextColor.copy(alpha = 0.5f),
                                 fontSize = 10.sp
                             )
@@ -777,7 +777,7 @@ private fun StaticRemapTabContent(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Scan ${key.scancode} • Orig: $defaultKey",
+                                text = "Scan ${key.scancode} (${key.hexScancode}) • Orig: $defaultKey",
                                 color = theme.cardTextColor.copy(alpha = 0.6f),
                                 fontSize = 10.sp
                             )
@@ -1496,7 +1496,7 @@ private fun StaticKeySubDialog(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Scan ${physicalKey.scancode} • Current: $currentMappedKey",
+                text = "Scan ${physicalKey.scancode} (${physicalKey.hexScancode}) • Current: $currentMappedKey",
                 color = theme.cardTextColor.copy(alpha = 0.6f),
                 fontSize = 10.sp
             )

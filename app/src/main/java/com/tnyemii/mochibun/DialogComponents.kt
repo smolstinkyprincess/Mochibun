@@ -92,6 +92,16 @@ fun isBackDismissKey(keyCode: Int): Boolean =
     keyCode == android.view.KeyEvent.KEYCODE_BACK ||
         keyCode == android.view.KeyEvent.KEYCODE_ESCAPE
 
+fun isDpadOrActionKey(keyCode: Int): Boolean =
+    keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT ||
+        keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT ||
+        keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP ||
+        keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN ||
+        keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
+        keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+        keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER ||
+        keyCode == android.view.KeyEvent.KEYCODE_BUTTON_A
+
 @Composable
 fun requestFocusSafely(focusRequester: FocusRequester, key: Any? = Unit) {
     LaunchedEffect(key) {

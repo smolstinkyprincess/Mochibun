@@ -85,6 +85,9 @@ class MochibunAccessibilityService : AccessibilityService() {
             val config = HardwareRemapManager.getButtonActionConfig(this, key)
             if (config.hasAnyAction()) {
                 activeMappings[key.defaultKeyCode] = config
+                if (key == PhysicalKey.KEY_ENTER) {
+                    activeMappings[KeyEvent.KEYCODE_DPAD_CENTER] = config
+                }
             }
         }
     }
@@ -92,9 +95,21 @@ class MochibunAccessibilityService : AccessibilityService() {
     override fun onKeyEvent(event: KeyEvent): Boolean {
         // Fast lookup with fresh reload fallback if needed
         var config = activeMappings[event.keyCode]
+        if (config == null && event.scanCode > 0) {
+            val key = PhysicalKey.fromScancode(event.scanCode)
+            if (key != null) {
+                config = activeMappings[key.defaultKeyCode]
+            }
+        }
         if (config == null) {
             loadConfiguration()
             config = activeMappings[event.keyCode]
+            if (config == null && event.scanCode > 0) {
+                val key = PhysicalKey.fromScancode(event.scanCode)
+                if (key != null) {
+                    config = activeMappings[key.defaultKeyCode]
+                }
+            }
         }
         if (config == null || !config.hasAnyAction()) return false
 
