@@ -31,7 +31,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import java.lang.reflect.Method
 
-// holds information about a recent app task to display in recents switcher :3
+/**
+ * Holds information about a recent app task to display in Mochibun's Recents overview.
+ */
 @Immutable
 data class RecentTaskInfo(
     val taskId: Int,
@@ -40,7 +42,8 @@ data class RecentTaskInfo(
     val icon: Drawable?,
     val iconBitmap: ImageBitmap? = null,
     val thumbnail: ImageBitmap?,
-    val baseIntent: Intent?
+    val baseIntent: Intent?,
+    val tintIndex: Int = 0
 )
 
 private data class CachedAppTaskMeta(
@@ -49,24 +52,27 @@ private data class CachedAppTaskMeta(
     val iconBitmap: ImageBitmap
 )
 
-// manages querying, launching, and dismissing recent tasks via system services <3
+/**
+ * Manages querying, launching, and dismissing recent tasks via system services on Android 12 (API 31).
+ * Optimized for MediaTek MT6761 memory constraints (~1.8 GB RAM).
+ */
 class RecentTasksManager(context: Context) {
 
     private val appContext = context.applicationContext
     private val activityManager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     private val packageManager = appContext.packageManager
 
-    // fetches up to maxNum recent tasks using ActivityManager <3
+    /**
+     * Fetches up to maxNum recent tasks using ActivityManager and ActivityTaskManager.
+     */
     fun getRecentTasks(maxNum: Int = 15): List<RecentTaskInfo> {
         val result = mutableListOf<RecentTaskInfo>()
         try {
-            // query active recent tasks from system ActivityManager :3
             val recentTasks = activityManager.getRecentTasks(maxNum, ActivityManager.RECENT_IGNORE_UNAVAILABLE)
             val currentPackage = appContext.packageName
             Log.d(TAG, "getRecentTasks queried: received ${recentTasks?.size ?: 0} raw tasks from system (currentPackage=$currentPackage)")
 
             for (rawInfo in recentTasks) {
-                // get persistent task ID depending on SDK version
                 val taskId = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     rawInfo.taskId
                 } else {
@@ -80,7 +86,7 @@ class RecentTasksManager(context: Context) {
                 val isHomeCategory = baseIntent.hasCategory(Intent.CATEGORY_HOME)
                 val className = component?.className ?: ""
 
-                // exclude our launcher activities (home screen and recents overview) from recents switcher <3
+                // Exclude Mochibun's own launcher and recents activities from the switcher
                 val isLauncherActivity = (pkgName == currentPackage && (
                     isHomeCategory ||
                     className == RecentsActivity::class.java.name ||
@@ -98,7 +104,6 @@ class RecentTasksManager(context: Context) {
                 var icon: Drawable? = null
                 var iconBitmap: ImageBitmap? = null
 
-                // load cached label and icon bitmap for app package off the UI thread :3
                 val cachedMeta = getOrLoadAppMeta(pkgName)
                 if (cachedMeta != null) {
                     if (title.isEmpty()) title = cachedMeta.label
@@ -108,8 +113,11 @@ class RecentTasksManager(context: Context) {
                     title = pkgName
                 }
 
-                // fetch task snapshot thumbnail using reflection if supported
+                // Downscaled snapshot thumbnail to protect 1.8GB RAM budget
                 val thumbnailBitmap = getTaskThumbnail(taskId)
+
+                // Assign coordinated pastel tint index based on package hash
+                val tintIndex = (Math.abs(pkgName.hashCode())) % 4
 
                 Log.d(TAG, "Added task to recents: id=$taskId, title=$title, pkg=$pkgName, component=$component")
 
@@ -121,7 +129,8 @@ class RecentTasksManager(context: Context) {
                         icon = icon,
                         iconBitmap = iconBitmap,
                         thumbnail = thumbnailBitmap,
-                        baseIntent = baseIntent
+                        baseIntent = baseIntent,
+                        tintIndex = tintIndex
                     )
                 )
             }
@@ -156,14 +165,16 @@ class RecentTasksManager(context: Context) {
         }
     }
 
-    // attempts to extract hardware buffer task snapshot bitmap via reflection <3
+    /**
+     * Extracts hardware buffer task snapshot bitmap via reflection, downscaling to card preview size.
+     */
     @SuppressLint("BlockedPrivateApi")
     private fun getTaskThumbnail(taskId: Int): ImageBitmap? {
         return try {
             val service = getAtmService() ?: return null
             val getTaskSnapshotMethod = getTaskSnapshotMethod ?: return null
 
-            // Request low-resolution reduced snapshot (true) first if supported by system
+            // Request low-resolution reduced snapshot first if supported
             val snapshot = getTaskSnapshotMethod.invoke(
                 service,
                 taskId,
@@ -187,7 +198,6 @@ class RecentTasksManager(context: Context) {
                         as? android.graphics.ColorSpace
                     ?: return null
 
-                // Convert the hardware buffer into a bitmap
                 if (android.os.Build.VERSION.SDK_INT < 29) {
                     return null
                 }
@@ -199,8 +209,8 @@ class RecentTasksManager(context: Context) {
 
                 try {
                     val rawCopy = wrappedBitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return null
-                    // Downscale snapshot to fit the 220dp card width on the 480x800 hdpi screen
-                    val finalBitmap = if (rawCopy.width > 300) {
+                    // Downscale snapshot directly to 240px width for 480x800 display
+                    val finalBitmap = if (rawCopy.width > 260) {
                         val targetWidth = 240
                         val targetHeight = ((rawCopy.height.toFloat() / rawCopy.width.toFloat()) * targetWidth)
                             .toInt()
@@ -216,11 +226,9 @@ class RecentTasksManager(context: Context) {
                     finalBitmap.prepareToDraw()
                     finalBitmap.asImageBitmap()
                 } finally {
-                    // Recycle the HardwareBuffer-backed Bitmap immediately to release its native AHardwareBuffer reference
                     wrappedBitmap.recycle()
                 }
             } finally {
-                // explicitly close the hardware buffer to avoid native graphics buffer memory leaks <3
                 hardwareBuffer.close()
             }
         } catch (e: Exception) {
@@ -229,9 +237,11 @@ class RecentTasksManager(context: Context) {
         }
     }
 
-    // switches back to selected recent task or opens app intent :3
+    /**
+     * Switches to selected recent task or opens app intent with fallbacks.
+     */
     fun launchTask(task: RecentTaskInfo): Boolean {
-        // First try restoring the existing task stack via reflection
+        // 1. Try restoring the existing task stack via reflection
         val method = startActivityFromRecentsMethod
         if (method != null) {
             try {
@@ -239,53 +249,96 @@ class RecentTasksManager(context: Context) {
                 method.invoke(activityManager, task.taskId, opts.toBundle())
                 return true
             } catch (e: Exception) {
-                Log.w(TAG, "startActivityFromRecents reflection failed for task ${task.taskId}, falling back to intent launch", e)
+                Log.w(TAG, "startActivityFromRecents reflection failed for task ${task.taskId}", e)
             }
         }
 
-        // Fallback: launch app via standard launch intent or task baseIntent
-        return try {
+        // 2. Try moveTaskToFront via ActivityManager
+        try {
+            activityManager.moveTaskToFront(task.taskId, ActivityManager.MOVE_TASK_WITH_HOME)
+            return true
+        } catch (e: Exception) {
+            Log.w(TAG, "moveTaskToFront failed for task ${task.taskId}", e)
+        }
+
+        // 3. Fallback: launch app via standard launch intent or task baseIntent
+        try {
             val intent = task.baseIntent?.cloneFilter()
                 ?: packageManager.getLaunchIntentForPackage(task.packageName)
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                 appContext.startActivity(intent)
-                true
-            } else {
-                Log.e(TAG, "No launch intent available for ${task.packageName} (task ${task.taskId})")
-                false
+                return true
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch task fallback for ${task.packageName}", e)
+            Log.w(TAG, "Failed to launch intent fallback for ${task.packageName}", e)
+        }
+
+        // 4. Shell fallback if stock firmware restricts standard API
+        return try {
+            Runtime.getRuntime().exec(arrayOf("am", "start", "--activity-brought-to-front", "-p", task.packageName))
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Shell am start failed for ${task.packageName}", e)
             false
         }
     }
 
-    // removes task from recents stack via androids task management service
+    /**
+     * Removes a single task from the recents stack.
+     */
     @SuppressLint("BlockedPrivateApi")
     fun removeTask(taskId: Int): Boolean {
-        return try {
-            val service = getAtmService() ?: return false
-            val removeTaskMethod = removeTaskMethod
-                ?: service.javaClass.methods.firstOrNull {
-                    it.name == "removeTask" &&
-                            it.parameterTypes.size == 1 &&
-                            it.parameterTypes[0] == Int::class.javaPrimitiveType
-                }?.also {
-                    it.isAccessible = true
-                    removeTaskMethod = it
-                } ?: run {
-                    Log.e(TAG, "No removeTask(int) method found on task service")
-                    return false
-                }
+        // 1. Try ActivityTaskManager reflection
+        try {
+            val service = getAtmService()
+            if (service != null) {
+                val method = removeTaskMethod
+                    ?: service.javaClass.methods.firstOrNull {
+                        it.name == "removeTask" &&
+                                it.parameterTypes.size == 1 &&
+                                it.parameterTypes[0] == Int::class.javaPrimitiveType
+                    }?.also {
+                        it.isAccessible = true
+                        removeTaskMethod = it
+                    }
 
-            val result = removeTaskMethod.invoke(service, taskId)
-            Log.i(TAG, "removeTask($taskId) returned: $result")
-            result as? Boolean ?: true
+                if (method != null) {
+                    val result = method.invoke(service, taskId)
+                    Log.i(TAG, "removeTask($taskId) returned: $result")
+                    return (result as? Boolean) ?: true
+                }
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to remove task $taskId", e)
+            Log.w(TAG, "Reflection removeTask failed for $taskId", e)
+        }
+
+        // 2. Shell fallback
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("am", "stack", "remove", taskId.toString()))
+            process.waitFor()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Shell fallback removeTask failed for $taskId", e)
             false
         }
+    }
+
+    /**
+     * Sequentially kills/removes all background tasks.
+     */
+    fun clearAllTasks(tasks: List<RecentTaskInfo>): Boolean {
+        var allSuccess = true
+        for (task in tasks) {
+            val ok = removeTask(task.taskId)
+            if (!ok) {
+                allSuccess = false
+                try {
+                    activityManager.killBackgroundProcesses(task.packageName)
+                } catch (_: Exception) {}
+            }
+        }
+        return allSuccess
     }
 
     companion object {

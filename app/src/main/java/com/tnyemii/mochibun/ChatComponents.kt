@@ -77,11 +77,31 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -99,6 +119,146 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+
+/**
+ * Crisp pixel-art bunny sprite with white fur, black pixel eyes, pink inner ears, and blush cheeks.
+ * Rendered using direct Canvas pixel runs with 1:1 pixel silhouette (FilterQuality.None behavior)
+ * to avoid GPU overdraw or blurs on the MT6761.
+ */
+@Composable
+fun PixelBunnyAvatar(
+    modifier: Modifier = Modifier,
+    size: Dp = 22.dp
+) {
+    Canvas(modifier = modifier.size(size)) {
+        val pixelSize = this.size.width / 14f
+
+        val rows = listOf(
+            "..O.O....O.O..",
+            ".OWPWO..OWPWO.",
+            ".OWPWO..OWPWO.",
+            ".OWWWO..OWWWO.",
+            ".OOOOOOOOOOOO.",
+            "OWWWWWWWWWWWWO",
+            "OWWWWWWWWWWWWO",
+            "OWWDWWWWWWWDWO",
+            "OWWWWWWWWWWWWO",
+            "OWPPWWDDWWPPO.",
+            "OWWWWWWWWWWWWO",
+            ".OWWWWWWWWWWO.",
+            "..OOOOOOOOOO..",
+            ".............."
+        )
+
+        rows.forEachIndexed { y, row ->
+            row.forEachIndexed { x, ch ->
+                val color = when (ch) {
+                    'O' -> Color(0xFF4A2E56) // deep plum outline
+                    'W' -> Color(0xFFFFFFFF) // white fur
+                    'P' -> Color(0xFFFFADC9) // pink inner ear & blush
+                    'D' -> Color(0xFF2D1B36) // dark eyes & mouth
+                    else -> null
+                }
+                if (color != null) {
+                    drawRect(
+                        color = color,
+                        topLeft = Offset(x * pixelSize, y * pixelSize),
+                        size = Size(pixelSize, pixelSize)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Crisp pixel-art paper airplane icon pointing up-right (↗) for the send button.
+ */
+@Composable
+fun PixelPaperAirplane(
+    modifier: Modifier = Modifier,
+    size: Dp = 22.dp
+) {
+    Canvas(modifier = modifier.size(size)) {
+        val pixelSize = this.size.width / 14f
+
+        val rows = listOf(
+            "...........OO.",
+            ".........OO.WO",
+            ".......OO..WWO",
+            ".....OO..WWWWO",
+            "...OO..WWWWWWO",
+            ".OO..WWWWWWWWO",
+            "OWWWWWWWWWWWSO",
+            ".OWWWWWWWWWSO.",
+            "..OWWWWWWSSO..",
+            "...OWWWWSSO...",
+            "....OWWSO.....",
+            ".....OWO......",
+            "......O.......",
+            ".............."
+        )
+
+        rows.forEachIndexed { y, row ->
+            row.forEachIndexed { x, ch ->
+                val color = when (ch) {
+                    'O' -> Color(0xFF3E2452) // deep violet outline
+                    'W' -> Color(0xFFFFFFFF) // white wing
+                    'S' -> Color(0xFFD5C4E6) // lilac crease shadow
+                    else -> null
+                }
+                if (color != null) {
+                    drawRect(
+                        color = color,
+                        topLeft = Offset(x * pixelSize, y * pixelSize),
+                        size = Size(pixelSize, pixelSize)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Distinct double-line border in soft rose/mauve (#D68498) matching Mochi's message bubble.
+ */
+fun Modifier.concentricDoubleBorder(
+    outerColor: Color = Color(0xFFD68498),
+    innerColor: Color = Color(0xFFD68498),
+    outerRadiusDp: Dp = 20.dp,
+    outerStrokeDp: Dp = 1.5.dp,
+    gapDp: Dp = 3.5.dp,
+    innerStrokeDp: Dp = 1.2.dp
+): Modifier = this.drawWithContent {
+    drawContent()
+    val outerRadiusPx = outerRadiusDp.toPx()
+    val outerStrokePx = outerStrokeDp.toPx()
+    val gapPx = gapDp.toPx()
+    val innerStrokePx = innerStrokeDp.toPx()
+
+    // 1. Outer crisp stroke
+    drawRoundRect(
+        color = outerColor,
+        topLeft = Offset(outerStrokePx / 2f, outerStrokePx / 2f),
+        size = Size(size.width - outerStrokePx, size.height - outerStrokePx),
+        cornerRadius = CornerRadius(outerRadiusPx, outerRadiusPx),
+        style = Stroke(width = outerStrokePx)
+    )
+
+    // 2. Inner concentric stroke
+    val insetPx = outerStrokePx + gapPx
+    val innerRadiusPx = (outerRadiusPx - insetPx).coerceAtLeast(2f)
+    drawRoundRect(
+        color = innerColor,
+        topLeft = Offset(insetPx + innerStrokePx / 2f, insetPx + innerStrokePx / 2f),
+        size = Size(
+            (size.width - (insetPx * 2f) - innerStrokePx).coerceAtLeast(0f),
+            (size.height - (insetPx * 2f) - innerStrokePx).coerceAtLeast(0f)
+        ),
+        cornerRadius = CornerRadius(innerRadiusPx, innerRadiusPx),
+        style = Stroke(width = innerStrokePx)
+    )
+}
 
 // main composable screen for offline llm chat, ollama, and web search :3
 @OptIn(ExperimentalFoundationApi::class)
@@ -585,21 +745,40 @@ fun ChatPlaceholderPage(
         }
     }
 
-    Column(
+    val statusPillText = when (selectedBackend) {
+        "Local SmolLM2" -> {
+            if (resolvedModelPath.isNotEmpty()) "✦ SmolLM2 • Local ✦" else "✦ Model Needed ✦"
+        }
+        "PC Ollama" -> {
+            if (ollamaConnected == true) "✦ $selectedOllamaModel • Remote ✦" else "✦ Connecting... ✦"
+        }
+        else -> {
+            when (ollamaConnected) {
+                true -> "✦ $selectedOllamaModel • Remote ✦"
+                false -> if (resolvedModelPath.isNotEmpty()) "✦ SmolLM2 • Local ✦" else "✦ Setup Needed ✦"
+                null -> "✦ SmolLM2 • Local ✦"
+            }
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(theme.cardRoundnessDp.dp))
-            .background(theme.cardBgColor.copy(alpha = 0.85f))
+            .background(Color(0xFFFCECEF)) // Flat, solid warm blush pastel pink across screen
             .focusRequester(pageFocusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 if (!isActivePage || anyChatDialogOpen) return@onPreviewKeyEvent false
                 val native = event.nativeKeyEvent
 
-                if (isBackDismissKey(native.keyCode)) {
+                if (isBackDismissKey(native.keyCode) || native.keyCode == android.view.KeyEvent.KEYCODE_F4) {
                     if (event.type == KeyEventType.KeyUp) {
                         if (settingsMenuOpen) {
                             settingsMenuOpen = false
+                        } else if (settingsDialogOpen) {
+                            settingsDialogOpen = false
+                        } else if (selectedMessageForOptions != null) {
+                            selectedMessageForOptions = null
                         } else {
                             keyboardController?.hide()
                             onBack()
@@ -608,8 +787,8 @@ fun ChatPlaceholderPage(
                     return@onPreviewKeyEvent true
                 }
 
-                // When input TextField is focused, allow normal typing!
-                // Only intercept UP/DOWN or ENTER (to move to Send button).
+                // When input TextField is focused (focusZone == 3), allow normal typing!
+                // Only intercept UP/DOWN, RIGHT (to move to Send), or ENTER (to submit).
                 if (focusZone == 3) {
                     if (event.type == KeyEventType.KeyDown) {
                         when (native.keyCode) {
@@ -628,10 +807,14 @@ fun ChatPlaceholderPage(
                                 focusZone = 4
                                 return@onPreviewKeyEvent true
                             }
+                            android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                focusZone = 4
+                                return@onPreviewKeyEvent true
+                            }
                             android.view.KeyEvent.KEYCODE_ENTER,
                             android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                                 if (messageText.isNotBlank() && !isGenerating) {
-                                    focusZone = 4
+                                    sendMessageAction()
                                     return@onPreviewKeyEvent true
                                 }
                             }
@@ -647,11 +830,7 @@ fun ChatPlaceholderPage(
                         sawCenterDown = false
                         when (focusZone) {
                             0 -> {
-                                if (headerCol == 0) {
-                                    onBack()
-                                } else {
-                                    settingsDialogOpen = true
-                                }
+                                settingsDialogOpen = true
                             }
                             1 -> {
                                 try {
@@ -727,328 +906,391 @@ fun ChatPlaceholderPage(
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
                         when (focusZone) {
-                            0 -> {
-                                if (headerCol == 1) {
-                                    headerCol = 0
-                                } else {
-                                    onBack()
-                                }
-                            }
+                            0 -> onBack()
                             4 -> focusZone = 3
                         }
                         true
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
                         when (focusZone) {
-                            0 -> headerCol = 1
+                            3 -> focusZone = 4
                         }
                         true
                     }
                     else -> false
                 }
             }
-            .padding(14.dp)
     ) {
-        // top header with Home button, mascot, title, and settings button <3
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
-            KawaiiDialogPillButton(
-                text = "◀ Home",
-                isFocused = focusZone == 0 && headerCol == 0,
-                onClick = {
-                    focusZone = 0
-                    headerCol = 0
-                    onBack()
-                }
-            )
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            // 1. Top Header Card & Overlapping Badge
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 14.dp, top = 8.dp)
+                    .graphicsLayer { clip = false },
+                contentAlignment = Alignment.TopCenter
             ) {
-                PixelArtMascot(expression = mascotExpression, size = 48.dp)
-                Text(
-                    text = when (selectedBackend) {
-                        "PC Ollama" -> "✧ remote llm ✧"
-                        "Local SmolLM2" -> "✧ local llm ✧"
-                        else -> if (ollamaConnected == true) "✧ remote llm ✧" else "✧ local llm ✧"
-                    },
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = theme.fgTextColor
-                )
-            }
-
-            // Three-dot menu / settings button
-            Box {
-                KawaiiDialogPillButton(
-                    text = "⚙",
-                    isFocused = focusZone == 0 && headerCol == 1,
-                    onClick = {
-                        focusZone = 0
-                        headerCol = 1
-                        settingsMenuOpen = true
-                    }
-                )
-
-                DropdownMenu(
-                    expanded = settingsMenuOpen,
-                    onDismissRequest = { settingsMenuOpen = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Chat settings ♡", color = theme.fgTextColor) },
-                        onClick = {
-                            settingsMenuOpen = false
-                            settingsDialogOpen = true
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                "Clear chat ♡",
-                                color = if (!isGenerating && messages.isNotEmpty()) destructiveColor else Color.LightGray
-                            )
-                        },
-                        enabled = !isGenerating && messages.isNotEmpty(),
-                        onClick = {
-                            settingsMenuOpen = false
-                            messages.clear()
-                            coroutineScope.launch(Dispatchers.IO) {
-                                saveChatHistory(context, emptyList())
+                // Main Header Card with horizontal linear gradient
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .graphicsLayer { clip = false }
+                        .then(
+                            if (focusZone == 0) {
+                                Modifier.border(2.5.dp, Color(0xFFE5576E), RoundedCornerShape(30.dp))
+                            } else {
+                                Modifier
                             }
-                        }
-                    )
-                }
-            }
-        }
-
-        Text(
-            text = when (selectedBackend) {
-                "PC Ollama" -> if (ollamaConnected == true) "♡ PC connected • $selectedOllamaModel ♡" else "♡ PC Ollama mode • connecting... ♡"
-                "Local SmolLM2" -> if (resolvedModelPath.isNotEmpty()) "♡ Local SmolLM2 ready ♡" else "♡ Local mode • model needed ♡"
-                else -> when (ollamaConnected) {
-                    true -> "♡ PC connected • $selectedOllamaModel ♡"
-                    false -> if (resolvedModelPath.isNotEmpty()) "♡ Local AI ready • SmolLM2 ♡" else "♡ PC unavailable • local model needed ♡"
-                    null -> "♡ Checking AI connection... ♡"
-                }
-            },
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-            fontSize = 11.sp,
-            color = theme.appActionColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // scrollable chat conversation lazy column :3
-        LazyColumn(
-            state = chatListState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (showModelPrompt) {
-                item(key = "select_model_prompt") {
-                    val promptFocused = focusZone == 1
-                    val promptShape = RoundedCornerShape(16.dp)
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                width = if (promptFocused) 2.5.dp else 1.5.dp,
-                                color = if (promptFocused) theme.appActionColor else theme.greetingOutlineColor,
-                                shape = promptShape
+                        )
+                        .clip(RoundedCornerShape(30.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(Color(0xFFD5D4F5), Color(0xFFF7CAD8))
                             )
-                            .clickable {
-                                focusZone = 1
-                                try {
-                                    modelPicker.launch(arrayOf("*/*"))
-                                } catch (e: Exception) {
-                                    messages.add(ChatMessage(isUser = false, text = "Could not open file picker: ${e.localizedMessage} ♡"))
-                                }
-                            },
-                        shape = promptShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (promptFocused) theme.selectedContainerColor else theme.greetingBgColor
                         )
-                    ) {
-                        Text(
-                            text = "📁 Press OK or tap here to select your SmolLM2 .gguf model file ♡",
-                            modifier = Modifier.padding(14.dp),
-                            color = theme.fgTextColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            }
-
-            if (messages.isEmpty() && !isGenerating) {
-                item(key = "welcome_prompt") {
+                        .border(1.5.dp, Color(0xFF9D8DB8), RoundedCornerShape(30.dp))
+                        .clickable { settingsDialogOpen = true },
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = "♡ send me a message to try the chat ♡",
-                        color = theme.fgTextColor,
-                        modifier = Modifier.padding(8.dp)
+                        text = "— ♡ Mochi AI ♡ —",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF3E2452)
+                    )
+                }
+
+                // Overlapping Status Pill
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .offset(y = 13.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0xFFEAE8FB))
+                        .border(1.2.dp, Color(0xFFB3A2C8), RoundedCornerShape(50))
+                        .clickable { settingsDialogOpen = true }
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = statusPillText,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF3E2452)
                     )
                 }
             }
 
-            items(messages.size, key = { index -> messages[index].id }) { index ->
-                val msg = messages[index]
-                val isMsgFocused = focusZone == 2 && selectedMsgIndex == index
-                val bubbleShape = RoundedCornerShape(18.dp)
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = if (msg.isUser) Alignment.End else Alignment.Start
-                ) {
-                    if (!msg.isUser && msg.status != null) {
-                        Text(
-                            text = "🌐 ${msg.status}",
-                            fontSize = 11.sp,
-                            color = theme.appActionColor,
-                            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-                        )
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth(if (msg.isUser) 0.88f else 1f)
-                            .border(
-                                width = if (isMsgFocused) 2.5.dp else 1.dp,
-                                color = if (isMsgFocused) theme.appActionColor else theme.greetingOutlineColor,
-                                shape = bubbleShape
-                            )
-                            .pointerInput(msg.id) {
-                                detectTapGestures(
-                                    onTap = {
-                                        focusZone = 2
-                                        selectedMsgIndex = index
-                                    },
-                                    onLongPress = {
-                                        focusZone = 2
-                                        selectedMsgIndex = index
-                                        selectedMessageForOptions = msg
-                                    }
-                                )
-                            },
-                        shape = bubbleShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = when {
-                                isMsgFocused -> theme.selectedContainerColor
-                                msg.isUser -> theme.greetingBgColor
-                                else -> softSurfaceColor
-                            }
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = msg.text,
-                                color = theme.fgTextColor,
-                                fontSize = chatFontSize.sp
-                            )
-
-                            if (msg.sources.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "Sources:",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = theme.appActionColor
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                msg.sources.forEach { src ->
-                                    Text(
-                                        text = "• ${src.title}",
-                                        fontSize = 11.sp,
-                                        color = theme.appActionColor,
-                                        modifier = Modifier
-                                            .clickable {
-                                                try {
-                                                    val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(src.url))
-                                                    context.startActivity(viewIntent)
-                                                } catch (e: Exception) {
-                                                    e.printStackTrace()
-                                                }
-                                            }
-                                            .padding(vertical = 1.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Typing indicator positioned immediately above the input box <3
-        if (isGenerating) {
-            Spacer(modifier = Modifier.height(4.dp))
-            AnimatedTypingIndicator(
-                statusText = activeStatus ?: "Thinking...",
-                showReasoning = showReasoning
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // bottom message input text field and send button <3
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val fieldShape = RoundedCornerShape(18.dp)
-            TextField(
-                value = messageText,
-                onValueChange = { messageText = it },
+            // 2. Chat Message Stream
+            LazyColumn(
+                state = chatListState,
                 modifier = Modifier
                     .weight(1f)
-                    .border(
-                        width = if (focusZone == 3) 2.5.dp else 1.dp,
-                        color = if (focusZone == 3) theme.appActionColor else theme.greetingOutlineColor,
-                        shape = fieldShape
-                    )
-                    .focusRequester(inputFocusRequester),
-                placeholder = { Text(if (isGenerating) "thinking..." else "say something...") },
-                enabled = !isGenerating,
-                shape = fieldShape,
-                textStyle = TextStyle(
-                    color = theme.fgTextColor,
-                    fontSize = 14.sp
-                ),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = softSurfaceColor,
-                    unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.85f),
-                    focusedTextColor = theme.fgTextColor,
-                    unfocusedTextColor = theme.fgTextColor,
-                    focusedPlaceholderColor = theme.fgTextColor.copy(alpha = 0.6f),
-                    unfocusedPlaceholderColor = theme.fgTextColor.copy(alpha = 0.6f),
-                    disabledPlaceholderColor = theme.fgTextColor.copy(alpha = 0.45f),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledContainerColor = softSurfaceColor.copy(alpha = 0.6f),
-                    disabledTextColor = theme.fgTextColor,
-                ),
-                maxLines = 3
-            )
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            KawaiiDialogPillButton(
-                text = "Send",
-                isFocused = focusZone == 4,
-                enabled = !isGenerating && messageText.isNotBlank(),
-                isPrimary = true,
-                onClick = {
-                    focusZone = 4
-                    sendMessageAction()
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+                contentPadding = PaddingValues(top = 26.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                if (showModelPrompt) {
+                    item(key = "select_model_prompt") {
+                        val promptFocused = focusZone == 1
+                        val promptShape = RoundedCornerShape(20.dp)
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(
+                                    width = if (promptFocused) 2.5.dp else 1.5.dp,
+                                    color = if (promptFocused) Color(0xFFE5576E) else Color(0xFF9D8DB8),
+                                    shape = promptShape
+                                )
+                                .clickable {
+                                    focusZone = 1
+                                    try {
+                                        modelPicker.launch(arrayOf("*/*"))
+                                    } catch (e: Exception) {
+                                        messages.add(ChatMessage(isUser = false, text = "Could not open file picker: ${e.localizedMessage} ♡"))
+                                    }
+                                },
+                            shape = promptShape,
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFDFB))
+                        ) {
+                            Text(
+                                text = "📁 Press OK or tap here to select your SmolLM2 .gguf model file ♡",
+                                modifier = Modifier.padding(14.dp),
+                                color = Color(0xFF3E2452),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
                 }
-            )
+
+                if (messages.isEmpty() && !isGenerating) {
+                    item(key = "welcome_prompt") {
+                        Text(
+                            text = "— ♡ Ask Mochi anything to start chatting! ♡ —",
+                            color = Color(0xFF8E7A9F),
+                            fontSize = 13.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                items(messages.size, key = { index -> messages[index].id }) { index ->
+                    val msg = messages[index]
+                    val isMsgFocused = focusZone == 2 && selectedMsgIndex == index
+
+                    if (msg.isUser) {
+                        // User Chat Bubble (Right-Aligned)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 32.dp),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .graphicsLayer { clip = false }
+                                    .then(
+                                        if (isMsgFocused) {
+                                            Modifier.glowingDoubleBorder(true, RoundedCornerShape(20.dp))
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color(0xFFE3D4F7)) // Soft pastel lavender
+                                    .border(1.5.dp, Color(0xFF9D80B5), RoundedCornerShape(20.dp))
+                                    .pointerInput(msg.id) {
+                                        detectTapGestures(
+                                            onTap = {
+                                                focusZone = 2
+                                                selectedMsgIndex = index
+                                            },
+                                            onLongPress = {
+                                                focusZone = 2
+                                                selectedMsgIndex = index
+                                                selectedMessageForOptions = msg
+                                            }
+                                        )
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                            ) {
+                                Text(
+                                    text = msg.text,
+                                    color = Color(0xFF3A2446),
+                                    fontSize = chatFontSize.sp,
+                                    lineHeight = (chatFontSize + 6f).sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    } else {
+                        // Assistant / Mochi Chat Bubble (Left-Aligned)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 24.dp)
+                                .graphicsLayer { clip = false }
+                        ) {
+                            // Mochi Bubble Card with concentric double border
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 10.dp, start = 8.dp)
+                                    .graphicsLayer { clip = false }
+                                    .then(
+                                        if (isMsgFocused) {
+                                            Modifier.glowingDoubleBorder(true, RoundedCornerShape(20.dp))
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color(0xFFFFFDFB)) // Warm creamy off-white
+                                    .concentricDoubleBorder(
+                                        outerColor = Color(0xFFD68498),
+                                        innerColor = Color(0xFFD68498),
+                                        outerRadiusDp = 20.dp,
+                                        outerStrokeDp = 1.5.dp,
+                                        gapDp = 3.5.dp,
+                                        innerStrokeDp = 1.2.dp
+                                    )
+                                    .pointerInput(msg.id) {
+                                        detectTapGestures(
+                                            onTap = {
+                                                focusZone = 2
+                                                selectedMsgIndex = index
+                                            },
+                                            onLongPress = {
+                                                focusZone = 2
+                                                selectedMsgIndex = index
+                                                selectedMessageForOptions = msg
+                                            }
+                                        )
+                                    }
+                                    .padding(start = 24.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)
+                            ) {
+                                Column {
+                                    Text(
+                                        text = msg.text,
+                                        color = Color(0xFF3A2446),
+                                        fontSize = chatFontSize.sp,
+                                        lineHeight = (chatFontSize + 6f).sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+
+                                    if (msg.sources.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Sources:",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF9D80B5)
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        msg.sources.forEach { src ->
+                                            Text(
+                                                text = "• ${src.title}",
+                                                fontSize = 11.sp,
+                                                color = Color(0xFF9D80B5),
+                                                modifier = Modifier
+                                                    .clickable {
+                                                        try {
+                                                            val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(src.url))
+                                                            context.startActivity(viewIntent)
+                                                        } catch (e: Exception) {
+                                                            e.printStackTrace()
+                                                        }
+                                                    }
+                                                    .padding(vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Overlapping Bunny Avatar Badge anchored at top-left
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = 0.dp, y = 0.dp)
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFFDEEF2))
+                                    .border(1.5.dp, Color(0xFFD68498), RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                PixelBunnyAvatar(size = 22.dp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Typing indicator immediately above the input box
+            if (isGenerating) {
+                Spacer(modifier = Modifier.height(4.dp))
+                AnimatedTypingIndicator(
+                    statusText = activeStatus ?: "Thinking...",
+                    showReasoning = showReasoning
+                )
+            }
+
+            // 3. Bottom Input Bar & Send Button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 14.dp, bottom = 12.dp, top = 6.dp)
+                    .navigationBarsPadding()
+                    .imePadding(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Input Field Pill
+                val fieldShape = RoundedCornerShape(50)
+                BasicTextField(
+                    value = messageText,
+                    onValueChange = { messageText = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .focusRequester(inputFocusRequester)
+                        .graphicsLayer { clip = false }
+                        .then(
+                            if (focusZone == 3) {
+                                Modifier.border(2.dp, Color(0xFF9D8DB8), fieldShape)
+                            } else {
+                                Modifier.border(1.5.dp, Color(0xFFB19FC7), fieldShape)
+                            }
+                        )
+                        .clip(fieldShape)
+                        .background(Color(0xFFFFFDFB))
+                        .padding(horizontal = 16.dp),
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        color = Color(0xFF3E2452),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    cursorBrush = SolidColor(Color(0xFF3E2452)),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Send
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
+                            if (messageText.isNotBlank() && !isGenerating) {
+                                sendMessageAction()
+                            }
+                        }
+                    ),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (messageText.isEmpty()) {
+                                Text(
+                                    text = if (isGenerating) "♡ Thinking... ♡" else "♡ Ask Mochi anything... ♡",
+                                    color = Color(0xFF8E7A9F),
+                                    fontSize = 14.5.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    textAlign = TextAlign.Start
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+
+                // Circular Send Button
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .graphicsLayer { clip = false }
+                        .then(
+                            if (focusZone == 4) {
+                                Modifier.border(2.5.dp, Color(0xFF9D8DB8), CircleShape)
+                            } else {
+                                Modifier.border(1.5.dp, Color(0xFFC7B3D6), CircleShape)
+                            }
+                        )
+                        .clip(CircleShape)
+                        .background(Color(0xFFEAD5F0))
+                        .clickable(enabled = !isGenerating && messageText.isNotBlank()) {
+                            focusZone = 4
+                            sendMessageAction()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    PixelPaperAirplane(size = 22.dp)
+                }
+            }
         }
     }
 

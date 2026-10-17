@@ -116,3 +116,6 @@ local.properties
 
 # reference folder for agents
 reference/
+
+*.jks
+keystore.properties

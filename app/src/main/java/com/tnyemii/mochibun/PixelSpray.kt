@@ -142,31 +142,12 @@ object PixelStickers {
         blendMode = BlendMode.Modulate
     )
 
-    /** Golden yellow star with deep plum outline. Beautiful two-tone original artwork. */
+    /** 13x11 pastel star without dark outlines. Great candidate for all pastel tints. */
     val Star = PixelStickerAsset(
         resId = R.drawable.star,
         name = "star",
         intrinsicWidth = 12,
         intrinsicHeight = 11,
-        canTint = false
-    )
-
-    /** 13x11 pastel star without dark outlines. Great candidate for all pastel tints. */
-    val Star2 = PixelStickerAsset(
-        resId = R.drawable.star2,
-        name = "star2",
-        intrinsicWidth = 13,
-        intrinsicHeight = 11,
-        canTint = true,
-        blendMode = BlendMode.Modulate
-    )
-
-    /** Optional classic reference heart with black outline. */
-    val HeartRef = PixelStickerAsset(
-        resId = R.drawable.heart_ref,
-        name = "heart_ref",
-        intrinsicWidth = 1188,
-        intrinsicHeight = 1188,
         canTint = false
     )
 
@@ -176,180 +157,283 @@ object PixelStickers {
         Cloud,
         Heart,
         Sparkle,
-        Star,
-        Star2
+        Star
     )
 
-    /** Complete collection including reference heart. */
-    val ALL: List<PixelStickerAsset> = listOf(
-        Bow,
-        Cloud,
-        Heart,
-        Sparkle,
-        Star,
-        Star2,
-        HeartRef
-    )
-}
 
-/**
- * An individual positioned sticker within a generated [PixelSpray] layout.
- */
-data class PixelStickerItem(
-    val asset: PixelStickerAsset,
-    val x: Float,
-    val y: Float,
-    val width: Float,
-    val height: Float,
-    val rotation: Float,
-    val tintColor: Color?,
-    val colorFilter: ColorFilter?
-) {
-    val center: Offset get() = Offset(x, y)
-    val topLeft: Offset get() = Offset(x - width / 2f, y - height / 2f)
-}
-
-/**
- * Lightweight, deterministic layout generation helper for scattering stickers.
- *
- * Uses Mitchell's Best-Candidate algorithm to distribute stickers organically across
- * the canvas, preventing artificial grid rows/columns while avoiding unnatural center clumping.
- *
- * Aspect ratios are strictly preserved, and dimensions are clamped within the specified
- * area and edge padding.
- */
-fun generatePixelSprayLayout(
-    count: Int,
-    areaWidthPx: Float,
-    areaHeightPx: Float,
-    stickers: List<PixelStickerAsset> = PixelStickers.DEFAULT,
-    minSizePx: Float,
-    maxSizePx: Float,
-    minRotation: Float = -35f,
-    maxRotation: Float = 35f,
-    edgePaddingPx: Float = 0f,
-    tintBehavior: PixelSprayTintBehavior = PixelSprayTintBehavior.MIXED,
-    tintProbability: Float = 0.5f,
-    palette: List<Color> = PastelPalette.ALL,
-    seed: Long? = null
-): List<PixelStickerItem> {
-    if (count <= 0 || areaWidthPx <= 0f || areaHeightPx <= 0f || stickers.isEmpty()) {
-        return emptyList()
+    /**
+     * An individual positioned sticker within a generated [PixelSpray] layout.
+     */
+    data class PixelStickerItem(
+        val asset: PixelStickerAsset,
+        val x: Float,
+        val y: Float,
+        val width: Float,
+        val height: Float,
+        val rotation: Float,
+        val tintColor: Color?,
+        val colorFilter: ColorFilter?
+    ) {
+        val center: Offset get() = Offset(x, y)
+        val topLeft: Offset get() = Offset(x - width / 2f, y - height / 2f)
     }
 
-    val random = if (seed != null) Random(seed) else Random.Default
-    val actualMinSize = minOf(minSizePx, maxSizePx).coerceAtLeast(1f)
-    val actualMaxSize = maxOf(minSizePx, maxSizePx).coerceAtLeast(actualMinSize)
-    val actualMinRot = minOf(minRotation, maxRotation)
-    val actualMaxRot = maxOf(minRotation, maxRotation)
-
-    val items = ArrayList<PixelStickerItem>(count)
-    val candidatesCount = 8
-
-    for (i in 0 until count) {
-        val asset = stickers[random.nextInt(stickers.size)]
-
-        // Randomize target scale while strictly preserving intrinsic aspect ratio
-        val targetSize = actualMinSize + random.nextFloat() * (actualMaxSize - actualMinSize)
-        val ar = asset.aspectRatio
-        val (dispW, dispH) = if (ar >= 1f) {
-            targetSize to (targetSize / ar)
-        } else {
-            (targetSize * ar) to targetSize
+    /**
+     * Lightweight, deterministic layout generation helper for scattering stickers.
+     *
+     * Uses Mitchell's Best-Candidate algorithm to distribute stickers organically across
+     * the canvas, preventing artificial grid rows/columns while avoiding unnatural center clumping.
+     *
+     * Aspect ratios are strictly preserved, and dimensions are clamped within the specified
+     * area and edge padding.
+     */
+    fun generatePixelSprayLayout(
+        count: Int,
+        areaWidthPx: Float,
+        areaHeightPx: Float,
+        stickers: List<PixelStickerAsset> = PixelStickers.DEFAULT,
+        minSizePx: Float,
+        maxSizePx: Float,
+        minRotation: Float = -35f,
+        maxRotation: Float = 35f,
+        edgePaddingPx: Float = 0f,
+        tintBehavior: PixelSprayTintBehavior = PixelSprayTintBehavior.MIXED,
+        tintProbability: Float = 0.5f,
+        palette: List<Color> = PastelPalette.ALL,
+        seed: Long? = null
+    ): List<PixelStickerItem> {
+        if (count <= 0 || areaWidthPx <= 0f || areaHeightPx <= 0f || stickers.isEmpty()) {
+            return emptyList()
         }
 
-        // Randomize rotation
-        val rot = actualMinRot + random.nextFloat() * (actualMaxRot - actualMinRot)
+        val random = if (seed != null) Random(seed) else Random.Default
+        val actualMinSize = minOf(minSizePx, maxSizePx).coerceAtLeast(1f)
+        val actualMaxSize = maxOf(minSizePx, maxSizePx).coerceAtLeast(actualMinSize)
+        val actualMinRot = minOf(minRotation, maxRotation)
+        val actualMaxRot = maxOf(minRotation, maxRotation)
 
-        // Bounding radius accounting for rotation
-        val radius = sqrt(dispW * dispW + dispH * dispH) / 2f
+        val items = ArrayList<PixelStickerItem>(count)
+        val candidatesCount = 8
 
-        // Clamp placement within available area and padding
-        val minX = (edgePaddingPx + radius).coerceAtMost(areaWidthPx / 2f)
-        val maxX = (areaWidthPx - edgePaddingPx - radius).coerceAtLeast(minX)
-        val minY = (edgePaddingPx + radius).coerceAtMost(areaHeightPx / 2f)
-        val maxY = (areaHeightPx - edgePaddingPx - radius).coerceAtLeast(minY)
+        for (i in 0 until count) {
+            val asset = stickers[random.nextInt(stickers.size)]
 
-        // Best-Candidate placement for organic, non-grid, well-dispersed scatter
-        var bestX = minX + random.nextFloat() * (maxX - minX)
-        var bestY = minY + random.nextFloat() * (maxY - minY)
+            // Randomize target scale while strictly preserving intrinsic aspect ratio
+            val targetSize = actualMinSize + random.nextFloat() * (actualMaxSize - actualMinSize)
+            val ar = asset.aspectRatio
+            val (dispW, dispH) = if (ar >= 1f) {
+                targetSize to (targetSize / ar)
+            } else {
+                (targetSize * ar) to targetSize
+            }
 
-        if (items.isNotEmpty() && maxX > minX && maxY > minY) {
-            var bestDist = -1f
-            for (c in 0 until candidatesCount) {
-                val candX = minX + random.nextFloat() * (maxX - minX)
-                val candY = minY + random.nextFloat() * (maxY - minY)
+            // Randomize rotation
+            val rot = actualMinRot + random.nextFloat() * (actualMaxRot - actualMinRot)
 
-                var minDistToExisting = Float.MAX_VALUE
-                for (existing in items) {
-                    val d = hypot(candX - existing.x, candY - existing.y)
-                    if (d < minDistToExisting) {
-                        minDistToExisting = d
+            // Bounding radius accounting for rotation
+            val radius = sqrt(dispW * dispW + dispH * dispH) / 2f
+
+            // Clamp placement within available area and padding
+            val minX = (edgePaddingPx + radius).coerceAtMost(areaWidthPx / 2f)
+            val maxX = (areaWidthPx - edgePaddingPx - radius).coerceAtLeast(minX)
+            val minY = (edgePaddingPx + radius).coerceAtMost(areaHeightPx / 2f)
+            val maxY = (areaHeightPx - edgePaddingPx - radius).coerceAtLeast(minY)
+
+            // Best-Candidate placement for organic, non-grid, well-dispersed scatter
+            var bestX = minX + random.nextFloat() * (maxX - minX)
+            var bestY = minY + random.nextFloat() * (maxY - minY)
+
+            if (items.isNotEmpty() && maxX > minX && maxY > minY) {
+                var bestDist = -1f
+                for (c in 0 until candidatesCount) {
+                    val candX = minX + random.nextFloat() * (maxX - minX)
+                    val candY = minY + random.nextFloat() * (maxY - minY)
+
+                    var minDistToExisting = Float.MAX_VALUE
+                    for (existing in items) {
+                        val d = hypot(candX - existing.x, candY - existing.y)
+                        if (d < minDistToExisting) {
+                            minDistToExisting = d
+                        }
+                    }
+
+                    if (minDistToExisting > bestDist) {
+                        bestDist = minDistToExisting
+                        bestX = candX
+                        bestY = candY
                     }
                 }
+            }
 
-                if (minDistToExisting > bestDist) {
-                    bestDist = minDistToExisting
-                    bestX = candX
-                    bestY = candY
-                }
+            // Determine tinting per sticker
+            val shouldTint = asset.canTint && when (tintBehavior) {
+                PixelSprayTintBehavior.ORIGINAL_ONLY -> false
+                PixelSprayTintBehavior.TINT_ELIGIBLE_ONLY -> true
+                PixelSprayTintBehavior.MIXED -> random.nextFloat() < tintProbability
+                PixelSprayTintBehavior.ALWAYS_TINT_WHERE_POSSIBLE -> true
+            }
+
+            val tintColor = if (shouldTint && palette.isNotEmpty()) {
+                palette[random.nextInt(palette.size)]
+            } else {
+                null
+            }
+
+            val colorFilter = tintColor?.let { ColorFilter.tint(it, asset.blendMode) }
+
+            items.add(
+                PixelStickerItem(
+                    asset = asset,
+                    x = bestX,
+                    y = bestY,
+                    width = dispW,
+                    height = dispH,
+                    rotation = rot,
+                    tintColor = tintColor,
+                    colorFilter = colorFilter
+                )
+            )
+        }
+
+        return items
+    }
+
+    /**
+     * Scatters a specified number of cute pixel-art stickers across the available layout area.
+     *
+     * Designed for Mochibun's kawaii aesthetic and tuned for performance on 480 × 800 low-RAM devices:
+     * - Employs nearest-neighbor sampling ([FilterQuality.None]) to preserve crisp pixel-art edges.
+     * - Reuses cached [ImageBitmap] instances with zero per-frame bitmap duplication.
+     * - Renders all stickers in a single fast [Canvas] pass without Composable overhead.
+     * - Retains a stable arrangement across ordinary parent recompositions.
+     *
+     * @param count Number of stickers to scatter.
+     * @param modifier Modifier to apply to the container layout.
+     * @param stickers List of sticker assets to randomly select from. Defaults to [PixelStickers.DEFAULT].
+     * @param minSize Minimum bounding dimension for stickers.
+     * @param maxSize Maximum bounding dimension for stickers.
+     * @param minRotation Minimum rotation in degrees (defaults to -35°).
+     * @param maxRotation Maximum rotation in degrees (defaults to +35°).
+     * @param edgePadding Inset from the outer edges of the layout area.
+     * @param tintBehavior Pastel tinting strategy ([PixelSprayTintBehavior]). Defaults to [PixelSprayTintBehavior.MIXED].
+     * @param tintProbability Probability (0.0f..1.0f) of applying a pastel tint to an eligible sticker in [PixelSprayTintBehavior.MIXED] mode.
+     * @param palette Coordinated pastel colors to draw tints from. Defaults to [PastelPalette.ALL].
+     * @param seed Optional random seed for reproducible or preview layouts.
+     */
+    @Composable
+    fun PixelSpray(
+        count: Int = 20,
+        modifier: Modifier = Modifier.fillMaxSize(),
+        stickers: List<PixelStickerAsset> = PixelStickers.DEFAULT,
+        minSize: Dp = 28.dp,
+        maxSize: Dp = 68.dp,
+        minRotation: Float = -35f,
+        maxRotation: Float = 35f,
+        edgePadding: Dp = 16.dp,
+        tintBehavior: PixelSprayTintBehavior = PixelSprayTintBehavior.MIXED,
+        tintProbability: Float = 0.5f,
+        palette: List<Color> = PastelPalette.ALL,
+        seed: Long? = null
+    ) {
+        if (count <= 0 || stickers.isEmpty()) return
+
+        val density = LocalDensity.current
+        val minSizePx = with(density) { minSize.toPx() }
+        val maxSizePx = with(density) { maxSize.toPx() }
+        val edgePaddingPx = with(density) { edgePadding.toPx() }
+
+        // Preload & remember unique sticker ImageBitmaps; avoids duplicate allocations
+        val context = LocalContext.current
+        val stickerBitmaps = remember(stickers) {
+            stickers.associate { asset ->
+                asset.resId to ImageBitmap.imageResource(context.resources, asset.resId)
             }
         }
 
-        // Determine tinting per sticker
-        val shouldTint = asset.canTint && when (tintBehavior) {
-            PixelSprayTintBehavior.ORIGINAL_ONLY -> false
-            PixelSprayTintBehavior.TINT_ELIGIBLE_ONLY -> true
-            PixelSprayTintBehavior.MIXED -> random.nextFloat() < tintProbability
-            PixelSprayTintBehavior.ALWAYS_TINT_WHERE_POSSIBLE -> true
+        BoxWithConstraints(modifier = modifier) {
+            val widthPx = with(density) {
+                if (maxWidth != Dp.Infinity && maxWidth > 0.dp) maxWidth.toPx() else 480.dp.toPx()
+            }
+            val heightPx = with(density) {
+                if (maxHeight != Dp.Infinity && maxHeight > 0.dp) maxHeight.toPx() else 800.dp.toPx()
+            }
+
+            // Arrangement is kept stable across recompositions unless inputs change
+            val items = remember(
+                count,
+                widthPx,
+                heightPx,
+                stickers,
+                minSizePx,
+                maxSizePx,
+                minRotation,
+                maxRotation,
+                edgePaddingPx,
+                tintBehavior,
+                tintProbability,
+                palette,
+                seed
+            ) {
+                generatePixelSprayLayout(
+                    count = count,
+                    areaWidthPx = widthPx,
+                    areaHeightPx = heightPx,
+                    stickers = stickers,
+                    minSizePx = minSizePx,
+                    maxSizePx = maxSizePx,
+                    minRotation = minRotation,
+                    maxRotation = maxRotation,
+                    edgePaddingPx = edgePaddingPx,
+                    tintBehavior = tintBehavior,
+                    tintProbability = tintProbability,
+                    palette = palette,
+                    seed = seed
+                )
+            }
+
+            // Render all stickers in a single fast, nearest-neighbor canvas draw pass
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                for (item in items) {
+                    val bitmap = stickerBitmaps[item.asset.resId] ?: continue
+                    rotate(degrees = item.rotation, pivot = item.center) {
+                        drawImage(
+                            image = bitmap,
+                            dstOffset = IntOffset(
+                                item.topLeft.x.roundToInt(),
+                                item.topLeft.y.roundToInt()
+                            ),
+                            dstSize = IntSize(item.width.roundToInt(), item.height.roundToInt()),
+                            colorFilter = item.colorFilter,
+                            filterQuality = FilterQuality.None
+                        )
+                    }
+                }
+            }
         }
-
-        val tintColor = if (shouldTint && palette.isNotEmpty()) {
-            palette[random.nextInt(palette.size)]
-        } else {
-            null
-        }
-
-        val colorFilter = tintColor?.let { ColorFilter.tint(it, asset.blendMode) }
-
-        items.add(
-            PixelStickerItem(
-                asset = asset,
-                x = bestX,
-                y = bestY,
-                width = dispW,
-                height = dispH,
-                rotation = rot,
-                tintColor = tintColor,
-                colorFilter = colorFilter
-            )
-        )
     }
 
-    return items
+// ============================================================================
+// Previews
+// ============================================================================
+
+    @Preview(
+        name = "PixelSpray - Kawaii Mixed",
+        widthDp = 480,
+        heightDp = 800,
+        showBackground = true,
+        backgroundColor = 0xFFFFFAF5
+    )
+    @Composable
+    fun PixelSprayPreview() {
+        PixelSpray(
+            count = 20
+        )
+    }
 }
 
 /**
  * Scatters a specified number of cute pixel-art stickers across the available layout area.
- *
- * Designed for Mochibun's kawaii aesthetic and tuned for performance on 480 × 800 low-RAM devices:
- * - Employs nearest-neighbor sampling ([FilterQuality.None]) to preserve crisp pixel-art edges.
- * - Reuses cached [ImageBitmap] instances with zero per-frame bitmap duplication.
- * - Renders all stickers in a single fast [Canvas] pass without Composable overhead.
- * - Retains a stable arrangement across ordinary parent recompositions.
- *
- * @param count Number of stickers to scatter.
- * @param modifier Modifier to apply to the container layout.
- * @param stickers List of sticker assets to randomly select from. Defaults to [PixelStickers.DEFAULT].
- * @param minSize Minimum bounding dimension for stickers.
- * @param maxSize Maximum bounding dimension for stickers.
- * @param minRotation Minimum rotation in degrees (defaults to -35°).
- * @param maxRotation Maximum rotation in degrees (defaults to +35°).
- * @param edgePadding Inset from the outer edges of the layout area.
- * @param tintBehavior Pastel tinting strategy ([PixelSprayTintBehavior]). Defaults to [PixelSprayTintBehavior.MIXED].
- * @param tintProbability Probability (0.0f..1.0f) of applying a pastel tint to an eligible sticker in [PixelSprayTintBehavior.MIXED] mode.
- * @param palette Coordinated pastel colors to draw tints from. Defaults to [PastelPalette.ALL].
- * @param seed Optional random seed for reproducible or preview layouts.
+ * Top-level convenience composable delegating to [PixelStickers.PixelSpray].
  */
 @Composable
 fun PixelSpray(
@@ -366,99 +450,19 @@ fun PixelSpray(
     palette: List<Color> = PastelPalette.ALL,
     seed: Long? = null
 ) {
-    if (count <= 0 || stickers.isEmpty()) return
-
-    val density = LocalDensity.current
-    val minSizePx = with(density) { minSize.toPx() }
-    val maxSizePx = with(density) { maxSize.toPx() }
-    val edgePaddingPx = with(density) { edgePadding.toPx() }
-
-    // Preload & remember unique sticker ImageBitmaps; avoids duplicate allocations
-    val context = LocalContext.current
-    val stickerBitmaps = remember(stickers) {
-        stickers.associate { asset ->
-            asset.resId to ImageBitmap.imageResource(context.resources, asset.resId)
-        }
-    }
-
-    BoxWithConstraints(modifier = modifier) {
-        val widthPx = with(density) {
-            if (maxWidth != Dp.Infinity && maxWidth > 0.dp) maxWidth.toPx() else 480.dp.toPx()
-        }
-        val heightPx = with(density) {
-            if (maxHeight != Dp.Infinity && maxHeight > 0.dp) maxHeight.toPx() else 800.dp.toPx()
-        }
-
-        // Arrangement is kept stable across recompositions unless inputs change
-        val items = remember(
-            count,
-            widthPx,
-            heightPx,
-            stickers,
-            minSizePx,
-            maxSizePx,
-            minRotation,
-            maxRotation,
-            edgePaddingPx,
-            tintBehavior,
-            tintProbability,
-            palette,
-            seed
-        ) {
-            generatePixelSprayLayout(
-                count = count,
-                areaWidthPx = widthPx,
-                areaHeightPx = heightPx,
-                stickers = stickers,
-                minSizePx = minSizePx,
-                maxSizePx = maxSizePx,
-                minRotation = minRotation,
-                maxRotation = maxRotation,
-                edgePaddingPx = edgePaddingPx,
-                tintBehavior = tintBehavior,
-                tintProbability = tintProbability,
-                palette = palette,
-                seed = seed
-            )
-        }
-
-        // Render all stickers in a single fast, nearest-neighbor canvas draw pass
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            for (item in items) {
-                val bitmap = stickerBitmaps[item.asset.resId] ?: continue
-                rotate(degrees = item.rotation, pivot = item.center) {
-                    drawImage(
-                        image = bitmap,
-                        dstOffset = IntOffset(item.topLeft.x.roundToInt(), item.topLeft.y.roundToInt()),
-                        dstSize = IntSize(item.width.roundToInt(), item.height.roundToInt()),
-                        colorFilter = item.colorFilter,
-                        filterQuality = FilterQuality.None
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ============================================================================
-// Previews
-// ============================================================================
-
-@Preview(name = "PixelSpray - Kawaii Mixed", widthDp = 480, heightDp = 800, showBackground = true, backgroundColor = 0xFFFFFAF5)
-@Composable
-fun PixelSprayPreview() {
-    PixelSpray(
-        count = 20,
-        seed = 42L
+    PixelStickers.PixelSpray(
+        count = count,
+        modifier = modifier,
+        stickers = stickers,
+        minSize = minSize,
+        maxSize = maxSize,
+        minRotation = minRotation,
+        maxRotation = maxRotation,
+        edgePadding = edgePadding,
+        tintBehavior = tintBehavior,
+        tintProbability = tintProbability,
+        palette = palette,
+        seed = seed
     )
 }
 
-@Preview(name = "PixelSpray - Original Colors", widthDp = 480, heightDp = 800, showBackground = true, backgroundColor = 0xFFF7F0FA)
-@Composable
-fun PixelSprayOriginalPreview() {
-    PixelSpray(
-        count = 24,
-        tintBehavior = PixelSprayTintBehavior.ORIGINAL_ONLY,
-        seed = 101L
-    )
-}

@@ -8,9 +8,18 @@ import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,10 +37,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,7 +54,17 @@ import kotlinx.coroutines.delay
 
 const val APP_WIDGET_HOST_ID = 1024
 
-// widget page hosting actual Android widgets with AppWidgetHost & AppWidgetManager <3
+enum class WidgetFocusSection {
+    NOW_PLAYING,
+    USER_WIDGETS,
+    ADD_WIDGET,
+    HOME_PILL
+}
+
+/**
+ * Widget Screen hosting the native "Now Playing" media widget and Android AppWidgets.
+ * Faithfully matches the visual styling, component hierarchy, and kawaii aesthetic of Mochibun.
+ */
 @Composable
 fun WidgetPage(
     context: Context,
@@ -74,6 +95,27 @@ fun WidgetPage(
         }
     }
 
+    // MediaSession Tracking on Android 12 (API 31)
+    val mediaState by MediaSessionTracker.mediaState.collectAsState()
+
+    DisposableEffect(isActivePage) {
+        if (isActivePage) {
+            MediaSessionTracker.startTracking(context)
+        }
+        onDispose {
+            MediaSessionTracker.stopTracking()
+        }
+    }
+
+    // Periodic progress updates while actively playing
+    var playbackTick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(isActivePage, mediaState.isPlaying) {
+        while (isActivePage && mediaState.isPlaying) {
+            delay(500)
+            playbackTick++
+        }
+    }
+
     var savedWidgetIdsList by remember {
         mutableStateOf<List<Int>>(
             preferences.getString("widget_ids", "")
@@ -93,16 +135,13 @@ fun WidgetPage(
         }
     }
 
-    // the widget id we are currently creating (survives activity recreation) <3
     var pendingWidgetId by rememberSaveable { mutableStateOf<Int?>(null) }
 
-    // gives up on a widget that could not be created, so no id is leaked
     fun cancelPendingWidget(id: Int) {
         appWidgetHost.deleteAppWidgetId(id)
         pendingWidgetId = null
     }
 
-    // saves a finished widget (only once) so it shows up on the page
     fun finishWidget(id: Int) {
         pendingWidgetId = null
         if (id !in savedWidgetIdsList) {
@@ -110,8 +149,6 @@ fun WidgetPage(
         }
     }
 
-    // builds the intent for a widget's own configuration screen.
-    // it needs the explicit component, a plain ACTION_APPWIDGET_CONFIGURE can't be resolved
     fun makeConfigIntent(id: Int, configure: ComponentName): Intent =
         Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
             component = configure
@@ -131,20 +168,15 @@ fun WidgetPage(
             if (result.resultCode == Activity.RESULT_OK) {
                 if (!alreadySaved) saveIds(savedWidgetIdsList + id)
             } else if (!alreadySaved) {
-                // new widget whose setup was cancelled, so remove it.
-                // (cancelling the ⚙️ re-config of an existing widget keeps the widget)
                 Log.d(TAG, "Config cancelled for new widget id=$id")
                 appWidgetHost.deleteAppWidgetId(id)
             }
         }
     }
 
-    // called once Android says the widget id is bound to a provider:
-    // opens the config screen if the widget needs one, otherwise saves it
     fun continueAfterBind(id: Int) {
         val info = appWidgetManager.getAppWidgetInfo(id)
         if (info == null) {
-            // binding can lag behind the result callback; retry once before giving up
             Log.w(TAG, "Widget id=$id not visible yet, retrying")
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 val retry = appWidgetManager.getAppWidgetInfo(id)
@@ -214,11 +246,9 @@ fun WidgetPage(
             return@rememberLauncherForActivityResult
         }
 
-        // bind directly — no second bind screen needed
         if (appWidgetManager.bindAppWidgetIdIfAllowed(widgetId, provider)) {
             continueAfterBind(widgetId)
         } else {
-            // only when the user hasn't granted bind permission: one bind screen, once
             pendingWidgetId = widgetId
             val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
@@ -248,11 +278,12 @@ fun WidgetPage(
         }
     }
 
-    // D-pad focus state:
-    // focusIndex == 0:Header row (headerCol 0 = "+ Add Widget", headerCol 1 = "Home ▶")
-    // focusIndex in 1..savedWidgetIdsList.size: Widget card (pressing OK toggles remove strip or removes)
-    var focusIndex by remember { mutableIntStateOf(0) }
-    var headerCol by remember { mutableIntStateOf(0) }
+    // D-Pad Focus State Management
+    var focusSection by remember {
+        mutableStateOf(if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING else WidgetFocusSection.HOME_PILL)
+    }
+    var nowPlayingCol by remember { mutableIntStateOf(1) } // 0 = Prev, 1 = Play/Pause, 2 = Next
+    var focusedWidgetIdx by remember { mutableIntStateOf(0) }
     var removingWidgetId by remember { mutableStateOf<Int?>(null) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
@@ -260,24 +291,36 @@ fun WidgetPage(
     val listState = rememberLazyListState()
 
     val navigateHomeAndReset: () -> Unit = {
-        headerCol = 0
-        focusIndex = 0
+        focusSection = if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING else WidgetFocusSection.HOME_PILL
+        nowPlayingCol = 1
+        focusedWidgetIdx = 0
         removingWidgetId = null
         sawCenterDown = false
         onNavigateHome()
     }
 
-    LaunchedEffect(savedWidgetIdsList.size) {
-        focusIndex = focusIndex.coerceIn(0, savedWidgetIdsList.size)
+    // Graceful D-pad focus fallback when active music playback stops
+    LaunchedEffect(mediaState.isPlaying) {
+        if (!mediaState.isPlaying && focusSection == WidgetFocusSection.NOW_PLAYING) {
+            if (savedWidgetIdsList.isNotEmpty()) {
+                focusSection = WidgetFocusSection.USER_WIDGETS
+                focusedWidgetIdx = 0
+            } else {
+                focusSection = WidgetFocusSection.HOME_PILL
+            }
+        }
     }
 
-    LaunchedEffect(focusIndex, savedWidgetIdsList.size) {
-        val listIdx = focusIndex - 1
-        if (listIdx in savedWidgetIdsList.indices) {
-            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == listIdx }
+    // Ensure focused item is visible in LazyColumn
+    LaunchedEffect(focusSection, focusedWidgetIdx) {
+        if (focusSection == WidgetFocusSection.USER_WIDGETS && savedWidgetIdsList.isNotEmpty()) {
+            val targetIdx = (if (mediaState.isPlaying) 1 else 0) + focusedWidgetIdx
+            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
             if (!isVisible) {
-                listState.animateScrollToItem(listIdx)
+                listState.animateScrollToItem(targetIdx)
             }
+        } else if (focusSection == WidgetFocusSection.NOW_PLAYING) {
+            listState.animateScrollToItem(0)
         }
     }
 
@@ -292,23 +335,25 @@ fun WidgetPage(
                 }
             }
         } else {
-            headerCol = 0
-            focusIndex = 0
+            focusSection = if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING else WidgetFocusSection.HOME_PILL
+            nowPlayingCol = 1
+            focusedWidgetIdx = 0
             removingWidgetId = null
             sawCenterDown = false
         }
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
+            .background(Color(0xFFFCECEF)) // Flat pastel blush pink matching mockup
             .focusRequester(pageFocusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 if (!isActivePage) return@onPreviewKeyEvent false
 
-                if (isBackDismissKey(native.keyCode)) {
+                if (isBackDismissKey(native.keyCode) || native.keyCode == android.view.KeyEvent.KEYCODE_F4) {
                     if (event.type == KeyEventType.KeyUp) {
                         if (removingWidgetId != null) {
                             removingWidgetId = null
@@ -324,22 +369,31 @@ fun WidgetPage(
                         sawCenterDown = true
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
-                        if (focusIndex == 0) {
-                            if (headerCol == 0) {
-                                launchWidgetPicker()
-                            } else {
-                                navigateHomeAndReset()
-                            }
-                        } else {
-                            val widgetId = savedWidgetIdsList.getOrNull(focusIndex - 1)
-                            if (widgetId != null) {
-                                if (removingWidgetId == widgetId) {
-                                    appWidgetHost.deleteAppWidgetId(widgetId)
-                                    saveIds(savedWidgetIdsList.filter { it != widgetId })
-                                    removingWidgetId = null
-                                } else {
-                                    removingWidgetId = widgetId
+                        when (focusSection) {
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                when (nowPlayingCol) {
+                                    0 -> MediaSessionTracker.skipToPrevious()
+                                    1 -> MediaSessionTracker.togglePlayPause()
+                                    2 -> MediaSessionTracker.skipToNext()
                                 }
+                            }
+                            WidgetFocusSection.USER_WIDGETS -> {
+                                val widgetId = savedWidgetIdsList.getOrNull(focusedWidgetIdx)
+                                if (widgetId != null) {
+                                    if (removingWidgetId == widgetId) {
+                                        appWidgetHost.deleteAppWidgetId(widgetId)
+                                        saveIds(savedWidgetIdsList.filter { it != widgetId })
+                                        removingWidgetId = null
+                                    } else {
+                                        removingWidgetId = widgetId
+                                    }
+                                }
+                            }
+                            WidgetFocusSection.ADD_WIDGET -> {
+                                launchWidgetPicker()
+                            }
+                            WidgetFocusSection.HOME_PILL -> {
+                                navigateHomeAndReset()
                             }
                         }
                     }
@@ -351,208 +405,371 @@ fun WidgetPage(
                 when (native.keyCode) {
                     android.view.KeyEvent.KEYCODE_DPAD_UP -> {
                         removingWidgetId = null
-                        focusIndex = (focusIndex - 1).coerceAtLeast(0)
+                        when (focusSection) {
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                // Already at top
+                            }
+                            WidgetFocusSection.USER_WIDGETS -> {
+                                if (focusedWidgetIdx > 0) {
+                                    focusedWidgetIdx--
+                                } else if (mediaState.isPlaying) {
+                                    focusSection = WidgetFocusSection.NOW_PLAYING
+                                    nowPlayingCol = 1
+                                }
+                            }
+                            WidgetFocusSection.ADD_WIDGET -> {
+                                if (savedWidgetIdsList.isNotEmpty()) {
+                                    focusSection = WidgetFocusSection.USER_WIDGETS
+                                    focusedWidgetIdx = savedWidgetIdsList.size - 1
+                                } else if (mediaState.isPlaying) {
+                                    focusSection = WidgetFocusSection.NOW_PLAYING
+                                    nowPlayingCol = 1
+                                }
+                            }
+                            WidgetFocusSection.HOME_PILL -> {
+                                focusSection = WidgetFocusSection.ADD_WIDGET
+                            }
+                        }
                         true
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
                         removingWidgetId = null
-                        focusIndex = (focusIndex + 1).coerceAtMost(savedWidgetIdsList.size)
+                        when (focusSection) {
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                if (savedWidgetIdsList.isNotEmpty()) {
+                                    focusSection = WidgetFocusSection.USER_WIDGETS
+                                    focusedWidgetIdx = 0
+                                } else {
+                                    focusSection = WidgetFocusSection.ADD_WIDGET
+                                }
+                            }
+                            WidgetFocusSection.USER_WIDGETS -> {
+                                if (focusedWidgetIdx < savedWidgetIdsList.size - 1) {
+                                    focusedWidgetIdx++
+                                } else {
+                                    focusSection = WidgetFocusSection.ADD_WIDGET
+                                }
+                            }
+                            WidgetFocusSection.ADD_WIDGET -> {
+                                focusSection = WidgetFocusSection.HOME_PILL
+                            }
+                            WidgetFocusSection.HOME_PILL -> {
+                                // Already at bottom
+                            }
+                        }
                         true
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        if (focusIndex == 0) {
-                            headerCol = 0
-                        } else {
-                            removingWidgetId = null
+                        when (focusSection) {
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                nowPlayingCol = (nowPlayingCol - 1).coerceAtLeast(0)
+                            }
+                            WidgetFocusSection.USER_WIDGETS -> {
+                                removingWidgetId = null
+                            }
+                            else -> {}
                         }
                         true
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        if (focusIndex == 0) {
-                            if (headerCol == 0) {
-                                headerCol = 1
-                            } else {
+                        when (focusSection) {
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                if (nowPlayingCol < 2) {
+                                    nowPlayingCol++
+                                } else {
+                                    navigateHomeAndReset()
+                                }
+                            }
+                            else -> {
                                 navigateHomeAndReset()
                             }
-                        } else {
-                            navigateHomeAndReset()
                         }
                         true
                     }
                     else -> false
                 }
             }
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // 1. Top Scalloped Lavender Clouds
+        TopLavenderClouds(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+        )
+
+        // 2. Main Scrollable Content (Header, Now Playing, User Widgets, Add Widget)
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            contentPadding = PaddingValues(top = 44.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "♡ Widgets ♡",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = theme.fgTextColor
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                KawaiiDialogPillButton(
-                    text = "+ Add Widget",
-                    isFocused = focusIndex == 0 && headerCol == 0,
-                    isPrimary = true,
-                    onClick = {
-                        focusIndex = 0
-                        headerCol = 0
-                        launchWidgetPicker()
-                    }
-                )
-
-                KawaiiDialogPillButton(
-                    text = "Home ▶",
-                    isFocused = focusIndex == 0 && headerCol == 1,
-                    onClick = {
-                        navigateHomeAndReset()
-                    }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (savedWidgetIdsList.isEmpty()) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .border(2.5.dp, theme.greetingOutlineColor, RoundedCornerShape(cardRoundness)),
-                colors = CardDefaults.cardColors(containerColor = theme.cardBgColor.copy(alpha = 0.85f)),
-                shape = RoundedCornerShape(cardRoundness)
-            ) {
+            // Top Header & Overlapping Sub-Badge
+            item(key = "header") {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = 12.dp)
                 ) {
-                    Text(
-                        text = "♡ No widgets yet!\nPress OK on '+ Add Widget' to add your favorite Android widgets ♡",
-                        color = theme.fgTextColor,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center
+                    // Gradient pill card: — ♡ Widgets ♡ —
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(Color(0xFFD5D4F5), Color(0xFFF7CAD8))
+                                )
+                            )
+                            .border(1.5.dp, Color(0xFFB5A4CB), RoundedCornerShape(32.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "✦  —  ♡  Widgets  ♡  —  ✦",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF3E2452)
+                            )
+                        }
+                    }
+
+                    // Overlapping Sub-Badge: ✦ Now Playing ✦
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .offset(y = 13.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFFEAE8FB))
+                            .border(1.2.dp, Color(0xFFB5A4CB), RoundedCornerShape(50))
+                            .clickable {
+                                if (!MediaSessionTracker.hasNotificationAccess(context)) {
+                                    Toast.makeText(
+                                        context,
+                                        "Please allow Notification Access for Mochibun to track media ♡",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    try {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                        )
+                                    } catch (_: Exception) {}
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "Now Playing media service active ♡",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "✦ Now Playing ✦",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF3E2452)
+                        )
+                    }
+                }
+            }
+
+            // Dedicated, Dynamic "Now Playing" Native Card (Active Playback Only)
+            if (mediaState.isPlaying) {
+                item(key = "now_playing_card") {
+                    NowPlayingCard(
+                        mediaState = mediaState,
+                        focusedControl = if (focusSection == WidgetFocusSection.NOW_PLAYING) nowPlayingCol else -1,
+                        onPrevious = { MediaSessionTracker.skipToPrevious() },
+                        onPlayPause = { MediaSessionTracker.togglePlayPause() },
+                        onNext = { MediaSessionTracker.skipToNext() },
+                        onOpenMediaApp = { MediaSessionTracker.openCurrentMediaApp(context) },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                itemsIndexed(savedWidgetIdsList, key = { _, id -> id }) { idx, widgetId ->
-                    val info = remember(widgetId) { appWidgetManager.getAppWidgetInfo(widgetId) }
-                    if (info == null) {
-                        LaunchedEffect(widgetId) {
-                            appWidgetHost.deleteAppWidgetId(widgetId)
-                            saveIds(savedWidgetIdsList.filter { it != widgetId })
-                        }
-                    } else {
-                        val isWidgetFocused = focusIndex == idx + 1
-                        val showRemove = removingWidgetId == widgetId
-                        val cardShape = RoundedCornerShape(16.dp)
 
+            // User-added Android App Widgets
+            itemsIndexed(savedWidgetIdsList, key = { _, id -> id }) { idx, widgetId ->
+                val info = remember(widgetId) { appWidgetManager.getAppWidgetInfo(widgetId) }
+                if (info == null) {
+                    LaunchedEffect(widgetId) {
+                        appWidgetHost.deleteAppWidgetId(widgetId)
+                        saveIds(savedWidgetIdsList.filter { it != widgetId })
+                    }
+                } else {
+                    val isWidgetFocused = focusSection == WidgetFocusSection.USER_WIDGETS && focusedWidgetIdx == idx
+                    val showRemove = removingWidgetId == widgetId
+                    val cardShape = RoundedCornerShape(18.dp)
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(
+                                with(androidx.compose.ui.platform.LocalDensity.current) {
+                                    (info.minHeight.takeIf { it > 0 } ?: 100).dp
+                                }
+                            )
+                            .clip(cardShape)
+                            .background(Color(0xFFFFF6F8))
+                            .glowingDoubleBorder(isSelected = isWidgetFocused, shape = cardShape, cornerRadius = 18.dp)
+                            .border(
+                                width = if (isWidgetFocused) 2.5.dp else 1.5.dp,
+                                color = if (isWidgetFocused) Color(0xFFE06287) else Color(0xFFE5A4B4),
+                                shape = cardShape
+                            )
+                    ) {
+                        AndroidView(
+                            factory = { ctx ->
+                                try {
+                                    appWidgetHost.createView(ctx, widgetId, info).apply {
+                                        setAppWidget(widgetId, info)
+                                    }
+                                } catch (_: Exception) {
+                                    android.widget.TextView(ctx).apply {
+                                        text = "Error loading widget ♡"
+                                        setTextColor(android.graphics.Color.MAGENTA)
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+
+                        // Corner remove handle
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(
-                                    with(androidx.compose.ui.platform.LocalDensity.current) {
-                                        (info.minHeight.takeIf { it > 0 } ?: 100).dp
-                                    }
-                                )
-                                .clip(cardShape)
-                                .border(
-                                    width = if (isWidgetFocused) 3.dp else 1.5.dp,
-                                    color = if (isWidgetFocused) theme.appActionColor else theme.greetingOutlineColor,
-                                    shape = cardShape
-                                )
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFF6F0FD))
+                                .border(1.5.dp, Color(0xFFB5A4CB), RoundedCornerShape(10.dp))
+                                .clickable {
+                                    focusSection = WidgetFocusSection.USER_WIDGETS
+                                    focusedWidgetIdx = idx
+                                    removingWidgetId = if (showRemove) null else widgetId
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            AndroidView(
-                                factory = { ctx ->
-                                    try {
-                                        appWidgetHost.createView(ctx, widgetId, info).apply {
-                                            setAppWidget(widgetId, info)
-                                        }
-                                    } catch (_: Exception) {
-                                        android.widget.TextView(ctx).apply {
-                                            text = "Error loading widget ♡"
-                                            setTextColor(android.graphics.Color.MAGENTA)
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.fillMaxSize()
+                            Text(
+                                text = "⋯",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF3E2452)
                             )
+                        }
 
-                            // corner handle — tap or press OK when focused to reveal remove button
+                        if (showRemove) {
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(6.dp)
+                                    .padding(top = 36.dp, end = 6.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        if (isWidgetFocused) theme.selectedContainerColor else theme.cardBgColor.copy(alpha = 0.85f)
-                                    )
-                                    .border(
-                                        1.5.dp,
-                                        if (isWidgetFocused) theme.appActionColor else theme.greetingOutlineColor,
-                                        RoundedCornerShape(10.dp)
-                                    )
+                                    .background(destructiveBgColor)
+                                    .border(2.dp, destructiveColor, RoundedCornerShape(10.dp))
                                     .clickable {
-                                        focusIndex = idx + 1
-                                        removingWidgetId = if (showRemove) null else widgetId
+                                        appWidgetHost.deleteAppWidgetId(widgetId)
+                                        saveIds(savedWidgetIdsList.filter { it != widgetId })
+                                        removingWidgetId = null
                                     }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = "⋯",
-                                    fontSize = 14.sp,
+                                    text = "✖ Remove (OK)",
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = theme.fgTextColor
+                                    color = destructiveColor
                                 )
-                            }
-
-                            if (showRemove) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(top = 36.dp, end = 6.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(destructiveBgColor)
-                                        .border(2.dp, destructiveColor, RoundedCornerShape(10.dp))
-                                        .clickable {
-                                            appWidgetHost.deleteAppWidgetId(widgetId)
-                                            saveIds(savedWidgetIdsList.filter { it != widgetId })
-                                            removingWidgetId = null
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                                ) {
-                                    Text(
-                                        text = "✖ Remove (OK)",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = destructiveColor
-                                    )
-                                }
                             }
                         }
                     }
                 }
+            }
+
+            // "+ Add Widget" kawaii pill action
+            item(key = "add_widget_button") {
+                val isAddFocused = focusSection == WidgetFocusSection.ADD_WIDGET
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(if (isAddFocused) Color(0xFFFFF0F4) else Color(0xFFF6F0FD))
+                            .glowingDoubleBorder(isSelected = isAddFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
+                            .border(1.5.dp, if (isAddFocused) Color(0xFFE06287) else Color(0xFFB5A4CB), RoundedCornerShape(50))
+                            .clickable {
+                                focusSection = WidgetFocusSection.ADD_WIDGET
+                                launchWidgetPicker()
+                            }
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (savedWidgetIdsList.isEmpty() && !mediaState.isPlaying) {
+                                "+ Add Favorite Widgets ♡"
+                            } else {
+                                "+ Add Widget ♡"
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF3E2452)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Bottom Layered Lavender Clouds
+        BottomLavenderClouds(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+        )
+
+        // 4. Upward Chevron and "Back to Home" Navigation Pill
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "^",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF3E2452)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            val isHomeFocused = focusSection == WidgetFocusSection.HOME_PILL
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFFFFF6F8))
+                    .glowingDoubleBorder(isSelected = isHomeFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
+                    .border(1.2.dp, if (isHomeFocused) Color(0xFFE06287) else Color(0xFFB5A4CB), RoundedCornerShape(50))
+                    .clickable { navigateHomeAndReset() }
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "♥ Back to Home ▶",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF3E2452)
+                )
             }
         }
     }

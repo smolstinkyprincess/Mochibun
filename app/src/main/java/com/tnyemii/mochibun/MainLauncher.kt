@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -169,6 +170,14 @@ fun MainLauncher(
     var kawaiiIconNames by remember { mutableStateOf<List<String>>(emptyList()) }
     var iconRefreshKey by remember { mutableIntStateOf(0) }
     var folderIconRefreshKey by remember { mutableIntStateOf(0) }
+    var userName by remember {
+        mutableStateOf(preferences.getString("custom_user_name", "") ?: "")
+    }
+    LaunchedEffect(Unit) {
+        PreferencesManager.init(context)
+    }
+    val isPixelSprayEnabled by PreferencesManager.isPixelSprayEnabled.collectAsState()
+    var editUserNameDialogOpen by remember { mutableStateOf(false) }
     var launcherMenuOpen by remember { mutableStateOf(false) }
     var hiddenManagerOpen by remember { mutableStateOf(false) }
     var hardwareButtonsDialogOpen by remember { mutableStateOf(false) }
@@ -328,6 +337,7 @@ fun MainLauncher(
         themeStudioOpen ||
         hardwareButtonsDialogOpen ||
         virtualMouseDialogOpen ||
+        editUserNameDialogOpen ||
         openedFolderId != null ||
         createFolderDialogOpen ||
         folderToCreateFrom != null ||
@@ -414,6 +424,9 @@ fun MainLauncher(
                         folderIconMenuOpen = true
                     }
                 }
+            } else if (homeFocusArea == 2) {
+                selectedDrawerIndex = 0
+                drawerOpen = true
             } else {
                 launcherMenuOpen = true
             }
@@ -464,6 +477,7 @@ fun MainLauncher(
             themeStudioOpen = false
             iconPickerOpen = false
             hiddenManagerOpen = false
+            editUserNameDialogOpen = false
             openedFolderId = null
             folderToCreateFrom = null
             createFolderDialogOpen = false
@@ -569,6 +583,9 @@ fun MainLauncher(
                                                     openedFolderId = folder.id
                                                 }
                                             }
+                                        } else if (homeFocusArea == 2) {
+                                            selectedDrawerIndex = 0
+                                            drawerOpen = true
                                         } else {
                                             launcherMenuOpen = true
                                         }
@@ -724,8 +741,10 @@ fun MainLauncher(
                                     if (isCooldown) {
                                         return@onPreviewKeyEvent true
                                     }
-                                    if (homeFocusArea == 1 && favoriteItemCount > 0) {
-                                        homeFocusArea = 0
+                                    if (homeFocusArea == 2) {
+                                        homeFocusArea = if (favoriteItemCount > 0) 0 else 1
+                                    } else if (homeFocusArea == 0) {
+                                        homeFocusArea = 1
                                     } else if (nativeEvent.repeatCount == 0) {
                                         selectedDrawerIndex = 0
                                         drawerOpen = true
@@ -748,10 +767,13 @@ fun MainLauncher(
                                     if (isCooldown) {
                                         return@onPreviewKeyEvent true
                                     }
-                                    if (homeFocusArea == 0) {
-                                        homeFocusArea = 1
-                                    } else if (nativeEvent.repeatCount == 0) {
-                                        launcherMenuOpen = true
+                                    if (homeFocusArea == 1) {
+                                        homeFocusArea = if (favoriteItemCount > 0) 0 else 2
+                                    } else if (homeFocusArea == 0) {
+                                        homeFocusArea = 2
+                                    } else if (homeFocusArea == 2 && nativeEvent.repeatCount == 0) {
+                                        selectedDrawerIndex = 0
+                                        drawerOpen = true
                                     }
                                 }
                                 true
@@ -804,11 +826,12 @@ fun MainLauncher(
                             }
 
                             android.view.KeyEvent.KEYCODE_BACK,
-                            android.view.KeyEvent.KEYCODE_ESCAPE -> {
+                            android.view.KeyEvent.KEYCODE_ESCAPE,
+                            android.view.KeyEvent.KEYCODE_F4 -> {
                                 if (drawerOpen) {
                                     drawerOpen = false
                                     true
-                                } else if (isHomeScreenActive && homeFocusArea == 1 && favoriteItemCount > 0) {
+                                } else if (isHomeScreenActive && (homeFocusArea == 1 || homeFocusArea == 2) && favoriteItemCount > 0) {
                                     homeFocusArea = 0
                                     true
                                 } else if (isHomeScreenActive) {
@@ -866,11 +889,6 @@ fun MainLauncher(
                 )
             }
 
-            // cute sticker decorations only on main home page when drawer is closed :3
-            if (!drawerOpen) {
-                PixelSpray(24)
-            }
-
             val keyboardController = LocalSoftwareKeyboardController.current
             LaunchedEffect(pagerState.currentPage) {
                 if (pagerState.currentPage != 2) {
@@ -924,86 +942,74 @@ fun MainLauncher(
 
                     1 -> {
                         if (!drawerOpen) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                GreetingCard(
-                                    context = context,
-                                    isOnline = isOnline,
-                                    isLowBattery = isLowBattery
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                StatusCard(
-                                    context = context,
-                                    cardBgColor = cardBgColor,
-                                    cardTextColor = cardTextColor,
-                                    outlineColor = greetingOutlineColor,
-                                    isFocused = isHomeScreenActive && (homeFocusArea == 1 || favoriteItemCount == 0),
-                                    onClick = {
-                                        homeFocusArea = 1
-                                        launcherMenuOpen = true
-                                    },
-                                    onWifiChanged = { isOnline = it },
-                                    onLowBatteryChanged = { isLowBattery = it }
-                                )
-                                FavoritesCard(
-                                    context = context,
-                                    favoriteApps = favoriteApps,
-                                    favoriteFolders = favoriteFolders,
-                                    folderIconRefreshKey = folderIconRefreshKey,
-                                    selectedIndex = selectedFavoriteIndex,
-                                    isCardFocused = isHomeScreenActive && homeFocusArea == 0,
-                                    onAppClick = { app ->
-                                        val appIdx = favoriteApps.indexOfFirst {
-                                            it.packageName == app.packageName
-                                        }
-                                        if (appIdx != -1) {
-                                            homeFocusArea = 0
-                                            selectedFavoriteIndex = appIdx
-                                            savedFavoriteIndexOnHome = appIdx
-                                        }
-                                    },
-                                    onAppLongClick = { app ->
-                                        val appIdx = favoriteApps.indexOfFirst {
-                                            it.packageName == app.packageName
-                                        }
-                                        if (appIdx != -1) {
-                                            homeFocusArea = 0
-                                            selectedFavoriteIndex = appIdx
-                                            savedFavoriteIndexOnHome = appIdx
-                                        }
-                                        selectedApp = app
-                                    },
-                                    onFolderClick = { folder ->
-                                        val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
-                                        if (folderIdx != -1) {
-                                            val targetIdx = favoriteApps.size + folderIdx
-                                            homeFocusArea = 0
-                                            selectedFavoriteIndex = targetIdx
-                                            savedFavoriteIndexOnHome = targetIdx
-                                        }
-                                        folderOpenStartRename = false
-                                        folderOpenStartPicker = false
-                                        lastOpenedFolderId = folder.id
-                                        openedFolderId = folder.id
-                                    },
-                                    onFolderLongClick = { folder ->
-                                        val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
-                                        if (folderIdx != -1) {
-                                            val targetIdx = favoriteApps.size + folderIdx
-                                            homeFocusArea = 0
-                                            selectedFavoriteIndex = targetIdx
-                                            savedFavoriteIndexOnHome = targetIdx
-                                        }
-                                        iconEditingFolder = folder
-                                        folderIconMenuOpen = true
+                            HomeScreen(
+                                context = context,
+                                favoriteApps = favoriteApps,
+                                favoriteFolders = favoriteFolders,
+                                userName = userName,
+                                selectedFavoriteIndex = selectedFavoriteIndex,
+                                folderIconRefreshKey = folderIconRefreshKey,
+                                homeFocusArea = homeFocusArea,
+                                isHomeScreenActive = isHomeScreenActive,
+                                isPixelSprayEnabled = isPixelSprayEnabled,
+                                onHeaderClick = {
+                                    homeFocusArea = 1
+                                    launcherMenuOpen = true
+                                },
+                                onHeaderLongClick = {
+                                    homeFocusArea = 1
+                                    launcherMenuOpen = true
+                                },
+                                onAppClick = { app ->
+                                    val appIdx = favoriteApps.indexOfFirst {
+                                        it.packageName == app.packageName
                                     }
-                                )
-                            }
+                                    if (appIdx != -1) {
+                                        homeFocusArea = 0
+                                        selectedFavoriteIndex = appIdx
+                                        savedFavoriteIndexOnHome = appIdx
+                                    }
+                                },
+                                onAppLongClick = { app ->
+                                    val appIdx = favoriteApps.indexOfFirst {
+                                        it.packageName == app.packageName
+                                    }
+                                    if (appIdx != -1) {
+                                        homeFocusArea = 0
+                                        selectedFavoriteIndex = appIdx
+                                        savedFavoriteIndexOnHome = appIdx
+                                    }
+                                    selectedApp = app
+                                },
+                                onFolderClick = { folder ->
+                                    val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
+                                    if (folderIdx != -1) {
+                                        val targetIdx = favoriteApps.size + folderIdx
+                                        homeFocusArea = 0
+                                        selectedFavoriteIndex = targetIdx
+                                        savedFavoriteIndexOnHome = targetIdx
+                                    }
+                                    folderOpenStartRename = false
+                                    folderOpenStartPicker = false
+                                    lastOpenedFolderId = folder.id
+                                    openedFolderId = folder.id
+                                },
+                                onFolderLongClick = { folder ->
+                                    val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
+                                    if (folderIdx != -1) {
+                                        val targetIdx = favoriteApps.size + folderIdx
+                                        homeFocusArea = 0
+                                        selectedFavoriteIndex = targetIdx
+                                        savedFavoriteIndexOnHome = targetIdx
+                                    }
+                                    iconEditingFolder = folder
+                                    folderIconMenuOpen = true
+                                },
+                                onOpenDrawer = {
+                                    selectedDrawerIndex = 0
+                                    drawerOpen = true
+                                }
+                            )
                         }
                     }
 
@@ -1038,6 +1044,10 @@ fun MainLauncher(
                 LauncherMenuDialog(
                     onDismiss = {
                         launcherMenuOpen = false
+                    },
+                    onEditUserNameClick = {
+                        launcherMenuOpen = false
+                        editUserNameDialogOpen = true
                     },
                     onCreateFolderClick = {
                         launcherMenuOpen = false
@@ -1075,7 +1085,27 @@ fun MainLauncher(
                             .remove("wallpaper_uri")
                             .apply()
                     },
-                    showResetWallpaper = wallpaperUri != null
+                    showResetWallpaper = wallpaperUri != null,
+                    isPixelSprayEnabled = isPixelSprayEnabled,
+                    onTogglePixelSpray = { enabled ->
+                        PreferencesManager.setPixelSprayWallpaperEnabled(context, enabled)
+                    }
+                )
+            }
+
+            if (editUserNameDialogOpen) {
+                EditUserNameDialog(
+                    currentName = userName,
+                    onDismiss = {
+                        editUserNameDialogOpen = false
+                    },
+                    onSave = { newName ->
+                        userName = newName
+                        preferences.edit()
+                            .putString("custom_user_name", newName)
+                            .apply()
+                        editUserNameDialogOpen = false
+                    }
                 )
             }
 
@@ -1562,64 +1592,37 @@ fun MainLauncher(
 
             // app drawer view overlay :3
             if (drawerOpen) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(theme.bgColor.copy(alpha = 0.88f))
-                        .padding(16.dp)
-                ) {
-                    AppDrawerHeader(
-                        isFocused = selectedDrawerIndex == -1,
-                        onSwipeDown = { drawerOpen = false }
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(cardRoundness))
-                                .background(Color.Transparent)
-                                .padding(horizontal = 4.dp, vertical = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            itemsIndexed(
-                                visibleApps,
-                                key = { _, app -> app.componentKey }
-                            ) { index, app ->
-                                AppDrawerGridItem(
-                                    context = context,
-                                    app = app,
-                                    isSelected = index == selectedDrawerIndex,
-                                    onAppClick = { selectedDrawerIndex = index },
-                                    onAppLongClick = {
-                                        selectedDrawerIndex = index
-                                        selectedApp = it
-                                    }
-                                )
-                            }
+                AppDrawerScreen(
+                    context = context,
+                    visibleApps = visibleApps,
+                    selectedDrawerIndex = selectedDrawerIndex,
+                    currentDrawerLetter = currentDrawerLetter,
+                    letterStarts = letterStarts,
+                    listState = listState,
+                    onAppClick = { app ->
+                        selectedDrawerIndex = visibleApps.indexOfFirst { it.componentKey == app.componentKey }
+                        val launchIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+                        if (launchIntent != null) {
+                            context.startActivity(launchIntent)
                         }
-
-                        AlphabetIndex(
-                            availableLetters = letterStarts.keys,
-                            activeLetter = currentDrawerLetter,
-                            onLetterTap = { letter ->
-                                val target = letterStarts[letter]
-                                    ?: letterStarts.entries.firstOrNull { it.key > letter }?.value
-                                    ?: (visibleApps.size - 1)
-                                if (target >= 0) {
-                                    selectedDrawerIndex = target
-                                    scope.launch { listState.scrollToItem(target) }
-                                }
-                            }
-                        )
+                    },
+                    onAppLongClick = { app ->
+                        selectedDrawerIndex = visibleApps.indexOfFirst { it.componentKey == app.componentKey }
+                        selectedApp = app
+                    },
+                    onBackToHome = {
+                        drawerOpen = false
+                    },
+                    onLetterTap = { letter ->
+                        val target = letterStarts[letter]
+                            ?: letterStarts.entries.firstOrNull { it.key > letter }?.value
+                            ?: (visibleApps.size - 1)
+                        if (target >= 0 && visibleApps.isNotEmpty()) {
+                            selectedDrawerIndex = target
+                            scope.launch { listState.scrollToItem(target) }
+                        }
                     }
-                }
+                )
             }
         }
     }
