@@ -115,7 +115,8 @@ object HardwareRemapManager {
         for (key in PhysicalKey.entries) {
             if (!key.isStaticRemapSafe) continue
             val target = prefs.getString("static_remap_${key.scancode}", null)
-            if (!target.isNullOrBlank() && target != key.name) {
+            val defaultKey = BASELINE_MTK_KPD_MAPPINGS[key.scancode]
+            if (!target.isNullOrBlank() && target != defaultKey) {
                 mappings[key.scancode] = target
             }
         }

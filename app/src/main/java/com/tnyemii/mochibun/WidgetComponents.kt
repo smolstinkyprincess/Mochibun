@@ -259,6 +259,14 @@ fun WidgetPage(
     val pageFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
+    val navigateHomeAndReset: () -> Unit = {
+        headerCol = 0
+        focusIndex = 0
+        removingWidgetId = null
+        sawCenterDown = false
+        onNavigateHome()
+    }
+
     LaunchedEffect(savedWidgetIdsList.size) {
         focusIndex = focusIndex.coerceIn(0, savedWidgetIdsList.size)
     }
@@ -283,6 +291,11 @@ fun WidgetPage(
                     delay(35)
                 }
             }
+        } else {
+            headerCol = 0
+            focusIndex = 0
+            removingWidgetId = null
+            sawCenterDown = false
         }
     }
 
@@ -292,15 +305,15 @@ fun WidgetPage(
             .focusRequester(pageFocusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
-                if (!isActivePage) return@onPreviewKeyEvent false
                 val native = event.nativeKeyEvent
+                if (!isActivePage) return@onPreviewKeyEvent false
 
                 if (isBackDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) {
                         if (removingWidgetId != null) {
                             removingWidgetId = null
                         } else {
-                            onNavigateHome()
+                            navigateHomeAndReset()
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -315,7 +328,7 @@ fun WidgetPage(
                             if (headerCol == 0) {
                                 launchWidgetPicker()
                             } else {
-                                onNavigateHome()
+                                navigateHomeAndReset()
                             }
                         } else {
                             val widgetId = savedWidgetIdsList.getOrNull(focusIndex - 1)
@@ -359,10 +372,10 @@ fun WidgetPage(
                             if (headerCol == 0) {
                                 headerCol = 1
                             } else {
-                                onNavigateHome()
+                                navigateHomeAndReset()
                             }
                         } else {
-                            onNavigateHome()
+                            navigateHomeAndReset()
                         }
                         true
                     }
@@ -403,9 +416,7 @@ fun WidgetPage(
                     text = "Home ▶",
                     isFocused = focusIndex == 0 && headerCol == 1,
                     onClick = {
-                        focusIndex = 0
-                        headerCol = 1
-                        onNavigateHome()
+                        navigateHomeAndReset()
                     }
                 )
             }

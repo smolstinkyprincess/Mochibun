@@ -57,6 +57,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private class HomeTransitionTracker {
+    var wasActive: Boolean = false
+    var settledTimestamp: Long = 0L
+}
+
 // main launcher composable managing focus, gestures, state, and page navigation <3
 @Composable
 fun MainLauncher(
@@ -157,6 +162,7 @@ fun MainLauncher(
 
     var drawerOpen by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(initialPage = 1) { 3 }
+    var pendingTargetPage by remember { mutableStateOf<Int?>(null) }
     var selectedApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconEditingApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconPickerOpen by remember { mutableStateOf(false) }
@@ -171,6 +177,7 @@ fun MainLauncher(
 
     LaunchedEffect(requestedPage) {
         requestedPage?.let { target ->
+            pendingTargetPage = target
             pagerState.animateScrollToPage(target)
             onPageConsumed()
         }
@@ -300,6 +307,8 @@ fun MainLauncher(
 
     val favoriteItemCount = favoriteApps.size + favoriteFolders.size
     var selectedFavoriteIndex by remember { mutableIntStateOf(0) }
+    var savedFavoriteIndexOnHome by remember { mutableIntStateOf(0) }
+    val homeTracker = remember { HomeTransitionTracker() }
     var selectedDrawerIndex by remember { mutableIntStateOf(0) }
     // Home focus area: 0 = FavoritesCard row, 1 = StatusCard (launcher options / page switcher)
     var homeFocusArea by remember { mutableIntStateOf(0) }
@@ -322,8 +331,40 @@ fun MainLauncher(
         folderToCreateFrom != null ||
         folderIconMenuOpen
 
+    LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress) {
+        if (!pagerState.isScrollInProgress && (pendingTargetPage == null || pendingTargetPage == pagerState.settledPage)) {
+            pendingTargetPage = null
+        }
+    }
+
+    val isHomeScreenActive = !drawerOpen &&
+        !anyModalOpen &&
+        (pendingTargetPage == null || pendingTargetPage == 1) &&
+        pagerState.currentPage == 1 &&
+        pagerState.targetPage == 1 &&
+        pagerState.settledPage == 1 &&
+        !pagerState.isScrollInProgress
+
+    LaunchedEffect(isHomeScreenActive) {
+        if (isHomeScreenActive) {
+            homeTracker.wasActive = true
+            homeTracker.settledTimestamp = android.os.SystemClock.uptimeMillis()
+            selectedFavoriteIndex = savedFavoriteIndexOnHome.coerceIn(
+                0,
+                (favoriteItemCount - 1).coerceAtLeast(0)
+            )
+            if (favoriteItemCount > 0 && homeFocusArea != 1) {
+                homeFocusArea = 0
+            }
+        }
+    }
+
     LaunchedEffect(favoriteApps.size, favoriteFolders.size) {
         selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
+            0,
+            (favoriteItemCount - 1).coerceAtLeast(0)
+        )
+        savedFavoriteIndexOnHome = savedFavoriteIndexOnHome.coerceIn(
             0,
             (favoriteItemCount - 1).coerceAtLeast(0)
         )
@@ -359,7 +400,7 @@ fun MainLauncher(
             visibleApps.getOrNull(selectedDrawerIndex)?.let { app ->
                 selectedApp = app
             }
-        } else if (pagerState.currentPage == 1) {
+        } else if (isHomeScreenActive) {
             if (homeFocusArea == 0 && favoriteItemCount > 0) {
                 if (selectedFavoriteIndex < favoriteApps.size) {
                     favoriteApps.getOrNull(selectedFavoriteIndex)?.let { app ->
@@ -378,8 +419,8 @@ fun MainLauncher(
     }
 
     // Timed long-press detection for Center/OK button so holding OK opens menus immediately <3
-    LaunchedEffect(centerKeyState, drawerOpen, pagerState.currentPage, anyModalOpen) {
-        if (centerKeyState == 1 && !anyModalOpen && (drawerOpen || pagerState.currentPage == 1)) {
+    LaunchedEffect(centerKeyState, drawerOpen, isHomeScreenActive, anyModalOpen) {
+        if (centerKeyState == 1 && !anyModalOpen && (drawerOpen || isHomeScreenActive)) {
             delay(420L)
             if (centerKeyState == 1 && !anyModalOpen) {
                 centerKeyState = 2
@@ -391,7 +432,7 @@ fun MainLauncher(
     // focus requester handling for physical hardware key navigation <3
     LaunchedEffect(
         drawerOpen,
-        pagerState.currentPage,
+        isHomeScreenActive,
         anyModalOpen
     ) {
         // Modal dialogs manage their own focus.
@@ -400,7 +441,7 @@ fun MainLauncher(
             return@LaunchedEffect
         }
 
-        if (drawerOpen || pagerState.currentPage == 1) {
+        if (drawerOpen || isHomeScreenActive) {
             repeat(6) {
                 try {
                     focusRequester.requestFocus()
@@ -426,6 +467,7 @@ fun MainLauncher(
             createFolderDialogOpen = false
             folderIconMenuOpen = false
             homeFocusArea = if (favoriteItemCount > 0) 0 else 1
+            pendingTargetPage = 1
             scope.launch {
                 pagerState.animateScrollToPage(1)
             }
@@ -447,15 +489,37 @@ fun MainLauncher(
                 .focusable()
                 .focusRequester(focusRequester)
                 .onPreviewKeyEvent { event ->
-                    // Let open dialogs and non-home pages (Widgets / AI Chat) handle their own keys
+                    val nativeEvent = event.nativeKeyEvent
+                    // Let open dialogs handle their own keys
                     if (anyModalOpen) {
                         return@onPreviewKeyEvent false
                     }
-                    if (!drawerOpen && pagerState.currentPage != 1) {
+                    val isPageTransitioning = !drawerOpen && (pagerState.isScrollInProgress || (pendingTargetPage != null && pendingTargetPage != pagerState.settledPage))
+                    if (isPageTransitioning) {
+                        homeTracker.wasActive = false
+                        if (isDpadOrActionKey(nativeEvent.keyCode)) {
+                            return@onPreviewKeyEvent true
+                        }
                         return@onPreviewKeyEvent false
                     }
-
-                    val nativeEvent = event.nativeKeyEvent
+                    if (isHomeScreenActive) {
+                        if (!homeTracker.wasActive) {
+                            homeTracker.wasActive = true
+                            homeTracker.settledTimestamp = android.os.SystemClock.uptimeMillis()
+                            selectedFavoriteIndex = savedFavoriteIndexOnHome.coerceIn(
+                                0,
+                                (favoriteItemCount - 1).coerceAtLeast(0)
+                            )
+                            if (favoriteItemCount > 0 && homeFocusArea != 1) {
+                                homeFocusArea = 0
+                            }
+                        }
+                    } else {
+                        homeTracker.wasActive = false
+                    }
+                    if (!drawerOpen && !isHomeScreenActive) {
+                        return@onPreviewKeyEvent false
+                    }
                     val isCenterKey = isCenterActivateKey(nativeEvent.keyCode)
 
                     if (isCenterKey) {
@@ -484,7 +548,7 @@ fun MainLauncher(
                                                 )?.let(context::startActivity)
                                             }
                                         }
-                                    } else if (pagerState.currentPage == 1) {
+                                    } else if (isHomeScreenActive) {
                                         if (homeFocusArea == 0 && favoriteItemCount > 0) {
                                             if (selectedFavoriteIndex < favoriteApps.size) {
                                                 favoriteApps.getOrNull(selectedFavoriteIndex)
@@ -543,16 +607,19 @@ fun MainLauncher(
                                 if (!drawerOpen) {
                                     when (nativeEvent.keyCode) {
                                         android.view.KeyEvent.KEYCODE_1, android.view.KeyEvent.KEYCODE_NUMPAD_1 -> {
+                                            pendingTargetPage = 0
                                             scope.launch { pagerState.animateScrollToPage(0) }
                                             return@onPreviewKeyEvent true
                                         }
 
                                         android.view.KeyEvent.KEYCODE_2, android.view.KeyEvent.KEYCODE_NUMPAD_2 -> {
+                                            pendingTargetPage = 1
                                             scope.launch { pagerState.animateScrollToPage(1) }
                                             return@onPreviewKeyEvent true
                                         }
 
                                         android.view.KeyEvent.KEYCODE_3, android.view.KeyEvent.KEYCODE_NUMPAD_3 -> {
+                                            pendingTargetPage = 2
                                             scope.launch { pagerState.animateScrollToPage(2) }
                                             return@onPreviewKeyEvent true
                                         }
@@ -650,10 +717,14 @@ fun MainLauncher(
                                         selectedDrawerIndex =
                                             (selectedDrawerIndex - 1).coerceAtLeast(0)
                                     }
-                                } else if (pagerState.currentPage == 1) {
+                                } else if (isHomeScreenActive) {
+                                    val isCooldown = (android.os.SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
+                                    if (isCooldown) {
+                                        return@onPreviewKeyEvent true
+                                    }
                                     if (homeFocusArea == 1 && favoriteItemCount > 0) {
                                         homeFocusArea = 0
-                                    } else {
+                                    } else if (nativeEvent.repeatCount == 0) {
                                         selectedDrawerIndex = 0
                                         drawerOpen = true
                                     }
@@ -670,10 +741,14 @@ fun MainLauncher(
                                             (selectedDrawerIndex + 1)
                                                 .coerceIn(0, (visibleApps.size - 1).coerceAtLeast(0))
                                     }
-                                } else if (pagerState.currentPage == 1) {
+                                } else if (isHomeScreenActive) {
+                                    val isCooldown = (android.os.SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
+                                    if (isCooldown) {
+                                        return@onPreviewKeyEvent true
+                                    }
                                     if (homeFocusArea == 0) {
                                         homeFocusArea = 1
-                                    } else {
+                                    } else if (nativeEvent.repeatCount == 0) {
                                         launcherMenuOpen = true
                                     }
                                 }
@@ -686,10 +761,16 @@ fun MainLauncher(
                                         selectedDrawerIndex =
                                             (selectedDrawerIndex - 1).coerceAtLeast(0)
                                     }
-                                } else if (pagerState.currentPage == 1) {
+                                } else if (isHomeScreenActive) {
+                                    val isCooldown = (android.os.SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
+                                    if (isCooldown) {
+                                        return@onPreviewKeyEvent true
+                                    }
                                     if (homeFocusArea == 0 && favoriteItemCount > 0 && selectedFavoriteIndex > 0) {
                                         selectedFavoriteIndex--
-                                    } else {
+                                        savedFavoriteIndexOnHome = selectedFavoriteIndex
+                                    } else if (nativeEvent.repeatCount == 0) {
+                                        pendingTargetPage = 0
                                         scope.launch { pagerState.animateScrollToPage(0) }
                                     }
                                 }
@@ -704,10 +785,16 @@ fun MainLauncher(
                                             visibleApps.size - 1
                                         )
                                     }
-                                } else if (pagerState.currentPage == 1) {
+                                } else if (isHomeScreenActive) {
+                                    val isCooldown = (android.os.SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
+                                    if (isCooldown) {
+                                        return@onPreviewKeyEvent true
+                                    }
                                     if (homeFocusArea == 0 && favoriteItemCount > 0 && selectedFavoriteIndex < favoriteItemCount - 1) {
                                         selectedFavoriteIndex++
-                                    } else {
+                                        savedFavoriteIndexOnHome = selectedFavoriteIndex
+                                    } else if (nativeEvent.repeatCount == 0) {
+                                        pendingTargetPage = 2
                                         scope.launch { pagerState.animateScrollToPage(2) }
                                     }
                                 }
@@ -719,11 +806,13 @@ fun MainLauncher(
                                 if (drawerOpen) {
                                     drawerOpen = false
                                     true
-                                } else if (homeFocusArea == 1 && favoriteItemCount > 0) {
+                                } else if (isHomeScreenActive && homeFocusArea == 1 && favoriteItemCount > 0) {
                                     homeFocusArea = 0
                                     true
-                                } else {
+                                } else if (isHomeScreenActive) {
                                     true
+                                } else {
+                                    false
                                 }
                             }
 
@@ -736,7 +825,7 @@ fun MainLauncher(
                 .combinedClickable(
                     onClick = {},
                     onLongClick = {
-                        if (pagerState.currentPage == 1 && !drawerOpen) {
+                        if (isHomeScreenActive) {
                             launcherMenuOpen = true
                         }
                     }
@@ -746,7 +835,8 @@ fun MainLauncher(
                 drawerOpen = false
             }
 
-            BackHandler(enabled = !drawerOpen && !anyModalOpen && pagerState.currentPage != 1) {
+            BackHandler(enabled = !drawerOpen && !anyModalOpen && (pagerState.currentPage != 1 || pagerState.targetPage != 1 || (pendingTargetPage != null && pendingTargetPage != 1))) {
+                pendingTargetPage = 1
                 scope.launch {
                     pagerState.animateScrollToPage(1)
                 }
@@ -775,8 +865,8 @@ fun MainLauncher(
             }
 
             // cute sticker decorations only on main home page when drawer is closed :3
-            if (!drawerOpen && pagerState.currentPage == 1) {
-                StickerExplosion()
+            if (!drawerOpen) {
+                PixelSpray(24)
             }
 
             val keyboardController = LocalSoftwareKeyboardController.current
@@ -791,9 +881,9 @@ fun MainLauncher(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Transparent)
-                    .pointerInput(drawerOpen, pagerState.currentPage) {
+                    .pointerInput(drawerOpen, pagerState.currentPage, isHomeScreenActive) {
                         detectVerticalDragGestures { _, dragAmount ->
-                            if (!drawerOpen && pagerState.currentPage == 1 && dragAmount < -32) {
+                            if (!drawerOpen && isHomeScreenActive && dragAmount < -32) {
                                 selectedDrawerIndex = 0
                                 drawerOpen = true
                             }
@@ -803,15 +893,25 @@ fun MainLauncher(
             ) { page ->
                 when (page) {
                     0 -> {
-                        if (!drawerOpen && (pagerState.currentPage == 0 || pagerState.targetPage == 0)) {
+                        val isWidgetTarget = (pendingTargetPage ?: pagerState.targetPage) == 0
+                        val isWidgetPageActive = !drawerOpen &&
+                            !anyModalOpen &&
+                            isWidgetTarget &&
+                            pagerState.currentPage == 0 &&
+                            pagerState.settledPage == 0 &&
+                            !pagerState.isScrollInProgress
+
+                        if (!drawerOpen && (pagerState.currentPage == 0 || pagerState.targetPage == 0 || pendingTargetPage == 0)) {
                             WidgetPage(
                                 context = context,
                                 cardBgColor = cardBgColor,
                                 cardTextColor = cardTextColor,
                                 appActionColor = appActionColor,
                                 cardRoundness = cardRoundness,
-                                isActivePage = pagerState.currentPage == 0 && !anyModalOpen,
+                                isActivePage = isWidgetPageActive,
                                 onNavigateHome = {
+                                    savedFavoriteIndexOnHome = 0
+                                    pendingTargetPage = 1
                                     scope.launch { pagerState.animateScrollToPage(1) }
                                 }
                             )
@@ -840,7 +940,7 @@ fun MainLauncher(
                                     cardBgColor = cardBgColor,
                                     cardTextColor = cardTextColor,
                                     outlineColor = greetingOutlineColor,
-                                    isFocused = homeFocusArea == 1 || favoriteItemCount == 0,
+                                    isFocused = isHomeScreenActive && (homeFocusArea == 1 || favoriteItemCount == 0),
                                     onClick = {
                                         homeFocusArea = 1
                                         launcherMenuOpen = true
@@ -854,7 +954,7 @@ fun MainLauncher(
                                     favoriteFolders = favoriteFolders,
                                     folderIconRefreshKey = folderIconRefreshKey,
                                     selectedIndex = selectedFavoriteIndex,
-                                    isCardFocused = homeFocusArea == 0,
+                                    isCardFocused = isHomeScreenActive && homeFocusArea == 0,
                                     onAppClick = { app ->
                                         val appIdx = favoriteApps.indexOfFirst {
                                             it.packageName == app.packageName
@@ -862,6 +962,7 @@ fun MainLauncher(
                                         if (appIdx != -1) {
                                             homeFocusArea = 0
                                             selectedFavoriteIndex = appIdx
+                                            savedFavoriteIndexOnHome = appIdx
                                         }
                                     },
                                     onAppLongClick = { app ->
@@ -871,14 +972,17 @@ fun MainLauncher(
                                         if (appIdx != -1) {
                                             homeFocusArea = 0
                                             selectedFavoriteIndex = appIdx
+                                            savedFavoriteIndexOnHome = appIdx
                                         }
                                         selectedApp = app
                                     },
                                     onFolderClick = { folder ->
                                         val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
                                         if (folderIdx != -1) {
+                                            val targetIdx = favoriteApps.size + folderIdx
                                             homeFocusArea = 0
-                                            selectedFavoriteIndex = favoriteApps.size + folderIdx
+                                            selectedFavoriteIndex = targetIdx
+                                            savedFavoriteIndexOnHome = targetIdx
                                         }
                                         folderOpenStartRename = false
                                         folderOpenStartPicker = false
@@ -888,8 +992,10 @@ fun MainLauncher(
                                     onFolderLongClick = { folder ->
                                         val folderIdx = favoriteFolders.indexOfFirst { it.id == folder.id }
                                         if (folderIdx != -1) {
+                                            val targetIdx = favoriteApps.size + folderIdx
                                             homeFocusArea = 0
-                                            selectedFavoriteIndex = favoriteApps.size + folderIdx
+                                            selectedFavoriteIndex = targetIdx
+                                            savedFavoriteIndexOnHome = targetIdx
                                         }
                                         iconEditingFolder = folder
                                         folderIconMenuOpen = true
@@ -900,10 +1006,19 @@ fun MainLauncher(
                     }
 
                     2 -> {
-                        if (!drawerOpen && (pagerState.currentPage == 2 || pagerState.targetPage == 2)) {
+                        val isChatTarget = (pendingTargetPage ?: pagerState.targetPage) == 2
+                        val isChatPageActive = !drawerOpen &&
+                            !anyModalOpen &&
+                            isChatTarget &&
+                            pagerState.currentPage == 2 &&
+                            pagerState.settledPage == 2 &&
+                            !pagerState.isScrollInProgress
+
+                        if (!drawerOpen && (pagerState.currentPage == 2 || pagerState.targetPage == 2 || pendingTargetPage == 2)) {
                             ChatPlaceholderPage(
-                                isActivePage = pagerState.currentPage == 2 && !anyModalOpen,
+                                isActivePage = isChatPageActive,
                                 onBack = {
+                                    pendingTargetPage = 1
                                     scope.launch {
                                         pagerState.animateScrollToPage(1)
                                     }

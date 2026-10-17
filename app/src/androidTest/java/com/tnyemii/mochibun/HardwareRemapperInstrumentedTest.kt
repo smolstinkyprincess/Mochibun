@@ -142,4 +142,31 @@ class HardwareRemapperInstrumentedTest {
         )
         println("MOCHIBUN_DEVICE_TEST: Verified APP_SWITCH defaults to GlobalRecents")
     }
+
+    @Test
+    fun testCenterEnterActionPersistence() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val enterKey = PhysicalKey.KEY_ENTER
+        assertEquals("Center / Enter", enterKey.keyName)
+        assertEquals(28, enterKey.scancode)
+        assertEquals("0x001C", enterKey.hexScancode)
+
+        // Save a test action configuration on KEY_ENTER (e.g. double press flashlight)
+        val config = ButtonActionConfig(
+            singlePressAction = ActionType.None,
+            doublePressAction = ActionType.ToggleFlashlight,
+            longPressAction = ActionType.OpenAiChat
+        )
+        HardwareRemapManager.saveButtonActionConfig(context, enterKey, config)
+
+        val readBack = HardwareRemapManager.getButtonActionConfig(context, enterKey)
+        assertEquals(ActionType.None, readBack.singlePressAction)
+        assertEquals(ActionType.ToggleFlashlight, readBack.doublePressAction)
+        assertEquals(ActionType.OpenAiChat, readBack.longPressAction)
+
+        // Clean up preference
+        val emptyConfig = ButtonActionConfig()
+        HardwareRemapManager.saveButtonActionConfig(context, enterKey, emptyConfig)
+        println("MOCHIBUN_DEVICE_TEST: Verified KEY_ENTER configuration and restoration")
+    }
 }
