@@ -172,6 +172,7 @@ fun MainLauncher(
     var launcherMenuOpen by remember { mutableStateOf(false) }
     var hiddenManagerOpen by remember { mutableStateOf(false) }
     var hardwareButtonsDialogOpen by remember { mutableStateOf(false) }
+    var virtualMouseDialogOpen by remember { mutableStateOf(false) }
     var isOnline by remember { mutableStateOf(true) }
     var isLowBattery by remember { mutableStateOf(false) }
 
@@ -326,6 +327,7 @@ fun MainLauncher(
         hiddenManagerOpen ||
         themeStudioOpen ||
         hardwareButtonsDialogOpen ||
+        virtualMouseDialogOpen ||
         openedFolderId != null ||
         createFolderDialogOpen ||
         folderToCreateFrom != null ||
@@ -1046,6 +1048,10 @@ fun MainLauncher(
                         launcherMenuOpen = false
                         hardwareButtonsDialogOpen = true
                     },
+                    onVirtualMouseClick = {
+                        launcherMenuOpen = false
+                        virtualMouseDialogOpen = true
+                    },
                     onHiddenAppsClick = {
                         launcherMenuOpen = false
                         hiddenManagerOpen = true
@@ -1093,6 +1099,14 @@ fun MainLauncher(
                     installedApps = apps.map { AppInfo(it.packageName, it.name) },
                     onDismiss = {
                         hardwareButtonsDialogOpen = false
+                    }
+                )
+            }
+
+            if (virtualMouseDialogOpen) {
+                CursorSettingsDialog(
+                    onDismiss = {
+                        virtualMouseDialogOpen = false
                     }
                 )
             }
