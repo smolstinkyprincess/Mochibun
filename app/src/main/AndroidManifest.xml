@@ -33,6 +33,7 @@
     <uses-permission android:name="android.permission.ALLOW_SLIPPERY_TOUCHES" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.SYSTEM_APPLICATION_OVERLAY" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.GET_TOP_ACTIVITY_INFO" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" tools:ignore="ProtectedPermissions" />
 
     <application
         android:allowBackup="true"
@@ -111,6 +112,17 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/virtual_cursor_config" />
+        </service>
+
+        <!-- Mochibun Media Session Notification Listener Service -->
+        <service
+            android:name=".MochibunNotificationListenerService"
+            android:label="Mochibun Media Session Listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
     </application>
 

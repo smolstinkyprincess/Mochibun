@@ -1,6 +1,16 @@
+import com.android.build.gradle.internal.tasks.AarMetadataReader.Companion.load
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        load(FileInputStream(keystorePropertiesFile))
+    }
 }
 
 android {
@@ -21,23 +31,40 @@ android {
         ndk {
             abiFilters.add("armeabi-v7a")
         }
+
     }
-
-
-
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
         }
     }
 
-
+    signingConfigs {
+        create("sharedSigning") {
+            if (keystorePropertiesFile.exists()) {
+                storeFile = file(keystoreProperties.getProperty("RELEASE_STORE_FILE"))
+                storePassword = keystoreProperties.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = keystoreProperties.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword = keystoreProperties.getProperty("RELEASE_KEY_PASSWORD")
+            } else {
+                // Fallback to standard debug signing if properties are absent (e.g., CI/CD)
+                initWith(getByName("debug"))
+            }
+        }
+    }
 
     buildTypes {
         release {
             optimization {
                 enable = false
             }
+            isMinifyEnabled = false
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("sharedSigning")
+        }
+        debug {
+            isDebuggable = true
+            signingConfig = signingConfigs.getByName("sharedSigning")
         }
     }
     compileOptions {

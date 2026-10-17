@@ -19,6 +19,7 @@ package com.android.quickstep
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.animateFloatAsState
@@ -35,14 +36,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -52,6 +51,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,23 +60,63 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import com.tnyemii.mochibun.KawaiiDialogPillButton
+import com.tnyemii.mochibun.BottomLavenderClouds
 import com.tnyemii.mochibun.LocalLauncherTheme
+import com.tnyemii.mochibun.TopLavenderClouds
+import com.tnyemii.mochibun.glowingDoubleBorder
 import com.tnyemii.mochibun.isBackDismissKey
 import com.tnyemii.mochibun.isCenterActivateKey
 import com.tnyemii.mochibun.loadSavedTheme
 import com.tnyemii.mochibun.requestFocusSafely
-import com.tnyemii.mochibun.selectedContainerColor
 import com.tnyemii.mochibun.ui.theme.M120LauncherTheme
-import com.tnyemii.mochibun.ui.theme.destructiveBgColor
-import com.tnyemii.mochibun.ui.theme.destructiveColor
-import com.tnyemii.mochibun.ui.theme.softSurfaceColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-// overlay activity displaying recent apps in a horizontal scrollable card list :3
+enum class RecentsFocusZone {
+    TASK_CAROUSEL,
+    CLEAR_ALL,
+    BACK_TO_HOME
+}
+
+private data class TaskCardTint(
+    val badgeBg: Color,
+    val badgeBorder: Color,
+    val placeholderBg: Color
+)
+
+private val TASK_TINTS = listOf(
+    // 0: Soft Lavender (Discord, etc.)
+    TaskCardTint(
+        badgeBg = Color(0xFFE2DBF6),
+        badgeBorder = Color(0xFFC7B6EE),
+        placeholderBg = Color(0xFFEDE8F9)
+    ),
+    // 1: Soft Coral / Rose
+    TaskCardTint(
+        badgeBg = Color(0xFFFDD4DC),
+        badgeBorder = Color(0xFFF6ACB9),
+        placeholderBg = Color(0xFFFDE8EC)
+    ),
+    // 2: Soft Seafoam / Mint (CashApp, etc.)
+    TaskCardTint(
+        badgeBg = Color(0xFFCEF1E4),
+        badgeBorder = Color(0xFFA5E2CD),
+        placeholderBg = Color(0xFFE2F7EE)
+    ),
+    // 3: Soft Periwinkle (Via Browser, etc.)
+    TaskCardTint(
+        badgeBg = Color(0xFFD4DCF9),
+        badgeBorder = Color(0xFFB6C4EE),
+        placeholderBg = Color(0xFFE6EBFC)
+    )
+)
+
+/**
+ * Overlay activity displaying recent apps in a kawaii horizontal card carousel.
+ * Faithfully matches Mochibun's reference styling and Chinoe AT-M120 D-pad constraints.
+ */
 class RecentsActivity : ComponentActivity() {
 
     private lateinit var tasksManager: RecentTasksManager
@@ -103,14 +143,6 @@ class RecentsActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-    }
-
-    override fun onNewIntent(intent: android.content.Intent) {
-        super.onNewIntent(intent)
-    }
-
     companion object {
         private const val DEBOUNCE_MS = 600L
 
@@ -128,29 +160,26 @@ class RecentsActivity : ComponentActivity() {
     }
 }
 
-// composable UI container for recent app cards, clear-all action, and backdrop tap to close <3
+/**
+ * Composable UI container for recent task carousel, clear-all button, and kawaii framing.
+ */
 @Composable
 fun RecentsScreen(
     tasksManager: RecentTasksManager,
     onDismissActivity: () -> Unit
 ) {
-    val theme = LocalLauncherTheme.current
     var tasks by remember { mutableStateOf<List<RecentTaskInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
 
-    // Focus zones:
-    // 0 = Task Card dismiss "✕" button on the currently selected card
-    // 1 = Task Card body (launch task on OK, LEFT/RIGHT moves between cards)
-    // 2 = Bottom action buttons (bottomCol: 0 = Clear All, 1 = Close)
-    var focusZone by remember { mutableIntStateOf(1) }
+    var focusZone by remember { mutableStateOf(RecentsFocusZone.TASK_CAROUSEL) }
     var selectedTaskIndex by remember { mutableIntStateOf(0) }
-    var bottomCol by remember { mutableIntStateOf(1) }
+    var isDismissFocused by remember { mutableStateOf(false) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    // asynchronously load recent tasks list on IO thread :3
+    // Load recent tasks asynchronously off the main thread
     LaunchedEffect(Unit) {
         val fetchedTasks = withContext(Dispatchers.IO) {
             tasksManager.getRecentTasks()
@@ -158,30 +187,25 @@ fun RecentsScreen(
         tasks = fetchedTasks
         isLoading = false
         if (fetchedTasks.isEmpty()) {
-            focusZone = 2
-            bottomCol = 1
+            focusZone = RecentsFocusZone.BACK_TO_HOME
         } else {
-            focusZone = 1
+            focusZone = RecentsFocusZone.TASK_CAROUSEL
             selectedTaskIndex = 0
+            isDismissFocused = false
         }
     }
 
     LaunchedEffect(tasks.size) {
         selectedTaskIndex = selectedTaskIndex.coerceIn(0, (tasks.size - 1).coerceAtLeast(0))
         if (!isLoading && tasks.isEmpty()) {
-            focusZone = 2
-            bottomCol = 1
+            focusZone = RecentsFocusZone.BACK_TO_HOME
         }
     }
 
+    // Scroll carousel smoothly to center focused task card
     LaunchedEffect(selectedTaskIndex, tasks.size) {
         if (tasks.isNotEmpty() && selectedTaskIndex in tasks.indices) {
-            val isVisible = listState.layoutInfo.visibleItemsInfo.any {
-                it.index == selectedTaskIndex
-            }
-            if (!isVisible) {
-                listState.animateScrollToItem(selectedTaskIndex)
-            }
+            listState.animateScrollToItem(selectedTaskIndex)
         }
     }
 
@@ -199,10 +223,10 @@ fun RecentsScreen(
     }
 
     val clearAllTasks: () -> Unit = {
-        val idsToRemove = tasks.map { it.taskId }
+        val currentTasks = tasks
         tasks = emptyList()
         scope.launch(Dispatchers.IO) {
-            idsToRemove.forEach { tasksManager.removeTask(it) }
+            tasksManager.clearAllTasks(currentTasks)
         }
         onDismissActivity()
     }
@@ -210,14 +234,26 @@ fun RecentsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0x991A0D22))
+            .background(Color(0xFFFCECEF)) // Flat pastel blush/peach-pink matching mockup
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode) || native.keyCode == android.view.KeyEvent.KEYCODE_APP_SWITCH) {
+                if (isBackDismissKey(native.keyCode) ||
+                    native.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
+                    native.keyCode == KeyEvent.KEYCODE_F4
+                ) {
                     if (event.type == KeyEventType.KeyUp) {
                         onDismissActivity()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type == KeyEventType.KeyDown &&
+                    (native.keyCode == KeyEvent.KEYCODE_DEL || native.keyCode == KeyEvent.KEYCODE_FORWARD_DEL)
+                ) {
+                    if (focusZone == RecentsFocusZone.TASK_CAROUSEL && tasks.isNotEmpty()) {
+                        tasks.getOrNull(selectedTaskIndex)?.let(dismissTaskAt)
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -228,24 +264,24 @@ fun RecentsScreen(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         when (focusZone) {
-                            0 -> {
-                                tasks.getOrNull(selectedTaskIndex)?.let(dismissTaskAt)
-                                focusZone = 1
-                            }
-                            1 -> {
-                                tasks.getOrNull(selectedTaskIndex)?.let { task ->
-                                    val launched = tasksManager.launchTask(task)
-                                    if (launched) {
-                                        onDismissActivity()
+                            RecentsFocusZone.TASK_CAROUSEL -> {
+                                if (isDismissFocused) {
+                                    tasks.getOrNull(selectedTaskIndex)?.let(dismissTaskAt)
+                                    isDismissFocused = false
+                                } else {
+                                    tasks.getOrNull(selectedTaskIndex)?.let { task ->
+                                        val launched = tasksManager.launchTask(task)
+                                        if (launched) {
+                                            onDismissActivity()
+                                        }
                                     }
                                 }
                             }
-                            2 -> {
-                                if (bottomCol == 0 && tasks.isNotEmpty()) {
-                                    clearAllTasks()
-                                } else {
-                                    onDismissActivity()
-                                }
+                            RecentsFocusZone.CLEAR_ALL -> {
+                                clearAllTasks()
+                            }
+                            RecentsFocusZone.BACK_TO_HOME -> {
+                                onDismissActivity()
                             }
                         }
                     }
@@ -255,56 +291,63 @@ fun RecentsScreen(
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
                 when (native.keyCode) {
-                    android.view.KeyEvent.KEYCODE_DEL,
-                    android.view.KeyEvent.KEYCODE_FORWARD_DEL -> {
-                        if ((focusZone == 0 || focusZone == 1) && tasks.isNotEmpty()) {
-                            tasks.getOrNull(selectedTaskIndex)?.let(dismissTaskAt)
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        if (focusZone == RecentsFocusZone.TASK_CAROUSEL) {
+                            isDismissFocused = false
+                            if (selectedTaskIndex > 0) {
+                                selectedTaskIndex--
+                            }
                         }
                         true
                     }
-                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        if (focusZone == RecentsFocusZone.TASK_CAROUSEL) {
+                            isDismissFocused = false
+                            if (selectedTaskIndex < tasks.lastIndex) {
+                                selectedTaskIndex++
+                            }
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
                         when (focusZone) {
-                            0, 1 -> {
-                                if (selectedTaskIndex > 0) {
-                                    selectedTaskIndex--
+                            RecentsFocusZone.TASK_CAROUSEL -> {
+                                if (!isDismissFocused) {
+                                    isDismissFocused = true
+                                } else {
+                                    // Second UP dismisses task with upward slide
+                                    tasks.getOrNull(selectedTaskIndex)?.let(dismissTaskAt)
+                                    isDismissFocused = false
                                 }
                             }
-                            2 -> {
-                                if (tasks.isNotEmpty()) bottomCol = 0
-                            }
-                        }
-                        true
-                    }
-                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        when (focusZone) {
-                            0, 1 -> {
-                                if (selectedTaskIndex < tasks.lastIndex) {
-                                    selectedTaskIndex++
+                            RecentsFocusZone.CLEAR_ALL -> {
+                                if (tasks.isNotEmpty()) {
+                                    focusZone = RecentsFocusZone.TASK_CAROUSEL
+                                    isDismissFocused = false
                                 }
                             }
-                            2 -> {
-                                bottomCol = 1
+                            RecentsFocusZone.BACK_TO_HOME -> {
+                                if (tasks.isNotEmpty()) {
+                                    focusZone = RecentsFocusZone.CLEAR_ALL
+                                }
                             }
                         }
                         true
                     }
-                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
                         when (focusZone) {
-                            1 -> {
-                                if (tasks.isNotEmpty()) focusZone = 0
+                            RecentsFocusZone.TASK_CAROUSEL -> {
+                                if (isDismissFocused) {
+                                    isDismissFocused = false
+                                } else {
+                                    focusZone = if (tasks.isNotEmpty()) RecentsFocusZone.CLEAR_ALL else RecentsFocusZone.BACK_TO_HOME
+                                }
                             }
-                            2 -> {
-                                if (tasks.isNotEmpty()) focusZone = 1
+                            RecentsFocusZone.CLEAR_ALL -> {
+                                focusZone = RecentsFocusZone.BACK_TO_HOME
                             }
-                        }
-                        true
-                    }
-                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        when (focusZone) {
-                            0 -> focusZone = 1
-                            1 -> {
-                                focusZone = 2
-                                bottomCol = if (tasks.isNotEmpty()) 0 else 1
+                            RecentsFocusZone.BACK_TO_HOME -> {
+                                // Already at bottom
                             }
                         }
                         true
@@ -312,59 +355,83 @@ fun RecentsScreen(
                     else -> false
                 }
             }
-            .clickable { onDismissActivity() }
     ) {
+        // 1. Top Scalloped Lavender Clouds
+        TopLavenderClouds(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+        )
+
+        // 2. Main Layout (Header, Carousel, Clear All Button)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(vertical = 28.dp),
+                .padding(top = 40.dp, bottom = 64.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // header title banner
-            val headerShape = RoundedCornerShape(18.dp)
+            // Top Header: ✦ — ♡ Recents ♡ — ✦
             Text(
-                text = "✨ Recent Apps ✨",
-                fontSize = 19.sp,
+                text = "✦  —  ♡  Recents  ♡  —  ✦",
+                fontSize = 21.sp,
                 fontWeight = FontWeight.Bold,
-                color = theme.fgTextColor,
-                modifier = Modifier
-                    .background(theme.greetingBgColor, headerShape)
-                    .border(2.dp, theme.greetingOutlineColor, headerShape)
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                color = Color(0xFF3E2452),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
             )
 
+            // Center Content: Loading, Empty state, or Horizontal Task Carousel
             if (isLoading) {
-                CircularProgressIndicator(
-                    color = theme.appActionColor,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-            } else if (tasks.isEmpty()) {
-                val emptyShape = RoundedCornerShape(theme.cardRoundnessDp.dp)
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.82f)
-                        .background(theme.cardBgColor, emptyShape)
-                        .border(2.5.dp, theme.greetingOutlineColor, emptyShape)
-                        .padding(24.dp),
+                        .fillMaxWidth()
+                        .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "No recent apps 🌸",
-                        fontSize = 16.sp,
-                        color = theme.fgTextColor,
-                        fontWeight = FontWeight.Bold
+                    CircularProgressIndicator(
+                        color = Color(0xFFE5607E),
+                        modifier = Modifier.size(36.dp)
                     )
                 }
+            } else if (tasks.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Color(0xFFFFF6F8))
+                            .border(1.5.dp, Color(0xFFE5A4B4), RoundedCornerShape(22.dp))
+                            .padding(28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "— ♡ No Recent Apps ♡ —\n\nAll tasks closed! Press Back or Home to return ♡",
+                            fontSize = 14.sp,
+                            color = Color(0xFF3E2452),
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             } else {
-                // horizontal list of recent task cards :3
+                // Sizing and Carousel padding to center card at 480px width
+                val configuration = LocalConfiguration.current
+                val screenWidthDp = configuration.screenWidthDp.dp
+                val cardWidth = 210.dp
+                val horizontalContentPadding = ((screenWidthDp - cardWidth) / 2).coerceAtLeast(16.dp)
+
                 LazyRow(
                     state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .padding(vertical = 12.dp),
-                    contentPadding = PaddingValues(horizontal = 32.dp),
+                        .padding(vertical = 4.dp),
+                    contentPadding = PaddingValues(horizontal = horizontalContentPadding),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -372,16 +439,17 @@ fun RecentsScreen(
                         items = tasks,
                         key = { _, it -> it.taskId }
                     ) { index, task ->
-                        val isCardSelected = index == selectedTaskIndex && (focusZone == 0 || focusZone == 1)
-                        val isDismissFocused = index == selectedTaskIndex && focusZone == 0
+                        val isCardSelected = index == selectedTaskIndex && focusZone == RecentsFocusZone.TASK_CAROUSEL
+                        val isDismissActive = isCardSelected && isDismissFocused
 
                         TaskCard(
                             task = task,
                             isCardFocused = isCardSelected,
-                            isDismissFocused = isDismissFocused,
+                            isDismissFocused = isDismissActive,
                             onLaunch = {
                                 selectedTaskIndex = index
-                                focusZone = 1
+                                focusZone = RecentsFocusZone.TASK_CAROUSEL
+                                isDismissFocused = false
                                 val launched = tasksManager.launchTask(task)
                                 if (launched) {
                                     onDismissActivity()
@@ -396,32 +464,83 @@ fun RecentsScreen(
                 }
             }
 
-            // bottom action buttons (clear all / close) <3
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (tasks.isNotEmpty()) {
-                    KawaiiDialogPillButton(
-                        text = "Clear All 🧹",
-                        isFocused = focusZone == 2 && bottomCol == 0,
-                        isDestructive = true,
-                        onClick = clearAllTasks
+            // "♡ Clear All ♡" Pill Button
+            if (tasks.isNotEmpty()) {
+                val isClearAllFocused = focusZone == RecentsFocusZone.CLEAR_ALL
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0xFF3B1F48)) // Deep plum/violet
+                        .glowingDoubleBorder(isSelected = isClearAllFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
+                        .clickable { clearAllTasks() }
+                        .padding(horizontal = 24.dp, vertical = 9.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "♡ Clear All ♡",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 }
+            } else {
+                Spacer(modifier = Modifier.height(36.dp))
+            }
+        }
 
-                KawaiiDialogPillButton(
-                    text = "Close 🌸",
-                    isFocused = focusZone == 2 && bottomCol == 1,
-                    isPrimary = true,
-                    onClick = onDismissActivity
+        // 3. Bottom Layered Lavender Clouds
+        BottomLavenderClouds(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+        )
+
+        // 4. Upward Chevron and "Back to Home" Pill
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "^",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF3E2452)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            val isHomeFocused = focusZone == RecentsFocusZone.BACK_TO_HOME
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFFFFF6F8))
+                    .glowingDoubleBorder(isSelected = isHomeFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
+                    .border(1.2.dp, if (isHomeFocused) Color(0xFFE06287) else Color(0xFFB5A4CB), RoundedCornerShape(50))
+                    .clickable { onDismissActivity() }
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "♥ Back to Home ♥",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF3E2452)
                 )
             }
         }
     }
 }
 
-// individual recent app card supporting vertical drag-to-dismiss gesture and D-pad focus <3
+/**
+ * Individual recent app task card matching the reference image.
+ * Features:
+ * - Overlapping squircle app icon badge centered on the top edge
+ * - Bold deep violet app title directly below the icon badge
+ * - Top-right '✕' dismiss button in soft lilac
+ * - High-contrast frosted lavender-cream card container with 22dp corner radius
+ * - Glowing double-line rose neon focus ring when selected via D-pad
+ * - Receding / scaled-down side cards (scale = 0.88f)
+ */
 @Composable
 fun TaskCard(
     task: RecentTaskInfo,
@@ -430,172 +549,212 @@ fun TaskCard(
     onLaunch: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val theme = LocalLauncherTheme.current
     var offsetY by remember { mutableFloatStateOf(0f) }
+    var isDismissing by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
-        targetValue = if (isCardFocused) 1.03f else 1f,
-        animationSpec = tween(130),
+        targetValue = if (isCardFocused) 1.0f else 0.88f,
+        animationSpec = tween(140),
         label = "recentsCardScale"
     )
 
-    // vertical drag gesture handler to dismiss task when swiped up :3
+    val cardAlpha by animateFloatAsState(
+        targetValue = if (isDismissing) 0f else if (isCardFocused) 1.0f else 0.82f,
+        animationSpec = tween(180),
+        label = "recentsCardAlpha"
+    )
+
+    val dismissOffsetY by animateFloatAsState(
+        targetValue = if (isDismissing) -500f else offsetY,
+        animationSpec = tween(220),
+        finishedListener = {
+            if (isDismissing) {
+                onDismiss()
+            }
+        },
+        label = "recentsDismissOffsetY"
+    )
+
+    // Vertical drag gesture handler to dismiss task when swiped up
     val draggableState = rememberDraggableState { delta ->
         offsetY += delta
-        if (offsetY < -300f) {
-            onDismiss()
+        if (offsetY < -240f && !isDismissing) {
+            isDismissing = true
         }
     }
 
-    val cardShape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+    val cardShape = RoundedCornerShape(22.dp)
+    val tint = remember(task.tintIndex) {
+        TASK_TINTS[task.tintIndex % TASK_TINTS.size]
+    }
 
     Box(
         modifier = Modifier
-            .offset { IntOffset(0, offsetY.roundToInt()) }
+            .offset { IntOffset(0, dismissOffsetY.roundToInt()) }
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                alpha = cardAlpha
             }
             .draggable(
                 state = draggableState,
                 orientation = Orientation.Vertical,
                 onDragStopped = {
-                    if (offsetY > -200f) {
+                    if (offsetY > -180f) {
                         offsetY = 0f
                     }
                 }
             )
-            .width(220.dp)
-            .fillMaxHeight(0.82f)
-            .shadow(8.dp, cardShape)
-            .clip(cardShape)
-            .background(
-                if (isCardFocused) theme.selectedContainerColor else theme.cardBgColor
-            )
-            .border(
-                width = if (isCardFocused) 3.dp else 2.dp,
-                color = if (isCardFocused) theme.appActionColor else theme.greetingOutlineColor,
-                shape = cardShape
-            )
-            .clickable { onLaunch() }
-            .padding(12.dp)
+            .width(210.dp)
+            .height(350.dp)
+            .padding(top = 18.dp) // Clearance for overlapping top icon badge
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
+        // Main Card Container
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(cardShape)
+                .background(Color(0xFFF8F4FD)) // Frosted lavender-cream inner canvas
+                .glowingDoubleBorder(isSelected = isCardFocused && !isDismissFocused, shape = cardShape, cornerRadius = 22.dp)
+                .border(
+                    width = if (isCardFocused && !isDismissFocused) 2.5.dp else 1.5.dp,
+                    color = if (isCardFocused && !isDismissFocused) Color(0xFFE06287) else Color(0xFFE5A4B4),
+                    shape = cardShape
+                )
+                .clickable { onLaunch() }
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            // task app header (icon, title, close button) :3
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    if (task.iconBitmap != null) {
-                        Image(
-                            bitmap = task.iconBitmap,
-                            contentDescription = task.title,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    } else if (task.icon != null) {
-                        DrawableImage(
-                            drawable = task.icon,
-                            contentDescription = task.title,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = task.title,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = theme.fgTextColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                // Top spacing to account for overlapping badge and App Title
+                Spacer(modifier = Modifier.height(18.dp))
 
-                // close button (focusable via DPAD_UP on the selected card)
+                // App Title centered directly underneath the icon badge
+                Text(
+                    text = task.title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF3E2452),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Task Thumbnail Preview Snapshot or Tinted Pastel Placeholder
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isDismissFocused) destructiveColor else destructiveBgColor
-                        )
-                        .border(
-                            width = if (isDismissFocused) 2.dp else 1.dp,
-                            color = destructiveColor,
-                            shape = CircleShape
-                        )
-                        .clickable { onDismiss() },
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(tint.placeholderBg)
+                        .border(1.dp, tint.badgeBorder.copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        "✕",
-                        fontSize = 11.sp,
-                        color = if (isDismissFocused) Color.White else destructiveColor,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (task.thumbnail != null) {
+                        Image(
+                            bitmap = task.thumbnail,
+                            contentDescription = task.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        // Fallback coordinated pastel preview canvas
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            if (task.iconBitmap != null) {
+                                Image(
+                                    bitmap = task.iconBitmap,
+                                    contentDescription = task.title,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                            } else if (task.icon != null) {
+                                DrawableImage(
+                                    drawable = task.icon,
+                                    contentDescription = task.title,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = task.title,
+                                fontSize = 12.sp,
+                                color = Color(0xFF6D567E),
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
             }
 
-            // task thumbnail preview or fallback app icon <3
+            // Top-right Close Button ('✕') in soft lilac
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(softSurfaceColor),
+                    .align(Alignment.TopEnd)
+                    .size(24.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (isDismissFocused) Color(0xFFFDD4DC) else Color(0xFFE7DAF7))
+                    .border(
+                        width = if (isDismissFocused) 2.dp else 1.dp,
+                        color = if (isDismissFocused) Color(0xFFE5607E) else Color(0xFFC8B8E2),
+                        shape = RoundedCornerShape(9.dp)
+                    )
+                    .glowingDoubleBorder(isSelected = isDismissFocused, shape = RoundedCornerShape(9.dp), cornerRadius = 9.dp)
+                    .clickable {
+                        isDismissing = true
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                if (task.thumbnail != null) {
-                    Image(
-                        bitmap = task.thumbnail,
-                        contentDescription = task.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        if (task.iconBitmap != null) {
-                            Image(
-                                bitmap = task.iconBitmap,
-                                contentDescription = task.title,
-                                modifier = Modifier.size(56.dp)
-                            )
-                        } else if (task.icon != null) {
-                            DrawableImage(
-                                drawable = task.icon,
-                                contentDescription = task.title,
-                                modifier = Modifier.size(56.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = task.title,
-                            fontSize = 12.sp,
-                            color = theme.fgTextColor,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2
-                        )
-                    }
-                }
+                Text(
+                    text = "✕",
+                    fontSize = 11.5.sp,
+                    color = if (isDismissFocused) Color(0xFFE5607E) else Color(0xFF4A2E5A),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        // Overlapping Squircle App Icon Badge Centered on Top Border
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = (-18).dp)
+                .size(42.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(tint.badgeBg)
+                .border(1.5.dp, tint.badgeBorder, RoundedCornerShape(14.dp))
+                .clickable { onLaunch() },
+            contentAlignment = Alignment.Center
+        ) {
+            if (task.iconBitmap != null) {
+                Image(
+                    bitmap = task.iconBitmap,
+                    contentDescription = task.title,
+                    modifier = Modifier.size(26.dp)
+                )
+            } else if (task.icon != null) {
+                DrawableImage(
+                    drawable = task.icon,
+                    contentDescription = task.title,
+                    modifier = Modifier.size(26.dp)
+                )
             }
         }
     }
 }
 
-// renders Android drawable object into Compose Image bitmap :3
+/**
+ * Renders Android drawable object into Compose Image bitmap.
+ */
 @Composable
 fun DrawableImage(
     drawable: Drawable,

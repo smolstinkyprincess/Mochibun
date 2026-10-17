@@ -260,14 +260,21 @@ fun LauncherMenuDialog(
     showResetWallpaper: Boolean,
     onCreateFolderClick: (() -> Unit)? = null,
     onHardwareButtonsClick: (() -> Unit)? = null,
-    onVirtualMouseClick: (() -> Unit)? = null
+    onVirtualMouseClick: (() -> Unit)? = null,
+    onEditUserNameClick: (() -> Unit)? = null,
+    isPixelSprayEnabled: Boolean = true,
+    onTogglePixelSpray: ((Boolean) -> Unit)? = null
 ) {
     val theme = LocalLauncherTheme.current
     val focusRequester = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val actions = remember(showResetWallpaper, onCreateFolderClick, onHardwareButtonsClick, onVirtualMouseClick) {
+    val actions = remember(showResetWallpaper, onCreateFolderClick, onHardwareButtonsClick, onVirtualMouseClick, onEditUserNameClick) {
         buildList<Pair<String, () -> Unit>> {
+            if (onEditUserNameClick != null) {
+                add("✨ Edit user name" to onEditUserNameClick)
+            }
             if (onCreateFolderClick != null) {
                 add("📁 Make folder" to onCreateFolderClick)
             }
@@ -287,9 +294,16 @@ fun LauncherMenuDialog(
         }
     }
 
+    val hasToggle = onTogglePixelSpray != null
+    val totalCount = actions.size + (if (hasToggle) 1 else 0)
+
     var selectedIndex by remember { mutableIntStateOf(0) }
-    LaunchedEffect(actions.size) {
-        selectedIndex = selectedIndex.coerceIn(0, (actions.size - 1).coerceAtLeast(0))
+    LaunchedEffect(totalCount) {
+        selectedIndex = selectedIndex.coerceIn(0, (totalCount - 1).coerceAtLeast(0))
+    }
+
+    LaunchedEffect(selectedIndex) {
+        scrollState.animateScrollTo((selectedIndex * 42))
     }
 
     requestFocusSafely(focusRequester)
@@ -317,25 +331,37 @@ fun LauncherMenuDialog(
                         sawCenterDown = true
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
-                        actions.getOrNull(selectedIndex)?.second?.invoke()
+                        if (hasToggle && selectedIndex == 0) {
+                            onTogglePixelSpray(!isPixelSprayEnabled)
+                        } else {
+                            val actionIdx = if (hasToggle) selectedIndex - 1 else selectedIndex
+                            actions.getOrNull(actionIdx)?.second?.invoke()
+                        }
                     }
                     return@onPreviewKeyEvent true
                 }
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
                 when (native.keyCode) {
-                    android.view.KeyEvent.KEYCODE_DPAD_UP,
-                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT,
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        if (hasToggle && selectedIndex == 0) {
+                            onTogglePixelSpray(!isPixelSprayEnabled)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
                         selectedIndex = if (selectedIndex > 0) {
                             selectedIndex - 1
                         } else {
-                            actions.lastIndex.coerceAtLeast(0)
+                            (totalCount - 1).coerceAtLeast(0)
                         }
                         true
                     }
-                    android.view.KeyEvent.KEYCODE_DPAD_DOWN,
-                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        selectedIndex = if (selectedIndex < actions.lastIndex) {
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        selectedIndex = if (selectedIndex < totalCount - 1) {
                             selectedIndex + 1
                         } else {
                             0
@@ -350,7 +376,7 @@ fun LauncherMenuDialog(
         Surface(
             modifier = Modifier
                 .width(dialogWidth)
-                .heightIn(max = 440.dp)
+                .heightIn(max = 480.dp)
                 .border(2.5.dp, theme.greetingOutlineColor, shape),
             shape = shape,
             color = theme.cardBgColor,
@@ -360,26 +386,42 @@ fun LauncherMenuDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(scrollState)
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "♡ launcher options ♡",
+                    text = "— ♡ Settings ♡ —",
                     fontWeight = FontWeight.Bold,
                     color = theme.fgTextColor,
                     fontSize = 18.sp,
-                    modifier = Modifier.padding(
-                        start = 4.dp,
-                        top = 2.dp,
-                        bottom = 6.dp
-                    )
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            top = 2.dp,
+                            bottom = 6.dp
+                        ),
+                    textAlign = TextAlign.Center
                 )
 
                 HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
 
+                if (hasToggle) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    PixelSpraySettingsRow(
+                        isEnabled = isPixelSprayEnabled,
+                        isFocused = selectedIndex == 0,
+                        onToggle = { onTogglePixelSpray(it) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
+                }
+
                 Spacer(modifier = Modifier.height(2.dp))
 
                 actions.forEachIndexed { idx, (label, action) ->
+                    val itemIndex = if (hasToggle) idx + 1 else idx
                     val isClose = idx == actions.lastIndex
                     if (isClose) {
                         Spacer(modifier = Modifier.height(2.dp))
@@ -387,11 +429,11 @@ fun LauncherMenuDialog(
                     }
                     KawaiiDialogItem(
                         text = label,
-                        isFocused = selectedIndex == idx,
+                        isFocused = selectedIndex == itemIndex,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = if (isClose) TextAlign.End else TextAlign.Start,
                         onClick = {
-                            selectedIndex = idx
+                            selectedIndex = itemIndex
                             action()
                         }
                     )
@@ -497,10 +539,12 @@ fun HiddenAppsDialog(
                     .padding(14.dp)
             ) {
                 Text(
-                    text = "♡ hidden apps ♡",
+                    text = "— ♡ Hidden Apps ♡ —",
                     fontWeight = FontWeight.Bold,
                     color = theme.fgTextColor,
-                    fontSize = 18.sp
+                    fontSize = 18.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
                 )
 
                 Spacer(Modifier.height(10.dp))
@@ -1159,7 +1203,7 @@ fun FolderActionDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FavoriteFolderDialog(
+private fun DeprecatedFavoriteFolderDialog(
     folder: FavoriteFolder,
     apps: List<LauncherApp>,
     availableApps: List<LauncherApp> = apps,
@@ -3149,3 +3193,210 @@ fun KawaiiIconPicker(
         }
     }
 }
+
+// Dialog to edit custom user name on the home screen greeting
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditUserNameDialog(
+    currentName: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    val theme = LocalLauncherTheme.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
+    val textFocusRequester = remember { FocusRequester() }
+    var nameInput by remember { mutableStateOf(currentName) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    // Focus zone: 0 = text field, 1 = Cancel, 2 = Clear, 3 = Save
+    var focusZone by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(focusZone) {
+        if (focusZone == 0) {
+            repeat(6) {
+                try {
+                    textFocusRequester.requestFocus()
+                    return@LaunchedEffect
+                } catch (_: Exception) {
+                    delay(35)
+                }
+            }
+        } else {
+            keyboardController?.hide()
+            repeat(6) {
+                try {
+                    focusRequester.requestFocus()
+                    return@LaunchedEffect
+                } catch (_: Exception) {
+                    delay(35)
+                }
+            }
+        }
+    }
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        keyboardController?.hide()
+                        onDismiss()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (focusZone == 0) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (native.keyCode) {
+                            android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                            android.view.KeyEvent.KEYCODE_ENTER,
+                            android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                focusZone = 3
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent false
+                }
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        when (focusZone) {
+                            1 -> {
+                                keyboardController?.hide()
+                                onDismiss()
+                            }
+                            2 -> {
+                                nameInput = ""
+                                focusZone = 0
+                            }
+                            3 -> {
+                                keyboardController?.hide()
+                                onSave(nameInput.trim())
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (native.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                        focusZone = 0
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        focusZone = (focusZone - 1).coerceAtLeast(1)
+                        true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        focusZone = (focusZone + 1).coerceAtMost(3)
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+        Surface(
+            modifier = Modifier
+                .width(dialogWidth)
+                .heightIn(max = 380.dp)
+                .border(2.5.dp, theme.greetingOutlineColor, shape),
+            shape = shape,
+            color = theme.cardBgColor,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "— ♡ User Name ♡ —",
+                    fontWeight = FontWeight.Bold,
+                    color = theme.fgTextColor,
+                    fontSize = 17.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+
+                HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
+
+                Text(
+                    text = "Enter your cute name for the home screen greeting ♡",
+                    fontSize = 12.sp,
+                    color = theme.cardTextColor,
+                    lineHeight = 16.sp
+                )
+
+                OutlinedTextField(
+                    value = nameInput,
+                    onValueChange = { nameInput = it.take(20) },
+                    placeholder = {
+                        Text("e.g. emii ♡", color = theme.cardTextColor.copy(alpha = 0.6f))
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = theme.appActionColor,
+                        unfocusedBorderColor = theme.greetingOutlineColor,
+                        focusedTextColor = theme.fgTextColor,
+                        unfocusedTextColor = theme.fgTextColor,
+                        focusedContainerColor = softSurfaceColor,
+                        unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.7f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(textFocusRequester)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)
+                ) {
+                    KawaiiDialogPillButton(
+                        text = "Cancel",
+                        isFocused = focusZone == 1,
+                        onClick = {
+                            keyboardController?.hide()
+                            onDismiss()
+                        }
+                    )
+
+                    KawaiiDialogPillButton(
+                        text = "Clear",
+                        isFocused = focusZone == 2,
+                        onClick = {
+                            nameInput = ""
+                            focusZone = 0
+                        }
+                    )
+
+                    KawaiiDialogPillButton(
+                        text = "Save ♡",
+                        isFocused = focusZone == 3,
+                        isPrimary = true,
+                        onClick = {
+                            keyboardController?.hide()
+                            onSave(nameInput.trim())
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+

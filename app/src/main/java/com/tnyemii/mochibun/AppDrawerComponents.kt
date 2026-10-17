@@ -207,7 +207,7 @@ fun AppDrawerHeader(
     onSwipeDown: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(18.dp)
 
     Box(
         modifier = Modifier
@@ -218,12 +218,12 @@ fun AppDrawerHeader(
                 if (isFocused) theme.selectedContainerColor else theme.greetingBgColor.copy(alpha = 0.85f)
             )
             .border(
-                width = if (isFocused) 2.dp else 1.5.dp,
+                width = if (isFocused) 2.5.dp else 1.5.dp,
                 color = if (isFocused) theme.appActionColor else theme.greetingOutlineColor,
                 shape = shape
             )
             .clickable { onSwipeDown() }
-            .padding(vertical = 6.dp, horizontal = 12.dp),
+            .padding(vertical = 7.dp, horizontal = 12.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -231,8 +231,8 @@ fun AppDrawerHeader(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "♡ apps ♡",
-                fontSize = 18.sp,
+                text = "— ♡ App Drawer ♡ —",
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = theme.appActionColor
             )

@@ -26,6 +26,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -35,58 +36,138 @@ import com.tnyemii.mochibun.ui.theme.destructiveColor
 import com.tnyemii.mochibun.ui.theme.softSurfaceColor
 import kotlinx.coroutines.delay
 
+/**
+ * Unified color scheme model representing the 4 cohesive custom pastel palettes:
+ * 1. Sakura Dream (Default)
+ * 2. Lavender Mist
+ * 3. Minty Matcha
+ * 4. Milky Peach
+ */
+data class MochibunThemePalette(
+    val id: String,
+    val name: String,
+    val primary: Color,
+    val container: Color,
+    val deepAccent: Color,
+    val background: Color,
+    val outline: Color,
+    val textColor: Color,
+    val squirclePrimary: Color,
+    val squircleSecondary: Color,
+    val cloudBack: Color,
+    val cloudMid: Color,
+    val cloudFront: Color,
+    val catOutline: Color,
+    val catBlush: Color = Color(0xFFFFADC9)
+)
+
+val SakuraDreamPalette = MochibunThemePalette(
+    id = "sakura_dream",
+    name = "Sakura Dream",
+    primary = Color(0xFFF8BBD0),
+    container = Color(0xFFFCE4EC),
+    deepAccent = Color(0xFFA04064),
+    background = Color(0xFFFFF5F8),
+    outline = Color(0xFFF3CADC),
+    textColor = Color(0xFF703350),
+    squirclePrimary = Color(0xFFF8BBD0),
+    squircleSecondary = Color(0xFFE1BEE7),
+    cloudBack = Color(0xFFFCEBF2),
+    cloudMid = Color(0xFFF8DCE7),
+    cloudFront = Color(0xFFFFF2F7),
+    catOutline = Color(0xFFA04064),
+    catBlush = Color(0xFFFFADC9)
+)
+
+val LavenderMistPalette = MochibunThemePalette(
+    id = "lavender_mist",
+    name = "Lavender Mist",
+    primary = Color(0xFFD1C4E9),
+    container = Color(0xFFEDE7F6),
+    deepAccent = Color(0xFF5E35B1),
+    background = Color(0xFFF8F6FD),
+    outline = Color(0xFFD1C4E9),
+    textColor = Color(0xFF4A148C),
+    squirclePrimary = Color(0xFFC7AFE2),
+    squircleSecondary = Color(0xFFB39DDB),
+    cloudBack = Color(0xFFEFE3FB),
+    cloudMid = Color(0xFFE2CEF5),
+    cloudFront = Color(0xFFF7ECFD),
+    catOutline = Color(0xFF5E35B1),
+    catBlush = Color(0xFFFFADC9)
+)
+
+val MintyMatchaPalette = MochibunThemePalette(
+    id = "minty_matcha",
+    name = "Minty Matcha",
+    primary = Color(0xFFC8E6C9),
+    container = Color(0xFFE8F5E9),
+    deepAccent = Color(0xFF2E7D32),
+    background = Color(0xFFF4FBF4),
+    outline = Color(0xFFA5D6A7),
+    textColor = Color(0xFF1B5E20),
+    squirclePrimary = Color(0xFFA5D6A7),
+    squircleSecondary = Color(0xFFC8E6C9),
+    cloudBack = Color(0xFFE8F5E9),
+    cloudMid = Color(0xFFD7ECD7),
+    cloudFront = Color(0xFFF2FAF2),
+    catOutline = Color(0xFF2E7D32),
+    catBlush = Color(0xFFFFB6C1)
+)
+
+val MilkyPeachPalette = MochibunThemePalette(
+    id = "milky_peach",
+    name = "Milky Peach",
+    primary = Color(0xFFFFE0B2),
+    container = Color(0xFFFFF3E0),
+    deepAccent = Color(0xFF8D4E28),
+    background = Color(0xFFFFFBF5),
+    outline = Color(0xFFFFCC80),
+    textColor = Color(0xFF6D2C12),
+    squirclePrimary = Color(0xFFFFCC80),
+    squircleSecondary = Color(0xFFFFE0B2),
+    cloudBack = Color(0xFFFFF0E0),
+    cloudMid = Color(0xFFFFE5CC),
+    cloudFront = Color(0xFFFFF7EF),
+    catOutline = Color(0xFF8D4E28),
+    catBlush = Color(0xFFFFAB91)
+)
+
+fun MochibunThemePalette.toLauncherTheme(roundnessDp: Float = 24f): LauncherTheme = LauncherTheme(
+    name = id,
+    bgColor = background,
+    fgTextColor = textColor,
+    cardBgColor = container,
+    cardTextColor = textColor.copy(alpha = 0.85f),
+    greetingColor = deepAccent,
+    greetingOutlineColor = outline,
+    greetingBgColor = background,
+    appActionColor = deepAccent,
+    cardRoundnessDp = roundnessDp
+)
+
 data class LauncherTheme(
-    val name: String = "original",
-    val bgColor: Color = Color(0xFFFFEAF5),
-    val fgTextColor: Color = Color(0xFF9B5FA5),
-    val cardBgColor: Color = Color(0xFFFFCCF1),
-    val cardTextColor: Color = Color(0xFFD791E3),
-    val greetingColor: Color = Color(0xFFA975B2),
-    val greetingOutlineColor: Color = Color(0xFFD791E3),
-    val greetingBgColor: Color = Color(0xFFFFEAF7),
-    val appActionColor: Color = Color(0xFF9B5FA5),
+    val name: String = "sakura_dream",
+    val bgColor: Color = Color(0xFFFFF5F8),
+    val fgTextColor: Color = Color(0xFF703350),
+    val cardBgColor: Color = Color(0xFFFCE4EC),
+    val cardTextColor: Color = Color(0xFF703350),
+    val greetingColor: Color = Color(0xFFA04064),
+    val greetingOutlineColor: Color = Color(0xFFF3CADC),
+    val greetingBgColor: Color = Color(0xFFFFF5F8),
+    val appActionColor: Color = Color(0xFFA04064),
     val cardRoundnessDp: Float = 24f
 )
 
-val OriginalTheme = LauncherTheme(
-    name = "original",
-    bgColor = Color(0xFFFFEAF5),
-    fgTextColor = Color(0xFF9B5FA5),
-    cardBgColor = Color(0xFFFFCCF1),
-    cardTextColor = Color(0xFFD791E3),
-    greetingColor = Color(0xFFA975B2),
-    greetingOutlineColor = Color(0xFFD791E3),
-    greetingBgColor = Color(0xFFFFEAF7),
-    appActionColor = Color(0xFF9B5FA5),
-    cardRoundnessDp = 24f
-)
+val SakuraDreamTheme = SakuraDreamPalette.toLauncherTheme(24f)
+val LavenderMistTheme = LavenderMistPalette.toLauncherTheme(24f)
+val MintyMatchaTheme = MintyMatchaPalette.toLauncherTheme(24f)
+val MilkyPeachTheme = MilkyPeachPalette.toLauncherTheme(24f)
 
-val StrawberryMilkTheme = LauncherTheme(
-    name = "strawberry_milk",
-    bgColor = Color(0xFFFFEFF6),
-    fgTextColor = Color(0xFF8A335C),
-    cardBgColor = Color(0xFFFFB3D9),
-    cardTextColor = Color(0xFFD94680),
-    greetingColor = Color(0xFFE06699),
-    greetingOutlineColor = Color(0xFFFF80BF),
-    greetingBgColor = Color(0xFFFFE6F2),
-    appActionColor = Color(0xFFD94680),
-    cardRoundnessDp = 24f
-)
-
-val LavenderDreamTheme = LauncherTheme(
-    name = "lavender_dream",
-    bgColor = Color(0xFFF3E8FF),
-    fgTextColor = Color(0xFF4C1D95),
-    cardBgColor = Color(0xFFD8B4FE),
-    cardTextColor = Color(0xFF8B5CF6),
-    greetingColor = Color(0xFF7C3AED),
-    greetingOutlineColor = Color(0xFFC4B5FD),
-    greetingBgColor = Color(0xFFFAF5FF),
-    appActionColor = Color(0xFF7C3AED),
-    cardRoundnessDp = 24f
-)
-
+// Backward-compatible presets & aliases
+val OriginalTheme = SakuraDreamTheme
+val StrawberryMilkTheme = SakuraDreamTheme
+val LavenderDreamTheme = LavenderMistTheme
 val MidnightMochiTheme = LauncherTheme(
     name = "midnight_mochi",
     bgColor = Color(0xFF1E1128),
@@ -100,12 +181,21 @@ val MidnightMochiTheme = LauncherTheme(
     cardRoundnessDp = 24f
 )
 
+val LauncherTheme.palette: MochibunThemePalette
+    get() = when (name) {
+        "lavender_mist", "lavender_dream" -> LavenderMistPalette
+        "minty_matcha" -> MintyMatchaPalette
+        "milky_peach" -> MilkyPeachPalette
+        else -> SakuraDreamPalette
+    }
+
 val LauncherTheme.selectedContainerColor: Color
     get() = when (name) {
+        "lavender_mist", "lavender_dream" -> Color(0xFFE3D8F5)
+        "minty_matcha" -> Color(0xFFDCF0DC)
+        "milky_peach" -> Color(0xFFFFEAD0)
         "midnight_mochi" -> Color(0xFF5A3673)
-        "strawberry_milk" -> Color(0xFFFFCCE6)
-        "lavender_dream" -> Color(0xFFE9D5FF)
-        else -> Color(0xFFFFDEF5)
+        else -> Color(0xFFFCD7E6) // sakura dream
     }
 
 data class CustomPreset(
@@ -123,39 +213,39 @@ fun loadCustomPresets(prefs: SharedPreferences): List<CustomPreset> {
 
         val bgColor = prefs.getInt(
             "preset_custom_${id}_bg",
-            OriginalTheme.bgColor.toArgb()
+            SakuraDreamTheme.bgColor.toArgb()
         )
         val fgColor = prefs.getInt(
             "preset_custom_${id}_fg",
-            OriginalTheme.fgTextColor.toArgb()
+            SakuraDreamTheme.fgTextColor.toArgb()
         )
         val cardBg = prefs.getInt(
             "preset_custom_${id}_card_bg",
-            OriginalTheme.cardBgColor.toArgb()
+            SakuraDreamTheme.cardBgColor.toArgb()
         )
         val cardText = prefs.getInt(
             "preset_custom_${id}_card_text",
-            OriginalTheme.cardTextColor.toArgb()
+            SakuraDreamTheme.cardTextColor.toArgb()
         )
         val greeting = prefs.getInt(
             "preset_custom_${id}_greeting",
-            OriginalTheme.greetingColor.toArgb()
+            SakuraDreamTheme.greetingColor.toArgb()
         )
         val outline = prefs.getInt(
             "preset_custom_${id}_outline",
-            OriginalTheme.greetingOutlineColor.toArgb()
+            SakuraDreamTheme.greetingOutlineColor.toArgb()
         )
         val gBg = prefs.getInt(
             "preset_custom_${id}_gbg",
-            OriginalTheme.greetingBgColor.toArgb()
+            SakuraDreamTheme.greetingBgColor.toArgb()
         )
         val action = prefs.getInt(
             "preset_custom_${id}_action",
-            OriginalTheme.appActionColor.toArgb()
+            SakuraDreamTheme.appActionColor.toArgb()
         )
         val roundness = prefs.getFloat(
             "preset_custom_${id}_round",
-            OriginalTheme.cardRoundnessDp
+            SakuraDreamTheme.cardRoundnessDp
         )
 
         CustomPreset(
@@ -226,10 +316,10 @@ fun deleteCustomPreset(prefs: SharedPreferences, id: String) {
         .apply()
 }
 
-val LocalLauncherTheme = compositionLocalOf { OriginalTheme }
+val LocalLauncherTheme = compositionLocalOf { SakuraDreamTheme }
 
 fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
-    val presetName = prefs.getString("theme_preset", "original") ?: "original"
+    val presetName = prefs.getString("theme_preset", "sakura_dream") ?: "sakura_dream"
 
     if (presetName.startsWith("custom_")) {
         val id = presetName.removePrefix("custom_")
@@ -238,13 +328,14 @@ fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
     }
 
     val base = when (presetName) {
-        "strawberry_milk" -> StrawberryMilkTheme
-        "lavender_dream" -> LavenderDreamTheme
+        "lavender_mist", "lavender_dream" -> LavenderMistTheme
+        "minty_matcha" -> MintyMatchaTheme
+        "milky_peach" -> MilkyPeachTheme
         "midnight_mochi" -> MidnightMochiTheme
-        else -> OriginalTheme
+        else -> SakuraDreamTheme
     }
 
-    if (!prefs.contains("theme_bg_color") && presetName == "original") {
+    if (!prefs.contains("theme_bg_color") && (presetName == "sakura_dream" || presetName == "original")) {
         return base
     }
 
@@ -303,14 +394,14 @@ fun saveTheme(prefs: SharedPreferences, theme: LauncherTheme) {
 }
 
 val kawaiiSwatches = listOf(
+    Color(0xFFF8BBD0), Color(0xFFFCE4EC), Color(0xFFA04064),
+    Color(0xFFD1C4E9), Color(0xFFEDE7F6), Color(0xFF5E35B1),
+    Color(0xFFC8E6C9), Color(0xFFE8F5E9), Color(0xFF2E7D32),
+    Color(0xFFFFE0B2), Color(0xFFFFF3E0), Color(0xFF8D4E28),
     Color(0xFFFFEAF5), Color(0xFFFFCCF1), Color(0xFFFFB3D9),
-    Color(0xFFFF66B2), Color(0xFFD791E3), Color(0xFFE675FF),
-    Color(0xFFF3E8FF), Color(0xFFD8B4FE), Color(0xFFA975B2),
-    Color(0xFF8B5CF6), Color(0xFF7C3AED), Color(0xFF6B21A8),
+    Color(0xFFD791E3), Color(0xFFF3E8FF), Color(0xFFD8B4FE),
     Color(0xFF1E1128), Color(0xFF3B224C), Color(0xFF2A1638),
-    Color(0xFFFFF5FB), Color(0xFFFFFFFF), Color(0xFF42234F),
-    Color(0xFF9B5FA5), Color(0xFF8A335C), Color(0xFFD94680),
-    Color(0xFFE879F9), Color(0xFFF472B6), Color(0xFFFF80BF)
+    Color(0xFFFFF5FB), Color(0xFFFFFFFF), Color(0xFF703350)
 )
 
 private val COLOR_FIELD_DEFS = listOf(
@@ -349,8 +440,8 @@ fun ThemeStudioDialog(
 
     // Main dialog focus state:
     // Row 0: Save as Preset button
-    // Row 1: Built-in presets row 1 (col 0 = Original, col 1 = Strawberry)
-    // Row 2: Built-in presets row 2 (col 0 = Lavender, col 1 = Midnight)
+    // Row 1: Built-in presets row 1 (col 0 = Sakura Dream, col 1 = Lavender Mist)
+    // Row 2: Built-in presets row 2 (col 0 = Minty Matcha, col 1 = Milky Peach)
     // Row 3: Custom presets (index 0 until customPresets.size; subCol 0 = select, 1 = delete)
     // Row 4: Card Roundness slider (LEFT/RIGHT adjusts by 1dp)
     // Row 5..10: Individual Color rows (0..5)
@@ -537,10 +628,18 @@ fun ThemeStudioDialog(
                                     showSaveDialog = true
                                 }
                                 1 -> {
-                                    draft = if (focusCol == 0) OriginalTheme else StrawberryMilkTheme
+                                    draft = if (focusCol == 0) {
+                                        SakuraDreamPalette.toLauncherTheme(draft.cardRoundnessDp)
+                                    } else {
+                                        LavenderMistPalette.toLauncherTheme(draft.cardRoundnessDp)
+                                    }
                                 }
                                 2 -> {
-                                    draft = if (focusCol == 0) LavenderDreamTheme else MidnightMochiTheme
+                                    draft = if (focusCol == 0) {
+                                        MintyMatchaPalette.toLauncherTheme(draft.cardRoundnessDp)
+                                    } else {
+                                        MilkyPeachPalette.toLauncherTheme(draft.cardRoundnessDp)
+                                    }
                                 }
                                 3 -> {
                                     customPresets.getOrNull(customPresetIndex)?.let { preset ->
@@ -554,7 +653,6 @@ fun ThemeStudioDialog(
                                     }
                                 }
                                 4 -> {
-                                    // Cycle common roundness values or step up on OK
                                     val next = if (draft.cardRoundnessDp >= 32f) 8f else (draft.cardRoundnessDp + 4f).coerceAtMost(32f)
                                     draft = draft.copy(cardRoundnessDp = next)
                                 }
@@ -675,10 +773,12 @@ fun ThemeStudioDialog(
                 modifier = Modifier.padding(14.dp)
             ) {
                 Text(
-                    text = "🎨 Theme Studio ♡",
+                    text = "— ♡ Theme Studio ♡ —",
                     fontWeight = FontWeight.Bold,
                     color = draft.fgTextColor,
-                    fontSize = 18.sp
+                    fontSize = 18.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -715,7 +815,7 @@ fun ThemeStudioDialog(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                "♡ Hello, Mochibun ♡",
+                                "♡ Welcome home ♡",
                                 color = draft.greetingColor,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
@@ -763,7 +863,7 @@ fun ThemeStudioDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "Presets 🌸",
+                            "Pastel Presets 🌸",
                             fontWeight = FontWeight.Bold,
                             color = draft.fgTextColor,
                             fontSize = 13.sp
@@ -780,57 +880,59 @@ fun ThemeStudioDialog(
                         )
                     }
 
+                    // Preset row 1: Sakura Dream & Lavender Mist
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        PresetButton(
-                            text = "Original",
-                            isSelected = draft.name == "original",
+                        PresetThemeCard(
+                            palette = SakuraDreamPalette,
+                            isSelected = draft.name == SakuraDreamPalette.id || draft.name == "original" || draft.name == "strawberry_milk",
                             isFocused = editingColorField == null && focusRow == 1 && focusCol == 0,
                             theme = draft
                         ) {
                             focusRow = 1
                             focusCol = 0
-                            draft = OriginalTheme
+                            draft = SakuraDreamPalette.toLauncherTheme(draft.cardRoundnessDp)
                         }
 
-                        PresetButton(
-                            text = "Strawberry",
-                            isSelected = draft.name == "strawberry_milk",
+                        PresetThemeCard(
+                            palette = LavenderMistPalette,
+                            isSelected = draft.name == LavenderMistPalette.id || draft.name == "lavender_dream",
                             isFocused = editingColorField == null && focusRow == 1 && focusCol == 1,
                             theme = draft
                         ) {
                             focusRow = 1
                             focusCol = 1
-                            draft = StrawberryMilkTheme
+                            draft = LavenderMistPalette.toLauncherTheme(draft.cardRoundnessDp)
                         }
                     }
 
+                    // Preset row 2: Minty Matcha & Milky Peach
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        PresetButton(
-                            text = "Lavender",
-                            isSelected = draft.name == "lavender_dream",
+                        PresetThemeCard(
+                            palette = MintyMatchaPalette,
+                            isSelected = draft.name == MintyMatchaPalette.id,
                             isFocused = editingColorField == null && focusRow == 2 && focusCol == 0,
                             theme = draft
                         ) {
                             focusRow = 2
                             focusCol = 0
-                            draft = LavenderDreamTheme
+                            draft = MintyMatchaPalette.toLauncherTheme(draft.cardRoundnessDp)
                         }
 
-                        PresetButton(
-                            text = "Midnight",
-                            isSelected = draft.name == "midnight_mochi",
+                        PresetThemeCard(
+                            palette = MilkyPeachPalette,
+                            isSelected = draft.name == MilkyPeachPalette.id,
                             isFocused = editingColorField == null && focusRow == 2 && focusCol == 1,
                             theme = draft
                         ) {
                             focusRow = 2
                             focusCol = 1
-                            draft = MidnightMochiTheme
+                            draft = MilkyPeachPalette.toLauncherTheme(draft.cardRoundnessDp)
                         }
                     }
 
@@ -1163,10 +1265,12 @@ fun ThemeStudioDialog(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        "Save Custom Preset ♡",
+                        "— ♡ Save Preset ♡ —",
                         fontWeight = FontWeight.Bold,
                         color = draft.fgTextColor,
-                        fontSize = 17.sp
+                        fontSize = 17.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
                     )
 
                     OutlinedTextField(
@@ -1226,15 +1330,15 @@ fun ThemeStudioDialog(
 }
 
 @Composable
-fun RowScope.PresetButton(
-    text: String,
+fun RowScope.PresetThemeCard(
+    palette: MochibunThemePalette,
     isSelected: Boolean,
     isFocused: Boolean = false,
     theme: LauncherTheme,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(10.dp)
-    Box(
+    val shape = RoundedCornerShape(12.dp)
+    Column(
         modifier = Modifier
             .weight(1f)
             .clip(shape)
@@ -1252,15 +1356,45 @@ fun RowScope.PresetButton(
             )
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp, horizontal = 6.dp),
-        contentAlignment = Alignment.Center
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
-            text = if (isSelected) "✓ $text" else text,
-            fontSize = 12.sp,
+            text = if (isSelected) "♡ ${palette.name}" else palette.name,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = theme.fgTextColor,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
+
+        // Cute 3-dot color preview (primary, container, deepAccent)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(13.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(palette.primary)
+                    .border(0.75.dp, palette.outline, RoundedCornerShape(4.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .size(13.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(palette.container)
+                    .border(0.75.dp, palette.outline, RoundedCornerShape(4.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .size(13.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(palette.deepAccent)
+                    .border(0.75.dp, palette.outline, RoundedCornerShape(4.dp))
+            )
+        }
     }
 }
 
