@@ -74,6 +74,8 @@ app/src/main/assets/*.ggml
 .DS_Store
 Thumbs.db
 desktop.ini
+AGENTS.md
+PROJECT_MEMORY.md
 
 # ==============================
 
@@ -116,6 +118,7 @@ local.properties
 
 # reference folder for agents
 reference/
+agent refs/
 
 *.jks
 keystore.properties
