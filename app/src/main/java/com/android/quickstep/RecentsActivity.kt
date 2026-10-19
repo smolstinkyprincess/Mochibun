@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -45,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
@@ -60,8 +62,11 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import com.tnyemii.mochibun.ActiveTheme
 import com.tnyemii.mochibun.BottomLavenderClouds
+import com.tnyemii.mochibun.DrawerHomeNavigation
 import com.tnyemii.mochibun.LocalLauncherTheme
+import com.tnyemii.mochibun.MochibunSectionHeader
 import com.tnyemii.mochibun.TopLavenderClouds
 import com.tnyemii.mochibun.glowingDoubleBorder
 import com.tnyemii.mochibun.isBackDismissKey
@@ -371,14 +376,11 @@ fun RecentsScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Header: ✦ — ♡ Recents ♡ — ✦
-            Text(
-                text = "✦  —  ♡  Recents  ♡  —  ✦",
-                fontSize = 21.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF3E2452),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+            // Top Header: — ♡ Recents ♡ —
+            MochibunSectionHeader(
+                title = "Recents",
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                color = ActiveTheme.accentDeep
             )
 
             // Center Content: Loading, Empty state, or Horizontal Task Carousel
@@ -390,7 +392,7 @@ fun RecentsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        color = Color(0xFFE5607E),
+                        color = ActiveTheme.primary,
                         modifier = Modifier.size(36.dp)
                     )
                 }
@@ -404,15 +406,15 @@ fun RecentsScreen(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(22.dp))
-                            .background(Color(0xFFFFF6F8))
-                            .border(1.5.dp, Color(0xFFE5A4B4), RoundedCornerShape(22.dp))
+                            .background(ActiveTheme.surface)
+                            .border(1.5.dp, ActiveTheme.cardBorder, RoundedCornerShape(22.dp))
                             .padding(28.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "— ♡ No Recent Apps ♡ —\n\nAll tasks closed! Press Back or Home to return ♡",
                             fontSize = 14.sp,
-                            color = Color(0xFF3E2452),
+                            color = ActiveTheme.textPrimary,
                             fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center
                         )
@@ -469,8 +471,8 @@ fun RecentsScreen(
                 val isClearAllFocused = focusZone == RecentsFocusZone.CLEAR_ALL
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Color(0xFF3B1F48)) // Deep plum/violet
+                        .clip(CircleShape)
+                        .background(ActiveTheme.accentDeep)
                         .glowingDoubleBorder(isSelected = isClearAllFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
                         .clickable { clearAllTasks() }
                         .padding(horizontal = 24.dp, vertical = 9.dp),
@@ -495,39 +497,15 @@ fun RecentsScreen(
                 .align(Alignment.BottomCenter)
         )
 
-        // 4. Upward Chevron and "Back to Home" Pill
-        Column(
+        // 4. Centered "Back to Home (F4)" Navigation Pill
+        DrawerHomeNavigation(
+            isFocused = focusZone == RecentsFocusZone.BACK_TO_HOME,
+            onClick = { onDismissActivity() },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "^",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF3E2452)
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            val isHomeFocused = focusZone == RecentsFocusZone.BACK_TO_HOME
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFFFFF6F8))
-                    .glowingDoubleBorder(isSelected = isHomeFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
-                    .border(1.2.dp, if (isHomeFocused) Color(0xFFE06287) else Color(0xFFB5A4CB), RoundedCornerShape(50))
-                    .clickable { onDismissActivity() }
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "♥ Back to Home ♥",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF3E2452)
-                )
-            }
-        }
+            text = "♥ Back to Home (F4) ♥"
+        )
     }
 }
 
@@ -614,11 +592,11 @@ fun TaskCard(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(cardShape)
-                .background(Color(0xFFF8F4FD)) // Frosted lavender-cream inner canvas
+                .background(ActiveTheme.surface) // Frosted theme surface
                 .glowingDoubleBorder(isSelected = isCardFocused && !isDismissFocused, shape = cardShape, cornerRadius = 22.dp)
                 .border(
-                    width = if (isCardFocused && !isDismissFocused) 2.5.dp else 1.5.dp,
-                    color = if (isCardFocused && !isDismissFocused) Color(0xFFE06287) else Color(0xFFE5A4B4),
+                    width = if (isCardFocused && !isDismissFocused) 2.dp else 1.5.dp,
+                    color = if (isCardFocused && !isDismissFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
                     shape = cardShape
                 )
                 .clickable { onLaunch() }
@@ -636,7 +614,7 @@ fun TaskCard(
                     text = task.title,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF3E2452),
+                    color = ActiveTheme.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
@@ -660,6 +638,7 @@ fun TaskCard(
                             bitmap = task.thumbnail,
                             contentDescription = task.title,
                             contentScale = ContentScale.Crop,
+                            filterQuality = FilterQuality.None,
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
@@ -673,6 +652,7 @@ fun TaskCard(
                                 Image(
                                     bitmap = task.iconBitmap,
                                     contentDescription = task.title,
+                                    filterQuality = FilterQuality.None,
                                     modifier = Modifier.size(48.dp)
                                 )
                             } else if (task.icon != null) {
@@ -686,7 +666,7 @@ fun TaskCard(
                             Text(
                                 text = task.title,
                                 fontSize = 12.sp,
-                                color = Color(0xFF6D567E),
+                                color = ActiveTheme.textPrimary,
                                 fontWeight = FontWeight.Medium,
                                 textAlign = TextAlign.Center,
                                 maxLines = 1
@@ -696,16 +676,16 @@ fun TaskCard(
                 }
             }
 
-            // Top-right Close Button ('✕') in soft lilac
+            // Top-right Close Button ('✕') in soft theme tint
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .size(24.dp)
                     .clip(RoundedCornerShape(9.dp))
-                    .background(if (isDismissFocused) Color(0xFFFDD4DC) else Color(0xFFE7DAF7))
+                    .background(if (isDismissFocused) ActiveTheme.surfaceTint else ActiveTheme.surface)
                     .border(
                         width = if (isDismissFocused) 2.dp else 1.dp,
-                        color = if (isDismissFocused) Color(0xFFE5607E) else Color(0xFFC8B8E2),
+                        color = if (isDismissFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
                         shape = RoundedCornerShape(9.dp)
                     )
                     .glowingDoubleBorder(isSelected = isDismissFocused, shape = RoundedCornerShape(9.dp), cornerRadius = 9.dp)
@@ -717,7 +697,7 @@ fun TaskCard(
                 Text(
                     text = "✕",
                     fontSize = 11.5.sp,
-                    color = if (isDismissFocused) Color(0xFFE5607E) else Color(0xFF4A2E5A),
+                    color = if (isDismissFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -739,6 +719,7 @@ fun TaskCard(
                 Image(
                     bitmap = task.iconBitmap,
                     contentDescription = task.title,
+                    filterQuality = FilterQuality.None,
                     modifier = Modifier.size(26.dp)
                 )
             } else if (task.icon != null) {
@@ -773,6 +754,7 @@ fun DrawableImage(
         Image(
             bitmap = bitmap,
             contentDescription = contentDescription,
+            filterQuality = FilterQuality.None,
             modifier = modifier
         )
     }

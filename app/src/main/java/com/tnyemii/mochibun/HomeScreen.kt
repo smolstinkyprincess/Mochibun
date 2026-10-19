@@ -1,3 +1,8 @@
+/**
+ * Main Home Screen surface for Mochibun.
+ * Orchestrates the greeting banner, digital clock, favorite apps/folders card,
+ * and bottom app drawer handle within the Chinoe AT-M120's 480x800 display envelope.
+ */
 package com.tnyemii.mochibun
 
 import android.content.Context
@@ -241,10 +246,17 @@ fun WelcomeHomeBanner(
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp)
                 .graphicsLayer { clip = false }
-                .border(
-                    width = if (isFocused) 3.dp else 2.dp,
-                    color = if (isFocused) theme.appActionColor else theme.greetingOutlineColor,
-                    shape = pillShape
+                .softGlowFocus(isSelected = isFocused, cornerRadius = 32.dp)
+                .then(
+                    if (!isFocused) {
+                        Modifier.border(
+                            width = 2.dp,
+                            color = theme.greetingOutlineColor,
+                            shape = pillShape
+                        )
+                    } else {
+                        Modifier
+                    }
                 )
                 .background(theme.greetingBgColor, pillShape)
                 .clip(pillShape)
@@ -319,11 +331,8 @@ fun WelcomeHomeBanner(
         )
 
         // Decorative ribbon bow badge anchored at top-center overlapping the border
-        Image(
-            painter = painterResource(id = R.drawable.bow),
-            contentDescription = "Ribbon Bow",
+        PixelRibbonBow(
             modifier = Modifier
-                .size(width = 56.dp, height = 46.dp)
                 .align(Alignment.TopCenter)
                 .offset(y = (-25).dp)
         )
@@ -445,8 +454,13 @@ fun ClockWidget(
 
 /**
  * Favorites Card.
- * Lavender card container with decorative divider header: — ♡ Favorites ♡ —
- * Evenly distributed horizontal slots with squircle icon backgrounds and unclipped focus outlines.
+ * Displays pinned apps and folders in a horizontal row/carousel.
+ *
+ * Physical Focus Contract:
+ * Outer and inner containers specify 'graphicsLayer { clip = false }' so the ~3.5 dp soft focus
+ * halo around the active slot isn't clipped by container edges or viewport bounds.
+ * When > 4 favorites exist, the LazyRow automatically scrolls focused slots into view so D-pad
+ * navigation remains smooth and predictable.
  */
 @Composable
 fun FavoritesCard(
@@ -516,10 +530,10 @@ fun FavoritesCard(
                         .background(theme.greetingOutlineColor, RoundedCornerShape(1.dp))
                 )
                 Text(
-                    text = "♡ Favorites ♡",
+                    text = "— ♡ Favorites ♡ —",
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = theme.greetingColor,
+                    fontWeight = FontWeight.Bold,
+                    color = ActiveTheme.accentDeep,
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 Box(
@@ -663,11 +677,7 @@ private fun FavoriteAppSlot(
                 .size(60.dp)
                 .then(
                     if (isSelected) {
-                        Modifier.border(
-                            width = 3.dp,
-                            color = theme.appActionColor,
-                            shape = focusShape
-                        )
+                        Modifier.softGlowFocus(isSelected = true, cornerRadius = 20.dp)
                     } else {
                         Modifier
                     }
@@ -681,6 +691,7 @@ private fun FavoriteAppSlot(
                 ),
             contentAlignment = Alignment.Center
         ) {
+            // FilterQuality.None prevents bilinear blur on small/pixel-art icons at 480x800
             Image(
                 bitmap = app.imageBitmap,
                 contentDescription = app.name,
@@ -758,11 +769,7 @@ private fun FavoriteFolderSlot(
                 .size(60.dp)
                 .then(
                     if (isSelected) {
-                        Modifier.border(
-                            width = 3.dp,
-                            color = theme.appActionColor,
-                            shape = focusShape
-                        )
+                        Modifier.softGlowFocus(isSelected = true, cornerRadius = 20.dp)
                     } else {
                         Modifier
                     }
@@ -777,6 +784,7 @@ private fun FavoriteFolderSlot(
             contentAlignment = Alignment.Center
         ) {
             if (folderIconBitmap != null) {
+                // FilterQuality.None preserves crisp 1:1 pixel rendering on 480x800
                 Image(
                     bitmap = folderIconBitmap,
                     contentDescription = folder.name,
@@ -1024,8 +1032,8 @@ fun BottomDrawerHandle(
             .then(
                 if (isFocused) {
                     Modifier
-                        .border(2.5.dp, theme.appActionColor, handleShape)
-                        .background(theme.selectedContainerColor.copy(alpha = 0.5f), handleShape)
+                        .softGlowFocus(isSelected = true, cornerRadius = 16.dp)
+                        .background(theme.focusedContainerColor, handleShape)
                         .padding(horizontal = 14.dp, vertical = 4.dp)
                 } else {
                     Modifier.padding(horizontal = 14.dp, vertical = 4.dp)

@@ -167,6 +167,7 @@ fun MainLauncher(
     var selectedApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconEditingApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconPickerOpen by remember { mutableStateOf(false) }
+    var iconPackDialogOpen by remember { mutableStateOf(false) }
     var kawaiiIconNames by remember { mutableStateOf<List<String>>(emptyList()) }
     var iconRefreshKey by remember { mutableIntStateOf(0) }
     var folderIconRefreshKey by remember { mutableIntStateOf(0) }
@@ -210,9 +211,8 @@ fun MainLauncher(
     // sequential two-phase loader: loads pinned favorites first (~20ms) for instant home screen, then full app list reusing cached icons :3
     LaunchedEffect(appListRefreshCount, iconRefreshKey) {
         if (apps.isEmpty() && favoritePackages.isNotEmpty()) {
-            val fastFavs = withContext(Dispatchers.Default) {
-                val kawaiiIconContext = getKawaiiIconPackContext(context)
-                val kawaiiIconMap = loadKawaiiIconMap(context)
+            val fastFavs = withContext(Dispatchers.IO) {
+                IconPackManager.getActiveParsedPack(context)
 
                 favoritePackages
                     .filter { it !in hiddenPackages }
@@ -222,31 +222,26 @@ fun MainLauncher(
                         val resolveInfo = context.packageManager.resolveActivity(launchIntent, 0)
                             ?: return@mapNotNull null
 
-                        getOrLoadLauncherApp(
+                        IconPackManager.getOrLoadLauncherApp(
                             context = context,
                             preferences = preferences,
-                            resolveInfo = resolveInfo,
-                            kawaiiIconContext = kawaiiIconContext,
-                            kawaiiIconMap = kawaiiIconMap
+                            resolveInfo = resolveInfo
                         )
                     }
             }
             earlyFavoriteApps = fastFavs
         }
 
-        apps = withContext(Dispatchers.Default) {
-            val kawaiiIconContext = getKawaiiIconPackContext(context)
-            val kawaiiIconMap = loadKawaiiIconMap(context)
+        apps = withContext(Dispatchers.IO) {
+            IconPackManager.getActiveParsedPack(context)
 
             context.packageManager
                 .queryIntentActivities(intent, 0)
                 .map { app ->
-                    getOrLoadLauncherApp(
+                    IconPackManager.getOrLoadLauncherApp(
                         context = context,
                         preferences = preferences,
-                        resolveInfo = app,
-                        kawaiiIconContext = kawaiiIconContext,
-                        kawaiiIconMap = kawaiiIconMap
+                        resolveInfo = app
                     )
                 }
                 .sortedBy { it.lowercaseName }
@@ -256,8 +251,8 @@ fun MainLauncher(
     // async load icon names list for icon picker <3
     LaunchedEffect(iconPickerOpen) {
         if (iconPickerOpen) {
-            kawaiiIconNames = withContext(Dispatchers.Default) {
-                loadAllKawaiiIconNames(context)
+            kawaiiIconNames = withContext(Dispatchers.IO) {
+                IconPackManager.loadAllIconNames(context)
             }
         } else {
             kawaiiIconNames = emptyList()
@@ -333,6 +328,7 @@ fun MainLauncher(
     val anyModalOpen = selectedApp != null ||
         launcherMenuOpen ||
         iconPickerOpen ||
+        iconPackDialogOpen ||
         hiddenManagerOpen ||
         themeStudioOpen ||
         hardwareButtonsDialogOpen ||
@@ -476,6 +472,7 @@ fun MainLauncher(
             launcherMenuOpen = false
             themeStudioOpen = false
             iconPickerOpen = false
+            iconPackDialogOpen = false
             hiddenManagerOpen = false
             editUserNameDialogOpen = false
             openedFolderId = null
@@ -1062,6 +1059,10 @@ fun MainLauncher(
                         launcherMenuOpen = false
                         virtualMouseDialogOpen = true
                     },
+                    onIconPackClick = {
+                        launcherMenuOpen = false
+                        iconPackDialogOpen = true
+                    },
                     onHiddenAppsClick = {
                         launcherMenuOpen = false
                         hiddenManagerOpen = true
@@ -1089,6 +1090,22 @@ fun MainLauncher(
                     isPixelSprayEnabled = isPixelSprayEnabled,
                     onTogglePixelSpray = { enabled ->
                         PreferencesManager.setPixelSprayWallpaperEnabled(context, enabled)
+                    }
+                )
+            }
+
+            // third-party icon pack selection dialog :3
+            if (iconPackDialogOpen) {
+                IconPackSelectionDialog(
+                    context = context,
+                    onDismiss = {
+                        iconPackDialogOpen = false
+                    },
+                    onIconPackSelected = { _ ->
+                        iconPackDialogOpen = false
+                        apps = emptyList()
+                        earlyFavoriteApps = emptyList()
+                        iconRefreshKey++
                     }
                 )
             }

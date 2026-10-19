@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -44,12 +45,12 @@ fun PixelSpraySettingsRow(
             .padding(vertical = 3.dp, horizontal = 2.dp)
             .glowingDoubleBorder(isSelected = isFocused, shape = cardShape, cornerRadius = 18.dp)
             .background(
-                color = if (isFocused) Color(0xFFFFF0F4) else Color(0xFFFAF5FC),
+                color = if (isFocused) ActiveTheme.current.focusedContainerColor else ActiveTheme.surface,
                 shape = cardShape
             )
             .border(
                 width = if (isFocused) 2.dp else 1.2.dp,
-                color = if (isFocused) Color(0xFFE5607E) else Color(0xFFDFB3C4),
+                color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
                 shape = cardShape
             )
             .clip(cardShape)
@@ -70,14 +71,14 @@ fun PixelSpraySettingsRow(
                     text = "♡ Wallpaper PixelSpray ♡",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF3E2452)
+                    color = ActiveTheme.textPrimary
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "Scatter pastel pixel stickers above home wallpaper",
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Normal,
-                    color = Color(0xFF8D7B9D),
+                    color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
                     lineHeight = 15.sp
                 )
             }
@@ -88,10 +89,10 @@ fun PixelSpraySettingsRow(
                     .width(52.dp)
                     .height(26.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(if (isEnabled) Color(0xFFF8BBD0) else Color(0xFFD1C4E9))
+                    .background(if (isEnabled) ActiveTheme.primary else ActiveTheme.cardBorder)
                     .border(
                         1.2.dp,
-                        if (isEnabled) Color(0xFFE06287) else Color(0xFF9E8DB8),
+                        if (isEnabled) ActiveTheme.accentDeep else ActiveTheme.cardBorder,
                         RoundedCornerShape(50)
                     )
                     .padding(horizontal = 4.dp),
@@ -107,7 +108,7 @@ fun PixelSpraySettingsRow(
                             text = "ON",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF703350),
+                            color = ActiveTheme.accentDeep,
                             modifier = Modifier.padding(end = 4.dp)
                         )
                     }
@@ -118,14 +119,14 @@ fun PixelSpraySettingsRow(
                             .size(18.dp)
                             .clip(RoundedCornerShape(50))
                             .background(Color.White)
-                            .border(1.dp, Color(0xFFE06287).copy(alpha = 0.5f), RoundedCornerShape(50)),
+                            .border(1.dp, ActiveTheme.accentDeep.copy(alpha = 0.5f), RoundedCornerShape(50)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = if (isEnabled) "♡" else "・",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isEnabled) Color(0xFFE06287) else Color(0xFF8D7B9D)
+                            color = if (isEnabled) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.6f)
                         )
                     }
 
@@ -134,7 +135,7 @@ fun PixelSpraySettingsRow(
                             text = "OFF",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF5E35B1),
+                            color = ActiveTheme.textPrimary,
                             modifier = Modifier.padding(start = 3.dp)
                         )
                     }
@@ -221,52 +222,62 @@ fun LauncherSettingsDialog(
             }
     ) {
         val shape = RoundedCornerShape(22.dp)
-        Surface(
+        Box(
             modifier = Modifier
-                .width(280.dp)
-                .heightIn(max = 480.dp)
-                .border(2.dp, theme.greetingOutlineColor, shape),
-            shape = shape,
-            color = theme.cardBgColor,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+                .width(288.dp)
+                .graphicsLayer { clip = false },
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .width(288.dp)
+                    .heightIn(max = 480.dp)
+                    .border(2.dp, ActiveTheme.cardBorder, shape),
+                shape = shape,
+                color = ActiveTheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp
             ) {
-                Text(
-                    text = "— ♡ Settings ♡ —",
-                    fontWeight = FontWeight.Bold,
-                    color = theme.fgTextColor,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 16.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    MochibunSectionHeader(
+                        title = "Settings",
+                        color = ActiveTheme.accentDeep,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
+                    HorizontalDivider(color = ActiveTheme.accentDeep.copy(alpha = 0.22f))
 
-                // 1. Wallpaper PixelSpray row
-                PixelSpraySettingsRow(
-                    isEnabled = isPixelSprayEnabled,
-                    isFocused = focusIndex == 0,
-                    onToggle = onTogglePixelSpray,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    // 1. Wallpaper PixelSpray row
+                    PixelSpraySettingsRow(
+                        isEnabled = isPixelSprayEnabled,
+                        isFocused = focusIndex == 0,
+                        onToggle = onTogglePixelSpray,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                // 2. Close button
-                KawaiiDialogPillButton(
-                    text = "Close",
-                    isFocused = focusIndex == 1,
-                    onClick = onDismiss
-                )
+                    // 2. Close button
+                    KawaiiClosePillButton(
+                        isFocused = focusIndex == 1,
+                        onClick = onDismiss
+                    )
+                }
             }
+
+            // Unified ribbon bow badge overlapping the upper border rim
+            PixelRibbonBow(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-23).dp)
+            )
         }
     }
 }

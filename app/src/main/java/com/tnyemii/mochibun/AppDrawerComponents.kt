@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -130,15 +131,19 @@ fun AppDrawerGridItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(68.dp)
+            .height(64.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                clip = false
             }
-            .border(
-                width = if (isSelected) 2.5.dp else 1.dp,
-                color = if (isSelected) appActionColor else theme.greetingOutlineColor.copy(alpha = 0.45f),
-                shape = shape
+            .softGlowFocus(isSelected = isSelected, cornerRadius = cardRoundness)
+            .then(
+                if (!isSelected) {
+                    Modifier.border(1.dp, theme.unfocusedCardBorderColor, shape)
+                } else {
+                    Modifier
+                }
             )
             .combinedClickable(
                 onClick = {
@@ -156,9 +161,9 @@ fun AppDrawerGridItem(
         shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
-                selectedContainerColor
+                theme.focusedContainerColor
             } else {
-                cardBgColor
+                theme.unfocusedCardBgColor
             }
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
@@ -172,6 +177,7 @@ fun AppDrawerGridItem(
             Image(
                 bitmap = app.imageBitmap,
                 contentDescription = app.name,
+                filterQuality = FilterQuality.None,
                 modifier = Modifier.size(48.dp)
             )
 
@@ -213,14 +219,18 @@ fun AppDrawerHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 6.dp)
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 18.dp)
             .clip(shape)
             .background(
-                if (isFocused) theme.selectedContainerColor else theme.greetingBgColor.copy(alpha = 0.85f)
+                if (isFocused) theme.focusedContainerColor else theme.greetingBgColor.copy(alpha = 0.85f)
             )
-            .border(
-                width = if (isFocused) 2.5.dp else 1.5.dp,
-                color = if (isFocused) theme.appActionColor else theme.greetingOutlineColor,
-                shape = shape
+            .then(
+                if (!isFocused) {
+                    Modifier.border(1.5.dp, theme.greetingOutlineColor, shape)
+                } else {
+                    Modifier
+                }
             )
             .clickable { onSwipeDown() }
             .padding(vertical = 7.dp, horizontal = 12.dp),

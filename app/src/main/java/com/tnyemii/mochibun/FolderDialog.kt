@@ -1,3 +1,8 @@
+/**
+ * Favorite Folder modal dialog and management subsystems for Mochibun.
+ * Handles folder viewing, app picker checklists, inline renaming, and deletion
+ * while enforcing strict D-pad focus isolation so background launcher keys don't leak.
+ */
 package com.tnyemii.mochibun
 
 import android.view.KeyEvent
@@ -11,6 +16,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -31,14 +37,18 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,78 +71,47 @@ private val SUGGESTED_FOLDER_NAMES = listOf(
     "Mochi"
 )
 
+private data class FolderSquircleTint(val container: Color, val border: Color)
+
 /**
  * Alternating soft pastel background tints for app squircle tiles matching the reference design:
- * 0: Soft Lilac (#DDD5F6) - e.g., Discord
- * 1: Blush Pink (#FBD2CE) - e.g., Proton Mail
- * 2: Soft Mint   (#CEF0E2) - e.g., FairEmail
- * 3: Soft Peach  (#FDE0B6) - e.g., SMS
+ * 0: Soft Mint   (#D4F1E8) - e.g., Via Browser
+ * 1: Blush Pink  (#FCE2E6) - e.g., ChatGPT
+ * 2: Soft Lilac  (#E2D9F7) - e.g., Mew Notes
+ * 3: Soft Mint   (#D4F1E8) - e.g., Files
  */
-private val APP_SLOT_TINTS = listOf(
-    Color(0xFFDDD5F6),
-    Color(0xFFFBD2CE),
-    Color(0xFFCEF0E2),
-    Color(0xFFFDE0B6)
+private val SQUIRCLE_TINTS = listOf(
+    FolderSquircleTint(container = Color(0xFFD4F1E8), border = Color(0xFFA5E2CD)),
+    FolderSquircleTint(container = Color(0xFFFCE2E6), border = Color(0xFFF6ACB9)),
+    FolderSquircleTint(container = Color(0xFFE2D9F7), border = Color(0xFFC7B6EE)),
+    FolderSquircleTint(container = Color(0xFFD4F1E8), border = Color(0xFFA5E2CD))
 )
 
 /**
- * Crisp 24×16 pixel-art pastel pink ribbon bow overlapping the top perimeter border of the folder card.
- * Rendered with discrete 1:1 integer pixel Canvas rects to eliminate GPU overhead on MT6761.
+ * Crisp pixel-art ribbon bow badge overlapping the top perimeter border of the folder card.
+ * Uses the pixel-art ribbon bow asset from the home screen greeting card ([R.drawable.bow]).
+ *
+ * FilterQuality.None is strictly required here: on the AT-M120's 480x800 display, default bilinear
+ * filtering causes muddy interpolation artifacts along 1-bit pixel art edges.
  */
 @Composable
 fun PixelRibbonBow(
     modifier: Modifier = Modifier,
     width: Dp = 56.dp,
-    height: Dp = 38.dp
+    height: Dp = 46.dp
 ) {
-    Canvas(modifier = modifier.size(width = width, height = height)) {
-        val pixelW = size.width / 24f
-        val pixelH = size.height / 16f
-
-        val rows = listOf(
-            "....OOOO........OOOO....", // 0
-            "..OOPHHPOO....OOPHHPOO..", // 1
-            ".OPHHHHHHPO..OPHHHHHHPO.", // 2
-            ".OPPPPPPPPO..OPPPPPPPPO.", // 3
-            "OPPPSSPPPPO..OPPPPSSPPPO", // 4
-            "OPSSSSSSSSOOOOISSSSSSSSO", // 5
-            ".OPSSSSSPOOKKKOOPSSSSSPO.", // 6
-            "..OOPPPOOKPHPKKOOPPPOO..", // 7
-            "....OOPPOKPPPPOOPPOO....", // 8
-            "....OPPOOOKKKOOOOPPO....", // 9
-            "...OPPO...OO...OPPO.....", // 10
-            "...OPPO........OPPO.....", // 11
-            "..OPHPO........OPHPO....", // 12
-            "..OPSPO........OPSPO....", // 13
-            "..OP.PO........OP.PO....", // 14
-            "..OO.OO........OO.OO...."  // 15
-        )
-
-        rows.forEachIndexed { y, row ->
-            row.forEachIndexed { x, char ->
-                val color = when (char) {
-                    'O' -> Color(0xFF6E2B3E) // Dark berry outline
-                    'P' -> Color(0xFFF9B4C4) // Soft pastel pink fill
-                    'H' -> Color(0xFFFFF0F5) // Pale highlight
-                    'S', 'I' -> Color(0xFFE5879F) // Pink shadow fold
-                    'K' -> Color(0xFFB85970) // Knot shadow
-                    else -> null
-                }
-                if (color != null) {
-                    drawRect(
-                        color = color,
-                        topLeft = Offset(x * pixelW, y * pixelH),
-                        size = Size(pixelW + 0.5f, pixelH + 0.5f)
-                    )
-                }
-            }
-        }
-    }
+    Image(
+        bitmap = ImageBitmap.imageResource(id = R.drawable.bow),
+        contentDescription = "Ribbon Bow",
+        filterQuality = FilterQuality.None,
+        modifier = modifier.size(width = width, height = height)
+    )
 }
 
 /**
  * Scalloped/beaded pill button for "♥ Close (◄) ♥" overlapping the bottom card rim.
- * Features a continuous pearl bead chain along the perimeter and glowing focus outline.
+ * Features a continuous pearl bead chain drawn directly to hardware Canvas with 'graphicsLayer { clip = false }'.
+ * Drawing procedural circles directly avoids texture memory overhead on the MT6761's limited RAM budget.
  */
 @Composable
 fun ScallopedClosePillButton(
@@ -146,6 +125,7 @@ fun ScallopedClosePillButton(
     Box(
         modifier = modifier
             .size(width = buttonWidth + 24.dp, height = buttonHeight + 20.dp)
+            .graphicsLayer { clip = false }
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -223,6 +203,7 @@ fun ScallopedClosePillButton(
             Box(
                 modifier = Modifier
                     .size(width = buttonWidth + 8.dp, height = buttonHeight + 8.dp)
+                    .graphicsLayer { clip = false }
                     .glowingDoubleBorder(isSelected = true, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
             )
         }
@@ -289,7 +270,14 @@ fun FloatingPixelBackdrop(
 }
 
 /**
- * Refactored Folder modal dialog faithfully matching the reference mockup.
+ * Primary Favorite Folder modal dialog.
+ *
+ * D-pad Focus Isolation Contract:
+ * When this dialog is open, focus MUST be strictly trapped inside the modal container.
+ * In Jetpack Compose, unconsumed physical keypad events bubble through the window hierarchy;
+ * without isolating the dialog, D-pad events would simultaneously navigate favorite items
+ * on the HomeScreen underneath. We capture keys at the dialog root using onPreviewKeyEvent
+ * and route them across 3 distinct zones (Header, App Grid, Close Button).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -313,6 +301,7 @@ fun FavoriteFolderDialog(
     onDismiss: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
+    val palette = theme.palette
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -442,6 +431,8 @@ fun FavoriteFolderDialog(
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
 
+                // Intercept KEYCODE_F4 (OEM side key) alongside standard back keys so the physical
+                // shortcut button consistently returns the user to the launcher home state.
                 if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4) {
                     if (event.type == KeyEventType.KeyUp) {
                         handleBack()
@@ -761,41 +752,51 @@ fun FavoriteFolderDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF9D6DC).copy(alpha = 0.55f)) // Translucent peach-pink backdrop
                 .clickable { handleBack() },
             contentAlignment = Alignment.Center
         ) {
-            // Floating pixel sparkle stars & hearts
-            FloatingPixelBackdrop()
-
-            // Top and Bottom Lavender Clouds lining the screen boundaries
+            // 1. Top Scalloped Lavender Clouds lining top screen boundary
             TopLavenderClouds(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
             )
+
+            // 2. Bottom Scalloped Lavender Clouds lining bottom screen boundary
             BottomLavenderClouds(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
             )
 
-            // Main Folder Modal Card Container
-            Box(
+            // 3. Centered Content Unit (Folder Card + Bottom Navigation Pill)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier
-                    .width(308.dp)
-                    .clickable(enabled = false) {}, // Intercept clicks inside card
-                contentAlignment = Alignment.Center
+                    .graphicsLayer { clip = false }
+                    .pointerInput(Unit) { detectTapGestures { } }
             ) {
-                // Frosted cream-lavender card body
+                // Main Folder Modal Card Container
+                val cardCornerRadius = cardRoundness.coerceIn(22.dp, 24.dp)
+                val cardShape = RoundedCornerShape(cardCornerRadius)
+                val cardBg = theme.unfocusedCardBgColor
+                val cardBorderColor = theme.unfocusedCardBorderColor
+
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(Color(0xFFFAF5FC))
-                        .border(1.5.dp, Color(0xFFDFB3C4), RoundedCornerShape(26.dp))
-                        .padding(top = 22.dp, bottom = 26.dp, start = 14.dp, end = 14.dp)
+                        .width(308.dp)
+                        .graphicsLayer { clip = false }
+                        .background(cardBg, cardShape)
+                        .border(1.5.dp, cardBorderColor, cardShape)
+                        .padding(top = 22.dp, bottom = 22.dp, start = 14.dp, end = 14.dp),
+                    contentAlignment = Alignment.Center
                 ) {
+                    PixelRibbonBow(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = (-23).dp)
+                    )
                     when {
                         confirmingDelete -> {
                             Column(
@@ -896,6 +897,7 @@ fun FavoriteFolderDialog(
                                             Image(
                                                 bitmap = app.imageBitmap,
                                                 contentDescription = app.name,
+                                                filterQuality = FilterQuality.None,
                                                 modifier = Modifier.size(32.dp)
                                             )
                                             Spacer(Modifier.width(10.dp))
@@ -1053,24 +1055,31 @@ fun FavoriteFolderDialog(
                             ) {
                                 // Folder Header: — ♡ [Folder Title] ♡ —
                                 val isHeaderFocused = focusSection == 0
+                                val headerShape = RoundedCornerShape(12.dp)
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(if (isHeaderFocused) Color(0xFFFFF0F4) else Color.Transparent)
-                                        .glowingDoubleBorder(isSelected = isHeaderFocused, shape = RoundedCornerShape(12.dp), cornerRadius = 12.dp)
+                                        .graphicsLayer { clip = false }
+                                        .softGlowFocus(
+                                            isSelected = isHeaderFocused,
+                                            cornerRadius = 12.dp
+                                        )
+                                        .background(
+                                            if (isHeaderFocused) theme.focusedContainerColor else Color.Transparent,
+                                            headerShape
+                                        )
                                         .clickable {
                                             newName = folder.name
                                             renameFocusZone = 0
                                             editingName = true
                                         }
-                                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                                        .padding(horizontal = 12.dp, vertical = 4.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "— ♡ ${folder.name} ♡ —",
-                                        fontSize = 17.sp,
+                                        text = "— ♡ ${folder.name.ifBlank { "Favorites" }} ♡ —",
+                                        fontSize = 17.5.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF3B1B44),
+                                        color = theme.palette.textColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -1081,7 +1090,7 @@ fun FavoriteFolderDialog(
                                         text = "Edit mode: tap an app to remove ♡",
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFE06287),
+                                        color = destructiveColor,
                                         modifier = Modifier.padding(top = 2.dp)
                                     )
                                 }
@@ -1095,12 +1104,13 @@ fun FavoriteFolderDialog(
                                             .fillMaxWidth()
                                             .height(180.dp)
                                             .clip(RoundedCornerShape(16.dp))
-                                            .background(Color(0xFFFFF6F8)),
+                                            .background(theme.unfocusedCardBgColor)
+                                            .border(1.dp, theme.unfocusedCardBorderColor, RoundedCornerShape(16.dp)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = "Folder is empty ♡\nTap header to manage apps!",
-                                            color = Color(0xFF3B1B44),
+                                            color = theme.palette.textColor,
                                             fontSize = 13.5.sp,
                                             textAlign = TextAlign.Center
                                         )
@@ -1111,18 +1121,20 @@ fun FavoriteFolderDialog(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .heightIn(max = 240.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                            .heightIn(max = 240.dp)
+                                            .graphicsLayer { clip = false },
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
                                     ) {
                                         itemsIndexed(folderApps, key = { _, app -> app.packageName }) { index, app ->
                                             val isTileFocused = focusSection == 1 && selectedAppIndex == index
-                                            val tint = APP_SLOT_TINTS[index % APP_SLOT_TINTS.size]
+                                            val tint = SQUIRCLE_TINTS[index % SQUIRCLE_TINTS.size]
+                                            val tileShape = RoundedCornerShape(20.dp)
                                             val squircleShape = RoundedCornerShape(16.dp)
 
                                             val scale by animateFloatAsState(
-                                                targetValue = if (isTileFocused) 1.05f else 1.0f,
+                                                targetValue = if (isTileFocused) 1.04f else 1.0f,
                                                 animationSpec = tween(120),
                                                 label = "folderAppTileScale"
                                             )
@@ -1133,7 +1145,16 @@ fun FavoriteFolderDialog(
                                                     .graphicsLayer {
                                                         scaleX = scale
                                                         scaleY = scale
+                                                        clip = false
                                                     }
+                                                    .softGlowFocus(
+                                                        isSelected = isTileFocused,
+                                                        cornerRadius = 20.dp
+                                                    )
+                                                    .background(
+                                                        if (isTileFocused) theme.focusedContainerColor else Color.Transparent,
+                                                        tileShape
+                                                    )
                                                     .combinedClickable(
                                                         onClick = {
                                                             focusSection = 1
@@ -1150,19 +1171,19 @@ fun FavoriteFolderDialog(
                                                             selectedAppIndex = index
                                                             managing = !managing
                                                         }
-                                                    ),
+                                                    )
+                                                    .padding(horizontal = 8.dp, vertical = 10.dp),
                                                 horizontalAlignment = Alignment.CenterHorizontally
                                             ) {
                                                 // Squircle Icon Container
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(68.dp)
+                                                        .size(64.dp)
                                                         .clip(squircleShape)
-                                                        .background(tint)
-                                                        .glowingDoubleBorder(isSelected = isTileFocused, shape = squircleShape, cornerRadius = 16.dp)
+                                                        .background(tint.container, squircleShape)
                                                         .border(
-                                                            width = if (isTileFocused) 2.dp else 1.dp,
-                                                            color = if (isTileFocused) Color(0xFFE06287) else tint.copy(alpha = 0.6f),
+                                                            width = 1.dp,
+                                                            color = tint.border,
                                                             shape = squircleShape
                                                         ),
                                                     contentAlignment = Alignment.Center
@@ -1170,7 +1191,8 @@ fun FavoriteFolderDialog(
                                                     Image(
                                                         bitmap = app.imageBitmap,
                                                         contentDescription = app.name,
-                                                        modifier = Modifier.size(36.dp)
+                                                        filterQuality = FilterQuality.None,
+                                                        modifier = Modifier.size(34.dp)
                                                     )
 
                                                     if (managing) {
@@ -1188,14 +1210,14 @@ fun FavoriteFolderDialog(
                                                     }
                                                 }
 
-                                                Spacer(Modifier.height(6.dp))
+                                                Spacer(Modifier.height(8.dp))
 
                                                 // App Label
                                                 Text(
                                                     text = app.name,
                                                     fontSize = 13.5.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFF3B1B44),
+                                                    color = theme.palette.textColor,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                     textAlign = TextAlign.Center
@@ -1205,40 +1227,16 @@ fun FavoriteFolderDialog(
                                     }
                                 }
 
-                                Spacer(Modifier.height(6.dp))
+                                Spacer(Modifier.height(4.dp))
                             }
                         }
                     }
                 }
 
-                // Top-Center Overlapping Pixel Ribbon Bow
-                PixelRibbonBow(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset(y = (-18).dp)
-                )
-
-                // Top-Left Overlapping Bunny Pin Badge
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .offset(x = 8.dp, y = (-10).dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFFFFDFE))
-                        .border(1.5.dp, Color(0xFFDFB3C4), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 4.dp, vertical = 3.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    PixelBunnyAvatar(size = 20.dp)
-                }
-
-                // Bottom Scalloped "♥ Close (◄) ♥" Pill Button overlapping card bottom rim
-                ScallopedClosePillButton(
+                // Floating Bottom Home Navigation Pill: ^ ♥ Back to Home (F4) ♥
+                DrawerHomeNavigation(
                     isFocused = focusSection == 2,
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .offset(y = 18.dp)
+                    onClick = onDismiss
                 )
             }
         }

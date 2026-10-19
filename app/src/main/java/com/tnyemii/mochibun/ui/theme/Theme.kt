@@ -1,3 +1,8 @@
+/**
+ * Core Material 3 theming entry point for Mochibun.
+ * Configures the primary pastel color schemes, typography, and edge-to-edge system bar
+ * appearance tailored for the Chinoe AT-M120's 480x800 display.
+ */
 package com.tnyemii.mochibun.ui.theme
 
 import android.app.Activity
@@ -11,8 +16,11 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.tnyemii.mochibun.ActiveTheme
 
-// light pastel pink theme color scheme :3
+typealias ActiveTheme = com.tnyemii.mochibun.ActiveTheme
+
+// Baseline pastel pink palette used across launcher surfaces and interactive cards
 private val PinkLightColorScheme = lightColorScheme(
     primary = PinkPrimary,
     onPrimary = PinkOnPrimary,
@@ -25,7 +33,7 @@ private val PinkLightColorScheme = lightColorScheme(
     onSurface = ThemeOnSurface
 )
 
-// dark theme fallback color scheme <3
+// High-contrast fallback scheme for dark mode contexts
 private val PinkDarkColorScheme = darkColorScheme(
     primary = PinkPrimary,
     onPrimary = PinkOnPrimary,
@@ -38,7 +46,13 @@ private val PinkDarkColorScheme = darkColorScheme(
     onSurface = ThemeBackground
 )
 
-// root theme wrapper configuring system bar colors and typography :3
+/**
+ * Root theme composable wrapping all launcher activities and dialogs.
+ *
+ * Note: Dynamic Material You wallpaper coloring is disabled by default (dynamicColor = false).
+ * System wallpaper extraction on Android 12 frequently generates muddy brown/olive tones that
+ * clash with Mochibun's bespoke pastel pinks and break focus ring visibility on low-contrast screens.
+ */
 @Composable
 fun M120LauncherTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -55,7 +69,9 @@ fun M120LauncherTheme(
 
     val view = LocalView.current
 
-    // configure edge-to-edge system status and navigation bars <3
+    // Synchronize the window status bar and navigation bar with the launcher surface.
+    // On the AT-M120's 480x800 panel, keeping system bar backgrounds unified with ThemeBackground
+    // eliminates awkward letterbox seams while light foreground icons ensure time/battery legibility.
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window

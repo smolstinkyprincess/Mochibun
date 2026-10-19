@@ -55,9 +55,6 @@ android {
 
     buildTypes {
         release {
-            optimization {
-                enable = false
-            }
             isMinifyEnabled = false
             isDebuggable = false
             signingConfig = signingConfigs.getByName("sharedSigning")
@@ -74,6 +71,9 @@ android {
     buildFeatures {
         compose = true
         aidl = true
+    }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 

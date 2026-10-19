@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -493,6 +494,7 @@ fun FavoritesCard(
                             Image(
                                 bitmap = app.imageBitmap,
                                 contentDescription = app.name,
+                                filterQuality = FilterQuality.None,
                                 modifier = Modifier.size(52.dp)
                             )
                         }
@@ -570,6 +572,7 @@ fun FavoritesCard(
                                     Image(
                                         bitmap = folderIconBitmap,
                                         contentDescription = "${folder.name} folder icon",
+                                        filterQuality = FilterQuality.None,
                                         modifier = Modifier.size(42.dp)
                                     )
                                 } else {

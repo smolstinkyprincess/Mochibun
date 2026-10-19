@@ -270,14 +270,14 @@ fun HardwareButtonsDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+        val shape = RoundedCornerShape(22.dp)
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(shape)
-                .background(theme.cardBgColor)
-                .border(2.dp, theme.appActionColor, shape)
+                .background(ActiveTheme.surface)
+                .border(2.dp, ActiveTheme.cardBorder, shape)
                 .padding(10.dp)
         ) {
             // Header
@@ -286,15 +286,13 @@ fun HardwareButtonsDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "🎮 Button Remapper",
-                    color = theme.greetingColor,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
+                MochibunSectionHeader(
+                    title = "Button Remapper",
+                    color = ActiveTheme.accentDeep
                 )
                 Text(
                     text = "AT-M120",
-                    color = theme.cardTextColor.copy(alpha = 0.6f),
+                    color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
                     fontSize = 11.sp
                 )
             }

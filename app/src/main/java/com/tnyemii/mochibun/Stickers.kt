@@ -1,3 +1,8 @@
+/**
+ * Procedural pixel-art sticker and explosion effect engine for Mochibun.
+ * Uses run-length encoded canvas drawing routines instead of bitmaps, maintaining 1:1 pixel
+ * sharpness at 480x800 and bypassing the MediaTek MT6761's GPU shader overhead.
+ */
 package com.tnyemii.mochibun
 
 import androidx.compose.animation.core.Animatable

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Card
@@ -368,7 +369,7 @@ fun CursorSettingsScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 44.dp),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 60.dp, bottom = 86.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Item 0: Header & optional status message
@@ -377,6 +378,14 @@ fun CursorSettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    MochibunSectionHeader(
+                        title = "Virtual Mouse",
+                        color = ActiveTheme.accentDeep,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 2.dp)
+                    )
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -386,27 +395,22 @@ fun CursorSettingsScreen(
                     ) {
                         Column {
                             Text(
-                                text = "✨ Virtual Mouse",
-                                color = theme.greetingColor,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
                                 text = "C9-style pointer for AT-M120",
-                                color = theme.cardTextColor.copy(alpha = 0.7f),
-                                fontSize = 11.sp
+                                color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
 
                         // Status chip
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(CircleShape)
                                 .background(if (isServiceActive) Color(0xFFE8F5E9) else destructiveBgColor)
                                 .border(
                                     1.dp,
                                     if (isServiceActive) Color(0xFF4CAF50) else destructiveColor,
-                                    RoundedCornerShape(12.dp)
+                                    CircleShape
                                 )
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
@@ -424,14 +428,14 @@ fun CursorSettingsScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(theme.selectedContainerColor)
-                                .border(1.dp, theme.appActionColor, RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(ActiveTheme.surface)
+                                .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(12.dp))
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Text(
                                 text = statusMessage!!,
-                                color = theme.fgTextColor,
+                                color = ActiveTheme.textPrimary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -780,19 +784,34 @@ fun CursorSettingsScreen(
                 }
             }
 
-            // Item 6: Optional Close Button (Focus Index 10)
-            if (onClose != null) {
-                item {
-                    MochibunActionButton(
-                        text = "Close Settings",
-                        isFocused = focusedIndex == 10,
-                        onClick = {
-                            focusedIndex = 10
-                            onClose()
-                        }
-                    )
-                }
+            // Bottom spacer for generous scroll clearance above the pill button
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
             }
+        }
+
+        // Top and Bottom Scalloped Lavender Clouds
+        TopLavenderClouds(
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
+
+        BottomLavenderClouds(
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+
+        // Centered Bottom Navigation Pill Button
+        if (onClose != null) {
+            DrawerHomeNavigation(
+                isFocused = focusedIndex == 10,
+                onClick = {
+                    focusedIndex = 10
+                    onClose()
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp),
+                text = "♥ Back to Home (F4) ♥"
+            )
         }
     }
 }
@@ -805,8 +824,6 @@ fun CursorSettingsScreen(
 fun CursorSettingsDialog(
     onDismiss: () -> Unit
 ) {
-    val theme = LocalLauncherTheme.current
-
     BasicAlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -818,11 +835,11 @@ fun CursorSettingsDialog(
             .fillMaxWidth(0.96f)
             .fillMaxHeight(0.94f)
     ) {
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+        val shape = RoundedCornerShape(22.dp)
         Surface(
             shape = shape,
-            color = theme.bgColor,
-            border = BorderStroke(2.dp, theme.appActionColor),
+            color = ActiveTheme.background,
+            border = BorderStroke(2.dp, ActiveTheme.cardBorder),
             modifier = Modifier.fillMaxSize()
         ) {
             CursorSettingsScreen(
@@ -1136,31 +1153,34 @@ private fun MochibunActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val theme = LocalLauncherTheme.current
-    val shape = RoundedCornerShape(12.dp)
+    val pillShape = CircleShape
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
+            .softGlowFocus(
+                isSelected = isFocused,
+                cornerRadius = 20.dp
+            )
+            .clip(pillShape)
             .background(
-                if (isFocused) theme.appActionColor else theme.bgColor,
-                shape
+                if (isFocused) ActiveTheme.current.focusedContainerColor else ActiveTheme.surface,
+                pillShape
             )
             .border(
-                width = if (isFocused) 2.dp else 1.5.dp,
-                color = theme.appActionColor,
-                shape = shape
+                width = if (isFocused) 2.dp else 1.2.dp,
+                color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
+                shape = pillShape
             )
             .clickable(onClick = onClick)
-            .padding(vertical = 7.dp, horizontal = 12.dp),
+            .padding(vertical = 7.dp, horizontal = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            color = if (isFocused) Color.White else theme.appActionColor,
+            color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
             fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
+            fontSize = 12.5.sp,
             textAlign = TextAlign.Center
         )
     }

@@ -4,7 +4,6 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.Paint
 import android.graphics.PixelFormat
@@ -25,6 +24,9 @@ import kotlin.math.roundToInt
  * High-performance, pixel-crisp overlay view for the system-wide virtual mouse pointer.
  * Respects MT6761 memory and rendering constraints (using software allocator for decodes,
  * zero bilinear filtering to preserve sharp pixel art, and hardware-accelerated overlay window).
+ *
+ * Uses a full-screen overlay window and translates the cursor sprite via hardware-accelerated
+ * translationX / translationY, completely eliminating WindowManager.updateViewLayout IPC overhead.
  */
 class CursorOverlayView(context: Context) : FrameLayout(context) {
 
@@ -39,6 +41,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
 
     private var currentDrawable: Drawable? = null
     private var defaultCursorBitmap: Bitmap? = null
+    private var clickFeedbackAnimator: ValueAnimator? = null
 
     var currentX: Float = 240f
         private set
@@ -62,17 +65,24 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
         format = PixelFormat.TRANSLUCENT
         gravity = Gravity.TOP or Gravity.START
-        width = cursorSizePx
-        height = cursorSizePx
-        x = currentX.toInt()
-        y = currentY.toInt()
+        width = WindowManager.LayoutParams.MATCH_PARENT
+        height = WindowManager.LayoutParams.MATCH_PARENT
+        x = 0
+        y = 0
     }
 
     init {
+        // Enforce unfiltered nearest-neighbor sampling for pixel-art clarity
+        val pixelArtPaint = Paint().apply {
+            isFilterBitmap = false
+            isDither = false
+        }
+        imageView.setLayerPaint(pixelArtPaint)
+
         addView(
             imageView,
-            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
-                gravity = Gravity.CENTER
+            LayoutParams(cursorSizePx, cursorSizePx).apply {
+                gravity = Gravity.TOP or Gravity.START
             }
         )
         reloadConfiguration()
@@ -89,11 +99,15 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
         hotspotAlignment = CursorPreferences.getHotspotAlignment(context)
         gifPlaybackSpeed = CursorPreferences.getGifPlaybackSpeed(context)
 
-        windowLayoutParams.width = cursorSizePx
-        windowLayoutParams.height = cursorSizePx
+        imageView.layoutParams = (imageView.layoutParams as? LayoutParams)?.apply {
+            width = cursorSizePx
+            height = cursorSizePx
+        } ?: LayoutParams(cursorSizePx, cursorSizePx).apply {
+            gravity = Gravity.TOP or Gravity.START
+        }
 
         loadCursorAsset(CursorPreferences.getCustomCursorUri(context))
-        syncLayoutParamsCoordinates()
+        updatePosition(currentX, currentY)
     }
 
     /**
@@ -274,28 +288,22 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     }
 
     /**
-     * Updates cursor position on screen with boundary clamping.
+     * Updates cursor position on screen via hardware layer translation
+     * without triggering heavy WindowManager layout recalculations.
      */
-    fun updatePosition(newX: Float, newY: Float, windowManager: WindowManager) {
+    fun updatePosition(newX: Float, newY: Float, windowManager: WindowManager? = null) {
         currentX = newX
         currentY = newY
-        syncLayoutParamsCoordinates()
-        try {
-            windowManager.updateViewLayout(this, windowLayoutParams)
-        } catch (_: Exception) {}
-    }
-
-    private fun syncLayoutParamsCoordinates() {
-        when (hotspotAlignment) {
-            HotspotAlignment.TOP_LEFT -> {
-                windowLayoutParams.x = currentX.toInt()
-                windowLayoutParams.y = currentY.toInt()
-            }
-            HotspotAlignment.CENTER -> {
-                windowLayoutParams.x = (currentX - cursorSizePx / 2f).toInt()
-                windowLayoutParams.y = (currentY - cursorSizePx / 2f).toInt()
-            }
+        val renderX = when (hotspotAlignment) {
+            HotspotAlignment.TOP_LEFT -> currentX
+            HotspotAlignment.CENTER -> currentX - cursorSizePx / 2f
         }
+        val renderY = when (hotspotAlignment) {
+            HotspotAlignment.TOP_LEFT -> currentY
+            HotspotAlignment.CENTER -> currentY - cursorSizePx / 2f
+        }
+        imageView.translationX = renderX
+        imageView.translationY = renderY
     }
 
     /**
@@ -316,7 +324,18 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
      * Triggers a sweet bounce animation on click for tactile visual feedback.
      */
     fun showClickFeedback() {
-        val animator = ValueAnimator.ofFloat(1f, 0.82f, 1f).apply {
+        clickFeedbackAnimator?.cancel()
+        when (hotspotAlignment) {
+            HotspotAlignment.TOP_LEFT -> {
+                imageView.pivotX = 0f
+                imageView.pivotY = 0f
+            }
+            HotspotAlignment.CENTER -> {
+                imageView.pivotX = cursorSizePx / 2f
+                imageView.pivotY = cursorSizePx / 2f
+            }
+        }
+        clickFeedbackAnimator = ValueAnimator.ofFloat(1f, 0.82f, 1f).apply {
             duration = 120L
             interpolator = AccelerateDecelerateInterpolator()
             addUpdateListener { va ->
@@ -324,14 +343,16 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
                 imageView.scaleX = scale
                 imageView.scaleY = scale
             }
+            start()
         }
-        animator.start()
     }
 
     /**
      * Teardown cleanup to eliminate memory leaks.
      */
     fun release() {
+        clickFeedbackAnimator?.cancel()
+        clickFeedbackAnimator = null
         (currentDrawable as? AnimatedImageDrawable)?.stop()
         imageView.setImageDrawable(null)
         currentDrawable = null

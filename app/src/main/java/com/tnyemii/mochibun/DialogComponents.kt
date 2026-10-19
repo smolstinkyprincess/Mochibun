@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,6 +32,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
@@ -53,6 +55,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -193,7 +197,7 @@ fun KawaiiDialogPillButton(
     onClick: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
-    val shape = RoundedCornerShape(12.dp)
+    val shape = CircleShape
     val bg = when {
         !enabled -> softSurfaceColor.copy(alpha = 0.45f)
         isDestructive && isFocused -> destructiveColor
@@ -258,6 +262,7 @@ fun LauncherMenuDialog(
     onPickWallpaperClick: () -> Unit,
     onResetWallpaperClick: () -> Unit,
     showResetWallpaper: Boolean,
+    onIconPackClick: (() -> Unit)? = null,
     onCreateFolderClick: (() -> Unit)? = null,
     onHardwareButtonsClick: (() -> Unit)? = null,
     onVirtualMouseClick: (() -> Unit)? = null,
@@ -270,13 +275,16 @@ fun LauncherMenuDialog(
     val scrollState = rememberScrollState()
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val actions = remember(showResetWallpaper, onCreateFolderClick, onHardwareButtonsClick, onVirtualMouseClick, onEditUserNameClick) {
+    val actions = remember(showResetWallpaper, onIconPackClick, onCreateFolderClick, onHardwareButtonsClick, onVirtualMouseClick, onEditUserNameClick) {
         buildList<Pair<String, () -> Unit>> {
             if (onEditUserNameClick != null) {
                 add("✨ Edit user name" to onEditUserNameClick)
             }
             if (onCreateFolderClick != null) {
                 add("📁 Make folder" to onCreateFolderClick)
+            }
+            if (onIconPackClick != null) {
+                add("♡ Icon packs" to onIconPackClick)
             }
             if (onHardwareButtonsClick != null) {
                 add("🎮 Hardware buttons" to onHardwareButtonsClick)
@@ -290,7 +298,7 @@ fun LauncherMenuDialog(
             if (showResetWallpaper) {
                 add("↩ Reset to default wallpaper" to onResetWallpaperClick)
             }
-            add("Close" to onDismiss)
+            add("♥ Close (◄) ♥" to onDismiss)
         }
     }
 
@@ -372,37 +380,40 @@ fun LauncherMenuDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
-        Surface(
+        val shape = RoundedCornerShape(22.dp)
+        Box(
             modifier = Modifier
                 .width(dialogWidth)
-                .heightIn(max = 480.dp)
-                .border(2.5.dp, theme.greetingOutlineColor, shape),
-            shape = shape,
-            color = theme.cardBgColor,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+                .graphicsLayer { clip = false },
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .width(dialogWidth)
+                    .heightIn(max = 480.dp)
+                    .border(2.dp, ActiveTheme.cardBorder, shape),
+                shape = shape,
+                color = ActiveTheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp
             ) {
-                Text(
-                    text = "— ♡ Settings ♡ —",
-                    fontWeight = FontWeight.Bold,
-                    color = theme.fgTextColor,
-                    fontSize = 18.sp,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            top = 2.dp,
-                            bottom = 6.dp
-                        ),
-                    textAlign = TextAlign.Center
-                )
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 14.dp, vertical = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    MochibunSectionHeader(
+                        title = "Settings",
+                        color = ActiveTheme.accentDeep,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                top = 2.dp,
+                                bottom = 6.dp
+                            )
+                    )
 
                 HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
 
@@ -440,7 +451,15 @@ fun LauncherMenuDialog(
                 }
             }
         }
+
+        // Ribbon Bow centered and overlapping top border rim
+        PixelRibbonBow(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = (-23).dp)
+        )
     }
+}
 }
 
 // dialog listing hidden apps so they can be unhidden again <3
@@ -522,14 +541,14 @@ fun HiddenAppsDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+        val shape = RoundedCornerShape(22.dp)
         Surface(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 420.dp)
-                .border(2.5.dp, theme.greetingOutlineColor, shape),
+                .border(2.dp, ActiveTheme.cardBorder, shape),
             shape = shape,
-            color = theme.cardBgColor,
+            color = ActiveTheme.surface,
             tonalElevation = 6.dp,
             shadowElevation = 8.dp
         ) {
@@ -538,13 +557,12 @@ fun HiddenAppsDialog(
                     .fillMaxWidth()
                     .padding(14.dp)
             ) {
-                Text(
-                    text = "— ♡ Hidden Apps ♡ —",
-                    fontWeight = FontWeight.Bold,
-                    color = theme.fgTextColor,
-                    fontSize = 18.sp,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
+                MochibunSectionHeader(
+                    title = "Hidden Apps",
+                    color = ActiveTheme.accentDeep,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 4.dp)
                 )
 
                 Spacer(Modifier.height(10.dp))
@@ -634,7 +652,7 @@ fun HiddenAppsDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     KawaiiDialogPillButton(
-                        text = "Close",
+                        text = "♥ Close (◄) ♥",
                         isFocused = selectedIndex == hiddenApps.size,
                         onClick = onDismiss
                     )
@@ -689,7 +707,7 @@ fun AppActionDialog(
             if (onOpenLauncherOptions != null) {
                 add("⚙ Launcher options" to onOpenLauncherOptions)
             }
-            add("Close" to onDismiss)
+            add("♥ Close (◄) ♥" to onDismiss)
         }
     }
 
@@ -782,15 +800,15 @@ fun AppActionDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(cardRoundness)
+        val shape = RoundedCornerShape(22.dp)
 
         Surface(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
-                .border(2.5.dp, theme.greetingOutlineColor, shape),
+                .border(2.dp, ActiveTheme.cardBorder, shape),
             shape = shape,
-            color = theme.cardBgColor,
+            color = ActiveTheme.surface,
             tonalElevation = 6.dp,
             shadowElevation = 8.dp
         ) {
@@ -810,6 +828,7 @@ fun AppActionDialog(
                     Image(
                         bitmap = app.imageBitmap,
                         contentDescription = app.name,
+                        filterQuality = FilterQuality.None,
                         modifier = Modifier.size(38.dp)
                     )
 
@@ -2653,15 +2672,15 @@ fun CreateFavoriteFolderDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(cardRoundness)
+        val shape = RoundedCornerShape(22.dp)
 
         Surface(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 500.dp)
-                .border(2.5.dp, theme.greetingOutlineColor, shape),
+                .border(2.dp, ActiveTheme.cardBorder, shape),
             shape = shape,
-            color = theme.cardBgColor,
+            color = ActiveTheme.surface,
             tonalElevation = 6.dp,
             shadowElevation = 8.dp
         ) {
@@ -2670,11 +2689,12 @@ fun CreateFavoriteFolderDialog(
                     .fillMaxWidth()
                     .padding(14.dp)
             ) {
-                Text(
-                    text = "♡ make a folder ♡",
-                    color = theme.fgTextColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
+                MochibunSectionHeader(
+                    title = "Make Folder",
+                    color = ActiveTheme.accentDeep,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 4.dp)
                 )
 
                 Spacer(Modifier.height(8.dp))
@@ -3165,6 +3185,7 @@ fun KawaiiIconPicker(
                                     Image(
                                         bitmap = iconBitmap,
                                         contentDescription = iconName,
+                                        filterQuality = FilterQuality.None,
                                         modifier = Modifier.size(40.dp)
                                     )
                                 }
@@ -3307,14 +3328,14 @@ fun EditUserNameDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+        val shape = RoundedCornerShape(22.dp)
         Surface(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 380.dp)
-                .border(2.5.dp, theme.greetingOutlineColor, shape),
+                .border(2.dp, ActiveTheme.cardBorder, shape),
             shape = shape,
-            color = theme.cardBgColor,
+            color = ActiveTheme.surface,
             tonalElevation = 6.dp,
             shadowElevation = 8.dp
         ) {
@@ -3324,13 +3345,12 @@ fun EditUserNameDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = "— ♡ User Name ♡ —",
-                    fontWeight = FontWeight.Bold,
-                    color = theme.fgTextColor,
-                    fontSize = 17.sp,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
+                MochibunSectionHeader(
+                    title = "User Name",
+                    color = ActiveTheme.accentDeep,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 4.dp)
                 )
 
                 HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
@@ -3393,6 +3413,318 @@ fun EditUserNameDialog(
                             keyboardController?.hide()
                             onSave(nameInput.trim())
                         }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// generalized icon picker alias <3
+@Composable
+fun IconPicker(
+    context: Context,
+    iconNames: List<String>,
+    onIconSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    KawaiiIconPicker(
+        context = context,
+        iconNames = iconNames,
+        onIconSelected = onIconSelected,
+        onDismiss = onDismiss
+    )
+}
+
+// dialog for selecting and switching third-party Android icon packs :3
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun IconPackSelectionDialog(
+    context: Context,
+    onDismiss: () -> Unit,
+    onIconPackSelected: (String) -> Unit
+) {
+    val theme = LocalLauncherTheme.current
+    val focusRequester = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+
+    var installedPacks by remember { mutableStateOf<List<IconPackInfo>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var selectedPackPkg by remember {
+        mutableStateOf(IconPackManager.getSelectedIconPack(context))
+    }
+
+    LaunchedEffect(Unit) {
+        val packs = IconPackManager.queryInstalledIconPacks(context)
+        installedPacks = packs
+        isLoading = false
+    }
+
+    // Interactive items:
+    // index in 0 until installedPacks.size -> icon pack item
+    // index == installedPacks.size -> Close button
+    val totalItems = (if (isLoading) 0 else installedPacks.size) + 1
+    var focusedIndex by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    LaunchedEffect(totalItems) {
+        focusedIndex = focusedIndex.coerceIn(0, (totalItems - 1).coerceAtLeast(0))
+    }
+
+    LaunchedEffect(focusedIndex) {
+        if (!isLoading && focusedIndex < installedPacks.size) {
+            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == focusedIndex }
+            if (!isVisible) {
+                listState.animateScrollToItem(focusedIndex)
+            }
+        }
+    }
+
+    requestFocusSafely(focusRequester)
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        onDismiss()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        if (focusedIndex < installedPacks.size) {
+                            val pack = installedPacks[focusedIndex]
+                            selectedPackPkg = pack.packageName
+                            IconPackManager.setSelectedIconPack(context, pack.packageName)
+                            onIconPackSelected(pack.packageName)
+                        } else {
+                            onDismiss()
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                when (native.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (focusedIndex > 0) {
+                            focusedIndex--
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (focusedIndex < totalItems - 1) {
+                            focusedIndex++
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT,
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        val shape = RoundedCornerShape(22.dp)
+
+        Surface(
+            modifier = Modifier
+                .width(dialogWidth)
+                .widthIn(max = 400.dp)
+                .heightIn(max = 500.dp)
+                .border(2.dp, ActiveTheme.cardBorder, shape),
+            shape = shape,
+            color = ActiveTheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp)
+            ) {
+                MochibunSectionHeader(
+                    title = "Icon Packs",
+                    color = ActiveTheme.accentDeep,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 4.dp)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "Choose an icon theme for Mochibun:",
+                    color = theme.cardTextColor,
+                    fontSize = 12.sp
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Finding icon packs... ♡",
+                            color = theme.cardTextColor,
+                            fontSize = 13.sp
+                        )
+                    }
+                } else if (installedPacks.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No icon packs found ♡",
+                            color = theme.cardTextColor,
+                            fontSize = 13.sp
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp)
+                    ) {
+                        itemsIndexed(
+                            items = installedPacks,
+                            key = { _, pack -> pack.packageName.ifEmpty { "__system_default__" } }
+                        ) { index, pack ->
+                            val isFocused = index == focusedIndex
+                            val isSelected = pack.packageName == selectedPackPkg
+                            val packShape = RoundedCornerShape(12.dp)
+                            val packBitmap = remember(pack) {
+                                drawableToBitmap(pack.icon, 72).asImageBitmap()
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .graphicsLayer { clip = false }
+                                    .clip(packShape)
+                                    .background(
+                                        when {
+                                            isFocused -> theme.selectedContainerColor
+                                            isSelected -> softSurfaceColor.copy(alpha = 0.65f)
+                                            else -> Color.Transparent
+                                        },
+                                        packShape
+                                    )
+                                    .border(
+                                        width = if (isFocused) 2.5.dp else if (isSelected) 1.5.dp else 1.dp,
+                                        color = when {
+                                            isFocused -> theme.appActionColor
+                                            isSelected -> theme.appActionColor.copy(alpha = 0.7f)
+                                            else -> theme.greetingOutlineColor.copy(alpha = 0.4f)
+                                        },
+                                        shape = packShape
+                                    )
+                                    .clickable {
+                                        focusedIndex = index
+                                        selectedPackPkg = pack.packageName
+                                        IconPackManager.setSelectedIconPack(context, pack.packageName)
+                                        onIconPackSelected(pack.packageName)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Image(
+                                        bitmap = packBitmap,
+                                        contentDescription = pack.label,
+                                        filterQuality = FilterQuality.None,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = pack.label,
+                                            fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                                            color = if (isFocused || isSelected) theme.fgTextColor else theme.cardTextColor,
+                                            fontSize = 13.5.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        Text(
+                                            text = if (pack.isDefault) "Default launcher icons" else pack.packageName,
+                                            color = theme.cardTextColor.copy(alpha = 0.75f),
+                                            fontSize = 10.5.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    if (isSelected) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(theme.appActionColor.copy(alpha = 0.18f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "♥ active",
+                                                color = theme.appActionColor,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    KawaiiDialogPillButton(
+                        text = "♥ Close (◄) ♥",
+                        isFocused = focusedIndex == totalItems - 1,
+                        onClick = onDismiss
                     )
                 }
             }

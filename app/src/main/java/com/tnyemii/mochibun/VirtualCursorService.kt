@@ -1,9 +1,15 @@
+/**
+ * System-wide virtual mouse cursor service for the Chinoe AT-M120 (Android 12).
+ * Intercepts physical keypad and OEM side-key events to drive an on-screen pointer overlay,
+ * translating discrete D-pad presses into continuous, fluid hardware-accelerated cursor motion.
+ */
 package com.tnyemii.mochibun
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
@@ -13,13 +19,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
-import kotlin.math.hypot
 
-/**
- * System-wide virtual mouse cursor service for Android 12 (API 31) and Chinoe AT-M120.
- * Intercepts physical hardware side-key (F4) to toggle the mouse, and redirects D-pad
- * navigation to smooth, accelerated on-screen cursor movement and touch injection.
- */
 class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback {
 
     companion object {
@@ -57,20 +57,8 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     private var accelerationRate = CursorPreferences.DEFAULT_ACCELERATION
     private var clickMethod = ClickMethod.ACCESSIBILITY_GESTURE
 
-    // Display bounds (AT-M120 default: 480 x 800)
-    private var screenWidth = 480f
-    private var screenHeight = 800f
-
-    // Current cursor coordinates
-    private var cursorX = 240f
-    private var cursorY = 400f
-
-    // Movement state
-    private var moveUp = false
-    private var moveDown = false
-    private var moveLeft = false
-    private var moveRight = false
-    private var currentSpeed = CursorPreferences.DEFAULT_MOVE_SPEED
+    // Zero-allocation continuous physics engine
+    private val physics = CursorPhysics()
     private var isMovementTickerActive = false
 
     // Key event deduplication
@@ -87,11 +75,11 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val metrics = resources.displayMetrics
-        screenWidth = metrics.widthPixels.toFloat().coerceAtLeast(480f)
-        screenHeight = metrics.heightPixels.toFloat().coerceAtLeast(800f)
+        val width = metrics.widthPixels.toFloat().coerceAtLeast(480f)
+        val height = metrics.heightPixels.toFloat().coerceAtLeast(800f)
 
-        cursorX = screenWidth / 2f
-        cursorY = screenHeight / 2f
+        physics.setBounds(width, height)
+        physics.setPosition(width / 2f, height / 2f)
 
         prefs = CursorPreferences.getPrefs(this)
         prefs.registerOnSharedPreferenceChangeListener(prefChangeListener)
@@ -101,7 +89,15 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
             visibility = View.GONE
         }
 
-        Log.d(TAG, "VirtualCursorService connected on display ${screenWidth}x${screenHeight}")
+        Log.d(TAG, "VirtualCursorService connected on display ${physics.screenWidth}x${physics.screenHeight}")
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val metrics = resources.displayMetrics
+        val width = metrics.widthPixels.toFloat().coerceAtLeast(480f)
+        val height = metrics.heightPixels.toFloat().coerceAtLeast(800f)
+        physics.setBounds(width, height)
     }
 
     override fun onDestroy() {
@@ -129,7 +125,9 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Zero-overhead: No event processing needed for mouse movement
+        // Zero-overhead: We deliberately ignore accessibility event streams.
+        // On the low-end MediaTek MT6761, parsing window content changes or text events
+        // would burn precious CPU cycles and cause noticeable cursor jank.
     }
 
     override fun onInterrupt() {
@@ -160,8 +158,8 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
                 }
             }
             view.visibility = View.VISIBLE
-            view.updatePosition(cursorX, cursorY, windowManager)
-            Log.d(TAG, "Virtual cursor activated at ($cursorX, $cursorY)")
+            view.updatePosition(physics.posX, physics.posY)
+            Log.d(TAG, "Virtual cursor activated at (${physics.posX}, ${physics.posY})")
         } else {
             stopMovementTicker()
             view.visibility = View.GONE
@@ -169,15 +167,19 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         }
     }
 
-    override fun onKeyEvent(event: KeyEvent): Boolean {
-        val keyCode = event.keyCode
+    override fun onKeyEvent(event: KeyEvent?): Boolean {
+        if (event == null) return false
 
-        // 1. Toggle key check (F4 or configured keycode) with ACTION_DOWN / ACTION_UP deduplication
+        val keyCode = event.keyCode
+        val action = event.action
+
+        // The AT-M120 physical side key maps to KEYCODE_F4 (raw scan code 62).
+        // We deduplicate repeat events so holding the key doesn't strobe the cursor on and off.
         val isToggle = keyCode == toggleKeyCode ||
                 (event.scanCode == 62 && toggleKeyCode == KeyEvent.KEYCODE_F4)
 
         if (isToggle) {
-            when (event.action) {
+            when (action) {
                 KeyEvent.ACTION_DOWN -> {
                     if (!isToggleKeyDown && event.repeatCount == 0) {
                         isToggleKeyDown = true
@@ -192,33 +194,33 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
             }
         }
 
-        // 2. If cursor is not visible, pass all hardware keys normally
+        // When virtual cursor is off, pass all hardware keys through untouched to the active app
         if (!isCursorVisible) {
             return false
         }
 
-        // 3. Intercept D-pad navigation & Center click while cursor is visible
+        // When cursor is visible, hijack D-pad directional navigation and click keys
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
-                handleDirectionKey(KeyEvent.ACTION_DOWN == event.action, up = true)
+                handleDirectionKey(action, up = true)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                handleDirectionKey(KeyEvent.ACTION_DOWN == event.action, down = true)
+                handleDirectionKey(action, down = true)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                handleDirectionKey(KeyEvent.ACTION_DOWN == event.action, left = true)
+                handleDirectionKey(action, left = true)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                handleDirectionKey(KeyEvent.ACTION_DOWN == event.action, right = true)
+                handleDirectionKey(action, right = true)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                if (event.action == KeyEvent.ACTION_DOWN) {
+                if (action == KeyEvent.ACTION_DOWN) {
                     if (event.repeatCount == 0) {
                         performTapDispatch()
                     }
@@ -232,66 +234,68 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     }
 
     private fun handleDirectionKey(
-        isDown: Boolean,
+        action: Int,
         up: Boolean = false,
         down: Boolean = false,
         left: Boolean = false,
         right: Boolean = false
     ) {
-        if (up) moveUp = isDown
-        if (down) moveDown = isDown
-        if (left) moveLeft = isDown
-        if (right) moveRight = isDown
-
-        val hasDirection = moveUp || moveDown || moveLeft || moveRight
-        if (hasDirection) {
-            if (!isMovementTickerActive) {
-                currentSpeed = baseSpeed
-                isMovementTickerActive = true
-                Choreographer.getInstance().postFrameCallback(this)
+        when (action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (up) physics.moveUp = true
+                if (down) physics.moveDown = true
+                if (left) physics.moveLeft = true
+                if (right) physics.moveRight = true
+                startMovementTickerIfNeeded()
             }
-        } else {
-            stopMovementTicker()
+            KeyEvent.ACTION_UP -> {
+                if (up) physics.moveUp = false
+                if (down) physics.moveDown = false
+                if (left) physics.moveLeft = false
+                if (right) physics.moveRight = false
+
+                // Dead-stop immediately when all directional keys are released
+                if (!physics.hasActiveInput) {
+                    stopMovementTicker()
+                }
+            }
+        }
+    }
+
+    private fun startMovementTickerIfNeeded() {
+        if (!isMovementTickerActive && isCursorVisible) {
+            isMovementTickerActive = true
+            physics.resetVelocity(baseSpeed)
+            // Lock directly to display VSYNC frames
+            Choreographer.getInstance().postFrameCallback(this)
         }
     }
 
     private fun stopMovementTicker() {
-        moveUp = false
-        moveDown = false
-        moveLeft = false
-        moveRight = false
-        currentSpeed = baseSpeed
+        physics.moveUp = false
+        physics.moveDown = false
+        physics.moveLeft = false
+        physics.moveRight = false
+        physics.resetVelocity(baseSpeed)
         if (isMovementTickerActive) {
             isMovementTickerActive = false
             Choreographer.getInstance().removeFrameCallback(this)
         }
     }
 
+    /**
+     * VSYNC-driven frame callback. Continuous physics velocity integration
+     * with delta time, zero-allocation calculations, and GPU canvas translation.
+     */
     override fun doFrame(frameTimeNanos: Long) {
         if (!isMovementTickerActive || !isCursorVisible) {
             isMovementTickerActive = false
             return
         }
 
-        var dirX = 0f
-        var dirY = 0f
-        if (moveLeft) dirX -= 1f
-        if (moveRight) dirX += 1f
-        if (moveUp) dirY -= 1f
-        if (moveDown) dirY += 1f
-
-        if (dirX != 0f || dirY != 0f) {
-            val length = hypot(dirX, dirY)
-            val normX = dirX / length
-            val normY = dirY / length
-
-            // Accelerate smoothly while holding down the physical key
-            currentSpeed = (currentSpeed * accelerationRate).coerceAtMost(baseSpeed * 3.2f)
-
-            cursorX = (cursorX + normX * currentSpeed).coerceIn(0f, screenWidth)
-            cursorY = (cursorY + normY * currentSpeed).coerceIn(0f, screenHeight)
-
-            overlayView?.updatePosition(cursorX, cursorY, windowManager)
+        if (physics.hasActiveInput) {
+            physics.tick(frameTimeNanos, baseSpeed, accelerationRate)
+            overlayView?.updatePosition(physics.posX, physics.posY)
             Choreographer.getInstance().postFrameCallback(this)
         } else {
             stopMovementTicker()
@@ -299,22 +303,26 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     }
 
     /**
-     * Dispatches a tap at current cursor coordinates via AccessibilityService.dispatchGesture(),
-     * falling back seamlessly to RootTouchInjector if dispatch fails or Root mode is selected.
+     * Dispatches a tap at current cursor coordinates.
+     *
+     * We use AccessibilityService.dispatchGesture() as the primary low-latency, unprivileged path.
+     * However, certain overlays, system permission dialogs, or secure windows cancel or reject
+     * accessibility gestures. If dispatch fails or gets cancelled, we gracefully fall back to
+     * RootTouchInjector (interactive 'su' session running 'input tap') so clicks never silently fail.
      */
     private fun performTapDispatch() {
         val view = overlayView ?: return
         view.showClickFeedback()
 
-        val tapX = view.getHotspotX().coerceIn(0f, screenWidth - 1f)
-        val tapY = view.getHotspotY().coerceIn(0f, screenHeight - 1f)
+        val tapX = view.getHotspotX().coerceIn(0f, physics.screenWidth - 1f)
+        val tapY = view.getHotspotY().coerceIn(0f, physics.screenHeight - 1f)
 
         if (clickMethod == ClickMethod.ROOT_INPUT_TAP) {
             RootTouchInjector.tapAsync(tapX.toInt(), tapY.toInt())
             return
         }
 
-        // Accessibility Gesture dispatch (primary path)
+        // Accessibility Gesture dispatch (primary path: fast, no root required)
         val path = Path().apply {
             moveTo(tapX, tapY)
         }

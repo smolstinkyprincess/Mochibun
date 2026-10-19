@@ -8,17 +8,20 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -58,7 +61,13 @@ data class MochibunThemePalette(
     val cloudMid: Color,
     val cloudFront: Color,
     val catOutline: Color,
-    val catBlush: Color = Color(0xFFFFADC9)
+    val catBlush: Color = Color(0xFFFFADC9),
+    val selectionGlow: Color = primary,
+    val focusedCardContainer: Color = Color(0xFFF3E9F8),
+    val focusedCardContainerEnd: Color = Color(0xFFFCEFF2),
+    val focusedCardBorder: Color = Color(0xFFB6A2D8),
+    val unfocusedCardBg: Color = Color(0xFFFFFDF8),
+    val unfocusedCardBorder: Color = outline.copy(alpha = 0.35f)
 )
 
 val SakuraDreamPalette = MochibunThemePalette(
@@ -76,25 +85,37 @@ val SakuraDreamPalette = MochibunThemePalette(
     cloudMid = Color(0xFFF8DCE7),
     cloudFront = Color(0xFFFFF2F7),
     catOutline = Color(0xFFA04064),
-    catBlush = Color(0xFFFFADC9)
+    catBlush = Color(0xFFFFADC9),
+    selectionGlow = Color(0xFFF8BBD0),
+    focusedCardContainer = Color(0xFFFCE4EC),
+    focusedCardContainerEnd = Color(0xFFFFF0F5),
+    focusedCardBorder = Color(0xFFF48FB1),
+    unfocusedCardBg = Color(0xFFFFFDF8),
+    unfocusedCardBorder = Color(0xFFF3CADC).copy(alpha = 0.5f)
 )
 
 val LavenderMistPalette = MochibunThemePalette(
     id = "lavender_mist",
     name = "Lavender Mist",
-    primary = Color(0xFFD1C4E9),
+    primary = Color(0xFFC8A8E9),
     container = Color(0xFFEDE7F6),
     deepAccent = Color(0xFF5E35B1),
     background = Color(0xFFF8F6FD),
     outline = Color(0xFFD1C4E9),
-    textColor = Color(0xFF4A148C),
+    textColor = Color(0xFF3E2248),
     squirclePrimary = Color(0xFFC7AFE2),
     squircleSecondary = Color(0xFFB39DDB),
     cloudBack = Color(0xFFEFE3FB),
     cloudMid = Color(0xFFE2CEF5),
     cloudFront = Color(0xFFF7ECFD),
     catOutline = Color(0xFF5E35B1),
-    catBlush = Color(0xFFFFADC9)
+    catBlush = Color(0xFFFFADC9),
+    selectionGlow = Color(0xFFC8A8E9),
+    focusedCardContainer = Color(0xFFF3E9F8),
+    focusedCardContainerEnd = Color(0xFFFCEFF2),
+    focusedCardBorder = Color(0xFFB6A2D8),
+    unfocusedCardBg = Color(0xFFFFFDF8),
+    unfocusedCardBorder = Color(0xFFE8DEF2)
 )
 
 val MintyMatchaPalette = MochibunThemePalette(
@@ -112,7 +133,13 @@ val MintyMatchaPalette = MochibunThemePalette(
     cloudMid = Color(0xFFD7ECD7),
     cloudFront = Color(0xFFF2FAF2),
     catOutline = Color(0xFF2E7D32),
-    catBlush = Color(0xFFFFB6C1)
+    catBlush = Color(0xFFFFB6C1),
+    selectionGlow = Color(0xFFA5D6A7),
+    focusedCardContainer = Color(0xFFE8F5E9),
+    focusedCardContainerEnd = Color(0xFFF1F8F1),
+    focusedCardBorder = Color(0xFF81C784),
+    unfocusedCardBg = Color(0xFFFFFDF8),
+    unfocusedCardBorder = Color(0xFFC8E6C9).copy(alpha = 0.5f)
 )
 
 val MilkyPeachPalette = MochibunThemePalette(
@@ -130,7 +157,13 @@ val MilkyPeachPalette = MochibunThemePalette(
     cloudMid = Color(0xFFFFE5CC),
     cloudFront = Color(0xFFFFF7EF),
     catOutline = Color(0xFF8D4E28),
-    catBlush = Color(0xFFFFAB91)
+    catBlush = Color(0xFFFFAB91),
+    selectionGlow = Color(0xFFFFCC80),
+    focusedCardContainer = Color(0xFFFFF3E0),
+    focusedCardContainerEnd = Color(0xFFFFF8EE),
+    focusedCardBorder = Color(0xFFFFB74D),
+    unfocusedCardBg = Color(0xFFFFFDF8),
+    unfocusedCardBorder = Color(0xFFFFE0B2).copy(alpha = 0.5f)
 )
 
 fun MochibunThemePalette.toLauncherTheme(roundnessDp: Float = 24f): LauncherTheme = LauncherTheme(
@@ -189,14 +222,107 @@ val LauncherTheme.palette: MochibunThemePalette
         else -> SakuraDreamPalette
     }
 
+val LauncherTheme.selectionGlowColor: Color
+    get() = palette.selectionGlow
+
+val LauncherTheme.focusedContainerColor: Color
+    get() = palette.focusedCardContainer
+
+val LauncherTheme.focusedContainerEndColor: Color
+    get() = palette.focusedCardContainerEnd
+
+val LauncherTheme.cardBorderColor: Color
+    get() = palette.focusedCardBorder
+
+val LauncherTheme.unfocusedCardBgColor: Color
+    get() = if (name == "midnight_mochi") Color(0xFF2E1A3C) else palette.unfocusedCardBg
+
+val LauncherTheme.unfocusedCardBorderColor: Color
+    get() = if (name == "midnight_mochi") Color(0xFF4C2A60) else palette.unfocusedCardBorder
+
 val LauncherTheme.selectedContainerColor: Color
-    get() = when (name) {
-        "lavender_mist", "lavender_dream" -> Color(0xFFE3D8F5)
-        "minty_matcha" -> Color(0xFFDCF0DC)
-        "milky_peach" -> Color(0xFFFFEAD0)
-        "midnight_mochi" -> Color(0xFF5A3673)
-        else -> Color(0xFFFCD7E6) // sakura dream
-    }
+    get() = focusedContainerColor
+
+val LauncherTheme.background: Color get() = palette.background
+val LauncherTheme.surface: Color get() = palette.container
+val LauncherTheme.container: Color get() = palette.container
+val LauncherTheme.cardBorder: Color get() = palette.outline
+val LauncherTheme.textPrimary: Color get() = palette.textColor
+val LauncherTheme.accentDeep: Color get() = palette.deepAccent
+val LauncherTheme.primary: Color get() = palette.primary
+val LauncherTheme.selectionGlow: Color get() = palette.selectionGlow
+val LauncherTheme.surfaceTint: Color get() = palette.squirclePrimary
+
+/**
+ * Mochibun Unified Design Language Tokens (OEM System Standards).
+ * Exposes dynamic Material 3 and Mochibun tokens reactively derived from [LocalLauncherTheme].
+ */
+object ActiveTheme {
+    val current: LauncherTheme
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalLauncherTheme.current
+
+    val palette: MochibunThemePalette
+        @Composable
+        @ReadOnlyComposable
+        get() = current.palette
+
+    val background: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.background
+
+    val surface: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.container
+
+    val container: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.container
+
+    val cardBorder: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.outline
+
+    val textPrimary: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.textColor
+
+    val accentDeep: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.deepAccent
+
+    val primary: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.primary
+
+    val selectionGlow: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.selectionGlow
+
+    val surfaceTint: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.squirclePrimary
+
+    val unfocusedCardBg: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.unfocusedCardBg
+
+    val unfocusedCardBorder: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = palette.unfocusedCardBorder
+}
 
 data class CustomPreset(
     val id: String,
@@ -758,28 +884,33 @@ fun ThemeStudioDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(draft.cardRoundnessDp.dp)
-        Surface(
+        val shape = RoundedCornerShape(22.dp)
+        Box(
             modifier = Modifier
                 .width(dialogWidth)
-                .heightIn(max = 580.dp)
-                .border(2.5.dp, draft.greetingOutlineColor, shape),
-            shape = shape,
-            color = draft.cardBgColor,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+                .graphicsLayer { clip = false },
+            contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = Modifier.padding(14.dp)
+            Surface(
+                modifier = Modifier
+                    .width(dialogWidth)
+                    .heightIn(max = 580.dp)
+                    .border(2.dp, draft.cardBorder, shape),
+                shape = shape,
+                color = draft.cardBgColor,
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp
             ) {
-                Text(
-                    text = "— ♡ Theme Studio ♡ —",
-                    fontWeight = FontWeight.Bold,
-                    color = draft.fgTextColor,
-                    fontSize = 18.sp,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
+                Column(
+                    modifier = Modifier.padding(14.dp)
+                ) {
+                    MochibunSectionHeader(
+                        title = "Theme Studio",
+                        color = draft.accentDeep,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp, bottom = 6.dp)
+                    )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -1175,7 +1306,15 @@ fun ThemeStudioDialog(
                 }
             }
         }
+
+        // Unified ribbon bow badge overlapping the upper border rim
+        PixelRibbonBow(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = (-23).dp)
+        )
     }
+}
 
     if (showSaveDialog) {
         BasicAlertDialog(
@@ -1249,12 +1388,12 @@ fun ThemeStudioDialog(
                     }
                 }
         ) {
-            val shape = RoundedCornerShape(draft.cardRoundnessDp.dp)
+            val shape = RoundedCornerShape(22.dp)
             Surface(
                 modifier = Modifier
                     .width(dialogWidth)
                     .heightIn(max = 300.dp)
-                    .border(2.5.dp, draft.greetingOutlineColor, shape),
+                    .border(2.dp, draft.cardBorder, shape),
                 shape = shape,
                 color = draft.cardBgColor,
                 tonalElevation = 6.dp,
@@ -1264,13 +1403,10 @@ fun ThemeStudioDialog(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        "— ♡ Save Preset ♡ —",
-                        fontWeight = FontWeight.Bold,
-                        color = draft.fgTextColor,
-                        fontSize = 17.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
+                    MochibunSectionHeader(
+                        title = "Save Preset",
+                        color = draft.accentDeep,
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     OutlinedTextField(

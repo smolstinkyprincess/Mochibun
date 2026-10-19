@@ -1,3 +1,8 @@
+/**
+ * Privileged root execution bridge for the Chinoe AT-M120.
+ * Safely discovers su binaries, negotiates Magisk root authorization, and executes privileged
+ * commands off the main thread (Dispatchers.IO) with enforced timeouts to prevent ANRs.
+ */
 package com.tnyemii.mochibun
 
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +93,8 @@ object RootShell {
 
     /**
      * Executes a single command as root.
-     * Never executes on the main thread.
+     * Always dispatched on Dispatchers.IO: invoking 'su' blocks on process pipes and Magisk
+     * policy checks; calling this on the main thread would immediately hang the Android UI.
      */
     suspend fun execute(command: String, timeoutMs: Long = 10_000L): RootResult = withContext(Dispatchers.IO) {
         try {
