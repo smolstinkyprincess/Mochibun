@@ -31,7 +31,7 @@ Mochibun was engineered to respect the tight hardware budget of modern 4G featur
 | **Display** | 480 × 800 portrait |
 | **Memory** | ~1.8 GB RAM |
 
-> **Performance Note**: Mochibun avoids GPU-heavy runtime blurs (`Modifier.blur()`) and unbounded bitmap buffers. Cloud trims and decorative elements are drawn via lightweight vector canvas paths to guarantee smooth 60 FPS scrolling on 4-core hardware.
+> **Performance Note**: Mochibun avoids GPU-heavy runtime blurs (`Modifier.blur()`) and unbounded bitmap buffers. Cloud trims and decorative elements are drawn via lightweight vector canvas paths to guarantee smooth scrolling on restricted hardware.
 
 ---
 
@@ -51,9 +51,12 @@ To enable all hardware and overlay features, grant the following on your device:
 
 1. **Default Home App**: Go to *Settings > Apps > Default Apps > Home app* and choose **Mochibun**.
 2. **Virtual Cursor Overlay**: Enable **Mochibun Virtual Cursor** in *Settings > Accessibility*. When prompted, allow the *Display over other apps* (`SYSTEM_ALERT_WINDOW`) permission.
-
-
 3. **Root Access (Optional)**: If your device is rooted with Magisk, granting superuser access enables asynchronous shell click fallbacks (`su -c input tap`) and custom recents bridging.
+4. **Quickswitch Integration**: For Quickswitch users, set Mochibun as your recents provider to enable full recent apps functionality
+ ```bash
+su -c "/data/adb/modules/quickswitch/quickswitch --ch=com.crinklecodone.mochibun"
+
+``` 
 
 
 
