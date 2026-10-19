@@ -21,10 +21,10 @@ android {
 
     defaultConfig {
         applicationId = "com.crinklecodone.mochibun"
-        minSdk = 26
+        minSdk = 31
         targetSdk = 31
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -40,15 +40,12 @@ android {
     }
 
     signingConfigs {
-        create("sharedSigning") {
+        create("release") {
             if (keystorePropertiesFile.exists()) {
-                storeFile = file(keystoreProperties.getProperty("RELEASE_STORE_FILE"))
+                storeFile = rootProject.file(keystoreProperties.getProperty("RELEASE_STORE_FILE"))
                 storePassword = keystoreProperties.getProperty("RELEASE_STORE_PASSWORD")
                 keyAlias = keystoreProperties.getProperty("RELEASE_KEY_ALIAS")
                 keyPassword = keystoreProperties.getProperty("RELEASE_KEY_PASSWORD")
-            } else {
-                // Fallback to standard debug signing if properties are absent (e.g., CI/CD)
-                initWith(getByName("debug"))
             }
         }
     }
@@ -57,11 +54,11 @@ android {
         release {
             isMinifyEnabled = false
             isDebuggable = false
-            signingConfig = signingConfigs.getByName("sharedSigning")
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             isDebuggable = true
-            signingConfig = signingConfigs.getByName("sharedSigning")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
