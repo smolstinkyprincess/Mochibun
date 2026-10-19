@@ -47,16 +47,24 @@ Mochibun is tuned to run smoothly on modest flip phone hardware:
 
 ---
 
-## 🚀 Installation & Permissions
+### 📥 Install & Updates
 
-### 1. Grab the APK
-Download the latest APK from the [Releases](https://github.com/smolstinkyprincess/Mochibun/releases/latest) tab and install it using ADB or your phone's file manager:
+| Platform | Status | Link |
+| :--- | :--- | :--- |
+| **GitHub Releases** | Official / Direct APK | [Download Latest](https://github.com/smolstinkyprincess/Mochibun/releases/latest) |
+| **Obtainium** | One-Click Auto-Updates | [Add to Obtainium](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun) |
+| **IzzyOnDroid** | In Review / Tracking | *Pending inclusion* |
+| **F-Droid** | In Build Queue | *Pending inclusion* |
 
-```bash
-adb install -r mochibun.apk
-```
+---
 
-### 2. Set Up Permissions
+#### 🔄 Track Updates with Obtainium
+If you have [Obtainium](https://github.com/ImranR98/Obtainium) installed on your phone:
+1. Tap the button below to add Mochibun directly:  
+   [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun)
+2. Or open Obtainium manually, tap **Add App**, paste `https://github.com/smolstinkyprincess/Mochibun`, and tap **Add**.
+
+### 🗝️ Set Up Permissions
 
 1. **Default Home App**: Go to *Settings > Apps > Default Apps > Home app* and select **Mochibun**.
 2. **App Permissions**: Go to *Settings > Apps > Mochibun > Permissions* and enable:
