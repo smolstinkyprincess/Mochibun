@@ -1,96 +1,43 @@
 # <img src="mochibun.png" width="64" height="64" valign="middle" alt="Mochibun Icon" /> Mochibun (もちぶん) ♡
 
-A lightweight Android launcher designed for physical T9 keypad flip phones. Built with Jetpack Compose and Material 3, tailored specifically for the **ALT Mive Style Folder AT-M120** (Android 12, MediaTek MT6761, 480 × 800 display).
+A lightweight, pastel Android launcher built with Jetpack Compose and Material 3, tailored specifically for the **ALT Mive Style Folder (AT-M120)** (Android 12, MediaTek MT6761, 480 × 800 display).
 
-Mochibun pairs a dreamy pastel aesthetic with comfy D-pad navigation, physical T9 app filtering, and a built-in virtual mouse cursor for apps that demand touch input.
+Mochibun pairs a **dreamy pastel aesthetic** with comfy D-pad navigation, physical T9 app filtering, and a built-in virtual mouse cursor for apps that demand touch input.
 
 ---
 
 ## ✨ Features
 
-- **D-Pad & Keypad First**: Every menu, card, and setting is reachable using `DPAD_UP`, `DPAD_DOWN`, `DPAD_LEFT`, and `DPAD_RIGHT`. The cute, pastel selection halo makes it clear where focus is without clipping card borders.
-- **Compact Flip-Phone Layout**: Engineered strictly within a 480 × 800 resolution.
-- **Virtual Mouse Cursor Service**: An accessibility overlay cursor toggled via the side button (`F4`). Supports custom animated `.gif` or `.png` pointers, speed acceleration, and click dispatching.
-- **T9 App Drawer & Filtering**: Launch apps quickly by pressing the physical numeric keys.
-- **Cohesive Pastel Theming**: Includes 4 built-in pastel themes (*Sakura Dream*, *Lavender Mist*, *Minty Matcha*, and *Milky Peach*) with instant preview in Theme Studio.
-- **Widgets Page**: Featuring a lightweight media deck that appears only when music is playing and tucks away when audio stops.
-- **Custom Icon Pack Support**: Dynamic ADW/Nova/Apex compatible icon pack detection with bounded memory caching to protect low-RAM hardware.
+- **Keypad First**: Built from the ground up for physical buttons. Use your directional pad to move through every card, drawer, and menu. Selection rings have a soft pastel glow that won't get cut off by card edges.
+- **Made for Small Screens**: Designed specifically for 480 × 800 flip phone displays—no awkward overlapping cards or text running off the screen.
+- **Virtual Mouse Cursor**: A built-in mouse pointer you can turn on and off anytime using your side button. Great for apps that demand touchscreen taps. Supports animated `.gif` or `.png` cursors and adjustable speeds.
+- **T9 App Search**: Start typing on your number pad to filter and launch apps right away—no tapping a tiny search bar.
+- **Theme Studio**: Pick from 4 built-in pastel themes (*Sakura Dream*, *Lavender Mist*, *Minty Matcha*, and *Milky Peach*) with instant live previews.
+- **Widgets Page**: A dedicated widget screen featuring a dynamic Now Playing media card that automatically appears during active playback and tucks away when audio stops, alongside support for your own Android widgets.
+- **Icon Pack Support**: Compatible with standard icon packs (Nova, Apex, ADW) with smart caching so it stays light on memory.
 
 ---
 
 ## 📱 Hardware & Compatibility
 
-Mochibun was engineered to respect the tight hardware budget of modern 4G feature phones:
+Mochibun is tuned to run smoothly on modest flip phone hardware:
 
 | Specification | Target Details |
 | :--- | :--- |
 | **Primary Device** | ALT Mive Style Folder AT-M120 |
-| **OS / API** | Android 12 (API 31) |
-| **SoC / Architecture** | MediaTek MT6761 (quad-core ARMv7 / 32-bit) |
+| **Android Version** | Android 12 (API 31) |
+| **Chipset** | MediaTek MT6761 (ARMv7 / 32-bit) |
 | **Display** | 480 × 800 portrait |
-| **Memory** | ~1.8 GB RAM |
+| **RAM** | ~1.8 GB |
 
-> **Performance Note**: Mochibun avoids GPU-heavy runtime blurs (`Modifier.blur()`) and unbounded bitmap buffers. Cloud trims and decorative elements are drawn via lightweight vector canvas paths to guarantee smooth scrolling on restricted hardware.
+> **Performance Note**: To keep animations smooth and scrolling responsive, Mochibun avoids expensive real-time blur shaders (`Modifier.blur()`) and heavy image buffers. Decorative cloud trims and accents are drawn using lightweight vector paths.
 
 ---
 
 ## 🚀 Installation & Permissions
 
-### 1. Install the APK
-Download the latest `app-release.apk` from the [Releases](https://github.com/smolstinkyprincess/Mochibun/releases) tab and install it via ADB or a file manager:
+### 1. Grab the APK
+Download the latest APK from the [Releases](https://github.com/smolstinkyprincess/Mochibun/releases/latest) tab and install it using ADB or your phone's file manager:
 
 ```bash
-adb install -r app-release.apk
-
-```
-
-### 2. Configure Android Permissions
-
-To enable all hardware and overlay features, grant the following on your device:
-
-1. **Default Home App**: Go to *Settings > Apps > Default Apps > Home app* and choose **Mochibun**.
-2. **Virtual Cursor Overlay**: Enable **Mochibun Virtual Cursor** in *Settings > Accessibility*. When prompted, allow the *Display over other apps* (`SYSTEM_ALERT_WINDOW`) permission.
-3. **Root Access (Optional)**: If your device is rooted with Magisk, granting superuser access enables asynchronous shell click fallbacks (`su -c input tap`) and custom recents bridging.
-4. **Quickswitch Integration**: For Quickswitch users, set Mochibun as your recents provider to enable full recent apps functionality
- ```bash
-su -c "/data/adb/modules/quickswitch/quickswitch --ch=com.crinklecodone.mochibun"
-
-``` 
-
-
-
-## ⌨️ Physical Key Map
-
-| Key / Hardware Button | Action |
-| :--- | :--- |
-| **D-Pad Directional Keys** | Spatial 2D navigation across cards, apps, and steppers |
-| **D-Pad Center / Enter** | Launch selected app or activate focused control |
-| **Side Button** | Toggle Virtual Mouse Cursor overlay on/off |
-| **Back Button** | Dismiss active folder, App Drawer, or Settings modal to return Home |
-| **Number Keys (`2`–`9`)** | Filter installed applications via T9 keypad search |
-
-## 🛠️ Building from Source
-
-Mochibun is built using standard Gradle tooling with Kotlin and Jetpack Compose.
-
-```bash
-# Clone the repository
-git clone [https://github.com/smolstinkyprincess/Mochibun.git](https://github.com/smolstinkyprincess/Mochibun.git)
-cd Mochibun
-
-# Build a release APK
-./gradlew assembleRelease
-
-```
-
-The compiled binary will be located at `app/build/outputs/apk/release/app-release.apk`.
-
----
-
-## 📄 License
-
-Distributed under the [MIT License](https://www.google.com/search?q=LICENSE). Feel free to fork, customize, and adapt for your own physical-key Android devices!
-
-```
-
-```
+adb install -r mochibun.apk
