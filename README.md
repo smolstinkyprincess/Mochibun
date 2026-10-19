@@ -1,20 +1,19 @@
 # <img src="mochibun.png" width="64" height="64" valign="middle" alt="Mochibun Icon" /> Mochibun (もちぶん) ♡
 
-A lightweight Android launcher designed from scratch for physical T9 keypad flip phones. Built with Jetpack Compose and Material 3, tailored specifically for the **ALT Mive Style Folder AT-M120** (Android 12, MediaTek MT6761, 480 × 800 display).
+A lightweight Android launcher designed for physical T9 keypad flip phones. Built with Jetpack Compose and Material 3, tailored specifically for the **ALT Mive Style Folder AT-M120** (Android 12, MediaTek MT6761, 480 × 800 display).
 
-Mochibun pairs a dreamy pastel aesthetic with first-class D-pad navigation, physical T9 app filtering, and a built-in virtual mouse cursor for apps that demand touch input.
+Mochibun pairs a dreamy pastel aesthetic with comfy D-pad navigation, physical T9 app filtering, and a built-in virtual mouse cursor for apps that demand touch input.
 
 ---
 
 ## ✨ Features
 
-- **D-Pad & Keypad First**: Every menu, card, and setting is reachable using `DPAD_UP`, `DPAD_DOWN`, `DPAD_LEFT`, and `DPAD_RIGHT`. The custom pastel selection halo makes it clear where focus is without clipping card borders.
-- **Compact Flip-Phone Layout**: Engineered strictly within a 480 × 800 portrait envelope with scroll-contained sheets, ensuring no buttons or labels are cut off.
+- **D-Pad & Keypad First**: Every menu, card, and setting is reachable using `DPAD_UP`, `DPAD_DOWN`, `DPAD_LEFT`, and `DPAD_RIGHT`. The cute, pastel selection halo makes it clear where focus is without clipping card borders.
+- **Compact Flip-Phone Layout**: Engineered strictly within a 480 × 800 resolution.
 - **Virtual Mouse Cursor Service**: An accessibility overlay cursor toggled via the side button (`F4`). Supports custom animated `.gif` or `.png` pointers, speed acceleration, and click dispatching.
-- **T9 App Drawer & Filtering**: Launch apps quickly by pressing physical numeric keys (2–9) directly from the keypad without tapping a search bar.
+- **T9 App Drawer & Filtering**: Launch apps quickly by pressing the physical numeric keys.
 - **Cohesive Pastel Theming**: Includes 4 built-in pastel themes (*Sakura Dream*, *Lavender Mist*, *Minty Matcha*, and *Milky Peach*) with instant preview in Theme Studio.
-- **Dynamic Now Playing**: A lightweight media deck that appears only when music is playing and tucks away when audio stops.
-- **Pixel-Art Accents & Micro-FX**: Handcrafted pixel-art ribbon bows, bunny badges, sparkle accents, and zero-allocation canvas particle layers (`PixelSplat`).
+- **Widgets Page**: Featuring a lightweight media deck that appears only when music is playing and tucks away when audio stops.
 - **Custom Icon Pack Support**: Dynamic ADW/Nova/Apex compatible icon pack detection with bounded memory caching to protect low-RAM hardware.
 
 ---
