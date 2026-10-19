@@ -77,7 +77,7 @@ Mochibun builds with standard Gradle tooling:
 
 ```bash
 # Clone the repository
-git clone [https://github.com/smolstinkyprincess/Mochibun.git](https://github.com/smolstinkyprincess/Mochibun.git)
+git clone https://github.com/smolstinkyprincess/Mochibun.git
 cd Mochibun
 
 # Build release APK
