@@ -127,3 +127,7 @@ keystore.properties
 # random
 agent refs/
 app/src/main/cpp/llama.cpp
+m120-release
+mochibun-release
+*.jks
+*.keystore
