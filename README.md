@@ -54,14 +54,6 @@ Mochibun is tuned to run smoothly on modest flip phone hardware:
 | **GitHub Releases** | Official / Direct APK | [Download Latest](https://github.com/smolstinkyprincess/Mochibun/releases/latest) |
 | **Obtainium** | One-Click Auto-Updates | [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun) |
 
----
-
-#### 🔄 Track Updates with Obtainium
-If you have [Obtainium](https://github.com/ImranR98/Obtainium) installed on your phone:
-1. Tap the button below to add Mochibun directly:  
-   [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun)
-2. Or open Obtainium manually, tap **Add App**, paste `https://github.com/smolstinkyprincess/Mochibun`, and tap **Add**.
-
 ### 🗝️ Set Up Permissions
 
 1. **Default Home App**: Go to *Settings > Apps > Default Apps > Home app* and select **Mochibun**.
