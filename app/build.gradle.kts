@@ -14,17 +14,17 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.tnyemii.mochibun"
+    namespace = "com.crinklecodone.mochibun"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.tnyemii.mochibun"
+        applicationId = "com.crinklecodone.mochibun"
         minSdk = 26
         targetSdk = 31
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

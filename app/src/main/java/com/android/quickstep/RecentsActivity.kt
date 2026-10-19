@@ -62,18 +62,18 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import com.tnyemii.mochibun.ActiveTheme
-import com.tnyemii.mochibun.BottomLavenderClouds
-import com.tnyemii.mochibun.DrawerHomeNavigation
-import com.tnyemii.mochibun.LocalLauncherTheme
-import com.tnyemii.mochibun.MochibunSectionHeader
-import com.tnyemii.mochibun.TopLavenderClouds
-import com.tnyemii.mochibun.glowingDoubleBorder
-import com.tnyemii.mochibun.isBackDismissKey
-import com.tnyemii.mochibun.isCenterActivateKey
-import com.tnyemii.mochibun.loadSavedTheme
-import com.tnyemii.mochibun.requestFocusSafely
-import com.tnyemii.mochibun.ui.theme.M120LauncherTheme
+import com.crinklecodone.mochibun.ActiveTheme
+import com.crinklecodone.mochibun.BottomLavenderClouds
+import com.crinklecodone.mochibun.DrawerHomeNavigation
+import com.crinklecodone.mochibun.LocalLauncherTheme
+import com.crinklecodone.mochibun.MochibunSectionHeader
+import com.crinklecodone.mochibun.TopLavenderClouds
+import com.crinklecodone.mochibun.glowingDoubleBorder
+import com.crinklecodone.mochibun.isBackDismissKey
+import com.crinklecodone.mochibun.isCenterActivateKey
+import com.crinklecodone.mochibun.loadSavedTheme
+import com.crinklecodone.mochibun.requestFocusSafely
+import com.crinklecodone.mochibun.ui.theme.M120LauncherTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -498,6 +498,7 @@ fun RecentsScreen(
         )
 
         // 4. Centered "Back to Home (F4)" Navigation Pill
+        /*
         DrawerHomeNavigation(
             isFocused = focusZone == RecentsFocusZone.BACK_TO_HOME,
             onClick = { onDismissActivity() },
@@ -505,7 +506,7 @@ fun RecentsScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 12.dp),
             text = "♥ Back to Home (F4) ♥"
-        )
+        )*/
     }
 }
 
