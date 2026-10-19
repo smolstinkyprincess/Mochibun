@@ -24,10 +24,10 @@ Mochibun pairs a **dreamy pastel aesthetic** with comfy D-pad navigation, physic
 
 <div align="center">
 
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_placeholder.png" width="22%" alt="Home Screen" />
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_placeholder.png" width="22%" alt="App Drawer" />
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_placeholder.png" width="22%" alt="Theme Studio" />
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_placeholder.png" width="22%" alt="Virtual Cursor" />
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_home.png" width="22%" alt="Home Screen" />
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_folder.png" width="22%" alt="App Drawer" />
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_appdrawer.png" width="22%" alt="Theme Studio" />
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_recents.png" width="22%" alt="Virtual Cursor" />
 
 </div>
 
