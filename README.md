@@ -83,16 +83,6 @@ cd Mochibun
 
 The compiled binary will be located at `app/build/outputs/apk/release/app-release.apk`.
 
-### On-Device Speed Compilation (Optional)
-
-To lock in instant startup times on low-memory devices, run ahead-of-time (AOT) machine code compilation over ADB:
-
-```bash
-adb shell su -c "setprop dalvik.vm.dex2oat-threads 1"
-adb shell su -c "cmd package compile -m speed -f com.tnyemii.mochibun"
-
-```
-
 ---
 
 ## 📄 License
