@@ -53,8 +53,6 @@ Mochibun is tuned to run smoothly on modest flip phone hardware:
 | :--- | :--- | :--- |
 | **GitHub Releases** | Official / Direct APK | [Download Latest](https://github.com/smolstinkyprincess/Mochibun/releases/latest) |
 | **Obtainium** | One-Click Auto-Updates | [Add to Obtainium](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun) |
-| **IzzyOnDroid** | In Review / Tracking | *Pending inclusion* |
-| **F-Droid** | In Build Queue | *Pending inclusion* |
 
 ---
 
