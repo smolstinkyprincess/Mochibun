@@ -139,6 +139,22 @@ fun Modifier.softGlowFocus(
                 cornerRadius = CornerRadius(cornerPx, cornerPx),
                 style = Stroke(width = 1.8.dp.toPx())
             )
+
+            // 5. Delicate outer glow halo focus accents (1–2 tiny sparkles)
+            val focusSparkleTopRight = Offset(size.width + 1.5.dp.toPx(), -2.dp.toPx())
+            drawFourPointSparkle(
+                center = focusSparkleTopRight,
+                sizePx = 7.5.dp.toPx(),
+                color = effectiveGlow.copy(alpha = 0.85f),
+                hollow = false
+            )
+            val focusGlintBottomLeft = Offset(-2.dp.toPx(), size.height + 1.5.dp.toPx())
+            drawDiamondGlint(
+                center = focusGlintBottomLeft,
+                sizePx = 6.0.dp.toPx(),
+                color = effectiveGlow.copy(alpha = 0.75f),
+                strokeWidthPx = 1.0.dp.toPx()
+            )
         }
 }
 

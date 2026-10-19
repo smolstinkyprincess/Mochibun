@@ -65,7 +65,10 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
 
         if (intent.hasExtra("OPEN_PAGE")) {
-            requestedPage = intent.getIntExtra("OPEN_PAGE", 1)
+            val page = intent.getIntExtra("OPEN_PAGE", 1)
+            // TODO: Re-enable AI Chat page for future release
+            // Clamp requested page to active pages [0, 1] (Widgets, Home) while AI Chat is disconnected
+            requestedPage = page.coerceIn(0, 1)
         }
 
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
@@ -78,7 +81,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         if (intent?.hasExtra("OPEN_PAGE") == true) {
-            requestedPage = intent.getIntExtra("OPEN_PAGE", 1)
+            val page = intent.getIntExtra("OPEN_PAGE", 1)
+            // TODO: Re-enable AI Chat page for future release
+            // Clamp requested page to active pages [0, 1] (Widgets, Home) while AI Chat is disconnected
+            requestedPage = page.coerceIn(0, 1)
         }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)

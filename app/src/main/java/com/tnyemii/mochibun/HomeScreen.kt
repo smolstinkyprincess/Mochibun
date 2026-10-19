@@ -504,6 +504,10 @@ fun FavoritesCard(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
+            .kawaiiCardMotifs(
+                isFocused = isCardFocused,
+                cornerRadius = 24.dp
+            )
             .border(
                 width = 1.5.dp,
                 color = theme.greetingOutlineColor,

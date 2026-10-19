@@ -171,6 +171,11 @@ fun StatusCard(
 
     Card(
         modifier = Modifier
+            .graphicsLayer { clip = false }
+            .kawaiiCardMotifs(
+                isFocused = isFocused,
+                cornerRadius = roundness
+            )
             .border(
                 width = if (isFocused) 3.5.dp else 4.dp,
                 color = if (isFocused) theme.appActionColor else outlineColor,
@@ -330,6 +335,11 @@ fun GreetingCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 18.dp)
+                .graphicsLayer { clip = false }
+                .kawaiiCardMotifs(
+                    isFocused = false,
+                    cornerRadius = cardRoundness + 4.dp
+                )
                 .border(
                     width = 4.dp,
                     color = greetingOutlineColor,
@@ -408,6 +418,11 @@ fun FavoritesCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp, horizontal = 4.dp)
+                .graphicsLayer { clip = false }
+                .kawaiiCardMotifs(
+                    isFocused = isCardFocused,
+                    cornerRadius = roundness
+                )
                 .border(
                     width = 4.dp,
                     color = theme.greetingOutlineColor,

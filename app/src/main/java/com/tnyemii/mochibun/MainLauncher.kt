@@ -162,7 +162,8 @@ fun MainLauncher(
     }
 
     var drawerOpen by remember { mutableStateOf(false) }
-    val pagerState = rememberPagerState(initialPage = 1) { 3 }
+    // TODO: Re-enable AI Chat page for future release (originally pageCount = 3: 0 = Widgets, 1 = Home, 2 = AI Chat)
+    val pagerState = rememberPagerState(initialPage = 1) { 2 }
     var pendingTargetPage by remember { mutableStateOf<Int?>(null) }
     var selectedApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconEditingApp by remember { mutableStateOf<LauncherApp?>(null) }
@@ -188,8 +189,11 @@ fun MainLauncher(
 
     LaunchedEffect(requestedPage) {
         requestedPage?.let { target ->
-            pendingTargetPage = target
-            pagerState.animateScrollToPage(target)
+            // TODO: Re-enable AI Chat page for future release
+            // Clamp requested target page to active pages [0, 1] while AI Chat is disconnected
+            val clampedTarget = target.coerceIn(0, 1)
+            pendingTargetPage = clampedTarget
+            pagerState.animateScrollToPage(clampedTarget)
             onPageConsumed()
         }
     }
@@ -635,8 +639,10 @@ fun MainLauncher(
                                         }
 
                                         android.view.KeyEvent.KEYCODE_3, android.view.KeyEvent.KEYCODE_NUMPAD_3 -> {
-                                            pendingTargetPage = 2
-                                            scope.launch { pagerState.animateScrollToPage(2) }
+                                            // TODO: Re-enable AI Chat page for future release
+                                            // pendingTargetPage = 2
+                                            // scope.launch { pagerState.animateScrollToPage(2) }
+                                            // Consume key event so numeric shortcut does not attempt out-of-bounds page navigation
                                             return@onPreviewKeyEvent true
                                         }
 
@@ -814,10 +820,15 @@ fun MainLauncher(
                                     if (homeFocusArea == 0 && favoriteItemCount > 0 && selectedFavoriteIndex < favoriteItemCount - 1) {
                                         selectedFavoriteIndex++
                                         savedFavoriteIndexOnHome = selectedFavoriteIndex
-                                    } else if (nativeEvent.repeatCount == 0) {
+                                    }
+                                    // TODO: Re-enable AI Chat page for future release
+                                    // Home (page 1) is now the rightmost active page; do not scroll beyond it to page 2.
+                                    /*
+                                    else if (nativeEvent.repeatCount == 0) {
                                         pendingTargetPage = 2
                                         scope.launch { pagerState.animateScrollToPage(2) }
                                     }
+                                    */
                                 }
                                 true
                             }
@@ -888,9 +899,8 @@ fun MainLauncher(
 
             val keyboardController = LocalSoftwareKeyboardController.current
             LaunchedEffect(pagerState.currentPage) {
-                if (pagerState.currentPage != 2) {
-                    keyboardController?.hide()
-                }
+                // TODO: Re-enable AI Chat page for future release (previously avoided hiding keyboard on page 2)
+                keyboardController?.hide()
             }
 
             HorizontalPager(
@@ -1010,6 +1020,8 @@ fun MainLauncher(
                         }
                     }
 
+                    // TODO: Re-enable AI Chat page for future release
+                    /*
                     2 -> {
                         val isChatTarget = (pendingTargetPage ?: pagerState.targetPage) == 2
                         val isChatPageActive = !drawerOpen &&
@@ -1033,6 +1045,7 @@ fun MainLauncher(
                             Box(modifier = Modifier.fillMaxSize())
                         }
                     }
+                    */
                 }
             }
 

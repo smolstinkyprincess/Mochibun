@@ -200,6 +200,9 @@ class MochibunAccessibilityService : AccessibilityService() {
                 }
             }
             is ActionType.OpenAiChat -> {
+                // TODO: Re-enable AI Chat page for future release
+                // Bypassed while AI Chat is disconnected from active launcher hierarchy.
+                /*
                 try {
                     val intent = Intent(this, MainActivity::class.java).apply {
                         this.action = Intent.ACTION_MAIN
@@ -211,6 +214,7 @@ class MochibunAccessibilityService : AccessibilityService() {
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
+                */
             }
             is ActionType.GlobalBack -> {
                 performGlobalAction(GLOBAL_ACTION_BACK)

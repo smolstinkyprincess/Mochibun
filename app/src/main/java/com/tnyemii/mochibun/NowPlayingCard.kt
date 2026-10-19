@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -238,6 +239,11 @@ fun NowPlayingCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer { clip = false }
+                .kawaiiCardMotifs(
+                    isFocused = focusedControl != -1,
+                    cornerRadius = 22.dp
+                )
                 .clip(cardShape)
                 .background(Color(0xFFF6F0FD)) // Frosted lavender-cream
                 .nowPlayingCardConcentricBorder(cornerRadius = 22.dp)
