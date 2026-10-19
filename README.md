@@ -57,13 +57,10 @@ Mochibun is tuned to run smoothly on modest flip phone hardware:
 ### 🗝️ Set Up Permissions
 
 1. **Default Home App**: Go to *Settings > Apps > Default Apps > Home app* and select **Mochibun**.
-2. **App Permissions**: Go to *Settings > Apps > Mochibun > Permissions* and enable:
-   - **Location**: Needed for weather updates on your widget deck.
-   - **Files & Media**: Needed to pick custom cursor images (`.gif`/`.png`) and load wallpapers.
-3. **Media / Notification Access**: Enable notification access for Mochibun in *Settings > Apps > Special app access > Notification access* so the Now Playing widget can display live track info and album art.
-4. **Virtual Mouse Cursor**: Turn on **Mochibun Virtual Cursor** in *Settings > Accessibility*. When Android asks, grant the *Display over other apps* (`SYSTEM_ALERT_WINDOW`) permission.
-5. **Root Access (Optional)**: If your phone is rooted with Magisk, granting superuser access lets the cursor use faster shell tap fallbacks (`su -c input tap`) and integrates with custom recents providers.
-6. **QuickSwitch Integration (Optional)**: If you use QuickSwitch for physical recents/multitasking, set Mochibun as your provider:
+2. **Media / Notification Access**: Enable notification access for Mochibun in *Settings > Apps > Special app access > Notification access* so the Now Playing widget can display live track info and album art.
+3. **Virtual Mouse Cursor**: Turn on **Mochibun Virtual Cursor** in *Settings > Accessibility*. When Android asks, grant the *Display over other apps* (`SYSTEM_ALERT_WINDOW`) permission.
+4. **Root Access (Optional)**: If your phone is rooted with Magisk, granting superuser access lets the cursor use faster shell tap fallbacks (`su -c input tap`) and integrates with custom recents providers.
+5. **QuickSwitch Integration (Optional)**: If you use QuickSwitch for physical recents/multitasking, set Mochibun as your provider:
    ```bash
    su -c "/data/adb/modules/quickswitch/quickswitch --ch=com.crinklecodone.mochibun"
    ```
