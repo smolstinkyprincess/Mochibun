@@ -1,4 +1,4 @@
-# Mochibun (もちぶん) ♡
+# <img src="mochibun.png" width="38" height="38" valign="middle" alt="Mochibun Icon" /> Mochibun (もちぶん) ♡
 
 A lightweight Android launcher designed from scratch for physical T9 keypad flip phones. Built with Jetpack Compose and Material 3, tailored specifically for the **ALT Mive Style Folder AT-M120** (Android 12, MediaTek MT6761, 480 × 800 display).
 
