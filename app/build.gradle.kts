@@ -1,4 +1,3 @@
-import com.android.build.gradle.internal.tasks.AarMetadataReader.Companion.load
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -32,11 +31,6 @@ android {
             abiFilters.add("armeabi-v7a")
         }
 
-    }
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-        }
     }
 
     signingConfigs {

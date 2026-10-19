@@ -78,6 +78,12 @@ private val SQUIRCLE_TINTS = listOf(
 
 private val DRAWER_ALPHABET = ('A'..'Z').toList()
 
+// Helper for A-Z section grouping and fast scrolling
+fun firstLetterOf(label: String): Char {
+    val c = label.trim().firstOrNull()?.uppercaseChar() ?: return '#'
+    return if (c in 'A'..'Z') c else '#'
+}
+
 /**
  * Soft diffused pastel glow focus indicator matching Mochibun's physical D-pad contract.
  *
@@ -298,7 +304,7 @@ fun BottomLavenderClouds(
 /**
  * Bottom Home navigation pill button with upward chevron:
  * ^
- * ♥ Back to Home (F4) ♥
+ * ♡ Back to Home (F4) ♡
  */
 @Composable
 fun DrawerHomeNavigation(

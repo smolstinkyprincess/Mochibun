@@ -1,4 +1,4 @@
-package com.tnyemii.mochibun
+package com.crinklecodone.mochibun
 
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable

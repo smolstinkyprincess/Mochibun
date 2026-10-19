@@ -66,8 +66,6 @@ class MainActivity : ComponentActivity() {
 
         if (intent.hasExtra("OPEN_PAGE")) {
             val page = intent.getIntExtra("OPEN_PAGE", 1)
-            // TODO: Re-enable AI Chat page for future release
-            // Clamp requested page to active pages [0, 1] (Widgets, Home) while AI Chat is disconnected
             requestedPage = page.coerceIn(0, 1)
         }
 
@@ -82,8 +80,6 @@ class MainActivity : ComponentActivity() {
 
         if (intent?.hasExtra("OPEN_PAGE") == true) {
             val page = intent.getIntExtra("OPEN_PAGE", 1)
-            // TODO: Re-enable AI Chat page for future release
-            // Clamp requested page to active pages [0, 1] (Widgets, Home) while AI Chat is disconnected
             requestedPage = page.coerceIn(0, 1)
         }
 

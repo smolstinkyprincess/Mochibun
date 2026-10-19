@@ -162,7 +162,7 @@ fun MainLauncher(
     }
 
     var drawerOpen by remember { mutableStateOf(false) }
-    // TODO: Re-enable AI Chat page for future release (originally pageCount = 3: 0 = Widgets, 1 = Home, 2 = AI Chat)
+    // Active pages: 0 = Widgets, 1 = Home
     val pagerState = rememberPagerState(initialPage = 1) { 2 }
     var pendingTargetPage by remember { mutableStateOf<Int?>(null) }
     var selectedApp by remember { mutableStateOf<LauncherApp?>(null) }
@@ -184,13 +184,9 @@ fun MainLauncher(
     var hiddenManagerOpen by remember { mutableStateOf(false) }
     var hardwareButtonsDialogOpen by remember { mutableStateOf(false) }
     var virtualMouseDialogOpen by remember { mutableStateOf(false) }
-    var isOnline by remember { mutableStateOf(true) }
-    var isLowBattery by remember { mutableStateOf(false) }
 
     LaunchedEffect(requestedPage) {
         requestedPage?.let { target ->
-            // TODO: Re-enable AI Chat page for future release
-            // Clamp requested target page to active pages [0, 1] while AI Chat is disconnected
             val clampedTarget = target.coerceIn(0, 1)
             pendingTargetPage = clampedTarget
             pagerState.animateScrollToPage(clampedTarget)
@@ -639,10 +635,7 @@ fun MainLauncher(
                                         }
 
                                         android.view.KeyEvent.KEYCODE_3, android.view.KeyEvent.KEYCODE_NUMPAD_3 -> {
-                                            // TODO: Re-enable AI Chat page for future release
-                                            // pendingTargetPage = 2
-                                            // scope.launch { pagerState.animateScrollToPage(2) }
-                                            // Consume key event so numeric shortcut does not attempt out-of-bounds page navigation
+                                            // Consume key event so numeric shortcut does not trigger out-of-bounds navigation
                                             return@onPreviewKeyEvent true
                                         }
 
@@ -821,14 +814,6 @@ fun MainLauncher(
                                         selectedFavoriteIndex++
                                         savedFavoriteIndexOnHome = selectedFavoriteIndex
                                     }
-                                    // TODO: Re-enable AI Chat page for future release
-                                    // Home (page 1) is now the rightmost active page; do not scroll beyond it to page 2.
-                                    /*
-                                    else if (nativeEvent.repeatCount == 0) {
-                                        pendingTargetPage = 2
-                                        scope.launch { pagerState.animateScrollToPage(2) }
-                                    }
-                                    */
                                 }
                                 true
                             }
@@ -899,7 +884,6 @@ fun MainLauncher(
 
             val keyboardController = LocalSoftwareKeyboardController.current
             LaunchedEffect(pagerState.currentPage) {
-                // TODO: Re-enable AI Chat page for future release (previously avoided hiding keyboard on page 2)
                 keyboardController?.hide()
             }
 
@@ -1019,33 +1003,6 @@ fun MainLauncher(
                             )
                         }
                     }
-
-                    // TODO: Re-enable AI Chat page for future release
-                    /*
-                    2 -> {
-                        val isChatTarget = (pendingTargetPage ?: pagerState.targetPage) == 2
-                        val isChatPageActive = !drawerOpen &&
-                            !anyModalOpen &&
-                            isChatTarget &&
-                            pagerState.currentPage == 2 &&
-                            pagerState.settledPage == 2 &&
-                            !pagerState.isScrollInProgress
-
-                        if (!drawerOpen && (pagerState.currentPage == 2 || pagerState.targetPage == 2 || pendingTargetPage == 2)) {
-                            ChatPlaceholderPage(
-                                isActivePage = isChatPageActive,
-                                onBack = {
-                                    pendingTargetPage = 1
-                                    scope.launch {
-                                        pagerState.animateScrollToPage(1)
-                                    }
-                                }
-                            )
-                        } else {
-                            Box(modifier = Modifier.fillMaxSize())
-                        }
-                    }
-                    */
                 }
             }
 

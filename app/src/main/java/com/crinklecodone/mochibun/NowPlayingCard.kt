@@ -215,6 +215,57 @@ fun TransportButton(
 }
 
 /**
+ * Crisp pixel-art bunny sprite with white fur, black pixel eyes, pink inner ears, and blush cheeks.
+ * Rendered using direct Canvas pixel runs with 1:1 pixel silhouette (FilterQuality.None behavior)
+ * to avoid GPU overdraw or blurs on the MT6761.
+ */
+@Composable
+fun PixelBunnyAvatar(
+    modifier: Modifier = Modifier,
+    size: Dp = 22.dp
+) {
+    Canvas(modifier = modifier.size(size)) {
+        val pixelSize = this.size.width / 14f
+
+        val rows = listOf(
+            "..O.O....O.O..",
+            ".OWPWO..OWPWO.",
+            ".OWPWO..OWPWO.",
+            ".OWWWO..OWWWO.",
+            ".OOOOOOOOOOOO.",
+            "OWWWWWWWWWWWWO",
+            "OWWWWWWWWWWWWO",
+            "OWWDWWWWWWWDWO",
+            "OWWWWWWWWWWWWO",
+            "OWPPWWDDWWPPO.",
+            "OWWWWWWWWWWWWO",
+            ".OWWWWWWWWWWO.",
+            "..OOOOOOOOOO..",
+            ".............."
+        )
+
+        rows.forEachIndexed { y, row ->
+            row.forEachIndexed { x, ch ->
+                val color = when (ch) {
+                    'O' -> Color(0xFF4A2E56) // deep plum outline
+                    'W' -> Color(0xFFFFFFFF) // white fur
+                    'P' -> Color(0xFFFFADC9) // pink inner ear & blush
+                    'D' -> Color(0xFF2D1B36) // dark eyes & mouth
+                    else -> null
+                }
+                if (color != null) {
+                    drawRect(
+                        color = color,
+                        topLeft = Offset(x * pixelSize, y * pixelSize),
+                        size = Size(pixelSize, pixelSize)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * Native "Now Playing" card composable matching the mockup styling,
  * component hierarchy, and kawaii aesthetic.
  */

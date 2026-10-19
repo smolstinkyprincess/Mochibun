@@ -1,4 +1,4 @@
-package com.tnyemii.mochibun
+package com.crinklecodone.mochibun
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

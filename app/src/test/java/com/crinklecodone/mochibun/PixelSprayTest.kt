@@ -1,7 +1,7 @@
-package com.tnyemii.mochibun
+package com.crinklecodone.mochibun
 
 import androidx.compose.ui.graphics.Color
-import com.tnyemii.mochibun.PixelStickers.generatePixelSprayLayout
+import com.crinklecodone.mochibun.PixelStickers.generatePixelSprayLayout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull

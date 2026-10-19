@@ -200,21 +200,7 @@ class MochibunAccessibilityService : AccessibilityService() {
                 }
             }
             is ActionType.OpenAiChat -> {
-                // TODO: Re-enable AI Chat page for future release
-                // Bypassed while AI Chat is disconnected from active launcher hierarchy.
-                /*
-                try {
-                    val intent = Intent(this, MainActivity::class.java).apply {
-                        this.action = Intent.ACTION_MAIN
-                        addCategory(Intent.CATEGORY_LAUNCHER)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        putExtra("OPEN_PAGE", 2)
-                    }
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                */
+                // No-op: AI Chat page is disabled in this release
             }
             is ActionType.GlobalBack -> {
                 performGlobalAction(GLOBAL_ACTION_BACK)
