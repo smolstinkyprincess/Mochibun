@@ -9,6 +9,7 @@ import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -19,12 +20,9 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -75,16 +73,16 @@ private data class FolderSquircleTint(val container: Color, val border: Color)
 
 /**
  * Alternating soft pastel background tints for app squircle tiles matching the reference design:
- * 0: Soft Mint   (#D4F1E8) - e.g., Via Browser
- * 1: Blush Pink  (#FCE2E6) - e.g., ChatGPT
- * 2: Soft Lilac  (#E2D9F7) - e.g., Mew Notes
- * 3: Soft Mint   (#D4F1E8) - e.g., Files
+ * 0: Soft Lavender (#E2D9F7)
+ * 1: Blush Pink    (#FCE2E6)
+ * 2: Mint/Seafoam  (#D4F1E8)
+ * 3: Soft Peach    (#FFE5D9)
  */
 private val SQUIRCLE_TINTS = listOf(
-    FolderSquircleTint(container = Color(0xFFD4F1E8), border = Color(0xFFA5E2CD)),
-    FolderSquircleTint(container = Color(0xFFFCE2E6), border = Color(0xFFF6ACB9)),
     FolderSquircleTint(container = Color(0xFFE2D9F7), border = Color(0xFFC7B6EE)),
-    FolderSquircleTint(container = Color(0xFFD4F1E8), border = Color(0xFFA5E2CD))
+    FolderSquircleTint(container = Color(0xFFFCE2E6), border = Color(0xFFF6ACB9)),
+    FolderSquircleTint(container = Color(0xFFD4F1E8), border = Color(0xFFA5E2CD)),
+    FolderSquircleTint(container = Color(0xFFFFE5D9), border = Color(0xFFF9C6B3))
 )
 
 /**
@@ -106,6 +104,52 @@ fun PixelRibbonBow(
         filterQuality = FilterQuality.None,
         modifier = modifier.size(width = width, height = height)
     )
+}
+
+/**
+ * Centered pill button anchored at or slightly overlapping the bottom rim:
+ * "♥ Close (◄) ♥" in pastel lilac with deep plum typography.
+ * Renders an unclipped pastel focus outline when selected via physical D-pad.
+ */
+@Composable
+fun FolderClosePillButton(
+    isFocused: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val buttonWidth = 154.dp
+    val buttonHeight = 36.dp
+    val pillShape = CircleShape
+
+    Box(
+        modifier = modifier
+            .size(width = buttonWidth, height = buttonHeight)
+            .graphicsLayer { clip = false }
+            .softGlowFocus(
+                isSelected = isFocused,
+                cornerRadius = 20.dp,
+                glowColor = ActiveTheme.selectionGlow,
+                borderColor = ActiveTheme.primary,
+                containerTint = ActiveTheme.surfaceTint
+            )
+            .clip(pillShape)
+            .background(if (isFocused) ActiveTheme.current.focusedContainerColor else Color(0xFFF7F1FA))
+            .border(
+                width = if (isFocused) 1.5.dp else 1.2.dp,
+                color = if (isFocused) ActiveTheme.primary else ActiveTheme.cardBorder,
+                shape = pillShape
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "♥ Close (◄) ♥",
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+            textAlign = TextAlign.Center
+        )
+    }
 }
 
 /**
@@ -277,7 +321,7 @@ fun FloatingPixelBackdrop(
  * In Jetpack Compose, unconsumed physical keypad events bubble through the window hierarchy;
  * without isolating the dialog, D-pad events would simultaneously navigate favorite items
  * on the HomeScreen underneath. We capture keys at the dialog root using onPreviewKeyEvent
- * and route them across 3 distinct zones (Header, App Grid, Close Button).
+ * and route them across 3 distinct zones (Header, App List, Close Button).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -301,7 +345,6 @@ fun FavoriteFolderDialog(
     onDismiss: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
-    val palette = theme.palette
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -330,7 +373,7 @@ fun FavoriteFolderDialog(
 
     // Main Focus sections:
     // 0 = Header Title (rename / edit toggle)
-    // 1 = App Grid (selectedAppIndex)
+    // 1 = App List (selectedAppIndex)
     // 2 = Bottom Scalloped Close button
     var focusSection by remember(folder.id) {
         mutableIntStateOf(if (folderApps.isNotEmpty()) 1 else 2)
@@ -668,27 +711,16 @@ fun FavoriteFolderDialog(
                 when (native.keyCode) {
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
                         when (focusSection) {
-                            1 -> {
-                                if (selectedAppIndex % 2 == 1) {
-                                    selectedAppIndex--
-                                }
-                            }
                             2 -> {
                                 // "♥ Close (◄) ♥": Left dismisses folder cleanly
                                 onDismiss()
+                                true
                             }
+                            else -> false
                         }
-                        true
                     }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        when (focusSection) {
-                            1 -> {
-                                if (selectedAppIndex % 2 == 0 && selectedAppIndex + 1 < totalApps) {
-                                    selectedAppIndex++
-                                }
-                            }
-                        }
-                        true
+                        false
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         when (focusSection) {
@@ -696,8 +728,8 @@ fun FavoriteFolderDialog(
                                 // Topmost
                             }
                             1 -> {
-                                if (selectedAppIndex >= 2) {
-                                    selectedAppIndex -= 2
+                                if (selectedAppIndex > 0) {
+                                    selectedAppIndex--
                                 } else {
                                     focusSection = 0
                                 }
@@ -705,7 +737,7 @@ fun FavoriteFolderDialog(
                             2 -> {
                                 if (totalApps > 0) {
                                     focusSection = 1
-                                    selectedAppIndex = (totalApps - 1).coerceAtLeast(0)
+                                    selectedAppIndex = totalApps - 1
                                 } else {
                                     focusSection = 0
                                 }
@@ -724,8 +756,8 @@ fun FavoriteFolderDialog(
                                 }
                             }
                             1 -> {
-                                if (selectedAppIndex + 2 < totalApps) {
-                                    selectedAppIndex += 2
+                                if (selectedAppIndex + 1 < totalApps) {
+                                    selectedAppIndex++
                                 } else {
                                     focusSection = 2
                                 }
@@ -741,20 +773,27 @@ fun FavoriteFolderDialog(
             }
     ) {
         val pickerListState = rememberLazyListState()
-        val gridState = rememberLazyGridState()
+        val appListState = rememberLazyListState()
 
         LaunchedEffect(selectedAppIndex, folderApps.size, focusSection) {
             if (focusSection == 1 && folderApps.isNotEmpty() && selectedAppIndex in folderApps.indices) {
-                gridState.animateScrollToItem(selectedAppIndex)
+                appListState.animateScrollToItem(selectedAppIndex)
             }
         }
 
+        val isMainView = !confirmingDelete && !pickingApps && !editingName
+
+        // Backdrop & Scrim: soft, semi-transparent frosted dimming overlay avoiding GPU blur
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.38f))
                 .clickable { handleBack() },
             contentAlignment = Alignment.Center
         ) {
+            // Subtle floating pixel sparkle stars and hearts on the dialog backdrop
+            FloatingPixelBackdrop()
+
             // 1. Top Scalloped Lavender Clouds lining top screen boundary
             TopLavenderClouds(
                 modifier = Modifier
@@ -769,34 +808,31 @@ fun FavoriteFolderDialog(
                     .align(Alignment.BottomCenter)
             )
 
-            // 3. Centered Content Unit (Folder Card + Bottom Navigation Pill)
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+            // 3. Centered Content Unit (Folder Card with overlapping Bow Badge & Close Button)
+            Box(
                 modifier = Modifier
                     .graphicsLayer { clip = false }
-                    .pointerInput(Unit) { detectTapGestures { } }
+                    .pointerInput(Unit) { detectTapGestures { } },
+                contentAlignment = Alignment.Center
             ) {
                 // Main Folder Modal Card Container
                 val cardCornerRadius = cardRoundness.coerceIn(22.dp, 24.dp)
                 val cardShape = RoundedCornerShape(cardCornerRadius)
-                val cardBg = theme.unfocusedCardBgColor
-                val cardBorderColor = theme.unfocusedCardBorderColor
 
                 Box(
                     modifier = Modifier
                         .width(308.dp)
                         .graphicsLayer { clip = false }
-                        .background(cardBg, cardShape)
-                        .border(1.5.dp, cardBorderColor, cardShape)
-                        .padding(top = 22.dp, bottom = 22.dp, start = 14.dp, end = 14.dp),
+                        .background(ActiveTheme.surface, cardShape)
+                        .border(1.5.dp, ActiveTheme.cardBorder, cardShape)
+                        .padding(
+                            top = 24.dp,
+                            bottom = if (isMainView) 28.dp else 16.dp,
+                            start = 14.dp,
+                            end = 14.dp
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    PixelRibbonBow(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .offset(y = (-23).dp)
-                    )
                     when {
                         confirmingDelete -> {
                             Column(
@@ -815,7 +851,7 @@ fun FavoriteFolderDialog(
 
                                 Text(
                                     text = "This folder will be removed from favorites. Apps inside remain in your app drawer ♡",
-                                    color = Color(0xFF3B1B44),
+                                    color = ActiveTheme.textPrimary,
                                     fontSize = 13.sp,
                                     textAlign = TextAlign.Center
                                 )
@@ -849,7 +885,7 @@ fun FavoriteFolderDialog(
                             ) {
                                 Text(
                                     text = "— ♡ Apps in ${folder.name} ♡ —",
-                                    color = Color(0xFF3B1B44),
+                                    color = ActiveTheme.textPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                     textAlign = TextAlign.Center,
@@ -903,7 +939,7 @@ fun FavoriteFolderDialog(
                                             Spacer(Modifier.width(10.dp))
                                             Text(
                                                 text = app.name,
-                                                color = Color(0xFF3B1B44),
+                                                color = ActiveTheme.textPrimary,
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 13.5.sp,
                                                 modifier = Modifier.weight(1f),
@@ -970,7 +1006,7 @@ fun FavoriteFolderDialog(
                             ) {
                                 Text(
                                     text = "— ♡ Rename Folder ♡ —",
-                                    color = Color(0xFF3B1B44),
+                                    color = ActiveTheme.textPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
@@ -982,12 +1018,12 @@ fun FavoriteFolderDialog(
                                     singleLine = true,
                                     shape = RoundedCornerShape(14.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = Color(0xFFE06287),
-                                        unfocusedBorderColor = Color(0xFFDFB3C4),
-                                        focusedTextColor = Color(0xFF3B1B44),
-                                        unfocusedTextColor = Color(0xFF3B1B44),
-                                        focusedContainerColor = Color(0xFFFFF6F8),
-                                        unfocusedContainerColor = Color(0xFFFFF6F8)
+                                        focusedBorderColor = ActiveTheme.primary,
+                                        unfocusedBorderColor = ActiveTheme.cardBorder,
+                                        focusedTextColor = ActiveTheme.textPrimary,
+                                        unfocusedTextColor = ActiveTheme.textPrimary,
+                                        focusedContainerColor = ActiveTheme.current.unfocusedCardBgColor,
+                                        unfocusedContainerColor = ActiveTheme.current.unfocusedCardBgColor
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1048,9 +1084,11 @@ fun FavoriteFolderDialog(
                         }
 
                         else -> {
-                            // Main 2×2 Folder View
+                            // Main Vertical Scaled-Down App Drawer List Folder View
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .graphicsLayer { clip = false },
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 // Folder Header: — ♡ [Folder Title] ♡ —
@@ -1061,10 +1099,13 @@ fun FavoriteFolderDialog(
                                         .graphicsLayer { clip = false }
                                         .softGlowFocus(
                                             isSelected = isHeaderFocused,
-                                            cornerRadius = 12.dp
+                                            cornerRadius = 12.dp,
+                                            glowColor = ActiveTheme.selectionGlow,
+                                            borderColor = ActiveTheme.primary,
+                                            containerTint = ActiveTheme.surfaceTint
                                         )
                                         .background(
-                                            if (isHeaderFocused) theme.focusedContainerColor else Color.Transparent,
+                                            if (isHeaderFocused) ActiveTheme.current.focusedContainerColor else Color.Transparent,
                                             headerShape
                                         )
                                         .clickable {
@@ -1077,9 +1118,9 @@ fun FavoriteFolderDialog(
                                 ) {
                                     Text(
                                         text = "— ♡ ${folder.name.ifBlank { "Favorites" }} ♡ —",
-                                        fontSize = 17.5.sp,
+                                        fontSize = 16.5.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = theme.palette.textColor,
+                                        color = ActiveTheme.accentDeep,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -1095,65 +1136,85 @@ fun FavoriteFolderDialog(
                                     )
                                 }
 
-                                Spacer(Modifier.height(14.dp))
+                                Spacer(Modifier.height(10.dp))
 
-                                // Symmetrical 2-Column App Grid
+                                // Scaled-Down Vertical App List (replaces the 2x2 grid)
                                 if (folderApps.isEmpty()) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(180.dp)
+                                            .height(130.dp)
                                             .clip(RoundedCornerShape(16.dp))
-                                            .background(theme.unfocusedCardBgColor)
-                                            .border(1.dp, theme.unfocusedCardBorderColor, RoundedCornerShape(16.dp)),
+                                            .background(ActiveTheme.current.unfocusedCardBgColor.copy(alpha = 0.5f))
+                                            .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = "Folder is empty ♡\nTap header to manage apps!",
-                                            color = theme.palette.textColor,
-                                            fontSize = 13.5.sp,
+                                            color = ActiveTheme.textPrimary,
+                                            fontSize = 13.sp,
                                             textAlign = TextAlign.Center
                                         )
                                     }
                                 } else {
-                                    LazyVerticalGrid(
-                                        columns = GridCells.Fixed(2),
-                                        state = gridState,
+                                    LazyColumn(
+                                        state = appListState,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .heightIn(max = 240.dp)
+                                            .heightIn(max = 196.dp)
                                             .graphicsLayer { clip = false },
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
                                     ) {
-                                        itemsIndexed(folderApps, key = { _, app -> app.packageName }) { index, app ->
-                                            val isTileFocused = focusSection == 1 && selectedAppIndex == index
+                                        itemsIndexed(
+                                            folderApps,
+                                            key = { _, app -> app.packageName }
+                                        ) { index, app ->
+                                            val isRowFocused = focusSection == 1 && selectedAppIndex == index
                                             val tint = SQUIRCLE_TINTS[index % SQUIRCLE_TINTS.size]
-                                            val tileShape = RoundedCornerShape(20.dp)
-                                            val squircleShape = RoundedCornerShape(16.dp)
+                                            val rowShape = RoundedCornerShape(16.dp)
+                                            val squircleShape = RoundedCornerShape(12.dp)
 
                                             val scale by animateFloatAsState(
-                                                targetValue = if (isTileFocused) 1.04f else 1.0f,
-                                                animationSpec = tween(120),
-                                                label = "folderAppTileScale"
+                                                targetValue = if (isRowFocused) 1.02f else 1.0f,
+                                                animationSpec = tween(100),
+                                                label = "folderAppRowScale"
                                             )
 
-                                            Column(
+                                            Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
+                                                    .height(46.dp)
                                                     .graphicsLayer {
                                                         scaleX = scale
                                                         scaleY = scale
                                                         clip = false
                                                     }
                                                     .softGlowFocus(
-                                                        isSelected = isTileFocused,
-                                                        cornerRadius = 20.dp
+                                                        isSelected = isRowFocused,
+                                                        cornerRadius = 16.dp,
+                                                        glowColor = ActiveTheme.selectionGlow,
+                                                        borderColor = ActiveTheme.primary,
+                                                        containerTint = ActiveTheme.surfaceTint
                                                     )
+                                                    .clip(rowShape)
                                                     .background(
-                                                        if (isTileFocused) theme.focusedContainerColor else Color.Transparent,
-                                                        tileShape
+                                                        if (isRowFocused) {
+                                                            ActiveTheme.current.focusedContainerColor
+                                                        } else {
+                                                            ActiveTheme.current.unfocusedCardBgColor.copy(alpha = 0.85f)
+                                                        }
+                                                    )
+                                                    .then(
+                                                        if (!isRowFocused) {
+                                                            Modifier.border(
+                                                                1.dp,
+                                                                ActiveTheme.cardBorder.copy(alpha = 0.45f),
+                                                                rowShape
+                                                            )
+                                                        } else {
+                                                            Modifier
+                                                        }
                                                     )
                                                     .combinedClickable(
                                                         onClick = {
@@ -1172,13 +1233,13 @@ fun FavoriteFolderDialog(
                                                             managing = !managing
                                                         }
                                                     )
-                                                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally
+                                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                // Squircle Icon Container
+                                                // Left-aligned squircle icon container with alternating pastel tint
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(64.dp)
+                                                        .size(32.dp)
                                                         .clip(squircleShape)
                                                         .background(tint.container, squircleShape)
                                                         .border(
@@ -1192,52 +1253,66 @@ fun FavoriteFolderDialog(
                                                         bitmap = app.imageBitmap,
                                                         contentDescription = app.name,
                                                         filterQuality = FilterQuality.None,
-                                                        modifier = Modifier.size(34.dp)
+                                                        modifier = Modifier.size(22.dp)
                                                     )
-
-                                                    if (managing) {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .align(Alignment.TopEnd)
-                                                                .padding(3.dp)
-                                                                .size(18.dp)
-                                                                .clip(RoundedCornerShape(6.dp))
-                                                                .background(destructiveColor),
-                                                            contentAlignment = Alignment.Center
-                                                        ) {
-                                                            Text("✕", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                                                        }
-                                                    }
                                                 }
 
-                                                Spacer(Modifier.height(8.dp))
+                                                Spacer(Modifier.width(10.dp))
 
-                                                // App Label
+                                                // Medium-bold deep violet/plum app label (no numbers)
                                                 Text(
                                                     text = app.name,
                                                     fontSize = 13.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = theme.palette.textColor,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = ActiveTheme.textPrimary,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
-                                                    textAlign = TextAlign.Center
+                                                    modifier = Modifier.weight(1f)
                                                 )
+
+                                                if (managing) {
+                                                    Spacer(Modifier.width(6.dp))
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(20.dp)
+                                                            .clip(RoundedCornerShape(6.dp))
+                                                            .background(destructiveColor),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = "✕",
+                                                            fontSize = 10.sp,
+                                                            color = Color.White,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
-
-                                Spacer(Modifier.height(4.dp))
                             }
                         }
                     }
                 }
 
-                // Floating Bottom Home Navigation Pill: ^ ♥ Back to Home (F4) ♥
-                DrawerHomeNavigation(
-                    isFocused = focusSection == 2,
-                    onClick = onDismiss
+                // Top-Center Overlapping Bow Badge
+                PixelRibbonBow(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-23).dp)
                 )
+
+                // Bottom Dismiss Action: Centered pill button anchored at or slightly overlapping the bottom rim
+                if (isMainView) {
+                    FolderClosePillButton(
+                        isFocused = focusSection == 2,
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .offset(y = 18.dp)
+                    )
+                }
             }
         }
     }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -298,7 +299,7 @@ fun LauncherMenuDialog(
             if (showResetWallpaper) {
                 add("↩ Reset to default wallpaper" to onResetWallpaperClick)
             }
-            add("♥ Close (◄) ♥" to onDismiss)
+            add("♥ Close ♥" to onDismiss)
         }
     }
 
@@ -652,7 +653,7 @@ fun HiddenAppsDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     KawaiiDialogPillButton(
-                        text = "♥ Close (◄) ♥",
+                        text = "♥ Close ♥",
                         isFocused = selectedIndex == hiddenApps.size,
                         onClick = onDismiss
                     )
@@ -707,7 +708,7 @@ fun AppActionDialog(
             if (onOpenLauncherOptions != null) {
                 add("⚙ Launcher options" to onOpenLauncherOptions)
             }
-            add("♥ Close (◄) ♥" to onDismiss)
+            add("♥ Close ♥" to onDismiss)
         }
     }
 
@@ -3718,11 +3719,11 @@ fun IconPackSelectionDialog(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.wrapContentWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
                     KawaiiDialogPillButton(
-                        text = "♥ Close (◄) ♥",
+                        text = "♥ Close ♥",
                         isFocused = focusedIndex == totalItems - 1,
                         onClick = onDismiss
                     )

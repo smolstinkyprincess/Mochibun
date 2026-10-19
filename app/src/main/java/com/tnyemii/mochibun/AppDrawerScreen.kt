@@ -305,7 +305,7 @@ fun DrawerHomeNavigation(
     isFocused: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    text: String = "♥ Back to Home (F4) ♥"
+    text: String = "♡ Back to Home ♡"
 ) {
     val theme = LocalLauncherTheme.current
     val pillShape = CircleShape
@@ -362,7 +362,7 @@ fun KawaiiClosePillButton(
     isFocused: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    text: String = "♥ Close (◄) ♥"
+    text: String = "♥ Close ♥"
 ) {
     val theme = LocalLauncherTheme.current
     val pillShape = CircleShape

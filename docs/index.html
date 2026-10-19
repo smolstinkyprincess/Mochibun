@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mochibun ♡ Physical-Key Android Launcher</title>
+  <style>
+    :root {
+      --bg: #FEE8F0;
+      --card-bg: #FFF9FB;
+      --card-border: #E5D4F7;
+      --text-main: #381D3F;
+      --text-muted: #7D5286;
+      --accent-pink: #F2A7BF;
+      --accent-lavender: #EADDF8;
+      --accent-mint: #B7F4D8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2.5rem 1rem;
+    }
+
+    .container {
+      max-width: 640px;
+      width: 100%;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .icon-wrapper {
+      width: 88px;
+      height: 88px;
+      margin: 0 auto 1rem;
+      border-radius: 22px;
+      background: var(--card-bg);
+      border: 2px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(229, 212, 247, 0.45);
+      overflow: hidden;
+    }
+
+    .icon-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.25rem;
+    }
+
+    .tagline {
+      color: var(--text-muted);
+      font-size: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .cta-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 2.5rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.4rem;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .btn-primary {
+      background-color: var(--accent-pink);
+      color: var(--text-main);
+      box-shadow: 0 4px 14px rgba(242, 167, 191, 0.4);
+    }
+
+    .btn-secondary {
+      background-color: var(--accent-lavender);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.03);
+    }
+
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    ul.features-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    ul.features-list li {
+      position: relative;
+      padding-left: 1.75rem;
+      font-size: 0.95rem;
+    }
+
+    ul.features-list li::before {
+      content: "♡";
+      position: absolute;
+      left: 0;
+      color: var(--accent-pink);
+      font-weight: bold;
+    }
+
+    .specs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .spec-item {
+      background-color: #FAF4FD;
+      border-radius: 12px;
+      padding: 0.75rem;
+      border: 1px solid #EFE4F8;
+    }
+
+    .spec-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .spec-val {
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 1.5rem;
+    }
+
+    footer a {
+      color: var(--text-muted);
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="icon-wrapper">
+        <img src="icon.png" alt="Mochibun Icon">
+      </div>
+      <h1>Mochibun (もちぶん) ♡</h1>
+      <p class="tagline">A kawaii, D-pad first Android launcher built for physical keypad flip phones.</p>
+
+      <div class="cta-buttons">
+        <a class="btn btn-primary" href="https://github.com/smolstinkyprincess/Mochibun/releases">
+          Download APK (v1.0.0-rc1)
+        </a>
+        <a class="btn btn-secondary" href="https://github.com/smolstinkyprincess/Mochibun">
+          View on GitHub
+        </a>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="card-title">— ♡ Features ♡ —</div>
+      <ul class="features-list">
+        <li><strong>Physical D-Pad First:</strong> Native 2D focus traversal across every card, dialog, and drawer with soft pastel glowing focus rings.</li>
+        <li><strong>T9 App Search:</strong> Filter and launch applications instantly using the physical 2–9 numeric keys.</li>
+        <li><strong>Virtual Mouse Service:</strong> Built-in accessibility cursor toggled with the side key (F4) for non-keypad touch apps.</li>
+        <li><strong>Now Playing Widget:</strong> Contextual media deck that appears only during active playback.</li>
+        <li><strong>Theme Studio:</strong> 4 pastel themes (Sakura Dream, Lavender Mist, Minty Matcha, Milky Peach).</li>
+        <li><strong>Low-RAM Tuned:</strong> Avoids heavy real-time GPU blurs to maintain 60 FPS on modest 4-core hardware.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-title">— ♡ Hardware Target ♡ —</div>
+      <div class="specs-grid">
+        <div class="spec-item">
+          <div class="spec-label">Target Device</div>
+          <div class="spec-val">Chinoe AT-M120</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Operating System</div>
+          <div class="spec-val">Android 12 (API 31)</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Display Envelope</div>
+          <div class="spec-val">480 × 800 Portrait</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Memory Budget</div>
+          <div class="spec-val">~1.8 GB RAM</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Mochibun is open source under the MIT License.<br>
+      Made with ♡ by <a href="https://github.com/smolstinkyprincess">smolstinkyprincess</a>
+    </footer>
+  </div>
+
+</body>
+</html>
