@@ -1,0 +1,7 @@
+Initial stable release of Mochibun!
+- Full D-pad and numeric keypad navigation across all screens.
+- Physical T9 search in the app drawer.
+- Built-in virtual mouse cursor service toggled via hardware side key.
+- Theme Studio with 4 pastel palettes.
+- Dynamic Now Playing media widget.
+- Refactored package namespace to com.crinklecodone.mochibun.

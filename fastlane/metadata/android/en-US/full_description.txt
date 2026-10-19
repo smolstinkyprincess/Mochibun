@@ -1,0 +1,9 @@
+Mochibun is a lightweight, pastel launcher engineered specifically for T9 keypad Android flip devices (optimized for the ALT Mive Style Folder(AT-M120)).
+
+Features:
+- Physical Keypad Support: Move through your apps, folders, and menus using the physical arrow keys and number pad.
+- T9 App Search: Type numbers on your keypad to quickly filter and find apps without tapping the screen.
+- Virtual Mouse Cursor: Turn on a mouse pointer with the side key so you can click things in apps made only for touchscreens.
+- Theme Studio: 4 soft pastel color themes (Sakura Dream, Lavender Mist, Minty Matcha, and Milky Peach).
+- Widget Page & Music Player: A dedicated screen for your widgets, featuring a card that shows what music is playing.
+- Lightweight & Fast: Smooth performance tuned specifically for flip phones and small screens with ~1.8 GB RAM.
