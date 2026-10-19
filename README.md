@@ -57,29 +57,15 @@ To enable all hardware and overlay features, grant the following on your device:
 
 
 
----
-
 ## ⌨️ Physical Key Map
 
 | Key / Hardware Button | Action |
-| --- | --- |
-| **D-Pad Directional Keys** | Spatial 2D navigation across cards, apps, and steppers
-
- |
-| **D-Pad Center / Enter** | Launch selected app or activate focused control
-
- |
-| **Side Key (`F4`)** | Toggle Virtual Mouse Cursor overlay on/off
-
- |
-| **Back / `F4` (In Menus)** | Dismiss active folder, App Drawer, or Settings modal to return Home
-
- |
-| **Number Keys (`2`–`9`)** | Filter installed applications via T9 keypad search
-
- |
-
----
+| :--- | :--- |
+| **D-Pad Directional Keys** | Spatial 2D navigation across cards, apps, and steppers |
+| **D-Pad Center / Enter** | Launch selected app or activate focused control |
+| **Side Button** | Toggle Virtual Mouse Cursor overlay on/off |
+| **Back Button** | Dismiss active folder, App Drawer, or Settings modal to return Home |
+| **Number Keys (`2`–`9`)** | Filter installed applications via T9 keypad search |
 
 ## 🛠️ Building from Source
 
