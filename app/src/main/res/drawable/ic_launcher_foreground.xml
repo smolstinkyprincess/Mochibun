@@ -1,30 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="85.84757"
-                android:endY="92.4963"
-                android:startX="42.9492"
-                android:startY="49.59793"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
+
+    <!-- 1. The Soft Mochi Dome (Creamy White) -->
+    <!-- Base center at (54, 57), radius 26 horizontal, 21 vertical -->
     <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+        android:fillColor="#FFFDFB"
+        android:strokeColor="#E5D4F7"
+        android:strokeWidth="1.5"
+        android:pathData="M28,64
+                          C28,42 80,42 80,64
+                          C80,75 70,78 54,78
+                          C38,78 28,75 28,64 Z" />
+
+    <!-- 2. Tiny Pale Matcha Garnish / Leaf on Top (Pale Mint) -->
+    <path
+        android:fillColor="#B7F4D8"
+        android:pathData="M52,38
+                          C50,42 54,45 56,43
+                          C58,41 57,36 52,38 Z" />
+
+    <!-- 3. Two Simple Dot Eyes (Deep Plum) -->
+    <path
+        android:fillColor="#381D3F"
+        android:pathData="M43,59a2.5,2.5 0 1,0 0.1,0 Z" />
+    <path
+        android:fillColor="#381D3F"
+        android:pathData="M65,59a2.5,2.5 0 1,0 0.1,0 Z" />
+
+    <!-- 4. Soft Blush Cheeks (Strawberry Milk Pink) -->
+    <path
+        android:fillColor="#F2A7BF"
+        android:pathData="M37,65a3.5,2 0 1,0 0.1,0 Z" />
+    <path
+        android:fillColor="#F2A7BF"
+        android:pathData="M71,65a3.5,2 0 1,0 0.1,0 Z" />
+
+    <!-- 5. Tiny Minimalist Smile -->
+    <path
+        android:strokeColor="#381D3F"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M51,64 Q54,67 57,64" />
 </vector>

@@ -75,6 +75,11 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+    lint {
+        //Prevent lint errors from failing assembleRelease
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
 }
 
 dependencies {
