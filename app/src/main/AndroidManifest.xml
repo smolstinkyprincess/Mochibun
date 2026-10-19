@@ -62,7 +62,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.M120Launcher">
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.MainActivity"
             android:launchMode="singleTask"
             android:excludeFromRecents="true"
             android:exported="true"
@@ -103,7 +103,7 @@
 
         <!-- Mochibun Hardware Button Accessibility Service -->
         <service
-            android:name=".MochibunAccessibilityService"
+            android:name=".service.MochibunAccessibilityService"
             android:label="@string/accessibility_service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
@@ -117,7 +117,7 @@
 
         <!-- Mochibun Virtual Mouse Accessibility Service -->
         <service
-            android:name=".VirtualCursorService"
+            android:name=".service.VirtualCursorService"
             android:label="@string/virtual_cursor_service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
@@ -131,7 +131,7 @@
 
         <!-- Mochibun Media Session Notification Listener Service -->
         <service
-            android:name=".MochibunNotificationListenerService"
+            android:name=".service.MochibunNotificationListenerService"
             android:label="Mochibun Media Session Listener"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">

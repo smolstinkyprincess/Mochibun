@@ -4,8 +4,8 @@
 -keep public class * extends android.accessibilityservice.AccessibilityService
 
 # Keep Mochibun's Virtual Cursor & Core Services intact
--keep class com.crinklecodone.mochibun.VirtualCursorService { *; }
--keep class com.crinklecodone.mochibun.MochibunAccessibilityService { *; }
+-keep class com.crinklecodone.mochibun.service.VirtualCursorService { *; }
+-keep class com.crinklecodone.mochibun.service.MochibunAccessibilityService { *; }
 
 # Preserve Compose runtime lambdas & inspection
 -keepclassmembers class * {

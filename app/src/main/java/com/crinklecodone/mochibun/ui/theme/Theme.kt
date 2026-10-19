@@ -16,9 +16,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import com.crinklecodone.mochibun.ActiveTheme
-
-typealias ActiveTheme = com.crinklecodone.mochibun.ActiveTheme
 
 // Baseline pastel pink palette used across launcher surfaces and interactive cards
 private val PinkLightColorScheme = lightColorScheme(
