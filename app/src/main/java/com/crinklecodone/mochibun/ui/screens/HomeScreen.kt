@@ -78,7 +78,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// dynamic pastel theme colors provided via LocalLauncherTheme and MochibunThemePalette :3
+// dynamic pastel theme colors provided via LocalLauncherTheme and MochibunThemePalette
 
 /**
  * Main Home Screen composable recreating the kawaii Mochibun layout.

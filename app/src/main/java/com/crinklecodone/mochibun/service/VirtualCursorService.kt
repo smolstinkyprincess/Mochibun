@@ -114,7 +114,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
             if (isOverlayAttached) {
                 try {
                     windowManager.removeView(view)
-                } catch (_: Exception) {}
+                } catch (_: IllegalArgumentException) {}
                 isOverlayAttached = false
             }
             view.release()

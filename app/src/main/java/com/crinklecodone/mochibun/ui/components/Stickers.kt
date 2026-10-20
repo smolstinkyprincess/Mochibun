@@ -41,12 +41,12 @@ import kotlin.math.sin
 // Mochibun Pixel Art Sticker Engine & Retro Arcade Explosion
 // ============================================================================
 
-// a horizontal run of same-colored pixels for fast, seam-free Canvas rendering <3
+// a horizontal run of same-colored pixels for fast, seam-free Canvas rendering
 private class StickerPixelRun(val x: Int, val y: Int, val length: Int, val color: Color)
 
-// color extension helpers for authentic retro pixel-art shading & highlights :3
+// color extension helpers for authentic retro pixel-art shading & highlights
 private fun Color.outlineTone(): Color {
-    // deep plum/berry tint (0xFF482650) to give pixel outlines rich retro depth without muddiness <3
+    // deep plum/berry tint (0xFF482650) to give pixel outlines rich retro depth without muddiness
     val plum = Color(0xFF482650)
     return Color(
         red = (this.red * 0.30f + plum.red * 0.70f).coerceIn(0f, 1f),
@@ -70,7 +70,7 @@ private fun Color.lighter(factor: Float): Color = Color(
     alpha = this.alpha
 )
 
-// converts ASCII sprite rows into merged horizontal pixel runs :3
+// converts ASCII sprite rows into merged horizontal pixel runs
 private fun runsFromRows(rows: List<String>, palette: (Char) -> Color?): List<StickerPixelRun> {
     val runs = ArrayList<StickerPixelRun>(rows.size * 4)
     rows.forEachIndexed { rowIndex, row ->
@@ -90,7 +90,7 @@ private fun runsFromRows(rows: List<String>, palette: (Char) -> Color?): List<St
     return runs
 }
 
-// draws pixel runs with integer-snapped edges so pixels remain razor-sharp with zero gaps <3
+// draws pixel runs with integer-snapped edges so pixels remain razor-sharp with zero gaps
 private fun DrawScope.drawPixelSprite(
     runs: List<StickerPixelRun>,
     gridW: Int,
@@ -254,7 +254,7 @@ private val MINI_DIAMOND_ROWS = listOf(
 // Sticker Composables (100% Backward Compatible API)
 // ============================================================================
 
-// pixel-art heart sticker with die-cut white border and highlight reflection :3
+// pixel-art heart sticker with die-cut white border and highlight reflection
 @Composable
 fun HeartSticker(
     size: Dp = 42.dp,
@@ -288,7 +288,7 @@ fun HeartSticker(
     }
 }
 
-// pixel-art ribbon bow sticker with die-cut white border and center knot <3
+// pixel-art ribbon bow sticker with die-cut white border and center knot
 @Composable
 fun BowSticker(
     size: Dp = 64.dp,
@@ -324,7 +324,7 @@ fun BowSticker(
     }
 }
 
-// pixel-art 4-pointed sparkle sticker :3
+// pixel-art 4-pointed sparkle sticker
 @Composable
 fun SparkleSticker(
     size: Dp = 36.dp,
@@ -356,7 +356,7 @@ fun SparkleSticker(
     }
 }
 
-// pixel-art fluffy cloud sticker <3
+// pixel-art fluffy cloud sticker
 @Composable
 fun CloudSticker(
     width: Dp = 82.dp,
@@ -391,7 +391,7 @@ fun CloudSticker(
     }
 }
 
-// pixel-art 5-petal flower sticker with contrasting center :3
+// pixel-art 5-petal flower sticker with contrasting center
 @Composable
 fun FlowerSticker(
     size: Dp = 42.dp,
@@ -431,7 +431,7 @@ fun FlowerSticker(
     }
 }
 
-// mini pixel art charms replacing raw unicode glyphs for authentic retro aesthetics :3
+// mini pixel art charms replacing raw unicode glyphs for authentic retro aesthetics
 @Composable
 fun PixelMiniHeart(
     size: Dp = 16.dp,
@@ -524,7 +524,7 @@ private class ArcadeParticle(
     val gravityDp: Float = 0f
 )
 
-// pre-allocated static pool of 42 arcade particles: zero allocations at runtime <3
+// pre-allocated static pool of 42 arcade particles: zero allocations at runtime
 private val ARCADE_EXPLOSION_PARTICLES: List<ArcadeParticle> = listOf(
     // 16 chunky foreground pixel fragments (2x2 clusters with highlights & shadows)
     ArcadeParticle(0.26f, 160f, 9.5f, Color(0xFFFF62AE), isChunkyFragment = true, isStarlet = false, gravityDp = 20f),
@@ -575,7 +575,7 @@ private val ARCADE_EXPLOSION_PARTICLES: List<ArcadeParticle> = listOf(
     ArcadeParticle(5.76f, 115f, 6.5f, Color(0xFF6EECDE), isChunkyFragment = false, isStarlet = true, gravityDp = 7f)
 )
 
-// renders the retro arcade explosion burst with central flash, expanding shockwave & fragments :3
+// renders the retro arcade explosion burst with central flash, expanding shockwave & fragments
 private fun DrawScope.drawRetroArcadeExplosion(progress: Float, origin: Offset) {
     if (progress >= 1f) return
 
@@ -730,7 +730,7 @@ private fun DrawScope.drawRetroArcadeExplosion(progress: Float, origin: Offset) 
 // StickerExplosion Screen Overlay
 // ============================================================================
 
-// decorative sticker layout scatter overlay on launcher background with retro arcade explosion <3
+// decorative sticker layout scatter overlay on launcher background with retro arcade explosion
 @Composable
 fun StickerExplosion() {
     var explosionTrigger by remember { mutableStateOf(1) }
@@ -745,7 +745,7 @@ fun StickerExplosion() {
         )
     }
 
-    // playful scale pop-in for background stickers during the explosion burst :3
+    // playful scale pop-in for background stickers during the explosion burst
     val p = animProgress.value
     val stickerScale = if (p < 0.35f) {
         (0.65f + (p / 0.35f) * 0.45f).coerceAtMost(1.10f)
@@ -765,7 +765,7 @@ fun StickerExplosion() {
                 }
             }
     ) {
-        // decorative pixel art stickers scattering across wallpaper <3
+        // decorative pixel art stickers scattering across wallpaper
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -838,7 +838,7 @@ fun StickerExplosion() {
                 modifier = Modifier.offset(x = 210.dp, y = 455.dp)
             )
 
-            // tiny top-left pixel sparkle/heart accents :3
+            // tiny top-left pixel sparkle/heart accents
             PixelMiniHeart(
                 size = 24.dp,
                 color = Color(0xFFFF9FD2),
@@ -860,7 +860,7 @@ fun StickerExplosion() {
                 modifier = Modifier.offset(x = 52.dp, y = 150.dp)
             )
 
-            // tiny top-right pixel accents <3
+            // tiny top-right pixel accents
             PixelMiniDiamond(
                 size = 18.dp,
                 color = Color(0xFFD791E3),
@@ -875,7 +875,7 @@ fun StickerExplosion() {
                 modifier = Modifier.offset(x = 245.dp, y = 145.dp)
             )
 
-            // left-middle pixel accents :3
+            // left-middle pixel accents
             PixelMiniHeart(
                 size = 16.dp,
                 color = Color(0xFFFF9FD2),
@@ -897,7 +897,7 @@ fun StickerExplosion() {
                 modifier = Modifier.offset(x = 12.dp, y = 485.dp)
             )
 
-            // right-middle pixel accents <3
+            // right-middle pixel accents
             PixelMiniHeart(
                 size = 22.dp,
                 color = Color(0xFFD791E3),
@@ -919,7 +919,7 @@ fun StickerExplosion() {
                 modifier = Modifier.offset(x = 250.dp, y = 500.dp)
             )
 
-            // floating decorative pixel accents :3
+            // floating decorative pixel accents
             PixelMiniSparkle(
                 size = 16.dp,
                 color = Color(0xFFE675FF),
@@ -942,7 +942,7 @@ fun StickerExplosion() {
             )
         }
 
-        // arcade explosion canvas overlay: draws fast, bright retro burst & shockwaves <3
+        // arcade explosion canvas overlay: draws fast, bright retro burst & shockwaves
         if (animProgress.value < 1f) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val origin = burstOrigin ?: Offset(size.width * 0.50f, size.height * 0.46f)
@@ -956,7 +956,7 @@ fun StickerExplosion() {
 // Status Bar Wi-Fi Icon (Preserved for LauncherComponents.kt StatusCard)
 // ============================================================================
 
-// custom vector drawn Wi-Fi status icon for StatusCard :3
+// custom vector drawn Wi-Fi status icon for StatusCard
 @Composable
 fun TinyWifiIcon(
     modifier: Modifier = Modifier,

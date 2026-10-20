@@ -19,7 +19,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 
-// mascot assistant expression states :3
+// mascot assistant expression states
 enum class MascotExpression {
     IDLE,
     THINKING,
@@ -28,11 +28,11 @@ enum class MascotExpression {
     LOW_BATTERY
 }
 
-// the sprite lives on a 20 x 15 grid of square pixels <3
+// the sprite lives on a 20 x 15 grid of square pixels
 private const val GRID_W = 20
 private const val GRID_H = 15
 
-// pixel color legend: each letter in the sprite below is one colored pixel :3
+// pixel color legend: each letter in the sprite below is one colored pixel
 // . = empty   O = outline   P = pink      L = light pink   C = cheek
 // D = dark (eyes/mouth)  W = white shine   H = heart nose   T = tongue
 // S = yellow sparkle     V = violet sparkle   K = pink sparkle
@@ -52,10 +52,10 @@ private fun paletteColor(c: Char): Color? = when (c) {
     else -> null
 }
 
-// a horizontal strip of same-colored pixels (fewer draw calls = lighter on the phone) <3
+// a horizontal strip of same-colored pixels (fewer draw calls = lighter on the phone)
 private class PixelRun(val x: Int, val y: Int, val length: Int, val color: Color)
 
-// turns rows of letters into strips of pixels :3
+// turns rows of letters into strips of pixels
 private fun runsFromRows(rows: List<String>, startRow: Int): List<PixelRun> {
     val runs = mutableListOf<PixelRun>()
     rows.forEachIndexed { rowIndex, row ->
@@ -75,11 +75,11 @@ private fun runsFromRows(rows: List<String>, startRow: Int): List<PixelRun> {
     return runs
 }
 
-// a little sticker of pixels placed at (x, y) on the grid <3
+// a little sticker of pixels placed at (x, y) on the grid
 private fun patch(x: Int, y: Int, vararg rows: String): List<PixelRun> =
     runsFromRows(rows.toList(), y).map { PixelRun(it.x + x, it.y, it.length, it.color) }
 
-// the bunny's head, ears, cheeks and paws (16 wide, padded by 2 on each side) :3
+// the bunny's head, ears, cheeks and paws (16 wide, padded by 2 on each side)
 private val BASE_ROWS = listOf(
     "...OOO....OOO...",
     "..OPLPO..OPLPO..",
@@ -100,13 +100,13 @@ private val BASE_ROWS = listOf(
 
 private val BASE_RUNS = runsFromRows(BASE_ROWS, 0)
 
-// heart nose + tiny smile, shared by the idle, sleepy and blink faces <3
+// heart nose + tiny smile, shared by the idle, sleepy and blink faces
 private val SMILE_RUNS =
     patch(9, 10, "HH") +
             patch(8, 11, "D..D") +
             patch(9, 12, "DD")
 
-// each expression = base bunny + its own face and sparkles <3
+// each expression = base bunny + its own face and sparkles
 private val EXPRESSION_RUNS: Map<MascotExpression, List<PixelRun>> = mapOf(
     MascotExpression.IDLE to (
             BASE_RUNS +
@@ -151,14 +151,14 @@ private val EXPRESSION_RUNS: Map<MascotExpression, List<PixelRun>> = mapOf(
             )
 )
 
-// idle face with eyes shut for a quick blink <3
+// idle face with eyes shut for a quick blink
 private val BLINK_RUNS: List<PixelRun> =
     BASE_RUNS +
             patch(6, 9, "DD") +              // closed left eye
             patch(12, 9, "DD") +             // closed right eye
             SMILE_RUNS
 
-// pixel art bunny mascot that hops one whole pixel at a time and changes expressions <3
+// pixel art bunny mascot that hops one whole pixel at a time and changes expressions
 @Composable
 fun PixelArtMascot(
     expression: MascotExpression,
@@ -170,7 +170,7 @@ fun PixelArtMascot(
     val shouldHop = enabled && (expression == MascotExpression.IDLE ||
             expression == MascotExpression.THINKING)
 
-    // simple timer hop: flips up/down every second only while visible & resumed :3
+    // simple timer hop: flips up/down every second only while visible & resumed
     var hopUp by remember { mutableStateOf(false) }
     LaunchedEffect(shouldHop, lifecycleOwner) {
         hopUp = false
@@ -184,7 +184,7 @@ fun PixelArtMascot(
         }
     }
 
-    // random blink every few seconds, only when idle, visible, and resumed :3
+    // random blink every few seconds, only when idle, visible, and resumed
     var blinking by remember { mutableStateOf(false) }
     LaunchedEffect(expression, enabled, lifecycleOwner) {
         blinking = false
@@ -205,14 +205,14 @@ fun PixelArtMascot(
     }
 
     Canvas(modifier = modifier.size(size)) {
-        // Read hopUp and blinking inside draw scope so state flips only redraw Canvas without recomposition <3
+        // Read hopUp and blinking inside draw scope so state flips only redraw Canvas without recomposition
         val activeRuns = if (blinking && expression == MascotExpression.IDLE) {
             BLINK_RUNS
         } else {
             baseExpressionRuns
         }
 
-        // every pixel is a whole number of screen pixels so the edges stay crisp :3
+        // every pixel is a whole number of screen pixels so the edges stay crisp
         val cell = (this.size.minDimension / GRID_W).toInt().coerceAtLeast(1).toFloat()
         val left = ((this.size.width - cell * GRID_W) / 2f).toInt().toFloat()
         val top = ((this.size.height - cell * GRID_H) / 2f).toInt().toFloat() +

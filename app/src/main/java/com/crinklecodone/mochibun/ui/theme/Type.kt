@@ -6,7 +6,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// material design 3 typography configuration tuned for 480x800 kawaii launcher UI :3
+// material design 3 typography configuration tuned for 480x800
 val Typography = Typography(
     titleLarge = TextStyle(
         fontFamily = FontFamily.Default,

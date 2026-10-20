@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.util.Log
 import android.util.LruCache
 import android.util.Xml
 import androidx.compose.ui.graphics.ImageBitmap
@@ -40,6 +41,7 @@ data class ParsedIconPack(
 )
 
 object IconPackManager {
+    private const val TAG = "IconPackManager"
     private const val PREF_SELECTED_ICON_PACK = "selected_icon_pack"
     private const val KAWAII_ICON_PACK = "kawaii.icon.pack"
 
@@ -114,7 +116,7 @@ object IconPackManager {
                 context.packageManager.getPackageInfo(packageName, 0)
             }
             true
-        } catch (_: Exception) {
+        } catch (_: PackageManager.NameNotFoundException) {
             false
         }
     }
@@ -143,7 +145,9 @@ object IconPackManager {
                     @Suppress("DEPRECATION")
                     pm.queryIntentActivities(intent, 0)
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Log.w(TAG, "Failed querying icon pack intent: $action", e)
                 emptyList()
             }
 
@@ -159,7 +163,10 @@ object IconPackManager {
                             icon = icon,
                             isDefault = false
                         )
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        Log.w(TAG, "Failed loading icon pack info for $pkg", e)
+                    }
                 }
             }
         }
@@ -231,7 +238,8 @@ object IconPackManager {
         val appContext = context.applicationContext ?: context
         val iconPackContext = try {
             appContext.createPackageContext(iconPackPackage, Context.CONTEXT_IGNORE_SECURITY)
-        } catch (_: Exception) {
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.w(TAG, "Icon pack package not found: $iconPackPackage")
             return null
         }
 
@@ -281,7 +289,7 @@ object IconPackManager {
                     val pullParser = Xml.newPullParser()
                     pullParser.setInput(inputStream, "UTF-8")
                     parser = pullParser
-                } catch (_: Exception) {}
+                } catch (_: java.io.IOException) { }
             }
 
             if (parser == null) return
@@ -315,11 +323,12 @@ object IconPackManager {
                 }
                 eventType = parser.next()
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Error parsing appfilter.xml from $iconPackPackage: ${e.message}")
         } finally {
             try {
                 inputStream?.close()
-            } catch (_: Exception) {}
+            } catch (_: java.io.IOException) {}
         }
     }
 
@@ -346,7 +355,7 @@ object IconPackManager {
                     val pullParser = Xml.newPullParser()
                     pullParser.setInput(inputStream, "UTF-8")
                     parser = pullParser
-                } catch (_: Exception) {}
+                } catch (_: java.io.IOException) {}
             }
 
             if (parser == null) return
@@ -361,11 +370,12 @@ object IconPackManager {
                 }
                 eventType = parser.next()
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Error parsing drawable.xml from $iconPackPackage: ${e.message}")
         } finally {
             try {
                 inputStream?.close()
-            } catch (_: Exception) {}
+            } catch (_: java.io.IOException) {}
         }
     }
 

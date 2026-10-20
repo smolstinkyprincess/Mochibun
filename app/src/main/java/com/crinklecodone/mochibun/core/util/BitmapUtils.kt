@@ -44,7 +44,7 @@ fun drawableToBitmap(
     return bitmap
 }
 
-// loads and samples wallpaper bitmap using memory efficient rgb_565 config <3
+// loads and samples wallpaper bitmap using memory efficient rgb_565 config
 fun loadWallpaperBitmap(
     context: Context,
     uri: Uri

@@ -84,7 +84,7 @@ private class HomeTransitionTracker {
     var settledTimestamp: Long = 0L
 }
 
-// main launcher composable managing focus, gestures, state, and page navigation <3
+// main launcher composable managing focus, gestures, state, and page navigation
 @Composable
 fun MainLauncher(
     name: String,
@@ -153,7 +153,7 @@ fun MainLauncher(
             }
         }
 
-    // memory-efficient sampled wallpaper loader <3
+    // memory-efficient sampled wallpaper loader
     LaunchedEffect(wallpaperUri) {
         val uri = wallpaperUri ?: run {
             wallpaperBitmap = null
@@ -269,7 +269,7 @@ fun MainLauncher(
         }
     }
 
-    // async load icon names list for icon picker <3
+    // async load icon names list for icon picker
     LaunchedEffect(iconPickerOpen) {
         if (iconPickerOpen) {
             kawaiiIconNames = withContext(Dispatchers.IO) {
@@ -450,7 +450,7 @@ fun MainLauncher(
         }
     }
 
-    // Timed long-press detection for Center/OK button so holding OK opens menus immediately <3
+    // Timed long-press detection for Center/OK button so holding OK opens menus immediately
     LaunchedEffect(centerKeyState, drawerOpen, isHomeScreenActive, anyModalOpen) {
         if (centerKeyState == 1 && !anyModalOpen && (drawerOpen || isHomeScreenActive)) {
             delay(420L)
@@ -461,7 +461,7 @@ fun MainLauncher(
         }
     }
 
-    // focus requester handling for physical hardware key navigation <3
+    // focus requester handling for physical hardware key navigation
     LaunchedEffect(
         drawerOpen,
         isHomeScreenActive,
@@ -1029,7 +1029,7 @@ fun MainLauncher(
                 }
             }
 
-            // long-press launcher menu dialog :3
+            // long-press launcher menu dialog
             if (launcherMenuOpen) {
                 LauncherMenuDialog(
                     onDismiss = {
@@ -1087,7 +1087,7 @@ fun MainLauncher(
                 )
             }
 
-            // third-party icon pack selection dialog :3
+            // third-party icon pack selection dialog
             if (iconPackDialogOpen) {
                 IconPackSelectionDialog(
                     context = context,
@@ -1151,7 +1151,7 @@ fun MainLauncher(
                 )
             }
 
-            // app options long-press dialog :3
+            // app options long-press dialog
             if (selectedApp != null) {
                 val targetApp = selectedApp!!
                 AppActionDialog(
@@ -1367,7 +1367,7 @@ fun MainLauncher(
                 )
             }
 
-            // custom KawaiiIconPack icon picker dialog <3
+            // custom KawaiiIconPack icon picker dialog
             if (iconPickerOpen &&
                 (iconEditingApp != null || iconEditingFolder != null)
             ) {
@@ -1414,7 +1414,7 @@ fun MainLauncher(
                 )
             }
 
-            // hidden apps manager dialog :3
+            // hidden apps manager dialog
             if (hiddenManagerOpen) {
                 HiddenAppsDialog(
                     hiddenApps = hiddenApps,
@@ -1600,7 +1600,7 @@ fun MainLauncher(
                 )
             }
 
-            // app drawer view overlay :3
+            // app drawer view overlay
             if (drawerOpen) {
                 AppDrawerScreen(
                     context = context,

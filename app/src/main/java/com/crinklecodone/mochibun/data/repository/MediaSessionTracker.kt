@@ -124,7 +124,7 @@ object MediaSessionTracker {
 
         try {
             mgr.removeOnActiveSessionsChangedListener(listener)
-        } catch (_: Exception) {}
+        } catch (_: IllegalArgumentException) {}
 
         try {
             mgr.addOnActiveSessionsChangedListener(listener, comp)
@@ -156,12 +156,12 @@ object MediaSessionTracker {
         if (activeController?.sessionToken != playingController?.sessionToken) {
             try {
                 activeController?.unregisterCallback(controllerCallback)
-            } catch (_: Exception) {}
+            } catch (_: IllegalArgumentException) {}
 
             activeController = playingController
             try {
                 activeController?.registerCallback(controllerCallback)
-            } catch (_: Exception) {}
+            } catch (_: IllegalArgumentException) {}
         }
 
         updateFromController(activeController)
@@ -201,7 +201,7 @@ object MediaSessionTracker {
                     val stream = appContext?.contentResolver?.openInputStream(uri)
                     artwork = BitmapFactory.decodeStream(stream)
                     stream?.close()
-                } catch (_: Exception) {}
+                } catch (_: java.io.IOException) {}
             }
         }
 
@@ -268,13 +268,13 @@ object MediaSessionTracker {
     fun stopTracking() {
         try {
             activeController?.unregisterCallback(controllerCallback)
-        } catch (_: Exception) {}
+        } catch (_: IllegalArgumentException) {}
         activeController = null
 
         activeSessionsListener?.let { listener ->
             try {
                 sessionManager?.removeOnActiveSessionsChangedListener(listener)
-            } catch (_: Exception) {}
+            } catch (_: IllegalArgumentException) {}
         }
         activeSessionsListener = null
         sessionManager = null

@@ -87,7 +87,7 @@ object RootTouchInjector {
             try {
                 suWriter?.close()
                 suProcess?.destroy()
-            } catch (_: Exception) {}
+            } catch (_: java.io.IOException) {}
 
             return try {
                 val process = ProcessBuilder("su")
@@ -116,13 +116,13 @@ object RootTouchInjector {
                     writer.flush()
                     return true
                 }
-            } catch (e: Exception) {
+            } catch (e: java.io.IOException) {
                 Log.w(TAG, "Interactive shell write failed, falling back to direct exec: ${e.message}")
                 synchronized(lock) {
                     try {
                         suWriter?.close()
                         suProcess?.destroy()
-                    } catch (_: Exception) {}
+                    } catch (_: java.io.IOException) { }
                     suWriter = null
                     suProcess = null
                 }
@@ -135,6 +135,9 @@ object RootTouchInjector {
             proc.waitFor()
             proc.exitValue() == 0
         } catch (e: Exception) {
+            if (e is InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
             Log.e(TAG, "Fallback root tap failed: ${e.message}")
             false
         }
@@ -150,7 +153,7 @@ object RootTouchInjector {
                 suWriter?.write("exit\n")
                 suWriter?.flush()
                 suWriter?.close()
-            } catch (_: Exception) {}
+            } catch (_: java.io.IOException) {}
             try {
                 suProcess?.destroy()
             } catch (_: Exception) {}
