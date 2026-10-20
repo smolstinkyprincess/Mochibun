@@ -3,17 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mochibun ♡ T9-oriented Android Launcher</title>
+  <title>Mochibun (もちぶん) ♡</title>
   <style>
     :root {
-      --bg: #FEE8F0;
-      --card-bg: #FFF9FB;
-      --card-border: #E5D4F7;
-      --text-main: #381D3F;
-      --text-muted: #7D5286;
-      --accent-pink: #F2A7BF;
-      --accent-lavender: #EADDF8;
-      --accent-mint: #B7F4D8;
+      --sky-top: #fbf0f5;
+      --sky-mid: #f5eef8;
+      --sky-bottom: #edf0fc;
+      --card-bg: #ffffff;
+      --card-inner: #fffafd;
+      --border: #eedcf0;
+      --border-bright: #ffffff;
+      --text: #412348;
+      --text-muted: #845f8f;
+      --accent-pink: #efaac4;
+      --accent-lavender: #d6ccf8;
+      --accent-glow: rgba(246, 185, 215, 0.4);
+      --shadow: 0 12px 32px rgba(215, 190, 225, 0.35);
     }
 
     * {
@@ -23,60 +28,122 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--bg);
-      color: var(--text-main);
-      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 15% 15%, rgba(255, 225, 238, 0.7) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(225, 220, 255, 0.7) 0%, transparent 40%),
+        linear-gradient(170deg, var(--sky-top) 0%, var(--sky-mid) 50%, var(--sky-bottom) 100%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       padding: 2.5rem 1rem;
     }
 
     .container {
-      max-width: 640px;
+      max-width: 860px;
       width: 100%;
-    }
-
-    header {
       text-align: center;
-      margin-bottom: 2rem;
     }
 
-    .icon-wrapper {
-      width: 88px;
-      height: 88px;
-      margin: 0 auto 1rem;
-      border-radius: 22px;
+    .celestial-bar {
+      font-size: 1.1rem;
+      letter-spacing: 0.5rem;
+      color: var(--accent-lavender);
+      margin-bottom: 0.8rem;
+      user-select: none;
+      animation: float 4s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+
+    .profile-card {
       background: var(--card-bg);
-      border: 2px solid var(--card-border);
+      border: 2px solid var(--border);
+      border-radius: 30px;
+      padding: 2.4rem 1.8rem 2rem;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+
+    .bow-badge {
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #f7b7ce, #dfb4f5);
+      color: #ffffff;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      padding: 0.28rem 1.1rem;
+      border-radius: 999px;
+      border: 1.5px solid #ffffff;
+      box-shadow: 0 4px 12px var(--accent-glow);
+      white-space: nowrap;
+    }
+
+    .avatar-wrapper {
+      position: relative;
+      width: 84px;
+      height: 84px;
+      margin: 0.4rem auto 1rem;
+    }
+
+    .avatar {
+      width: 100%;
+      height: 100%;
+      background: #fff;
+      border: 3px solid var(--accent-pink);
+      border-radius: 50%;
+      overflow: hidden;
+      box-shadow: 0 4px 14px var(--accent-glow);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 8px 24px rgba(229, 212, 247, 0.45);
-      overflow: hidden;
+      font-size: 2.2rem;
     }
 
-    .icon-wrapper img {
+    .avatar img {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      display: block;
     }
+
+    .sparkle-decor {
+      position: absolute;
+      font-size: 0.85rem;
+      color: #f7b7ce;
+      user-select: none;
+    }
+    .sparkle-1 { top: -2px; right: -8px; }
+    .sparkle-2 { bottom: 2px; left: -8px; }
 
     h1 {
-      font-size: 2rem;
+      font-size: 1.6rem;
       font-weight: 700;
-      letter-spacing: -0.5px;
-      margin-bottom: 0.25rem;
+      letter-spacing: -0.3px;
+      margin-bottom: 0.35rem;
     }
 
-    .tagline {
+    .bio {
+      font-size: 0.92rem;
       color: var(--text-muted);
-      font-size: 1rem;
-      margin-bottom: 1.5rem;
+      line-height: 1.55;
+      margin-bottom: 1.8rem;
+      max-width: 540px;
+      margin-left: auto;
+      margin-right: auto;
     }
 
-    .cta-buttons {
+    /* Action Buttons */
+    .btn-row {
       display: flex;
       justify-content: center;
       gap: 0.75rem;
@@ -87,249 +154,59 @@
     .btn {
       display: inline-flex;
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.75rem 1.4rem;
+      justify-content: center;
+      padding: 0.65rem 1.35rem;
       border-radius: 999px;
-      text-decoration: none;
+      font-size: 0.88rem;
       font-weight: 600;
-      font-size: 0.95rem;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    .btn:hover {
-      transform: translateY(-2px);
+      text-decoration: none;
+      transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     }
 
     .btn-primary {
-      background-color: var(--accent-pink);
-      color: var(--text-main);
-      box-shadow: 0 4px 14px rgba(242, 167, 191, 0.4);
+      background: linear-gradient(135deg, #f7b7ce, #e0b0ff);
+      color: #ffffff;
+      border: 1.5px solid #ffffff;
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(242, 170, 196, 0.4);
     }
 
     .btn-secondary {
-      background-color: var(--accent-lavender);
-      color: var(--text-main);
-      border: 1px solid var(--card-border);
+      background: var(--card-inner);
+      color: var(--text);
+      border: 1.5px solid var(--border);
     }
 
-    .card {
-      background-color: var(--card-bg);
-      border: 1.5px solid var(--card-border);
-      border-radius: 20px;
-      padding: 1.5rem;
-      margin-bottom: 1.5rem;
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.03);
+    .btn-secondary:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent-lavender);
+      background: #ffffff;
+      box-shadow: 0 4px 14px rgba(214, 204, 248, 0.25);
     }
 
-    .card-title {
-      font-size: 1.15rem;
-      font-weight: 700;
-      color: var(--text-muted);
-      text-align: center;
-      margin-bottom: 1rem;
-    }
-
-    ul.features-list {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    ul.features-list li {
-      position: relative;
-      padding-left: 1.75rem;
-      font-size: 0.95rem;
-    }
-
-    ul.features-list li::before {
-      content: "♡";
-      position: absolute;
-      left: 0;
-      color: var(--accent-pink);
-      font-weight: bold;
-    }
-
-    .specs-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-    }
-
-    .spec-item {
-      background-color: #FAF4FD;
-      border-radius: 12px;
-      padding: 0.75rem;
-      border: 1px solid #EFE4F8;
-    }
-
-    .spec-label {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      font-weight: 700;
-      color: var(--text-muted);
-    }
-
-    .spec-val {
-      font-size: 0.95rem;
-      font-weight: 600;
-    }
-
-    footer {
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      margin-top: 1.5rem;
-    }
-
-    footer a {
-      color: var(--text-muted);
-      text-decoration: underline;
-    }
-
+    /* Screenshots Showcase */
     .screenshots-section {
-      margin: 2.5rem 0;
+      margin-top: 1rem;
       text-align: center;
     }
 
-    .screenshots-section h2 {
-      font-size: 1.4rem;
-      color: #3b1b44;
-      margin-bottom: 1.2rem;
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
     }
 
     .screenshots-grid {
       display: flex;
       justify-content: center;
-      gap: 1rem;
+      gap: 1.1rem;
       overflow-x: auto;
-      padding: 1rem 0.5rem 1.5rem;
-      scroll-snap-type: x mandatory;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .screenshot-card {
-      flex: 0 0 auto;
-      width: 190px;
-      border-radius: 18px;
-      overflow: hidden;
-      box-shadow: 0 8px 24px rgba(229, 164, 180, 0.25);
-      border: 2px solid #ecd0d8;
-      background: #fff;
-      scroll-snap-align: center;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .screenshot-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 28px rgba(229, 164, 180, 0.35);
-    }
-
-    .screenshot-card img {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-
-  </style>
-  <script>
-  (async function() {
-    try {
-      const response = await fetch('https://api.github.com/repos/smolstinkyprincess/Mochibun/releases/latest');
-      if (!response.ok) return;
-      const release = await response.json();
-
-      // Look for the .apk asset in the release
-      const apkAsset = release.assets.find(asset => asset.name.endsWith('.apk'));
-      const btn = document.getElementById('download-btn');
-
-      if (btn && apkAsset) {
-        btn.href = apkAsset.browser_download_url;
-        btn.textContent = `Download Mochibun ${release.tag_name} (${(apkAsset.size / (1024 * 1024)).toFixed(2)} MB)`;
-      }
-    } catch (err) {
-      console.warn("Could not fetch latest release info, falling back to release page link.", err);
-    }
-  })();
-</script>
-</head>
-<body>
-
-  <div class="container">
-    <header>
-      <div class="icon-wrapper">
-        <img src="icon.png" alt="Mochibun Icon">
-      </div>
-      <h1>Mochibun (もちぶん) ♡</h1>
-      <p class="tagline">A pastel, t9-oriented Android launcher built for the ALT Mive Style Folder(AT-M120)</p>
-
-      <div class="cta-buttons">
-        <a class="btn btn-primary" id="download-btn" href="https://github.com/smolstinkyprincess/Mochibun/releases/latest">
-          Download Latest APK
-        </a>
-        <a class="btn btn-secondary" href="https://github.com/smolstinkyprincess/Mochibun">
-          View on GitHub
-        </a>
-      </div>
-    </header>
-
-    <section class="screenshots-section">
-      <h2>— ♡ Screenshots ♡ —</h2>
-      <div class="screenshots-grid">
-        <div class="screenshot-card">
-          <img src="screenshots/1_home.png" alt="Mochibun Home Screen" loading="lazy">
-        </div>
-        <div class="screenshot-card">
-          <img src="screenshots/2_folder.png" alt="Folder UI" loading="lazy">
-        </div>
-        <div class="screenshot-card">
-          <img src="screenshots/3_appdrawer.png" alt="App Drawer" loading="lazy">
-        </div>
-        <div class="screenshot-card">
-          <img src="screenshots/4_recents.png" alt="Recents" loading="lazy">
-        </div>
-      </div>
-    </section>
-
-    <div class="card">
-      <div class="card-title">— ♡ Features ♡ —</div>
-      <ul class="features-list">
-        <li><strong>Keypad-First Navigation:</strong> Glide across every card and drawer with soft glowing pastel focus rings. ♡</li>
-        <li><strong>T9 Keypad Search:</strong> Jump straight to your favorite apps using the 2–9 numeric keys.</li>
-        <li><strong>Virtual Mouse Cursor:</strong> Handy system pointer for touch apps, toggled with the side key and customizable with cute .gif or .png sprites.</li>
-        <li><strong>Now Playing Deck:</strong> A cozy little media card that appears whenever music is playing.</li>
-        <li><strong>Theme Studio:</strong> 4 sweet pastel palettes to match your mood (Sakura Dream, Lavender Mist, Minty Matcha, Milky Peach).</li>
-        <li><strong>Gentle on Hardware:</strong> Stripped of heavy GPU blurs to keep everything breezy and responsive.</li>
-      </ul>
-    </div>
-
-    <div class="card">
-      <div class="card-title">— ♡ Hardware Specs ♡ —</div>
-      <div class="specs-grid">
-        <div class="spec-item">
-          <div class="spec-label">Target Device</div>
-          <div class="spec-val">ALT Mive Style Folder AT-M120</div>
-        </div>
-        <div class="spec-item">
-          <div class="spec-label">Operating System</div>
-          <div class="spec-val">Android 12 (API 31)</div>
-        </div>
-        <div class="spec-item">
-          <div class="spec-label">Display</div>
-          <div class="spec-val">480 × 800 Portrait</div>
-        </div>
-        <div class="spec-item">
-          <div class="spec-label">Memory</div>
-          <div class="spec-val">~1.8 GB RAM</div>
-        </div>
-      </div>
-    </div>
-
-    <footer>
-      Mochibun is open source under the MIT License.<br>
-      Made with ♡ and a sprinkle of AI magic ✨ by <a href="https://github.com/smolstinkyprincess">smolstinkyprincess</a>
-    </footer>
-  </div>
-
-</body>
-</html>
+      padding: 0.5rem 0.5rem 1.25rem;
