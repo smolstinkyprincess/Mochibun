@@ -28,14 +28,9 @@ Mochibun pairs a **dreamy pastel aesthetic** with comfy D-pad navigation, physic
 
 ## 📸 Screenshots
 
-<div align="center">
-
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_home.png" width="22%" alt="Home Screen" />
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_folder.png" width="22%" alt="App Drawer" />
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_appdrawer.png" width="22%" alt="Theme Studio" />
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_recents.png" width="22%" alt="Virtual Cursor" />
-
-</div>
+| Home | Folder | App Drawer | Recents | Widgets | Notifications | System Info |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_home.png" width="160" alt="Home Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_folder.png" width="160" alt="Folder Dialog" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_appdrawer.png" width="160" alt="App Drawer & T9 Filter" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_recents.png" width="160" alt="Recent Tasks / QuickSwitch" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_widgets.png" width="160" alt="Widgets & Media Deck" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_notifications.png" width="160" alt="Notifications Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7_info.png" width="160" alt="System Info & Settings" /> |
 
 ---
 
@@ -84,10 +79,10 @@ Mochibun is tuned to run smoothly on modest flip phone hardware:
 | Specification | Target Details |
 | :--- | :--- |
 | **Primary Device** | ALT Mive Style Folder AT-M120 |
-| **Android Version** | Android 12 (API 31) |
+| **Operating System** | Android 12 (API 31) |
 | **Chipset** | MediaTek MT6761 (ARMv7 / 32-bit) |
 | **Display** | 480 × 800 portrait |
-| **RAM** | ~1.8 GB |
+| **Memory** | ~1.8 GB RAM |
 
 > **Performance Note**: To keep animations smooth and scrolling responsive, Mochibun avoids expensive real-time blur shaders (`Modifier.blur()`) and heavy image buffers. Decorative cloud trims and accents are drawn using lightweight vector paths.
 
