@@ -22,11 +22,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -745,16 +745,6 @@ fun StickerExplosion() {
         )
     }
 
-    // playful scale pop-in for background stickers during the explosion burst
-    val p = animProgress.value
-    val stickerScale = if (p < 0.35f) {
-        (0.65f + (p / 0.35f) * 0.45f).coerceAtMost(1.10f)
-    } else if (p < 0.60f) {
-        1.10f - ((p - 0.35f) / 0.25f) * 0.10f
-    } else {
-        1.0f
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -769,7 +759,18 @@ fun StickerExplosion() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .scale(stickerScale)
+                .graphicsLayer {
+                    val p = animProgress.value
+                    val stickerScale = if (p < 0.35f) {
+                        (0.65f + (p / 0.35f) * 0.45f).coerceAtMost(1.10f)
+                    } else if (p < 0.60f) {
+                        1.10f - ((p - 0.35f) / 0.25f) * 0.10f
+                    } else {
+                        1.0f
+                    }
+                    scaleX = stickerScale
+                    scaleY = stickerScale
+                }
         ) {
             HeartSticker(
                 size = 96.dp,
@@ -943,10 +944,11 @@ fun StickerExplosion() {
         }
 
         // arcade explosion canvas overlay: draws fast, bright retro burst & shockwaves
-        if (animProgress.value < 1f) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val progress = animProgress.value
+            if (progress < 1f) {
                 val origin = burstOrigin ?: Offset(size.width * 0.50f, size.height * 0.46f)
-                drawRetroArcadeExplosion(animProgress.value, origin)
+                drawRetroArcadeExplosion(progress, origin)
             }
         }
     }

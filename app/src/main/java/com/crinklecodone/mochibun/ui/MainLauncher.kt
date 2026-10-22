@@ -66,6 +66,7 @@ import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
 import com.crinklecodone.mochibun.ui.screens.AppDrawerScreen
 import com.crinklecodone.mochibun.ui.screens.SettingsHubDialog
 import com.crinklecodone.mochibun.ui.screens.HomeScreen
+import com.crinklecodone.mochibun.ui.screens.NotificationsScreen
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.screens.ThemeStudioDialog
 import com.crinklecodone.mochibun.ui.screens.firstLetterOf
@@ -83,7 +84,6 @@ import kotlin.text.get
 // main launcher composable managing focus, gestures, state, and page navigation
 @Composable
 fun MainLauncher(
-    name: String,
     modifier: Modifier = Modifier,
     homePressCount: Int = 0,
     appListRefreshCount: Int = 0,
@@ -192,8 +192,8 @@ fun MainLauncher(
     }
 
     var drawerOpen by remember { mutableStateOf(false) }
-    // Active pages: 0 = Widgets, 1 = Home
-    val pagerState = rememberPagerState(initialPage = 1) { 2 }
+    // Active pages: 0 = Widgets, 1 = Home, 2 = Notifications
+    val pagerState = rememberPagerState(initialPage = 1) { 3 }
     var pendingTargetPage by remember { mutableStateOf<Int?>(null) }
     var selectedApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconEditingApp by remember { mutableStateOf<LauncherApp?>(null) }
@@ -217,7 +217,7 @@ fun MainLauncher(
 
     LaunchedEffect(requestedPage) {
         requestedPage?.let { target ->
-            val clampedTarget = target.coerceIn(0, 1)
+            val clampedTarget = target.coerceIn(0, 2)
             pendingTargetPage = clampedTarget
             pagerState.animateScrollToPage(clampedTarget)
             onPageConsumed()
@@ -798,6 +798,34 @@ fun MainLauncher(
                                 onFolderLongClick = onHomeFolderLongClick,
                                 onOpenDrawer = onHomeOpenDrawer
                             )
+                        }
+                    }
+
+                    2 -> {
+                        val isNotificationTarget = (pendingTargetPage ?: pagerState.targetPage) == 2
+                        val isNotificationPageActive = !drawerOpen &&
+                            !anyModalOpen &&
+                            isNotificationTarget &&
+                            pagerState.currentPage == 2 &&
+                            pagerState.settledPage == 2 &&
+                            !pagerState.isScrollInProgress
+
+                        if (!drawerOpen && (pagerState.currentPage == 2 || pagerState.targetPage == 2 || pendingTargetPage == 2)) {
+                            NotificationsScreen(
+                                context = context,
+                                cardBgColor = cardBgColor,
+                                cardTextColor = cardTextColor,
+                                appActionColor = appActionColor,
+                                cardRoundness = cardRoundness,
+                                isActivePage = isNotificationPageActive,
+                                onNavigateHome = {
+                                    savedFavoriteIndexOnHome = 0
+                                    pendingTargetPage = 1
+                                    scope.launch { pagerState.animateScrollToPage(1) }
+                                }
+                            )
+                        } else {
+                            Box(modifier = Modifier.fillMaxSize())
                         }
                     }
                 }

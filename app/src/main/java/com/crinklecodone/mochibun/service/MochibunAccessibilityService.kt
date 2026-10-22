@@ -239,7 +239,7 @@ class MochibunAccessibilityService : AccessibilityService() {
             }
         }
     }
-    // TODO: Why is this here?
+    /** Toggles the device flashlight for hardware remap shortcut actions. */
     private fun toggleTorch() {
         try {
             val cameraManager = getSystemService(CAMERA_SERVICE) as? CameraManager ?: return

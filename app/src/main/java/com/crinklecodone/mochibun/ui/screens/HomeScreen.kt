@@ -83,6 +83,7 @@ import java.util.Date
 import java.util.Locale
 
 // dynamic pastel theme colors provided via LocalLauncherTheme and MochibunThemePalette
+private val FavoriteSquircleShape = RoundedCornerShape(16.dp)
 
 /**
  * Main Home Screen composable recreating the kawaii Mochibun layout.
@@ -154,7 +155,7 @@ fun HomeScreen(
             // 2. Digital Clock & Date Section
             ClockWidget()
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // 3. Favorites Card
             FavoritesCard(
@@ -451,13 +452,7 @@ fun ClockWidget(
             }
         }
 
-        // Centerpiece companion mascot loaf
-        MochibunMascot(
-            mood = getDefaultTimeOfDayMood(),
-            size = 58.dp,
-            themeTintColor = theme.mascotTintColor,
-            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
-        )
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Subtitle formatted date
         Text(
@@ -522,18 +517,23 @@ fun FavoritesCard(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
-            .kawaiiCardMotifs(
-                isFocused = isCardFocused,
-                cornerRadius = 24.dp
-            )
-            .border(
-                width = 1.5.dp,
-                color = theme.greetingOutlineColor,
-                shape = cardShape
-            )
-            .background(theme.cardBgColor, cardShape)
-            .padding(horizontal = 8.dp, vertical = 8.dp)
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { clip = false }
+                .kawaiiCardMotifs(
+                    isFocused = isCardFocused,
+                    cornerRadius = 24.dp
+                )
+                .border(
+                    width = 1.5.dp,
+                    color = theme.greetingOutlineColor,
+                    shape = cardShape
+                )
+                .background(theme.cardBgColor, cardShape)
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+        ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -657,6 +657,17 @@ fun FavoritesCard(
             }
         }
     }
+
+    // Companion mascot loaf sitting on the top-right corner of the favorites card
+    MochibunMascot(
+        mood = getDefaultTimeOfDayMood(),
+        size = 46.dp,
+        themeTintColor = theme.mascotTintColor,
+        modifier = Modifier
+            .align(Alignment.TopEnd)
+            .offset(x = (-16).dp, y = (-22).dp)
+    )
+}
 }
 
 /**
@@ -681,8 +692,6 @@ private fun FavoriteAppSlot(
     )
 
     val squircleBg = if (index % 2 == 0) palette.squirclePrimary else palette.squircleSecondary
-    val squircleShape = RoundedCornerShape(16.dp)
-    val focusShape = RoundedCornerShape(20.dp)
 
     Column(
         modifier = modifier
@@ -705,8 +714,8 @@ private fun FavoriteAppSlot(
                     }
                 )
                 .padding(3.dp)
-                .background(squircleBg, squircleShape)
-                .clip(squircleShape)
+                .background(squircleBg, FavoriteSquircleShape)
+                .clip(FavoriteSquircleShape)
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = onLongClick
@@ -773,8 +782,6 @@ private fun FavoriteFolderSlot(
     }
 
     val squircleBg = if (index % 2 == 0) palette.squirclePrimary else palette.squircleSecondary
-    val squircleShape = RoundedCornerShape(16.dp)
-    val focusShape = RoundedCornerShape(20.dp)
 
     Column(
         modifier = modifier
@@ -797,8 +804,8 @@ private fun FavoriteFolderSlot(
                     }
                 )
                 .padding(3.dp)
-                .background(squircleBg, squircleShape)
-                .clip(squircleShape)
+                .background(squircleBg, FavoriteSquircleShape)
+                .clip(FavoriteSquircleShape)
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = onLongClick

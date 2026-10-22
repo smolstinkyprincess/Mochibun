@@ -60,19 +60,8 @@ enum class MascotMood(
         pngResId = R.drawable.mochibunny_worried,
         gifResId = null,
         description = "Worried / concerned loaf"
-    );
-
-    companion object {
-        val SLEEPY: MascotMood get() = SLEEP
-        val NERVOUS: MascotMood get() = WORRIED
-        val HAPPY: MascotMood get() = DEFAULT
-    }
+    )
 }
-
-/**
- * Backward compatibility alias for [MascotMood].
- */
-typealias MascotEmote = MascotMood
 
 /**
  * Returns [MascotMood.SLEEP] during late night hours (22:00 - 06:00),
@@ -82,8 +71,6 @@ fun getDefaultTimeOfDayMood(): MascotMood {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     return if (hour >= 22 || hour < 6) MascotMood.SLEEP else MascotMood.DEFAULT
 }
-
-fun getDefaultTimeOfDayEmote(): MascotMood = getDefaultTimeOfDayMood()
 
 /**
  * Maps Launcher Theme Presets to their subtle mascot pastel tint washes:

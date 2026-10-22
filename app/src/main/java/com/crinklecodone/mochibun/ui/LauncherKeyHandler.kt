@@ -251,6 +251,12 @@ fun handleMainLauncherKeyEvent(
                             return true
                         }
 
+                        KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_NUMPAD_3 -> {
+                            onSetPendingTargetPage(2)
+                            scope.launch { pagerState.animateScrollToPage(2) }
+                            return true
+                        }
+
                         else -> return true
                     }
                 }
@@ -420,18 +426,16 @@ fun handleMainLauncherKeyEvent(
                     if (isCooldown) {
                         return true
                     }
-                    if (homeFocusArea == 0 && favoriteItemCount > 0) {
-                        if (selectedFavoriteIndex < favoriteItemCount - 1) {
-                            val newIdx = selectedFavoriteIndex + 1
-                            onSetSelectedFavoriteIndex(newIdx)
-                            onSetSavedFavoriteIndexOnHome(newIdx)
+                    if (homeFocusArea == 0 && favoriteItemCount > 0 && selectedFavoriteIndex < favoriteItemCount - 1) {
+                        val newIdx = selectedFavoriteIndex + 1
+                        onSetSelectedFavoriteIndex(newIdx)
+                        onSetSavedFavoriteIndexOnHome(newIdx)
+                    } else if (nativeEvent.repeatCount == 0) {
+                        if (pagerState.currentPage < 2) {
+                            onSetPendingTargetPage(2)
+                            scope.launch { pagerState.animateScrollToPage(2) }
                         } else {
-                            if (wrapAround) {
-                                onSetSelectedFavoriteIndex(0)
-                                onSetSavedFavoriteIndexOnHome(0)
-                            } else {
-                                performBoundaryHaptic(context)
-                            }
+                            performBoundaryHaptic(context)
                         }
                     }
                 }

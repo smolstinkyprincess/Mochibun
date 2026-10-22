@@ -66,19 +66,17 @@ fun safeParseColorOrNull(hex: String?): Color? {
                 Color(value.toInt())
             }
             3 -> {
-                val r = trimmed[0].toString().repeat(2)
-                val g = trimmed[1].toString().repeat(2)
-                val b = trimmed[2].toString().repeat(2)
-                val value = "$r$g$b".toLong(16)
-                Color((0xFF000000 or value).toInt())
+                val r = trimmed[0].digitToInt(16) * 0x11
+                val g = trimmed[1].digitToInt(16) * 0x11
+                val b = trimmed[2].digitToInt(16) * 0x11
+                Color((0xFF shl 24) or (r shl 16) or (g shl 8) or b)
             }
             4 -> {
-                val a = trimmed[0].toString().repeat(2)
-                val r = trimmed[1].toString().repeat(2)
-                val g = trimmed[2].toString().repeat(2)
-                val b = trimmed[3].toString().repeat(2)
-                val value = "$a$r$g$b".toLong(16)
-                Color(value.toInt())
+                val a = trimmed[0].digitToInt(16) * 0x11
+                val r = trimmed[1].digitToInt(16) * 0x11
+                val g = trimmed[2].digitToInt(16) * 0x11
+                val b = trimmed[3].digitToInt(16) * 0x11
+                Color((a shl 24) or (r shl 16) or (g shl 8) or b)
             }
             else -> null
         }

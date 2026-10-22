@@ -354,16 +354,18 @@ private fun SpeedDialAppPicker(
                 HorizontalDivider(color = ActiveTheme.cardBorder.copy(alpha = 0.5f), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(6.dp))
 
+                val speedDialRowShape = RoundedCornerShape(10.dp)
+
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.heightIn(max = 260.dp)
                 ) {
-                    item {
+                    item(key = "__unassign__") {
                         val isFocused = selectedIndex == 0
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(speedDialRowShape)
                                 .background(if (isFocused) theme.selectedContainerColor else Color.Transparent)
                                 .clickable { onSelect(null) }
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -378,7 +380,10 @@ private fun SpeedDialAppPicker(
                         }
                     }
 
-                    itemsIndexed(apps) { index, app ->
+                    itemsIndexed(
+                        items = apps,
+                        key = { _, app -> app.packageName }
+                    ) { index, app ->
                         val isFocused = selectedIndex == index + 1
                         val isCurrent = app.packageName == currentPackage
 
@@ -386,7 +391,7 @@ private fun SpeedDialAppPicker(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 1.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(speedDialRowShape)
                                 .background(if (isFocused) theme.selectedContainerColor else Color.Transparent)
                                 .clickable { onSelect(app.packageName) }
                                 .padding(horizontal = 8.dp, vertical = 5.dp),

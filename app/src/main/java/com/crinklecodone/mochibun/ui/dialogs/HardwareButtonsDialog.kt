@@ -630,24 +630,29 @@ private fun ActionsTabContent(
             Spacer(modifier = Modifier.height(4.dp))
         }
 
+        val keyCardShape = RoundedCornerShape(8.dp)
+
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            itemsIndexed(PhysicalKey.entries) { index, key ->
+            itemsIndexed(
+                items = PhysicalKey.entries,
+                key = { _, key -> key.name }
+            ) { index, key ->
                 val isFocused = selectedIndex == index
                 val config = actionConfigs[key] ?: ButtonActionConfig()
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(keyCardShape)
                         .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
                         .border(
                             width = if (isFocused) 2.dp else 1.dp,
                             color = if (isFocused) theme.appActionColor else Color.Transparent,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = keyCardShape
                         )
                         .clickable { onKeySelected(key) }
                         .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -751,12 +756,17 @@ private fun StaticRemapTabContent(
 
         Spacer(modifier = Modifier.height(4.dp))
 
+        val safeKeyCardShape = RoundedCornerShape(8.dp)
+
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            itemsIndexed(safeKeys) { index, key ->
+            itemsIndexed(
+                items = safeKeys,
+                key = { _, key -> key.name }
+            ) { index, key ->
                 val isFocused = selectedIndex == index
                 val defaultKey = BASELINE_MTK_KPD_MAPPINGS[key.scancode] ?: "DEFAULT"
                 val mappedKey = staticMappings[key.scancode] ?: defaultKey
@@ -765,12 +775,12 @@ private fun StaticRemapTabContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(safeKeyCardShape)
                         .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
                         .border(
                             width = if (isFocused) 2.dp else 1.dp,
                             color = if (isFocused) theme.appActionColor else Color.Transparent,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = safeKeyCardShape
                         )
                         .clickable { onKeySelected(key) }
                         .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -1406,22 +1416,27 @@ private fun AppPickerSubDialog(
             )
             Spacer(modifier = Modifier.height(6.dp))
 
+            val appRowShape = RoundedCornerShape(6.dp)
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                itemsIndexed(installedApps) { index, app ->
+                itemsIndexed(
+                    items = installedApps,
+                    key = { _, app -> app.packageName }
+                ) { index, app ->
                     val isFocused = selectedIndex == index
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(appRowShape)
                             .background(if (isFocused) theme.selectedContainerColor else Color.Transparent)
                             .border(
                                 width = if (isFocused) 2.dp else 0.dp,
                                 color = if (isFocused) theme.appActionColor else Color.Transparent,
-                                shape = RoundedCornerShape(6.dp)
+                                shape = appRowShape
                             )
                             .clickable { onAppSelected(app.packageName, app.label) }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -1511,24 +1526,29 @@ private fun StaticKeySubDialog(
 
             Spacer(modifier = Modifier.height(6.dp))
 
+            val staticKeyRowShape = RoundedCornerShape(6.dp)
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                itemsIndexed(CONTROLLED_STATIC_KEYCODES) { index, code ->
+                itemsIndexed(
+                    items = CONTROLLED_STATIC_KEYCODES,
+                    key = { _, code -> code }
+                ) { index, code ->
                     val isFocused = selectedIndex == index
                     val isCurrent = code == currentMappedKey
 
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(staticKeyRowShape)
                             .background(if (isFocused) theme.selectedContainerColor else Color.Transparent)
                             .border(
                                 width = if (isFocused) 2.dp else 0.dp,
                                 color = if (isFocused) theme.appActionColor else Color.Transparent,
-                                shape = RoundedCornerShape(6.dp)
+                                shape = staticKeyRowShape
                             )
                             .clickable { onSelect(code) }
                             .padding(horizontal = 8.dp, vertical = 6.dp)

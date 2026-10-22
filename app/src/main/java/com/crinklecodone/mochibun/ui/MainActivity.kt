@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
 
         if (intent.hasExtra("OPEN_PAGE")) {
             val page = intent.getIntExtra("OPEN_PAGE", 1)
-            requestedPage = page.coerceIn(0, 1)
+            requestedPage = page.coerceIn(0, 2)
         }
 
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
 
         if (intent?.hasExtra("OPEN_PAGE") == true) {
             val page = intent.getIntExtra("OPEN_PAGE", 1)
-            requestedPage = page.coerceIn(0, 1)
+            requestedPage = page.coerceIn(0, 2)
         }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -131,7 +131,6 @@ class MainActivity : ComponentActivity() {
                     containerColor = ThemeBackground
                 ) { innerPadding ->
                     MainLauncher(
-                        name = "Android",
                         modifier = Modifier.padding(innerPadding),
                         homePressCount = homePressCount,
                         appListRefreshCount = appListRefreshCount,
