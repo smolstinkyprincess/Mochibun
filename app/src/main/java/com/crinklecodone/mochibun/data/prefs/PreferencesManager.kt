@@ -18,10 +18,45 @@ object PreferencesManager {
     const val PREFS_NAME = "launcher_preferences"
     const val KEY_PIXELSPRAY_WALLPAPER_ENABLED = "pref_pixelspray_wallpaper_enabled"
     const val DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED = true
+    const val KEY_SYSTEM_MONITOR_ENABLED = "pref_system_monitor_enabled"
+    const val DEFAULT_SYSTEM_MONITOR_ENABLED = true
     const val KEY_FAVORITE_FOLDERS = "favorite_folders_v1"
+
+    const val KEY_FOLDER_GRID_MODE = "pref_folder_grid_mode"
+    const val DEFAULT_FOLDER_GRID_MODE = false // Compact List by default
+
+    const val KEY_T9_SEARCH_ENABLED = "pref_t9_search_enabled"
+    const val DEFAULT_T9_SEARCH_ENABLED = true
+
+    const val KEY_SYSTEM_MONITOR_INTERVAL = "pref_system_monitor_interval_sec"
+    const val DEFAULT_SYSTEM_MONITOR_INTERVAL = 2
+
+    const val KEY_CUSTOM_USER_NAME = "custom_user_name"
+    const val DEFAULT_CUSTOM_USER_NAME = ""
+
+    const val KEY_THEME_PRESET = "theme_preset"
+    const val DEFAULT_THEME_PRESET = "sakura_dream"
 
     private val _isPixelSprayEnabled = MutableStateFlow(DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED)
     val isPixelSprayEnabled: StateFlow<Boolean> = _isPixelSprayEnabled.asStateFlow()
+
+    private val _isSystemMonitorEnabled = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_ENABLED)
+    val isSystemMonitorEnabled: StateFlow<Boolean> = _isSystemMonitorEnabled.asStateFlow()
+
+    private val _isFolderGridMode = MutableStateFlow(DEFAULT_FOLDER_GRID_MODE)
+    val isFolderGridMode: StateFlow<Boolean> = _isFolderGridMode.asStateFlow()
+
+    private val _isT9SearchEnabled = MutableStateFlow(DEFAULT_T9_SEARCH_ENABLED)
+    val isT9SearchEnabled: StateFlow<Boolean> = _isT9SearchEnabled.asStateFlow()
+
+    private val _systemMonitorInterval = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_INTERVAL)
+    val systemMonitorInterval: StateFlow<Int> = _systemMonitorInterval.asStateFlow()
+
+    private val _customUserName = MutableStateFlow(DEFAULT_CUSTOM_USER_NAME)
+    val customUserName: StateFlow<String> = _customUserName.asStateFlow()
+
+    private val _themePreset = MutableStateFlow(DEFAULT_THEME_PRESET)
+    val themePreset: StateFlow<String> = _themePreset.asStateFlow()
 
     private var initialized = false
 
@@ -32,6 +67,30 @@ object PreferencesManager {
                 KEY_PIXELSPRAY_WALLPAPER_ENABLED,
                 DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED
             )
+            _isSystemMonitorEnabled.value = prefs.getBoolean(
+                KEY_SYSTEM_MONITOR_ENABLED,
+                DEFAULT_SYSTEM_MONITOR_ENABLED
+            )
+            _isFolderGridMode.value = prefs.getBoolean(
+                KEY_FOLDER_GRID_MODE,
+                DEFAULT_FOLDER_GRID_MODE
+            )
+            _isT9SearchEnabled.value = prefs.getBoolean(
+                KEY_T9_SEARCH_ENABLED,
+                DEFAULT_T9_SEARCH_ENABLED
+            )
+            _systemMonitorInterval.value = prefs.getInt(
+                KEY_SYSTEM_MONITOR_INTERVAL,
+                DEFAULT_SYSTEM_MONITOR_INTERVAL
+            )
+            _customUserName.value = prefs.getString(
+                KEY_CUSTOM_USER_NAME,
+                DEFAULT_CUSTOM_USER_NAME
+            ) ?: DEFAULT_CUSTOM_USER_NAME
+            _themePreset.value = prefs.getString(
+                KEY_THEME_PRESET,
+                DEFAULT_THEME_PRESET
+            ) ?: DEFAULT_THEME_PRESET
             initialized = true
         }
     }
@@ -48,7 +107,6 @@ object PreferencesManager {
                     val name = item.optString("name")
                     val packages = item.optJSONArray("apps") ?: JSONArray()
                     if (id.isBlank() || name.isBlank()) continue
-
                     val appPackages = buildList {
                         for (j in 0 until packages.length()) {
                             val pkg = packages.optString(j)
@@ -90,5 +148,65 @@ object PreferencesManager {
     fun setPixelSprayWallpaperEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_PIXELSPRAY_WALLPAPER_ENABLED, enabled).apply()
         _isPixelSprayEnabled.value = enabled
+    }
+
+    fun isSystemMonitorEnabled(context: Context): Boolean {
+        init(context)
+        return _isSystemMonitorEnabled.value
+    }
+
+    fun setSystemMonitorEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SYSTEM_MONITOR_ENABLED, enabled).apply()
+        _isSystemMonitorEnabled.value = enabled
+    }
+
+    fun isFolderGridMode(context: Context): Boolean {
+        init(context)
+        return _isFolderGridMode.value
+    }
+
+    fun setFolderGridMode(context: Context, isGrid: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_FOLDER_GRID_MODE, isGrid).apply()
+        _isFolderGridMode.value = isGrid
+    }
+
+    fun isT9SearchEnabled(context: Context): Boolean {
+        init(context)
+        return _isT9SearchEnabled.value
+    }
+
+    fun setT9SearchEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_T9_SEARCH_ENABLED, enabled).apply()
+        _isT9SearchEnabled.value = enabled
+    }
+
+    fun getSystemMonitorInterval(context: Context): Int {
+        init(context)
+        return _systemMonitorInterval.value
+    }
+
+    fun setSystemMonitorInterval(context: Context, intervalSec: Int) {
+        getPrefs(context).edit().putInt(KEY_SYSTEM_MONITOR_INTERVAL, intervalSec).apply()
+        _systemMonitorInterval.value = intervalSec
+    }
+
+    fun getCustomUserName(context: Context): String {
+        init(context)
+        return _customUserName.value
+    }
+
+    fun setCustomUserName(context: Context, name: String) {
+        getPrefs(context).edit().putString(KEY_CUSTOM_USER_NAME, name).apply()
+        _customUserName.value = name
+    }
+
+    fun getThemePreset(context: Context): String {
+        init(context)
+        return _themePreset.value
+    }
+
+    fun setThemePreset(context: Context, presetId: String) {
+        getPrefs(context).edit().putString(KEY_THEME_PRESET, presetId).apply()
+        _themePreset.value = presetId
     }
 }

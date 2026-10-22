@@ -1137,7 +1137,6 @@ private fun ActionConfigSubDialog(
 
     val actionOptions = listOf(
         "None (Default)" to ActionType.None,
-        "Open Mochibun AI Chat" to ActionType.OpenAiChat,
         "Global Back" to ActionType.GlobalBack,
         "Recents / Overview" to ActionType.GlobalRecents,
         "Open Recents (System)" to ActionType.OpenRecentsSystem,
@@ -1280,16 +1279,14 @@ private fun cycleAction(
     onPickApp: (((String, String) -> Unit)) -> Unit,
     onSet: (ActionType) -> Unit
 ) {
-    val currentIndex = when (current) {
-        is ActionType.None -> 0
-        is ActionType.OpenAiChat -> 1
-        is ActionType.GlobalBack -> 2
-        is ActionType.GlobalRecents -> 3
-        is ActionType.OpenRecentsSystem -> 4
-        is ActionType.GlobalNotifications -> 5
-        is ActionType.ToggleFlashlight -> 6
-        is ActionType.LaunchApp -> 7
-    }
+    val currentIndex = options.indexOfFirst { (_, action) ->
+        when {
+            action == null -> current is ActionType.LaunchApp
+            current is ActionType.LaunchApp -> false
+            else -> action::class == current::class
+        }
+    }.coerceAtLeast(0)
+
     val nextIndex = (currentIndex + 1) % options.size
     val nextOption = options[nextIndex].second
     if (nextOption == null) {

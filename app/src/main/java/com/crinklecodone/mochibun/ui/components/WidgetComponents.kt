@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.data.repository.MediaSessionTracker
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
@@ -57,13 +58,14 @@ const val APP_WIDGET_HOST_ID = 1024
 
 enum class WidgetFocusSection {
     NOW_PLAYING,
+    SYSTEM_MONITOR,
     USER_WIDGETS,
     ADD_WIDGET,
     HOME_PILL
 }
 
 /**
- * Widget Screen hosting the native "Now Playing" media widget and Android AppWidgets.
+ * Widget Screen hosting the native "Now Playing" media widget, System Monitor card, and Android AppWidgets.
  * Faithfully matches the visual styling, component hierarchy, and kawaii aesthetic of Mochibun.
  */
 @Composable
@@ -82,6 +84,8 @@ fun WidgetPage(
         context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
     }
 
+    val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
+
     val appWidgetManager = remember { AppWidgetManager.getInstance(context) }
     val appWidgetHost = remember { AppWidgetHost(context, APP_WIDGET_HOST_ID) }
 
@@ -91,7 +95,7 @@ fun WidgetPage(
             try {
                 appWidgetHost.stopListening()
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.w(TAG, "Error stopping appWidgetHost", e)
             }
         }
     }
@@ -275,24 +279,33 @@ fun WidgetPage(
             }
             pickLauncher.launch(pickIntent)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Failed to launch widget picker", e)
         }
     }
 
     // D-Pad Focus State Management
     var focusSection by remember {
-        mutableStateOf(if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING else WidgetFocusSection.HOME_PILL)
+        mutableStateOf(
+            if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
+            else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
+            else if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+            else WidgetFocusSection.HOME_PILL
+        )
     }
     var nowPlayingCol by remember { mutableIntStateOf(1) } // 0 = Prev, 1 = Play/Pause, 2 = Next
     var focusedWidgetIdx by remember { mutableIntStateOf(0) }
     var removingWidgetId by remember { mutableStateOf<Int?>(null) }
     var sawCenterDown by remember { mutableStateOf(false) }
+    var systemMonitorRefreshTrigger by remember { mutableIntStateOf(0) }
 
     val pageFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
     val navigateHomeAndReset: () -> Unit = {
-        focusSection = if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING else WidgetFocusSection.HOME_PILL
+        focusSection = if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
+            else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
+            else if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+            else WidgetFocusSection.HOME_PILL
         nowPlayingCol = 1
         focusedWidgetIdx = 0
         removingWidgetId = null
@@ -300,28 +313,32 @@ fun WidgetPage(
         onNavigateHome()
     }
 
-    // Graceful D-pad focus fallback when active music playback stops
-    LaunchedEffect(mediaState.isPlaying) {
+    // Graceful D-pad focus fallback when active music playback stops or system monitor is toggled
+    LaunchedEffect(mediaState.isPlaying, isSystemMonitorEnabled) {
         if (!mediaState.isPlaying && focusSection == WidgetFocusSection.NOW_PLAYING) {
-            if (savedWidgetIdsList.isNotEmpty()) {
-                focusSection = WidgetFocusSection.USER_WIDGETS
-                focusedWidgetIdx = 0
-            } else {
-                focusSection = WidgetFocusSection.HOME_PILL
-            }
+            focusSection = if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
+                else if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+                else WidgetFocusSection.HOME_PILL
+        } else if (!isSystemMonitorEnabled && focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
+            focusSection = if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+                else WidgetFocusSection.HOME_PILL
         }
     }
 
     // Ensure focused item is visible in LazyColumn
     LaunchedEffect(focusSection, focusedWidgetIdx) {
         if (focusSection == WidgetFocusSection.USER_WIDGETS && savedWidgetIdsList.isNotEmpty()) {
-            val targetIdx = (if (mediaState.isPlaying) 1 else 0) + focusedWidgetIdx
+            val baseOffset = 1 + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
+            val targetIdx = baseOffset + focusedWidgetIdx
             val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
             if (!isVisible) {
                 listState.animateScrollToItem(targetIdx)
             }
         } else if (focusSection == WidgetFocusSection.NOW_PLAYING) {
             listState.animateScrollToItem(0)
+        } else if (focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
+            val targetIdx = if (mediaState.isPlaying) 1 else 0
+            listState.animateScrollToItem(targetIdx)
         }
     }
 
@@ -336,7 +353,10 @@ fun WidgetPage(
                 }
             }
         } else {
-            focusSection = if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING else WidgetFocusSection.HOME_PILL
+            focusSection = if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
+                else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
+                else if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+                else WidgetFocusSection.HOME_PILL
             nowPlayingCol = 1
             focusedWidgetIdx = 0
             removingWidgetId = null
@@ -378,6 +398,9 @@ fun WidgetPage(
                                     2 -> MediaSessionTracker.skipToNext()
                                 }
                             }
+                            WidgetFocusSection.SYSTEM_MONITOR -> {
+                                systemMonitorRefreshTrigger++
+                            }
                             WidgetFocusSection.USER_WIDGETS -> {
                                 val widgetId = savedWidgetIdsList.getOrNull(focusedWidgetIdx)
                                 if (widgetId != null) {
@@ -410,9 +433,17 @@ fun WidgetPage(
                             WidgetFocusSection.NOW_PLAYING -> {
                                 // Already at top
                             }
+                            WidgetFocusSection.SYSTEM_MONITOR -> {
+                                if (mediaState.isPlaying) {
+                                    focusSection = WidgetFocusSection.NOW_PLAYING
+                                    nowPlayingCol = 1
+                                }
+                            }
                             WidgetFocusSection.USER_WIDGETS -> {
                                 if (focusedWidgetIdx > 0) {
                                     focusedWidgetIdx--
+                                } else if (isSystemMonitorEnabled) {
+                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
                                 } else if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
@@ -422,6 +453,8 @@ fun WidgetPage(
                                 if (savedWidgetIdsList.isNotEmpty()) {
                                     focusSection = WidgetFocusSection.USER_WIDGETS
                                     focusedWidgetIdx = savedWidgetIdsList.size - 1
+                                } else if (isSystemMonitorEnabled) {
+                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
                                 } else if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
@@ -437,6 +470,16 @@ fun WidgetPage(
                         removingWidgetId = null
                         when (focusSection) {
                             WidgetFocusSection.NOW_PLAYING -> {
+                                if (isSystemMonitorEnabled) {
+                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
+                                } else if (savedWidgetIdsList.isNotEmpty()) {
+                                    focusSection = WidgetFocusSection.USER_WIDGETS
+                                    focusedWidgetIdx = 0
+                                } else {
+                                    focusSection = WidgetFocusSection.ADD_WIDGET
+                                }
+                            }
+                            WidgetFocusSection.SYSTEM_MONITOR -> {
                                 if (savedWidgetIdsList.isNotEmpty()) {
                                     focusSection = WidgetFocusSection.USER_WIDGETS
                                     focusedWidgetIdx = 0
@@ -498,7 +541,7 @@ fun WidgetPage(
                 .align(Alignment.TopCenter)
         )
 
-        // 2. Main Scrollable Content (Header, Now Playing, User Widgets, Add Widget)
+        // 2. Main Scrollable Content (Header, Now Playing, System Monitor, User Widgets, Add Widget)
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -595,6 +638,22 @@ fun WidgetPage(
                         onPlayPause = { MediaSessionTracker.togglePlayPause() },
                         onNext = { MediaSessionTracker.skipToNext() },
                         onOpenMediaApp = { MediaSessionTracker.openCurrentMediaApp(context) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            // Lightweight, Cute Pastel System Monitor Card (when enabled)
+            if (isSystemMonitorEnabled) {
+                item(key = "system_monitor_card") {
+                    SystemMonitorCard(
+                        isActivePage = isActivePage,
+                        isFocused = focusSection == WidgetFocusSection.SYSTEM_MONITOR,
+                        onCardClick = {
+                            focusSection = WidgetFocusSection.SYSTEM_MONITOR
+                            systemMonitorRefreshTrigger++
+                        },
+                        triggerRefreshKey = systemMonitorRefreshTrigger,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

@@ -23,10 +23,6 @@ class HardwareRemapUnitTest {
         assertEquals("com.android.chrome", deserializedLaunch.packageName)
         assertEquals("Chrome", deserializedLaunch.appLabel)
 
-        val aiChat = ActionType.OpenAiChat
-        assertEquals("OPEN_AI_CHAT", aiChat.serialize())
-        assertEquals(ActionType.OpenAiChat, ActionType.deserialize(aiChat.serialize()))
-
         val torch = ActionType.ToggleFlashlight
         assertEquals("TOGGLE_FLASHLIGHT", torch.serialize())
         assertEquals(ActionType.ToggleFlashlight, ActionType.deserialize(torch.serialize()))

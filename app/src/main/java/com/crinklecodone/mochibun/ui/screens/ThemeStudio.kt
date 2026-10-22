@@ -11,6 +11,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
 import com.crinklecodone.mochibun.ui.dialogs.KawaiiDialogPillButton
 import com.crinklecodone.mochibun.ui.dialogs.PixelRibbonBow
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
@@ -88,16 +90,25 @@ fun ThemeStudioDialog(
     var showSaveDialog by remember { mutableStateOf(false) }
     var newPresetTitle by remember { mutableStateOf("") }
 
+    val themeOptions by ExternalThemeManager.themes.collectAsState()
+    val externalThemes = remember(themeOptions) { themeOptions.filter { it.isExternal } }
+
+    LaunchedEffect(Unit) {
+        ExternalThemeManager.scanThemes(context)
+    }
+
     // Main dialog focus state:
     // Row 0: Save as Preset button
     // Row 1: Built-in presets row 1 (col 0 = Sakura Dream, col 1 = Lavender Mist)
     // Row 2: Built-in presets row 2 (col 0 = Minty Matcha, col 1 = Milky Peach)
-    // Row 3: Custom presets (index 0 until customPresets.size; subCol 0 = select, 1 = delete)
-    // Row 4: Card Roundness slider (LEFT/RIGHT adjusts by 1dp)
-    // Row 5..10: Individual Color rows (0..5)
-    // Row 11: Footer buttons (col 0 = Cancel, col 1 = Apply)
+    // Row 3: External YAML themes (index 0 until externalThemes.size)
+    // Row 4: Custom presets (index 0 until customPresets.size; subCol 0 = select, 1 = delete)
+    // Row 5: Card Roundness slider (LEFT/RIGHT adjusts by 1dp)
+    // Row 6..11: Individual Color rows (0..5)
+    // Row 12: Footer buttons (col 0 = Cancel, col 1 = Apply)
     var focusRow by remember { mutableIntStateOf(1) }
     var focusCol by remember { mutableIntStateOf(0) }
+    var externalThemeIndex by remember { mutableIntStateOf(0) }
     var customPresetIndex by remember { mutableIntStateOf(0) }
     var customPresetDeleteCol by remember { mutableIntStateOf(0) }
     var selectedSwatchIndex by remember { mutableIntStateOf(0) }
@@ -112,10 +123,13 @@ fun ThemeStudioDialog(
     val saveNameFocusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
 
-    LaunchedEffect(customPresets.size) {
+    LaunchedEffect(externalThemes.size, customPresets.size) {
+        externalThemeIndex = externalThemeIndex.coerceIn(0, (externalThemes.size - 1).coerceAtLeast(0))
         customPresetIndex = customPresetIndex.coerceIn(0, (customPresets.size - 1).coerceAtLeast(0))
-        if (customPresets.isEmpty() && focusRow == 3) {
-            focusRow = 4
+        if (externalThemes.isEmpty() && focusRow == 3) {
+            focusRow = if (customPresets.isNotEmpty()) 4 else 5
+        } else if (customPresets.isEmpty() && focusRow == 4) {
+            focusRow = 5
         }
     }
 
@@ -123,8 +137,8 @@ fun ThemeStudioDialog(
         val targetScroll = when {
             editingColorField != null -> scrollState.maxValue
             focusRow <= 1 -> 0
-            focusRow in 2..4 -> (scrollState.maxValue * 0.35f).toInt()
-            focusRow in 5..10 -> (scrollState.maxValue * 0.78f).toInt()
+            focusRow in 2..5 -> (scrollState.maxValue * 0.35f).toInt()
+            focusRow in 6..11 -> (scrollState.maxValue * 0.78f).toInt()
             else -> scrollState.maxValue
         }
         scrollState.animateScrollTo(targetScroll)
@@ -292,6 +306,11 @@ fun ThemeStudioDialog(
                                     }
                                 }
                                 3 -> {
+                                    externalThemes.getOrNull(externalThemeIndex)?.let { ext ->
+                                        draft = ext.theme.copy(cardRoundnessDp = draft.cardRoundnessDp)
+                                    }
+                                }
+                                4 -> {
                                     customPresets.getOrNull(customPresetIndex)?.let { preset ->
                                         if (customPresetDeleteCol == 1) {
                                             deleteCustomPreset(prefs, preset.id)
@@ -302,16 +321,16 @@ fun ThemeStudioDialog(
                                         }
                                     }
                                 }
-                                4 -> {
+                                5 -> {
                                     val next = if (draft.cardRoundnessDp >= 32f) 8f else (draft.cardRoundnessDp + 4f).coerceAtMost(32f)
                                     draft = draft.copy(cardRoundnessDp = next)
                                 }
-                                in 5..10 -> {
-                                    val fieldKey = COLOR_FIELD_DEFS[focusRow - 5].first
+                                in 6..11 -> {
+                                    val fieldKey = COLOR_FIELD_DEFS[focusRow - 6].first
                                     selectedSwatchIndex = 0
                                     editingColorField = fieldKey
                                 }
-                                11 -> {
+                                12 -> {
                                     if (focusCol == 0) {
                                         onDismiss()
                                     } else {
@@ -329,20 +348,33 @@ fun ThemeStudioDialog(
                         KeyEvent.KEYCODE_DPAD_UP -> {
                             when (focusRow) {
                                 0 -> {
-                                    focusRow = 11
+                                    focusRow = 12
                                     focusCol = 1
                                 }
                                 3 -> {
-                                    if (customPresetIndex > 0) {
-                                        customPresetIndex--
+                                    if (externalThemeIndex > 0) {
+                                        externalThemeIndex--
                                     } else {
                                         focusRow = 2
                                     }
                                 }
                                 4 -> {
-                                    if (customPresets.isNotEmpty()) {
+                                    if (customPresetIndex > 0) {
+                                        customPresetIndex--
+                                    } else if (externalThemes.isNotEmpty()) {
                                         focusRow = 3
+                                        externalThemeIndex = externalThemes.lastIndex
+                                    } else {
+                                        focusRow = 2
+                                    }
+                                }
+                                5 -> {
+                                    if (customPresets.isNotEmpty()) {
+                                        focusRow = 4
                                         customPresetIndex = customPresets.lastIndex
+                                    } else if (externalThemes.isNotEmpty()) {
+                                        focusRow = 3
+                                        externalThemeIndex = externalThemes.lastIndex
                                     } else {
                                         focusRow = 2
                                     }
@@ -356,34 +388,47 @@ fun ThemeStudioDialog(
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
                             when (focusRow) {
                                 2 -> {
-                                    if (customPresets.isNotEmpty()) {
+                                    if (externalThemes.isNotEmpty()) {
                                         focusRow = 3
+                                        externalThemeIndex = 0
+                                    } else if (customPresets.isNotEmpty()) {
+                                        focusRow = 4
                                         customPresetIndex = 0
                                     } else {
-                                        focusRow = 4
+                                        focusRow = 5
                                     }
                                 }
                                 3 -> {
+                                    if (externalThemeIndex < externalThemes.lastIndex) {
+                                        externalThemeIndex++
+                                    } else if (customPresets.isNotEmpty()) {
+                                        focusRow = 4
+                                        customPresetIndex = 0
+                                    } else {
+                                        focusRow = 5
+                                    }
+                                }
+                                4 -> {
                                     if (customPresetIndex < customPresets.lastIndex) {
                                         customPresetIndex++
                                     } else {
-                                        focusRow = 4
+                                        focusRow = 5
                                     }
                                 }
-                                11 -> {
+                                12 -> {
                                     focusRow = 0
                                 }
                                 else -> {
-                                    focusRow = (focusRow + 1).coerceAtMost(11)
+                                    focusRow = (focusRow + 1).coerceAtMost(12)
                                 }
                             }
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
                             when (focusRow) {
-                                1, 2, 11 -> focusCol = 0
-                                3 -> customPresetDeleteCol = 0
-                                4 -> {
+                                1, 2, 12 -> focusCol = 0
+                                4 -> customPresetDeleteCol = 0
+                                5 -> {
                                     draft = draft.copy(
                                         cardRoundnessDp = (draft.cardRoundnessDp - 2f).coerceIn(8f, 32f)
                                     )
@@ -393,9 +438,9 @@ fun ThemeStudioDialog(
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             when (focusRow) {
-                                1, 2, 11 -> focusCol = 1
-                                3 -> customPresetDeleteCol = 1
-                                4 -> {
+                                1, 2, 12 -> focusCol = 1
+                                4 -> customPresetDeleteCol = 1
+                                5 -> {
                                     draft = draft.copy(
                                         cardRoundnessDp = (draft.cardRoundnessDp + 2f).coerceIn(8f, 32f)
                                     )
@@ -591,6 +636,93 @@ fun ThemeStudioDialog(
                         }
                     }
 
+                    // External YAML Themes section
+                    if (externalThemes.isNotEmpty()) {
+                        Text(
+                            "External Themes 📂",
+                            fontWeight = FontWeight.Bold,
+                            color = draft.fgTextColor,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+
+                        externalThemes.forEachIndexed { idx, extTheme ->
+                            val isRowFocused = editingColorField == null && focusRow == 3 && externalThemeIndex == idx
+                            val isSelected = draft.name == extTheme.id
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (isRowFocused || isSelected) {
+                                            draft.selectedContainerColor
+                                        } else {
+                                            draft.greetingBgColor.copy(alpha = 0.65f)
+                                        }
+                                    )
+                                    .border(
+                                        width = if (isRowFocused) 2.dp else 1.dp,
+                                        color = if (isRowFocused) draft.appActionColor else draft.greetingOutlineColor,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable {
+                                        focusRow = 3
+                                        externalThemeIndex = idx
+                                        draft = extTheme.theme.copy(cardRoundnessDp = draft.cardRoundnessDp)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 7.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isSelected) "✓ ${extTheme.name}" else extTheme.name,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = draft.fgTextColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "by ${extTheme.author} • v${extTheme.version}",
+                                            fontSize = 10.sp,
+                                            color = draft.fgTextColor.copy(alpha = 0.7f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(13.dp)
+                                                .clip(CircleShape)
+                                                .background(extTheme.palette.primary)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(13.dp)
+                                                .clip(CircleShape)
+                                                .background(extTheme.palette.deepAccent)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(13.dp)
+                                                .clip(CircleShape)
+                                                .background(extTheme.palette.container)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if (customPresets.isNotEmpty()) {
                         Text(
                             "Custom Presets ♡",
@@ -601,7 +733,7 @@ fun ThemeStudioDialog(
                         )
 
                         customPresets.forEachIndexed { idx, preset ->
-                            val isRowFocused = editingColorField == null && focusRow == 3 && customPresetIndex == idx
+                            val isRowFocused = editingColorField == null && focusRow == 4 && customPresetIndex == idx
                             val selectFocused = isRowFocused && customPresetDeleteCol == 0
                             val deleteFocused = isRowFocused && customPresetDeleteCol == 1
                             val isSelected = draft.name == preset.theme.name
@@ -628,7 +760,7 @@ fun ThemeStudioDialog(
                                             shape = RoundedCornerShape(10.dp)
                                         )
                                         .clickable {
-                                            focusRow = 3
+                                            focusRow = 4
                                             customPresetIndex = idx
                                             customPresetDeleteCol = 0
                                             draft = preset.theme
@@ -658,7 +790,7 @@ fun ThemeStudioDialog(
                         }
                     }
 
-                    val sliderFocused = editingColorField == null && focusRow == 4
+                    val sliderFocused = editingColorField == null && focusRow == 5
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -697,7 +829,7 @@ fun ThemeStudioDialog(
                         Slider(
                             value = draft.cardRoundnessDp,
                             onValueChange = {
-                                focusRow = 4
+                                focusRow = 5
                                 draft = draft.copy(cardRoundnessDp = it)
                             },
                             valueRange = 8f..32f,
@@ -728,10 +860,10 @@ fun ThemeStudioDialog(
                         ColorRow(
                             label = label,
                             color = colorVal,
-                            isFocused = editingColorField == null && focusRow == 5 + idx,
+                            isFocused = editingColorField == null && focusRow == 6 + idx,
                             theme = draft
                         ) {
-                            focusRow = 5 + idx
+                            focusRow = 6 + idx
                             selectedSwatchIndex = 0
                             editingColorField = key
                         }
@@ -817,13 +949,13 @@ fun ThemeStudioDialog(
                 ) {
                     KawaiiDialogPillButton(
                         text = "Cancel",
-                        isFocused = editingColorField == null && focusRow == 11 && focusCol == 0,
+                        isFocused = editingColorField == null && focusRow == 12 && focusCol == 0,
                         onClick = onDismiss
                     )
 
                     KawaiiDialogPillButton(
                         text = "Apply ♡",
-                        isFocused = editingColorField == null && focusRow == 11 && focusCol == 1,
+                        isFocused = editingColorField == null && focusRow == 12 && focusCol == 1,
                         isPrimary = true,
                         onClick = { onApply(draft) }
                     )
@@ -832,11 +964,11 @@ fun ThemeStudioDialog(
         }
 
         // Unified ribbon bow badge overlapping the upper border rim
-            PixelRibbonBow(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-23).dp)
-            )
+        PixelRibbonBow(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = (-23).dp)
+        )
     }
 }
 
@@ -933,6 +1065,8 @@ fun ThemeStudioDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    val softSurfaceColor = draft.greetingBgColor
+
                     OutlinedTextField(
                         value = newPresetTitle,
                         onValueChange = { newPresetTitle = it.take(24) },
@@ -961,21 +1095,19 @@ fun ThemeStudioDialog(
                         KawaiiDialogPillButton(
                             text = "Cancel",
                             isFocused = saveDialogZone == 1,
-                            onClick = { showSaveDialog = false }
+                            onClick = {
+                                keyboardController?.hide()
+                                showSaveDialog = false
+                            }
                         )
 
                         KawaiiDialogPillButton(
                             text = "Save ♡",
                             isFocused = saveDialogZone == 2,
-                            enabled = newPresetTitle.isNotBlank(),
                             isPrimary = true,
                             onClick = {
                                 if (newPresetTitle.isNotBlank()) {
-                                    saveCustomPreset(
-                                        prefs,
-                                        newPresetTitle.trim(),
-                                        draft
-                                    )
+                                    saveCustomPreset(prefs, newPresetTitle.trim(), draft)
                                     customPresets = loadCustomPresets(prefs)
                                     showSaveDialog = false
                                     newPresetTitle = ""
@@ -990,18 +1122,16 @@ fun ThemeStudioDialog(
 }
 
 @Composable
-fun RowScope.PresetThemeCard(
+private fun PresetThemeCard(
     palette: MochibunThemePalette,
     isSelected: Boolean,
-    isFocused: Boolean = false,
+    isFocused: Boolean,
     theme: LauncherTheme,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(12.dp)
-    Column(
+    Box(
         modifier = Modifier
-            .weight(1f)
-            .clip(shape)
+            .clip(RoundedCornerShape(12.dp))
             .background(
                 if (isFocused || isSelected) {
                     theme.selectedContainerColor
@@ -1010,95 +1140,89 @@ fun RowScope.PresetThemeCard(
                 }
             )
             .border(
-                width = if (isFocused) 2.5.dp else if (isSelected) 1.5.dp else 1.dp,
-                color = if (isFocused || isSelected) theme.appActionColor else theme.greetingOutlineColor,
-                shape = shape
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) theme.appActionColor else theme.greetingOutlineColor,
+                shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
-        Text(
-            text = if (isSelected) "♡ ${palette.name}" else palette.name,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = theme.fgTextColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        // Cute 3-dot color preview (primary, container, deepAccent)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(13.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(palette.primary)
-                    .border(0.75.dp, palette.outline, RoundedCornerShape(4.dp))
+            Text(
+                text = if (isSelected) "✓ ${palette.name}" else palette.name,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = theme.fgTextColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Box(
-                modifier = Modifier
-                    .size(13.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(palette.container)
-                    .border(0.75.dp, palette.outline, RoundedCornerShape(4.dp))
-            )
-            Box(
-                modifier = Modifier
-                    .size(13.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(palette.deepAccent)
-                    .border(0.75.dp, palette.outline, RoundedCornerShape(4.dp))
-            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(palette.primary)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(palette.deepAccent)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(palette.container)
+                )
+            }
         }
     }
 }
 
 @Composable
-fun ColorRow(
+private fun ColorRow(
     label: String,
     color: Color,
-    isFocused: Boolean = false,
+    isFocused: Boolean,
     theme: LauncherTheme,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(10.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
+            .clip(RoundedCornerShape(10.dp))
             .background(
                 if (isFocused) theme.selectedContainerColor else Color.Transparent
             )
             .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) theme.appActionColor else Color.Transparent,
-                shape = shape
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) theme.appActionColor else theme.greetingOutlineColor.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(10.dp)
             )
             .clickable(onClick = onClick)
-            .padding(vertical = 6.dp, horizontal = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
-            fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
             color = theme.fgTextColor
         )
 
         Box(
             modifier = Modifier
-                .size(24.dp)
+                .size(22.dp)
                 .clip(RoundedCornerShape(6.dp))
                 .background(color)
                 .border(
-                    width = if (isFocused) 2.dp else 1.dp,
-                    color = if (isFocused) theme.fgTextColor else Color.Gray.copy(alpha = 0.5f),
+                    width = 1.dp,
+                    color = theme.greetingOutlineColor,
                     shape = RoundedCornerShape(6.dp)
                 )
         )

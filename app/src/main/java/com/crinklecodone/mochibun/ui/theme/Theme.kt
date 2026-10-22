@@ -51,7 +51,7 @@ private val PinkDarkColorScheme = darkColorScheme(
  * clash with Mochibun's bespoke pastel pinks and break focus ring visibility on low-contrast screens.
  */
 @Composable
-fun M120LauncherTheme(
+fun MochibunTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit

@@ -1,0 +1,121 @@
+package com.crinklecodone.mochibun.data.model
+
+import androidx.compose.ui.graphics.Color
+import com.crinklecodone.mochibun.ui.theme.LauncherTheme
+import com.crinklecodone.mochibun.ui.theme.MochibunThemePalette
+import com.crinklecodone.mochibun.ui.theme.SakuraDreamPalette
+import com.crinklecodone.mochibun.ui.theme.toLauncherTheme
+import kotlinx.serialization.Serializable
+
+/**
+ * Serializable data representation of an external YAML theme file.
+ * Stored in `/sdcard/Android/data/com.crinklecodone.mochibun/files/themes/`.
+ */
+@Serializable
+data class YamlTheme(
+    val id: String = "",
+    val name: String = "Custom Theme",
+    val author: String = "Community",
+    val version: String = "1.0",
+    val colors: YamlThemeColors = YamlThemeColors(),
+    val decorations: YamlThemeDecorations = YamlThemeDecorations()
+)
+
+@Serializable
+data class YamlThemeColors(
+    val primary: String? = null,
+    val container: String? = null,
+    val cardBorder: String? = null,
+    val accentDeep: String? = null,
+    val background: String? = null,
+    val outline: String? = null,
+    val selectionGlow: String? = null,
+    val textColor: String? = null,
+    val squirclePrimary: String? = null,
+    val squircleSecondary: String? = null,
+    val cloudBack: String? = null,
+    val cloudMid: String? = null,
+    val cloudFront: String? = null,
+    val catOutline: String? = null,
+    val catBlush: String? = null
+)
+
+@Serializable
+data class YamlThemeDecorations(
+    val greetingText: String = "— ♡ Welcome Home ♡ —",
+    val glowExpansionDp: Float = 4f,
+    val cardRoundnessDp: Float = 24f
+)
+
+/**
+ * Parses a hex string (#RRGGBB, #AARRGGBB, or without leading #) into a Compose [Color].
+ * Never throws exceptions, falling back to [fallback] if parsing fails.
+ */
+fun safeParseColor(hex: String?, fallback: Color): Color {
+    if (hex.isNullOrBlank()) return fallback
+    val trimmed = hex.trim()
+    return try {
+        val formatted = if (trimmed.startsWith("#")) trimmed else "#$trimmed"
+        Color(android.graphics.Color.parseColor(formatted))
+    } catch (_: Exception) {
+        fallback
+    }
+}
+
+/**
+ * Converts this [YamlTheme] into a full [MochibunThemePalette].
+ * Missing or invalid color tokens gracefully fall back to [fallback] (default Sakura Dream).
+ */
+fun YamlTheme.toLauncherPalette(fallback: MochibunThemePalette = SakuraDreamPalette): MochibunThemePalette {
+    val parsedPrimary = safeParseColor(colors.primary, fallback.primary)
+    val parsedContainer = safeParseColor(colors.container, fallback.container)
+    val parsedAccentDeep = safeParseColor(colors.accentDeep, fallback.deepAccent)
+    val parsedBackground = safeParseColor(colors.background, fallback.background)
+    val parsedOutline = safeParseColor(colors.outline, fallback.outline)
+    val parsedTextColor = safeParseColor(colors.textColor, fallback.textColor)
+    val parsedCardBorder = safeParseColor(colors.cardBorder, fallback.focusedCardBorder)
+    val parsedGlow = safeParseColor(colors.selectionGlow, parsedPrimary)
+
+    val parsedSquirclePrimary = safeParseColor(colors.squirclePrimary, parsedPrimary)
+    val parsedSquircleSecondary = safeParseColor(colors.squircleSecondary, fallback.squircleSecondary)
+
+    val parsedCloudBack = safeParseColor(colors.cloudBack, fallback.cloudBack)
+    val parsedCloudMid = safeParseColor(colors.cloudMid, fallback.cloudMid)
+    val parsedCloudFront = safeParseColor(colors.cloudFront, fallback.cloudFront)
+    val parsedCatOutline = safeParseColor(colors.catOutline, parsedAccentDeep)
+    val parsedCatBlush = safeParseColor(colors.catBlush, fallback.catBlush)
+
+    val effectiveId = id.ifBlank { "custom_${System.currentTimeMillis()}" }
+    val effectiveName = name.ifBlank { "Custom Theme" }
+
+    return MochibunThemePalette(
+        id = effectiveId,
+        name = effectiveName,
+        primary = parsedPrimary,
+        container = parsedContainer,
+        deepAccent = parsedAccentDeep,
+        background = parsedBackground,
+        outline = parsedOutline,
+        textColor = parsedTextColor,
+        squirclePrimary = parsedSquirclePrimary,
+        squircleSecondary = parsedSquircleSecondary,
+        cloudBack = parsedCloudBack,
+        cloudMid = parsedCloudMid,
+        cloudFront = parsedCloudFront,
+        catOutline = parsedCatOutline,
+        catBlush = parsedCatBlush,
+        selectionGlow = parsedGlow,
+        focusedCardContainer = parsedContainer,
+        focusedCardContainerEnd = parsedContainer,
+        focusedCardBorder = parsedCardBorder,
+        unfocusedCardBg = fallback.unfocusedCardBg,
+        unfocusedCardBorder = parsedOutline.copy(alpha = 0.35f)
+    )
+}
+
+/**
+ * Converts this [YamlTheme] directly into a [LauncherTheme].
+ */
+fun YamlTheme.toLauncherTheme(fallback: MochibunThemePalette = SakuraDreamPalette): LauncherTheme {
+    return toLauncherPalette(fallback).toLauncherTheme(decorations.cardRoundnessDp)
+}

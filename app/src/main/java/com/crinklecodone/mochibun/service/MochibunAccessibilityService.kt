@@ -26,6 +26,8 @@ import kotlinx.coroutines.launch
 class MochibunAccessibilityService : AccessibilityService() {
 
     companion object {
+        private const val TAG = "MochibunAccessibility"
+        const val ACTION_RELOAD_CONFIG="com.crinklecodone.mochibun.RELOAD_CONFIG"
         const val PREFS_NAME = "hardware_remap_preferences"
 
         @Volatile
@@ -202,11 +204,8 @@ class MochibunAccessibilityService : AccessibilityService() {
                         startActivity(intent)
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e(TAG, "Failed to launch app ${action.packageName}", e)
                 }
-            }
-            is ActionType.OpenAiChat -> {
-                // No-op: AI Chat page is disabled in this release
             }
             is ActionType.GlobalBack -> {
                 performGlobalAction(GLOBAL_ACTION_BACK)
@@ -225,7 +224,7 @@ class MochibunAccessibilityService : AccessibilityService() {
             }
         }
     }
-
+    // TODO: Why is this here?
     private fun toggleTorch() {
         try {
             val cameraManager = getSystemService(CAMERA_SERVICE) as? CameraManager ?: return
@@ -233,7 +232,7 @@ class MochibunAccessibilityService : AccessibilityService() {
             isTorchOn = !isTorchOn
             cameraManager.setTorchMode(cameraId, isTorchOn)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Failed toggling torch", e)
         }
     }
 

@@ -17,6 +17,7 @@
 package com.android.quickstep
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.KeyEvent
@@ -69,7 +70,7 @@ import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.theme.loadSavedTheme
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
-import com.crinklecodone.mochibun.ui.theme.M120LauncherTheme
+import com.crinklecodone.mochibun.ui.theme.MochibunTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -121,6 +122,7 @@ private val TASK_TINTS = listOf(
 class RecentsActivity : ComponentActivity() {
 
     private lateinit var tasksManager: RecentTasksManager
+    private val refreshTrigger = androidx.compose.runtime.mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -133,15 +135,27 @@ class RecentsActivity : ComponentActivity() {
             }
             val savedTheme = remember { loadSavedTheme(prefs) }
 
-            M120LauncherTheme {
+            MochibunTheme {
                 CompositionLocalProvider(LocalLauncherTheme provides savedTheme) {
                     RecentsScreen(
                         tasksManager = tasksManager,
+                        refreshTrigger = refreshTrigger.intValue,
                         onDismissActivity = { finish() }
                     )
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshTrigger.intValue++
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        refreshTrigger.intValue++
     }
 
     companion object {
@@ -167,6 +181,7 @@ class RecentsActivity : ComponentActivity() {
 @Composable
 fun RecentsScreen(
     tasksManager: RecentTasksManager,
+    refreshTrigger: Int = 0,
     onDismissActivity: () -> Unit
 ) {
     var tasks by remember { mutableStateOf<List<RecentTaskInfo>>(emptyList()) }
@@ -181,7 +196,7 @@ fun RecentsScreen(
     var sawCenterDown by remember { mutableStateOf(false) }
 
     // Load recent tasks asynchronously off the main thread
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshTrigger) {
         val fetchedTasks = withContext(Dispatchers.IO) {
             tasksManager.getRecentTasks()
         }
@@ -214,9 +229,10 @@ fun RecentsScreen(
 
     val dismissTaskAt: (RecentTaskInfo) -> Unit = { task ->
         val dismissedId = task.taskId
+        val pkg = task.packageName
         tasks = tasks.filter { it.taskId != dismissedId }
-        scope.launch(Dispatchers.IO) {
-            tasksManager.removeTask(dismissedId)
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            tasksManager.removeTask(dismissedId, pkg)
         }
         if (tasks.isEmpty()) {
             onDismissActivity()
@@ -226,7 +242,7 @@ fun RecentsScreen(
     val clearAllTasks: () -> Unit = {
         val currentTasks = tasks
         tasks = emptyList()
-        scope.launch(Dispatchers.IO) {
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
             tasksManager.clearAllTasks(currentTasks)
         }
         onDismissActivity()
@@ -328,9 +344,7 @@ fun RecentsScreen(
                                 }
                             }
                             RecentsFocusZone.BACK_TO_HOME -> {
-                                if (tasks.isNotEmpty()) {
-                                    focusZone = RecentsFocusZone.CLEAR_ALL
-                                }
+                                focusZone = if (tasks.isNotEmpty()) RecentsFocusZone.CLEAR_ALL else RecentsFocusZone.TASK_CAROUSEL
                             }
                         }
                         true
@@ -340,12 +354,12 @@ fun RecentsScreen(
                             RecentsFocusZone.TASK_CAROUSEL -> {
                                 if (isDismissFocused) {
                                     isDismissFocused = false
-                                } else {
-                                    focusZone = if (tasks.isNotEmpty()) RecentsFocusZone.CLEAR_ALL else RecentsFocusZone.BACK_TO_HOME
+                                } else if (tasks.isNotEmpty()) {
+                                    focusZone = RecentsFocusZone.CLEAR_ALL
                                 }
                             }
                             RecentsFocusZone.CLEAR_ALL -> {
-                                focusZone = RecentsFocusZone.BACK_TO_HOME
+                                // Already at bottom button
                             }
                             RecentsFocusZone.BACK_TO_HOME -> {
                                 // Already at bottom

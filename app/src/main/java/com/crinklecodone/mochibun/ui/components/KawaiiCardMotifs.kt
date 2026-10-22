@@ -471,14 +471,6 @@ fun KawaiiCard(
     )
 }
 
-/**
- * Soft diffused pastel glow focus indicator matching Mochibun's physical D-pad contract.
- *
- * Technical note: MediaTek MT6761 GPU drops frames under runtime shaders, so we avoid Modifier.blur().
- * Instead, we draw 4 hardware-accelerated concentric stroke passes with stepping alphas to produce
- * a smooth halo. We enforce 'graphicsLayer { clip = false }' so parent layout boundaries do not
- * slice off the ~3.5 dp outer glow.
- */
 fun Modifier.softGlowFocus(
     isSelected: Boolean,
     cornerRadius: Dp = 22.dp,

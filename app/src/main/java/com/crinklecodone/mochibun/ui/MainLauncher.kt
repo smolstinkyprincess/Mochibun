@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import com.crinklecodone.mochibun.data.repository.IconPackManager
+import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
 import com.crinklecodone.mochibun.data.model.AppInfo
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
 import com.crinklecodone.mochibun.data.model.LauncherApp
@@ -58,12 +59,11 @@ import com.crinklecodone.mochibun.ui.dialogs.HardwareButtonsDialog
 import com.crinklecodone.mochibun.ui.dialogs.HiddenAppsDialog
 import com.crinklecodone.mochibun.ui.dialogs.IconPackSelectionDialog
 import com.crinklecodone.mochibun.ui.dialogs.KawaiiIconPicker
-import com.crinklecodone.mochibun.ui.dialogs.LauncherMenuDialog
 import com.crinklecodone.mochibun.ui.dialogs.dialogWidth
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
 import com.crinklecodone.mochibun.ui.screens.AppDrawerScreen
-import com.crinklecodone.mochibun.ui.screens.CursorSettingsDialog
+import com.crinklecodone.mochibun.ui.screens.SettingsHubDialog
 import com.crinklecodone.mochibun.ui.screens.HomeScreen
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.screens.ThemeStudioDialog
@@ -106,6 +106,17 @@ fun MainLauncher(
     var currentTheme by remember {
         mutableStateOf(loadSavedTheme(preferences))
     }
+    val themeOptions by ExternalThemeManager.themes.collectAsState()
+    LaunchedEffect(themeOptions) {
+        val savedPreset = preferences.getString("theme_preset", null)
+        if (savedPreset != null && currentTheme.name != savedPreset) {
+            val matching = ExternalThemeManager.findTheme(savedPreset)
+            if (matching != null) {
+                currentTheme = matching.theme
+            }
+        }
+    }
+
     var themeStudioOpen by remember { mutableStateOf(false) }
 
     val theme = currentTheme
@@ -123,7 +134,7 @@ fun MainLauncher(
         }
     }
 
-    // wallpaper selection and persistence state :3
+    // wallpaper selection and persistence state
     var wallpaperUri by remember {
         mutableStateOf(
             preferences.getString("wallpaper_uri", null)?.let {
@@ -198,13 +209,13 @@ fun MainLauncher(
     }
     LaunchedEffect(Unit) {
         PreferencesManager.init(context)
+        ExternalThemeManager.init(context)
     }
     val isPixelSprayEnabled by PreferencesManager.isPixelSprayEnabled.collectAsState()
     var editUserNameDialogOpen by remember { mutableStateOf(false) }
     var launcherMenuOpen by remember { mutableStateOf(false) }
     var hiddenManagerOpen by remember { mutableStateOf(false) }
     var hardwareButtonsDialogOpen by remember { mutableStateOf(false) }
-    var virtualMouseDialogOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(requestedPage) {
         requestedPage?.let { target ->
@@ -229,7 +240,7 @@ fun MainLauncher(
     var apps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
     var earlyFavoriteApps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
 
-    // sequential two-phase loader: loads pinned favorites first (~20ms) for instant home screen, then full app list reusing cached icons :3
+    // sequential two-phase loader: loads pinned favorites first (~20ms) for instant home screen, then full app list reusing cached icons
     LaunchedEffect(appListRefreshCount, iconRefreshKey) {
         if (apps.isEmpty() && favoritePackages.isNotEmpty()) {
             val fastFavs = withContext(Dispatchers.IO) {
@@ -290,7 +301,7 @@ fun MainLauncher(
         }
     }
 
-    // hidden apps shown in the hidden apps manager (one entry per package) :3
+    // hidden apps shown in the hidden apps manager (one entry per package)
     val hiddenApps = remember(apps, hiddenPackages) {
         if (hiddenPackages.isEmpty()) {
             emptyList()
@@ -301,7 +312,7 @@ fun MainLauncher(
         }
     }
 
-    // remembers the list position where each starting letter first appears :3
+    // remembers the list position where each starting letter first appears
     val letterStarts = remember(visibleApps) {
         val map = linkedMapOf<Char, Int>()
         visibleApps.forEachIndexed { index, app ->
@@ -339,7 +350,7 @@ fun MainLauncher(
     // Home focus area: 0 = FavoritesCard row, 1 = StatusCard (launcher options / page switcher)
     var homeFocusArea by remember { mutableIntStateOf(0) }
 
-    // 0 = center not pressed, 1 = pressed, 2 = held long (menu already opened) :3
+    // 0 = center not pressed, 1 = pressed, 2 = held long (menu already opened)
     var centerKeyState by remember { mutableIntStateOf(0) }
     var t9Key by remember { mutableStateOf<Int?>(null) }
     var t9Index by remember { mutableIntStateOf(0) }
@@ -353,7 +364,6 @@ fun MainLauncher(
         hiddenManagerOpen ||
         themeStudioOpen ||
         hardwareButtonsDialogOpen ||
-        virtualMouseDialogOpen ||
         editUserNameDialogOpen ||
         openedFolderId != null ||
         createFolderDialogOpen ||
@@ -407,7 +417,7 @@ fun MainLauncher(
             selectedDrawerIndex.coerceIn(0, (visibleApps.size - 1).coerceAtLeast(0))
     }
 
-    // auto scroll to highlighted item in app drawer :3
+    // auto scroll to highlighted item in app drawer
     LaunchedEffect(selectedDrawerIndex, drawerOpen, visibleApps.size) {
         if (drawerOpen && visibleApps.isNotEmpty() && selectedDrawerIndex in visibleApps.indices) {
             val selectedItem = listState.layoutInfo.visibleItemsInfo.firstOrNull {
@@ -485,7 +495,7 @@ fun MainLauncher(
         }
     }
 
-    // physical home button press brings user back to home screen :3
+    // physical home button press brings user back to home screen
     LaunchedEffect(homePressCount) {
         if (homePressCount > 0) {
             drawerOpen = false
@@ -1029,47 +1039,39 @@ fun MainLauncher(
                 }
             }
 
-            // long-press launcher menu dialog
+            // Unified Mochibun Settings Hub (replaces fragmented old LauncherMenuDialog)
             if (launcherMenuOpen) {
-                LauncherMenuDialog(
+                SettingsHubDialog(
                     onDismiss = {
                         launcherMenuOpen = false
                     },
-                    onEditUserNameClick = {
+                    onOpenThemeStudio = {
                         launcherMenuOpen = false
-                        editUserNameDialogOpen = true
+                        themeStudioOpen = true
+                    },
+                    onOpenIconPackDialog = {
+                        launcherMenuOpen = false
+                        iconPackDialogOpen = true
+                    },
+                    onOpenHardwareButtons = {
+                        launcherMenuOpen = false
+                        hardwareButtonsDialogOpen = true
+                    },
+                    onOpenHiddenApps = {
+                        launcherMenuOpen = false
+                        hiddenManagerOpen = true
                     },
                     onCreateFolderClick = {
                         launcherMenuOpen = false
                         folderToCreateFrom = null
                         createFolderDialogOpen = true
                     },
-                    onHardwareButtonsClick = {
-                        launcherMenuOpen = false
-                        hardwareButtonsDialogOpen = true
-                    },
-                    onVirtualMouseClick = {
-                        launcherMenuOpen = false
-                        virtualMouseDialogOpen = true
-                    },
-                    onIconPackClick = {
-                        launcherMenuOpen = false
-                        iconPackDialogOpen = true
-                    },
-                    onHiddenAppsClick = {
-                        launcherMenuOpen = false
-                        hiddenManagerOpen = true
-                    },
-                    onThemeStudioClick = {
-                        launcherMenuOpen = false
-                        themeStudioOpen = true
-                    },
                     onPickWallpaperClick = {
                         launcherMenuOpen = false
                         try {
                             wallpaperPicker.launch(arrayOf("image/*"))
                         } catch (e: Exception) {
-                            e.printStackTrace()
+                            android.util.Log.e("MainLauncher", "Failed to launch wallpaper picker", e)
                         }
                     },
                     onResetWallpaperClick = {
@@ -1079,11 +1081,7 @@ fun MainLauncher(
                             .remove("wallpaper_uri")
                             .apply()
                     },
-                    showResetWallpaper = wallpaperUri != null,
-                    isPixelSprayEnabled = isPixelSprayEnabled,
-                    onTogglePixelSpray = { enabled ->
-                        PreferencesManager.setPixelSprayWallpaperEnabled(context, enabled)
-                    }
+                    hasCustomWallpaper = wallpaperUri != null
                 )
             }
 
@@ -1129,6 +1127,7 @@ fun MainLauncher(
                     onApply = { newTheme ->
                         currentTheme = newTheme
                         saveTheme(preferences, newTheme)
+                        PreferencesManager.setThemePreset(context, newTheme.name)
                         themeStudioOpen = false
                     }
                 )
@@ -1139,14 +1138,6 @@ fun MainLauncher(
                     installedApps = apps.map { AppInfo(it.packageName, it.name) },
                     onDismiss = {
                         hardwareButtonsDialogOpen = false
-                    }
-                )
-            }
-
-            if (virtualMouseDialogOpen) {
-                CursorSettingsDialog(
-                    onDismiss = {
-                        virtualMouseDialogOpen = false
                     }
                 )
             }
@@ -1511,9 +1502,7 @@ fun MainLauncher(
                     },
                     onDeleteFolder = {
                         val deletedId = openedFolder.id
-                        favoriteFolders = favoriteFolders.filterNot {
-                            it.id == deletedId
-                        }
+                        favoriteFolders = favoriteFolders.filterNot { it.id == deletedId }
                         preferences.edit()
                             .remove("custom_folder_icon_$deletedId")
                             .apply()

@@ -7,6 +7,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.toArgb
 
+import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
 import com.crinklecodone.mochibun.ui.theme.*
 
 /**
@@ -189,7 +190,7 @@ val LauncherTheme.palette: MochibunThemePalette
         "lavender_mist", "lavender_dream" -> LavenderMistPalette
         "minty_matcha" -> MintyMatchaPalette
         "milky_peach" -> MilkyPeachPalette
-        else -> SakuraDreamPalette
+        else -> ExternalThemeManager.findPalette(name) ?: SakuraDreamPalette
     }
 
 val LauncherTheme.selectionGlowColor: Color
@@ -423,7 +424,14 @@ fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
         if (found != null) return found.theme
     }
 
-    val base = when (presetName) {
+    val externalTheme = ExternalThemeManager.findTheme(presetName)
+    if (externalTheme != null) {
+        if (!prefs.contains("theme_bg_color")) {
+            return externalTheme.theme
+        }
+    }
+
+    val base = externalTheme?.theme ?: when (presetName) {
         "lavender_mist", "lavender_dream" -> LavenderMistTheme
         "minty_matcha" -> MintyMatchaTheme
         "milky_peach" -> MilkyPeachTheme
@@ -488,5 +496,3 @@ fun saveTheme(prefs: SharedPreferences, theme: LauncherTheme) {
         .putFloat("theme_card_roundness", theme.cardRoundnessDp)
         .apply()
 }
-
-

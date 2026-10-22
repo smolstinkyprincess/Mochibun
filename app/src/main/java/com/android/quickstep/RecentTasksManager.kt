@@ -285,11 +285,13 @@ class RecentTasksManager(context: Context) {
     }
 
     /**
-     * Removes a single task from the recents stack.
+     * Removes a single task from the recents stack and terminates its process.
      */
     @SuppressLint("BlockedPrivateApi")
-    fun removeTask(taskId: Int): Boolean {
-        // 1. Try ActivityTaskManager reflection
+    fun removeTask(taskId: Int, packageName: String? = null): Boolean {
+        var removed = false
+
+        // 1. Try ActivityTaskManager reflection (framework removeTask)
         try {
             val service = getAtmService()
             if (service != null) {
@@ -306,36 +308,63 @@ class RecentTasksManager(context: Context) {
                 if (method != null) {
                     val result = method.invoke(service, taskId)
                     Log.i(TAG, "removeTask($taskId) returned: $result")
-                    return (result as? Boolean) ?: true
+                    removed = (result as? Boolean) ?: true
                 }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Reflection removeTask failed for $taskId", e)
         }
 
-        // 2. Shell fallback
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("am", "stack", "remove", taskId.toString()))
-            process.waitFor()
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Shell fallback removeTask failed for $taskId", e)
-            false
+        // 2. Shell fallback for Android 11/12 (am task remove <taskId>)
+        if (!removed) {
+            try {
+                // Check root first for clean task removal
+                if (com.crinklecodone.mochibun.core.system.RootShell.isSuBinaryPresent()) {
+                    val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "am stack remove $taskId"))
+                    proc.waitFor()
+                    removed = proc.exitValue() == 0
+                }
+                if (!removed) {
+                    val process = Runtime.getRuntime().exec(arrayOf("am", "stack", "remove", taskId.toString()))
+                    process.waitFor()
+                    removed = process.exitValue() == 0
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Shell fallback removeTask failed for $taskId", e)
+            }
         }
+
+        // 3. Kill the associated application process so memory is truly freed
+        if (!packageName.isNullOrEmpty() && packageName != appContext.packageName) {
+            try {
+                activityManager.killBackgroundProcesses(packageName)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to killBackgroundProcesses for $packageName", e)
+            }
+
+            // If root is available, issue am force-stop to guarantee complete termination
+            if (com.crinklecodone.mochibun.core.system.RootShell.isSuBinaryPresent()) {
+                try {
+                    val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "am force-stop $packageName"))
+                    proc.waitFor()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to force-stop $packageName", e)
+                }
+            }
+        }
+
+        return removed
     }
 
     /**
-     * Sequentially kills/removes all background tasks.
+     * Sequentially kills and removes all background tasks from the stack.
      */
     fun clearAllTasks(tasks: List<RecentTaskInfo>): Boolean {
         var allSuccess = true
         for (task in tasks) {
-            val ok = removeTask(task.taskId)
+            val ok = removeTask(task.taskId, task.packageName)
             if (!ok) {
                 allSuccess = false
-                try {
-                    activityManager.killBackgroundProcesses(task.packageName)
-                } catch (_: Exception) {}
             }
         }
         return allSuccess

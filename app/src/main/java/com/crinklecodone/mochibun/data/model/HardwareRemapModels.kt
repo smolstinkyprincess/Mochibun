@@ -73,7 +73,6 @@ enum class PhysicalKey(
 sealed class ActionType {
     object None : ActionType()
     data class LaunchApp(val packageName: String, val appLabel: String) : ActionType()
-    object OpenAiChat : ActionType()
     object GlobalBack : ActionType()
     object GlobalRecents : ActionType()
     object OpenRecentsSystem : ActionType()
@@ -83,7 +82,6 @@ sealed class ActionType {
     fun displayName(): String = when (this) {
         is None -> "None (Default)"
         is LaunchApp -> "Launch $appLabel"
-        is OpenAiChat -> "Open Mochibun AI Chat"
         is GlobalBack -> "Global Back"
         is GlobalRecents -> "Overview / Recents"
         is OpenRecentsSystem -> "Open Recents (System)"
@@ -94,7 +92,6 @@ sealed class ActionType {
     fun serialize(): String = when (this) {
         is None -> "NONE"
         is LaunchApp -> "LAUNCH_APP:$packageName:$appLabel"
-        is OpenAiChat -> "OPEN_AI_CHAT"
         is GlobalBack -> "GLOBAL_BACK"
         is GlobalRecents -> "GLOBAL_RECENTS"
         is OpenRecentsSystem -> "OPEN_RECENTS_SYSTEM"
@@ -114,7 +111,6 @@ sealed class ActionType {
                 }
             }
             return when (raw) {
-                "OPEN_AI_CHAT" -> OpenAiChat
                 "GLOBAL_BACK" -> GlobalBack
                 "GLOBAL_RECENTS" -> GlobalRecents
                 "OPEN_RECENTS_SYSTEM" -> OpenRecentsSystem
