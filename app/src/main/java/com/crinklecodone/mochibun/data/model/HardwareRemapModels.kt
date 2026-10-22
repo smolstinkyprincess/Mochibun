@@ -1,7 +1,9 @@
 package com.crinklecodone.mochibun.data.model
 
 import android.view.KeyEvent
+import androidx.compose.runtime.Immutable
 
+@Immutable
 data class AppInfo(
     val packageName: String,
     val label: String

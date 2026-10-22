@@ -9,6 +9,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -28,6 +29,8 @@ import com.crinklecodone.mochibun.data.repository.IconPackManager
 
 
 class MainActivity : ComponentActivity() {
+    private val launcherViewModel: LauncherViewModel by viewModels()
+
     var homePressCount by mutableStateOf(0)
         private set
 
@@ -36,6 +39,13 @@ class MainActivity : ComponentActivity() {
 
     fun consumeRequestedPage() {
         requestedPage = null
+    }
+
+    var pendingThemeBundleUri by mutableStateOf<android.net.Uri?>(null)
+        private set
+
+    fun consumePendingThemeBundleUri() {
+        pendingThemeBundleUri = null
     }
 
     var appListRefreshCount by mutableIntStateOf(0)
@@ -93,6 +103,10 @@ class MainActivity : ComponentActivity() {
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
             homePressCount++
         }
+
+        if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
+            pendingThemeBundleUri = intent.data
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,6 +115,10 @@ class MainActivity : ComponentActivity() {
         if (intent?.hasExtra("OPEN_PAGE") == true) {
             val page = intent.getIntExtra("OPEN_PAGE", 1)
             requestedPage = page.coerceIn(0, 2)
+        }
+
+        if (intent?.action == Intent.ACTION_VIEW && intent?.data != null) {
+            pendingThemeBundleUri = intent?.data
         }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -132,12 +150,15 @@ class MainActivity : ComponentActivity() {
                 ) { innerPadding ->
                     MainLauncher(
                         modifier = Modifier.padding(innerPadding),
+                        viewModel = launcherViewModel,
                         homePressCount = homePressCount,
                         appListRefreshCount = appListRefreshCount,
                         lidOpenCount = lidOpenCount,
                         lidClosedCount = lidClosedCount,
                         requestedPage = requestedPage,
-                        onPageConsumed = ::consumeRequestedPage
+                        onPageConsumed = ::consumeRequestedPage,
+                        incomingBundleUri = pendingThemeBundleUri,
+                        onConsumeIncomingBundleUri = ::consumePendingThemeBundleUri
                     )
                 }
             }

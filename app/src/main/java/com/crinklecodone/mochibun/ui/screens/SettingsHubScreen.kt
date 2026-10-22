@@ -57,6 +57,7 @@ import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import com.crinklecodone.mochibun.data.repository.BackupRestoreManager
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -68,6 +69,7 @@ sealed class SettingsDestination {
     object Appearance : SettingsDestination()
     object CursorHardware : SettingsDestination()
     object Behavior : SettingsDestination()
+    object BackupRestore : SettingsDestination()
     object About : SettingsDestination()
 }
 
@@ -88,7 +90,8 @@ fun SettingsHubScreen(
     onOpenSpeedDial: (() -> Unit)? = null,
     onPickWallpaperClick: (() -> Unit)? = null,
     onResetWallpaperClick: (() -> Unit)? = null,
-    hasCustomWallpaper: Boolean = false
+    hasCustomWallpaper: Boolean = false,
+    onSettingsRestored: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var currentDestination by remember { mutableStateOf<SettingsDestination>(SettingsDestination.Hub) }
@@ -128,6 +131,13 @@ fun SettingsHubScreen(
                 modifier = modifier
             )
         }
+        SettingsDestination.BackupRestore -> {
+            BackupRestoreSettingsSubScreen(
+                onBack = { currentDestination = SettingsDestination.Hub },
+                onSettingsRestored = onSettingsRestored,
+                modifier = modifier
+            )
+        }
         SettingsDestination.About -> {
             AboutMochibunSubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
@@ -151,7 +161,7 @@ private fun SettingsHubRootScreen(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val totalItems = 4 // 4 primary navigation cards
+    val totalItems = 5 // 5 primary navigation cards
 
     LaunchedEffect(focusedIndex) {
         listState.animateScrollToItem(focusedIndex)
@@ -183,7 +193,8 @@ private fun SettingsHubRootScreen(
                             0 -> onNavigate(SettingsDestination.Appearance)
                             1 -> onNavigate(SettingsDestination.CursorHardware)
                             2 -> onNavigate(SettingsDestination.Behavior)
-                            3 -> onNavigate(SettingsDestination.About)
+                            3 -> onNavigate(SettingsDestination.BackupRestore)
+                            4 -> onNavigate(SettingsDestination.About)
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -245,12 +256,24 @@ private fun SettingsHubRootScreen(
             }
 
             item {
+                SettingsCard(categoryTitle = "Data & Storage") {
+                    SettingsNavigationRow(
+                        title = "Backup & Restore",
+                        subtitle = "Export or restore layout, themes, folders & key remaps",
+                        icon = "💾",
+                        isFocused = focusedIndex == 3,
+                        onClick = { onNavigate(SettingsDestination.BackupRestore) }
+                    )
+                }
+            }
+
+            item {
                 SettingsCard(categoryTitle = "System & Specs") {
                     SettingsNavigationRow(
                         title = "About Mochibun",
                         subtitle = "Version, hardware specs & credits",
                         icon = "♡",
-                        isFocused = focusedIndex == 3,
+                        isFocused = focusedIndex == 4,
                         onClick = { onNavigate(SettingsDestination.About) }
                     )
                 }
@@ -1213,6 +1236,317 @@ private fun AboutMochibunSubScreen(
 }
 
 /**
+ * Tier 1: Backup & Restore Sub-Screen
+ */
+@Composable
+private fun BackupRestoreSettingsSubScreen(
+    onBack: () -> Unit,
+    onSettingsRestored: (() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val listState = rememberLazyListState()
+    val focusRequester = remember { FocusRequester() }
+    var focusedIndex by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+    var showResetConfirmDialog by remember { mutableStateOf(false) }
+    var showExportBundleDialog by remember { mutableStateOf(false) }
+    var pendingImportPreviewData by remember { mutableStateOf<com.crinklecodone.mochibun.data.repository.BundlePreviewData?>(null) }
+    var pendingImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
+    // State for pending export configuration awaiting file creation URI
+    var pendingBundleName by remember { mutableStateOf("Mochibun Setup") }
+    var pendingIncludeWallpaper by remember { mutableStateOf(true) }
+    var pendingIncludeCursor by remember { mutableStateOf(true) }
+    var pendingIncludeDisplayName by remember { mutableStateOf(true) }
+
+    // Setup Bundle (.mochibun) Create launcher
+    val bundleCreateLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    val result = com.crinklecodone.mochibun.data.repository.ThemeBundleManager.exportBundle(
+                        context = context,
+                        outputStream = outputStream,
+                        bundleName = pendingBundleName,
+                        includeWallpaper = pendingIncludeWallpaper,
+                        includeCustomCursor = pendingIncludeCursor,
+                        includeDisplayName = pendingIncludeDisplayName
+                    )
+                    if (result.isSuccess) {
+                        statusMessage = "Theme bundle exported! ♡"
+                    } else {
+                        statusMessage = "Export failed: ${result.exceptionOrNull()?.message}"
+                    }
+                }
+            } catch (e: Exception) {
+                statusMessage = "Export failed: ${e.message}"
+            }
+        }
+    }
+
+    // Setup Bundle (.mochibun) Import launcher
+    val bundleImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    val previewRes = com.crinklecodone.mochibun.data.repository.ThemeBundleManager.readBundleManifest(inputStream)
+                    if (previewRes.isSuccess) {
+                        pendingImportPreviewData = previewRes.getOrThrow()
+                        pendingImportUri = uri
+                    } else {
+                        statusMessage = "Invalid bundle: ${previewRes.exceptionOrNull()?.message}"
+                    }
+                }
+            } catch (e: Exception) {
+                statusMessage = "Failed to inspect bundle: ${e.message}"
+            }
+        }
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    BackupRestoreManager.exportBackup(context, outputStream)
+                }
+                statusMessage = "Backup exported successfully! ♡"
+            } catch (e: Exception) {
+                statusMessage = "Export failed: ${e.message}"
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val result = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    BackupRestoreManager.importBackup(context, inputStream)
+                }
+                if (result != null && result.isSuccess) {
+                    val summary = result.getOrThrow()
+                    onSettingsRestored?.invoke()
+                    statusMessage = "Restored: ${summary.folderCount} folders, ${summary.favoriteCount} favorites, ${summary.remapCount} remaps! ♡"
+                } else {
+                    statusMessage = "Restore failed: ${result?.exceptionOrNull()?.message ?: "Invalid file"}"
+                }
+            } catch (e: Exception) {
+                statusMessage = "Restore failed: ${e.message}"
+            }
+        }
+    }
+
+    val items = listOf("export_bundle", "import_bundle", "export", "restore", "reset")
+    val totalItems = items.size
+
+    LaunchedEffect(focusedIndex) {
+        listState.animateScrollToItem(focusedIndex)
+    }
+
+    requestFocusSafely(focusRequester)
+
+    SettingsScaffold(
+        title = "Backup & Restore",
+        showBack = true,
+        onBack = onBack,
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) onBack()
+                    return@onPreviewKeyEvent true
+                }
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        when (items.getOrNull(focusedIndex)) {
+                            "export_bundle" -> showExportBundleDialog = true
+                            "import_bundle" -> bundleImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+                            "export" -> exportLauncher.launch(BackupRestoreManager.generateBackupFileName())
+                            "restore" -> importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
+                            "reset" -> showResetConfirmDialog = true
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                when (native.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        focusedIndex = if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        focusedIndex = if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            item {
+                SettingsCard(categoryTitle = "Share & Theme Presets") {
+                    SettingsNavigationRow(
+                        title = "Export Setup Bundle (.mochibun)",
+                        subtitle = "Share theme, colors, greeting & cursor in a safe archive",
+                        icon = "🎀",
+                        isFocused = focusedIndex == 0,
+                        onClick = {
+                            showExportBundleDialog = true
+                        }
+                    )
+
+                    SettingsNavigationRow(
+                        title = "Import Setup Bundle",
+                        subtitle = "Preview and apply a shared .mochibun preset",
+                        icon = "✨",
+                        isFocused = focusedIndex == 1,
+                        onClick = {
+                            bundleImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+                        }
+                    )
+                }
+            }
+
+            item {
+                SettingsCard(categoryTitle = "Full System Backup") {
+                    SettingsNavigationRow(
+                        title = "Export Full Backup",
+                        subtitle = "Save layout, folders, themes & key remaps to a .json file",
+                        icon = "📤",
+                        isFocused = focusedIndex == 2,
+                        onClick = {
+                            exportLauncher.launch(BackupRestoreManager.generateBackupFileName())
+                        }
+                    )
+
+                    SettingsNavigationRow(
+                        title = "Restore Full Backup",
+                        subtitle = "Import a complete Mochibun .json backup file",
+                        icon = "📥",
+                        isFocused = focusedIndex == 3,
+                        onClick = {
+                            importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
+                        }
+                    )
+                }
+            }
+
+            item {
+                SettingsCard(categoryTitle = "Factory Reset") {
+                    SettingsNavigationRow(
+                        title = "Reset to Defaults",
+                        subtitle = "Reset launcher layout, folders, remaps & preferences",
+                        icon = "🔄",
+                        isFocused = focusedIndex == 4,
+                        onClick = {
+                            showResetConfirmDialog = true
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showExportBundleDialog) {
+        com.crinklecodone.mochibun.ui.dialogs.ExportBundleDialog(
+            onDismiss = { showExportBundleDialog = false },
+            onExport = { name, wall, cur, disp ->
+                pendingBundleName = name
+                pendingIncludeWallpaper = wall
+                pendingIncludeCursor = cur
+                pendingIncludeDisplayName = disp
+                showExportBundleDialog = false
+                bundleCreateLauncher.launch(com.crinklecodone.mochibun.data.repository.ThemeBundleManager.generateBundleFileName(name))
+            }
+        )
+    }
+
+    pendingImportPreviewData?.let { preview ->
+        com.crinklecodone.mochibun.ui.dialogs.PresetPreviewDialog(
+            previewData = preview,
+            onApply = {
+                val uri = pendingImportUri
+                if (uri != null) {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { stream ->
+                            val applyRes = com.crinklecodone.mochibun.data.repository.ThemeBundleManager.applyBundle(context, stream)
+                            if (applyRes.isSuccess) {
+                                onSettingsRestored?.invoke()
+                                statusMessage = "Preset '${preview.manifest.bundleName}' applied! ♡"
+                            } else {
+                                statusMessage = "Apply failed: ${applyRes.exceptionOrNull()?.message}"
+                            }
+                        }
+                    } catch (e: Exception) {
+                        statusMessage = "Apply failed: ${e.message}"
+                    }
+                }
+                pendingImportPreviewData = null
+                pendingImportUri = null
+            },
+            onDismiss = {
+                pendingImportPreviewData = null
+                pendingImportUri = null
+            }
+        )
+    }
+
+    if (showResetConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirmDialog = false },
+            title = { Text("Reset to Factory Defaults", fontWeight = FontWeight.Bold, color = ActiveTheme.accentDeep) },
+            text = { Text("Are you sure you want to reset all Mochibun settings, layout, folders, and key remaps back to factory defaults?", color = ActiveTheme.textPrimary) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        BackupRestoreManager.resetToDefaults(context)
+                        onSettingsRestored?.invoke()
+                        showResetConfirmDialog = false
+                        statusMessage = "Reset to factory defaults completed."
+                    }
+                ) {
+                    Text("Reset", color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirmDialog = false }) {
+                    Text("Cancel", color = ActiveTheme.textPrimary)
+                }
+            },
+            containerColor = ActiveTheme.container,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    statusMessage?.let { msg ->
+        LaunchedEffect(msg) {
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+            statusMessage = null
+        }
+    }
+}
+
+/**
  * Mochibun dialog wrapper for [SettingsHubScreen].
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1227,7 +1561,8 @@ fun SettingsHubDialog(
     onOpenSpeedDial: (() -> Unit)? = null,
     onPickWallpaperClick: (() -> Unit)? = null,
     onResetWallpaperClick: (() -> Unit)? = null,
-    hasCustomWallpaper: Boolean = false
+    hasCustomWallpaper: Boolean = false,
+    onSettingsRestored: (() -> Unit)? = null
 ) {
     BasicAlertDialog(
         onDismissRequest = onDismiss,
@@ -1248,7 +1583,8 @@ fun SettingsHubDialog(
             onOpenSpeedDial = onOpenSpeedDial,
             onPickWallpaperClick = onPickWallpaperClick,
             onResetWallpaperClick = onResetWallpaperClick,
-            hasCustomWallpaper = hasCustomWallpaper
+            hasCustomWallpaper = hasCustomWallpaper,
+            onSettingsRestored = onSettingsRestored
         )
     }
 }

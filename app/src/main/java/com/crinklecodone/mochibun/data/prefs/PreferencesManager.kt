@@ -45,6 +45,13 @@ object PreferencesManager {
 
     const val KEY_SPEED_DIAL_PREFIX = "pref_speed_dial_"
 
+    const val KEY_WALLPAPER_URI = "wallpaper_uri"
+    const val KEY_HIDDEN_APPS = "hidden_apps"
+    const val KEY_FAVORITE_ITEMS_ORDERED = "favorite_items_ordered_v1"
+    const val KEY_FAVORITE_PACKAGES_ORDERED = "favorite_packages_ordered"
+    const val KEY_CUSTOM_ICON_PREFIX = "custom_icon_"
+    const val KEY_CUSTOM_FOLDER_ICON_PREFIX = "custom_folder_icon_"
+
     private val _isPixelSprayEnabled = MutableStateFlow(DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED)
     val isPixelSprayEnabled: StateFlow<Boolean> = _isPixelSprayEnabled.asStateFlow()
 
@@ -278,5 +285,91 @@ object PreferencesManager {
                 }
             }
         }
+    }
+
+    fun getWallpaperUri(context: Context): String? {
+        return getPrefs(context).getString(KEY_WALLPAPER_URI, null)
+    }
+
+    fun setWallpaperUri(context: Context, uri: String?) {
+        val editor = getPrefs(context).edit()
+        if (uri == null) {
+            editor.remove(KEY_WALLPAPER_URI)
+        } else {
+            editor.putString(KEY_WALLPAPER_URI, uri)
+        }
+        editor.apply()
+    }
+
+    fun getHiddenPackages(context: Context): Set<String> {
+        return getPrefs(context).getStringSet(KEY_HIDDEN_APPS, emptySet())?.toSet() ?: emptySet()
+    }
+
+    fun setHiddenPackages(context: Context, packages: Set<String>) {
+        getPrefs(context).edit().putStringSet(KEY_HIDDEN_APPS, packages).apply()
+    }
+
+    fun addHiddenPackage(context: Context, packageName: String) {
+        val current = getHiddenPackages(context).toMutableSet()
+        if (current.add(packageName)) {
+            setHiddenPackages(context, current)
+        }
+    }
+
+    fun removeHiddenPackage(context: Context, packageName: String) {
+        val current = getHiddenPackages(context).toMutableSet()
+        if (current.remove(packageName)) {
+            setHiddenPackages(context, current)
+        }
+    }
+
+    fun getFavoriteItemKeys(context: Context): List<String> {
+        val prefs = getPrefs(context)
+        val saved = prefs.getString(KEY_FAVORITE_ITEMS_ORDERED, null)
+        if (saved != null) {
+            return saved.split("|").filter { it.isNotEmpty() }
+        }
+        val legacyPackages = prefs.getString(KEY_FAVORITE_PACKAGES_ORDERED, "")
+            ?.split("|")
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+        val legacyFolders = loadFavoriteFolders(context)
+        return legacyPackages.map { "app:$it" } + legacyFolders.map { "folder:${it.id}" }
+    }
+
+    fun saveFavoriteItemKeys(context: Context, keys: List<String>) {
+        val appPkgs = keys.filterNot { it.startsWith("folder:") }.map { it.removePrefix("app:") }
+        getPrefs(context).edit()
+            .putString(KEY_FAVORITE_ITEMS_ORDERED, keys.joinToString("|"))
+            .putString(KEY_FAVORITE_PACKAGES_ORDERED, appPkgs.joinToString("|"))
+            .apply()
+    }
+
+    fun getCustomAppIcon(context: Context, packageName: String): String? {
+        return getPrefs(context).getString("$KEY_CUSTOM_ICON_PREFIX$packageName", null)
+    }
+
+    fun setCustomAppIcon(context: Context, packageName: String, iconName: String?) {
+        val editor = getPrefs(context).edit()
+        if (iconName == null) {
+            editor.remove("$KEY_CUSTOM_ICON_PREFIX$packageName")
+        } else {
+            editor.putString("$KEY_CUSTOM_ICON_PREFIX$packageName", iconName)
+        }
+        editor.apply()
+    }
+
+    fun getCustomFolderIcon(context: Context, folderId: String): String? {
+        return getPrefs(context).getString("$KEY_CUSTOM_FOLDER_ICON_PREFIX$folderId", null)
+    }
+
+    fun setCustomFolderIcon(context: Context, folderId: String, iconName: String?) {
+        val editor = getPrefs(context).edit()
+        if (iconName == null) {
+            editor.remove("$KEY_CUSTOM_FOLDER_ICON_PREFIX$folderId")
+        } else {
+            editor.putString("$KEY_CUSTOM_FOLDER_ICON_PREFIX$folderId", iconName)
+        }
+        editor.apply()
     }
 }

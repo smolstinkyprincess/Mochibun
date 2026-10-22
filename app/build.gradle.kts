@@ -100,6 +100,7 @@ dependencies {
     implementation(libs.androidx.profileinstaller)
     implementation(libs.libsu.core)
     implementation(libs.kaml)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
     testImplementation(libs.junit)

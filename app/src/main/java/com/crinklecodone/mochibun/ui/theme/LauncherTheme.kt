@@ -3,6 +3,7 @@ package com.crinklecodone.mochibun.ui.theme
 import androidx.compose.ui.graphics.Color
 import android.content.SharedPreferences
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.toArgb
@@ -17,6 +18,7 @@ import com.crinklecodone.mochibun.ui.theme.*
  * 3. Minty Matcha
  * 4. Milky Peach
  */
+@Immutable
 data class MochibunThemePalette(
     val id: String,
     val name: String,
@@ -156,6 +158,7 @@ fun MochibunThemePalette.toLauncherTheme(roundnessDp: Float = 24f): LauncherThem
     mascotTint = mascotTint
 )
 
+@Immutable
 data class LauncherTheme(
     val name: String = "sakura_dream",
     val bgColor: Color = Color(0xFFFFF5F8),

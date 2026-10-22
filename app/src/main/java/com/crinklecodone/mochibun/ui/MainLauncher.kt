@@ -66,6 +66,9 @@ import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
 import com.crinklecodone.mochibun.ui.screens.AppDrawerScreen
 import com.crinklecodone.mochibun.ui.screens.SettingsHubDialog
+import com.crinklecodone.mochibun.data.repository.ThemeBundleManager
+import com.crinklecodone.mochibun.data.repository.BundlePreviewData
+import com.crinklecodone.mochibun.ui.dialogs.PresetPreviewDialog
 import com.crinklecodone.mochibun.ui.screens.HomeScreen
 import com.crinklecodone.mochibun.ui.screens.NotificationsScreen
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
@@ -86,21 +89,44 @@ import kotlin.text.get
 @Composable
 fun MainLauncher(
     modifier: Modifier = Modifier,
+    viewModel: LauncherViewModel? = null,
     homePressCount: Int = 0,
     appListRefreshCount: Int = 0,
     lidOpenCount: Int = 0,
     lidClosedCount: Int = 0,
     requestedPage: Int? = null,
-    onPageConsumed: () -> Unit = {}
+    onPageConsumed: () -> Unit = {},
+    incomingBundleUri: Uri? = null,
+    onConsumeIncomingBundleUri: () -> Unit = {}
 ) {
     val context = LocalContext.current
-
-    val preferences = remember {
-        context.getSharedPreferences(
-            "launcher_preferences",
-            Context.MODE_PRIVATE
-        )
+    val launcherVm: LauncherViewModel = viewModel ?: remember {
+        LauncherViewModel(context.applicationContext as android.app.Application)
     }
+
+    var activeIncomingPreview by remember { mutableStateOf<BundlePreviewData?>(null) }
+    var pendingIncomingUri by remember { mutableStateOf<Uri?>(null) }
+
+    LaunchedEffect(incomingBundleUri) {
+        val uri = incomingBundleUri
+        if (uri != null) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val previewRes = ThemeBundleManager.readBundleManifest(stream)
+                    if (previewRes.isSuccess) {
+                        activeIncomingPreview = previewRes.getOrThrow()
+                        pendingIncomingUri = uri
+                    } else {
+                        onConsumeIncomingBundleUri()
+                    }
+                }
+            } catch (e: Exception) {
+                onConsumeIncomingBundleUri()
+            }
+        }
+    }
+
+    val preferences = remember { PreferencesManager.getPrefs(context) }
 
     var currentTheme by remember {
         mutableStateOf(loadSavedTheme(preferences))
@@ -127,94 +153,21 @@ fun MainLauncher(
     var iconEditingFolder by remember { mutableStateOf<FavoriteFolder?>(null) }
     var folderIconMenuOpen by remember { mutableStateOf(false) }
 
-    val intent = remember {
-        Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-        }
-    }
-
     // wallpaper selection and persistence state
-    var wallpaperUri by remember {
-        mutableStateOf(
-            preferences.getString("wallpaper_uri", null)?.let {
-                Uri.parse(it)
-            }
-        )
-    }
-    var wallpaperBitmap by remember {
-        mutableStateOf<Bitmap?>(null)
-    }
+    val wallpaperBitmap = launcherVm.wallpaperBitmap
     val wallpaperImageBitmap = remember(wallpaperBitmap) {
         wallpaperBitmap?.asImageBitmap()
     }
     val wallpaperPicker =
         rememberLauncherForActivityResult(contract = ActivityResultContracts.OpenDocument()) { uri ->
-            wallpaperUri = uri
-
             if (uri != null) {
                 context.contentResolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
-
-                preferences.edit()
-                    .putString("wallpaper_uri", uri.toString())
-                    .apply()
+                launcherVm.setWallpaper(uri)
             }
         }
-
-    // memory-efficient sampled wallpaper loader
-    LaunchedEffect(wallpaperUri) {
-        val uri = wallpaperUri ?: run {
-            wallpaperBitmap = null
-            return@LaunchedEffect
-        }
-
-        wallpaperBitmap = withContext(Dispatchers.IO) {
-            loadWallpaperBitmap(context, uri)
-        }
-    }
-
-    var hiddenPackages by remember {
-        mutableStateOf(
-            preferences.getStringSet("hidden_apps", emptySet())?.toSet()
-                ?: emptySet()
-        )
-    }
-
-    var favoriteItemKeys by remember {
-        mutableStateOf(
-            preferences.getString("favorite_items_ordered_v1", null)
-                ?.split("|")
-                ?.filter { it.isNotEmpty() }
-                ?: run {
-                    val legacyPackages = preferences
-                        .getString("favorite_packages_ordered", "")
-                        ?.split("|")
-                        ?.filter { it.isNotEmpty() }
-                        ?: emptyList()
-                    val legacyFolders = PreferencesManager.loadFavoriteFolders(context)
-                    legacyPackages.map { "app:$it" } + legacyFolders.map { "folder:${it.id}" }
-                }
-        )
-    }
-
-    var favoritePackages by remember(favoriteItemKeys) {
-        mutableStateOf(
-            favoriteItemKeys.filterNot { it.startsWith("folder:") }.map { it.removePrefix("app:") }
-        )
-    }
-
-    val saveFavoriteItemKeys = remember(preferences) {
-        { keys: List<String> ->
-            val appPkgs = keys.filterNot { it.startsWith("folder:") }.map { it.removePrefix("app:") }
-            favoritePackages = appPkgs
-            preferences.edit()
-                .putString("favorite_items_ordered_v1", keys.joinToString("|"))
-                .putString("favorite_packages_ordered", appPkgs.joinToString("|"))
-                .apply()
-        }
-    }
 
     var drawerOpen by remember { mutableStateOf(false) }
     // Active pages: 0 = Widgets, 1 = Home, 2 = Notifications
@@ -224,9 +177,6 @@ fun MainLauncher(
     var iconEditingApp by remember { mutableStateOf<LauncherApp?>(null) }
     var iconPickerOpen by remember { mutableStateOf(false) }
     var iconPackDialogOpen by remember { mutableStateOf(false) }
-    var kawaiiIconNames by remember { mutableStateOf<List<String>>(emptyList()) }
-    var iconRefreshKey by remember { mutableIntStateOf(0) }
-    var folderIconRefreshKey by remember { mutableIntStateOf(0) }
     val userName by PreferencesManager.customUserName.collectAsState()
     LaunchedEffect(Unit) {
         PreferencesManager.init(context)
@@ -247,7 +197,6 @@ fun MainLauncher(
         }
     }
 
-    var favoriteFolders by remember { mutableStateOf(PreferencesManager.loadFavoriteFolders(context)) }
     var folderToCreateFrom by remember { mutableStateOf<LauncherApp?>(null) }
     var createFolderDialogOpen by remember { mutableStateOf(false) }
     var openedFolderId by remember { mutableStateOf<String?>(null) }
@@ -258,157 +207,26 @@ fun MainLauncher(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    var apps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
-    var earlyFavoriteApps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
-
-    // sequential two-phase loader: loads pinned favorites first (~20ms) for instant home screen, then full app list reusing cached icons
-    LaunchedEffect(appListRefreshCount, iconRefreshKey) {
-        if (apps.isEmpty() && favoritePackages.isNotEmpty()) {
-            val fastFavs = withContext(Dispatchers.IO) {
-                IconPackManager.getActiveParsedPack(context)
-
-                favoritePackages
-                    .filter { it !in hiddenPackages }
-                    .mapNotNull { pkgName ->
-                        val launchIntent = context.packageManager.getLaunchIntentForPackage(pkgName)
-                            ?: return@mapNotNull null
-                        val resolveInfo = context.packageManager.resolveActivity(launchIntent, 0)
-                            ?: return@mapNotNull null
-
-                        IconPackManager.getOrLoadLauncherApp(
-                            context = context,
-                            preferences = preferences,
-                            resolveInfo = resolveInfo
-                        )
-                    }
-            }
-            earlyFavoriteApps = fastFavs
-        }
-
-        apps = withContext(Dispatchers.IO) {
-            IconPackManager.getActiveParsedPack(context)
-
-            context.packageManager
-                .queryIntentActivities(intent, 0)
-                .map { app ->
-                    IconPackManager.getOrLoadLauncherApp(
-                        context = context,
-                        preferences = preferences,
-                        resolveInfo = app
-                    )
-                }
-                .sortedBy { it.lowercaseName }
-        }
+    LaunchedEffect(appListRefreshCount) {
+        launcherVm.loadApps()
     }
 
-    // async load icon names list for icon picker
     LaunchedEffect(iconPickerOpen) {
         if (iconPickerOpen) {
-            kawaiiIconNames = withContext(Dispatchers.IO) {
-                IconPackManager.loadAllIconNames(context)
-            }
+            launcherVm.loadKawaiiIconNames()
         } else {
-            kawaiiIconNames = emptyList()
+            launcherVm.clearKawaiiIconNames()
         }
     }
 
-    val visibleApps = remember(apps, hiddenPackages) {
-        if (hiddenPackages.isEmpty()) {
-            apps
-        } else {
-            apps.filter { app ->
-                app.packageName !in hiddenPackages
-            }
-        }
-    }
-
-    // hidden apps shown in the hidden apps manager (one entry per package)
-    val hiddenApps = remember(apps, hiddenPackages) {
-        if (hiddenPackages.isEmpty()) {
-            emptyList()
-        } else {
-            apps
-                .filter { it.packageName in hiddenPackages }
-                .distinctBy { it.packageName }
-        }
-    }
-
-    // remembers the list position where each starting letter first appears
-    val letterStarts = remember(visibleApps) {
-        val map = linkedMapOf<Char, Int>()
-        visibleApps.forEachIndexed { index, app ->
-            map.getOrPut(firstLetterOf(app.name)) { index }
-        }
-        map
-    }
-
-    val appsByPackage = remember(apps) {
-        buildMap(apps.size) {
-            for (app in apps) {
-                putIfAbsent(app.packageName, app)
-            }
-        }
-    }
-
-    val favoriteApps = remember(apps, appsByPackage, earlyFavoriteApps, favoritePackages, hiddenPackages) {
-        if (apps.isEmpty()) {
-            earlyFavoriteApps.filter { it.packageName !in hiddenPackages }
-        } else {
-            val earlyByPkg = earlyFavoriteApps.associateBy { it.packageName }
-            favoritePackages
-                .filter { it !in hiddenPackages }
-                .mapNotNull { pkgName ->
-                    appsByPackage[pkgName] ?: earlyByPkg[pkgName]
-                }
-        }
-    }
-
-    val favoriteItems: List<FavoriteSlotItem> = remember(
-        favoriteItemKeys,
-        favoriteApps,
-        favoriteFolders,
-        hiddenPackages
-    ) {
-        val appsMap = favoriteApps.associateBy { it.packageName }
-        val foldersMap = favoriteFolders.associateBy { it.id }
-
-        val items = mutableListOf<FavoriteSlotItem>()
-        val seen = mutableSetOf<String>()
-
-        for (key in favoriteItemKeys) {
-            if (key.startsWith("folder:")) {
-                val folderId = key.removePrefix("folder:")
-                val folder = foldersMap[folderId]
-                if (folder != null && seen.add(key)) {
-                    items.add(FavoriteSlotItem.Folder(folder))
-                }
-            } else {
-                val pkg = key.removePrefix("app:")
-                val app = appsMap[pkg]
-                if (app != null && pkg !in hiddenPackages && seen.add("app:$pkg")) {
-                    items.add(FavoriteSlotItem.App(app))
-                }
-            }
-        }
-
-        // Safety fallback: ensure any folder not in keys is still accessible
-        for (folder in favoriteFolders) {
-            val fKey = "folder:${folder.id}"
-            if (seen.add(fKey)) {
-                items.add(FavoriteSlotItem.Folder(folder))
-            }
-        }
-
-        // Safety fallback: ensure any favorite apps not in keys are still accessible
-        for (app in favoriteApps) {
-            val aKey = "app:${app.packageName}"
-            if (app.packageName !in hiddenPackages && seen.add(aKey)) {
-                items.add(FavoriteSlotItem.App(app))
-            }
-        }
-
-        items
-    }
+    val apps = launcherVm.apps
+    val visibleApps = launcherVm.visibleApps
+    val hiddenApps = launcherVm.hiddenApps
+    val letterStarts = launcherVm.letterStarts
+    val favoriteFolders = launcherVm.favoriteFolders
+    val favoriteItems = launcherVm.favoriteItems
+    val favoritePackages = launcherVm.favoritePackages
+    val kawaiiIconNames = launcherVm.kawaiiIconNames
 
     val favoriteItemCount = favoriteItems.size
     var selectedFavoriteIndex by remember { mutableIntStateOf(0) }
@@ -418,23 +236,13 @@ fun MainLauncher(
     // Home focus area: 0 = FavoritesCard row, 1 = StatusCard (launcher options / page switcher)
     var homeFocusArea by remember { mutableIntStateOf(0) }
 
-    val moveFavoriteSlotItem: (itemKey: String, direction: Int) -> Unit = remember(favoriteItems, favoriteItemKeys) {
+    val moveFavoriteSlotItem: (itemKey: String, direction: Int) -> Unit = remember(launcherVm) {
         { itemKey, direction ->
-            val currentKeys = favoriteItems.map { it.key }
-            val currentIndex = currentKeys.indexOf(itemKey)
-            if (currentIndex != -1) {
-                val targetIndex = currentIndex + direction
-                if (targetIndex in currentKeys.indices) {
-                    val newKeys = currentKeys.toMutableList()
-                    val moved = newKeys.removeAt(currentIndex)
-                    newKeys.add(targetIndex, moved)
-
-                    favoriteItemKeys = newKeys
-                    saveFavoriteItemKeys(newKeys)
-                    selectedFavoriteIndex = targetIndex
-                    savedFavoriteIndexOnHome = targetIndex
-                    homeFocusArea = 0
-                }
+            val targetIndex = launcherVm.moveFavoriteSlotItem(itemKey, direction)
+            if (targetIndex != null) {
+                selectedFavoriteIndex = targetIndex
+                savedFavoriteIndexOnHome = targetIndex
+                homeFocusArea = 0
             }
         }
     }
@@ -677,7 +485,7 @@ fun MainLauncher(
                         centerKeyState = centerKeyState,
                         selectedDrawerIndex = selectedDrawerIndex,
                         visibleApps = visibleApps,
-                        favoriteApps = favoriteApps,
+                        favoriteApps = launcherVm.favoriteApps,
                         favoriteFolders = favoriteFolders,
                         favoriteItems = favoriteItems,
                         letterStarts = letterStarts,
@@ -880,7 +688,7 @@ fun MainLauncher(
                                 favoriteItems = favoriteItems,
                                 userName = userName,
                                 selectedFavoriteIndex = selectedFavoriteIndex,
-                                folderIconRefreshKey = folderIconRefreshKey,
+                                folderIconRefreshKey = launcherVm.folderIconRefreshKey,
                                 homeFocusArea = homeFocusArea,
                                 isHomeScreenActive = isHomeScreenActive,
                                 isPixelSprayEnabled = isPixelSprayEnabled,
@@ -962,16 +770,17 @@ fun MainLauncher(
                     },
                     onResetWallpaperClick = {
                         launcherMenuOpen = false
-                        wallpaperUri = null
-                        preferences.edit()
-                            .remove("wallpaper_uri")
-                            .apply()
+                        launcherVm.resetWallpaper()
                     },
                     onOpenSpeedDial = {
                         launcherMenuOpen = false
                         speedDialDialogOpen = true
                     },
-                    hasCustomWallpaper = wallpaperUri != null
+                    hasCustomWallpaper = launcherVm.wallpaperUri != null,
+                    onSettingsRestored = {
+                        currentTheme = loadSavedTheme(preferences)
+                        launcherVm.reloadAllFromPreferences()
+                    }
                 )
             }
 
@@ -984,9 +793,7 @@ fun MainLauncher(
                     },
                     onIconPackSelected = { _ ->
                         iconPackDialogOpen = false
-                        apps = emptyList()
-                        earlyFavoriteApps = emptyList()
-                        iconRefreshKey++
+                        launcherVm.onIconPackChanged()
                     }
                 )
             }
@@ -1060,19 +867,7 @@ fun MainLauncher(
                         selectedApp = null
                     },
                     onToggleFavorite = {
-                        val pkgName = targetApp.packageName
-                        val isFav = pkgName in favoritePackages
-                        if (isFav) {
-                            val newKeys = favoriteItemKeys.filterNot {
-                                it == "app:$pkgName" || it == pkgName
-                            }
-                            favoriteItemKeys = newKeys
-                            saveFavoriteItemKeys(newKeys)
-                        } else {
-                            val newKeys = favoriteItemKeys + "app:$pkgName"
-                            favoriteItemKeys = newKeys
-                            saveFavoriteItemKeys(newKeys)
-                        }
+                        launcherVm.toggleFavoriteApp(targetApp.packageName)
                         selectedApp = null
                     },
                     onAppInfo = {
@@ -1090,23 +885,11 @@ fun MainLauncher(
                         selectedApp = null
                     },
                     onResetIcon = {
-                        val pkgName = targetApp.packageName
-                        preferences.edit()
-                            .remove("custom_icon_$pkgName")
-                            .apply()
-                        IconPackManager.invalidateAppIcon(pkgName)
-                        iconRefreshKey++
+                        launcherVm.resetCustomAppIcon(targetApp.packageName)
                         selectedApp = null
                     },
                     onHideApp = {
-                        val pkgName = targetApp.packageName
-                        val newHidden = hiddenPackages.toMutableSet().apply {
-                            add(pkgName)
-                        }
-                        hiddenPackages = newHidden
-                        preferences.edit()
-                            .putStringSet("hidden_apps", newHidden)
-                            .apply()
+                        launcherVm.hideApp(targetApp.packageName)
                         selectedApp = null
                     },
                     onCreateFolder = {
@@ -1177,26 +960,15 @@ fun MainLauncher(
                         iconPickerOpen = true
                     },
                     onResetIcon = {
-                        preferences.edit()
-                            .remove("custom_folder_icon_${targetFolder.id}")
-                            .apply()
-                        folderIconRefreshKey++
+                        launcherVm.resetCustomFolderIcon(targetFolder.id)
                         folderIconMenuOpen = false
                         iconEditingFolder = null
                     },
                     onDeleteFolder = {
                         val deletedId = targetFolder.id
-                        favoriteFolders = favoriteFolders.filterNot { it.id == deletedId }
-                        preferences.edit()
-                            .remove("custom_folder_icon_$deletedId")
-                            .apply()
+                        launcherVm.deleteFolder(deletedId)
 
-                        PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
-                        val newKeys = favoriteItemKeys.filterNot { it == "folder:$deletedId" }
-                        favoriteItemKeys = newKeys
-                        saveFavoriteItemKeys(newKeys)
-
-                        val newCount = (favoriteItems.size - 1).coerceAtLeast(0)
+                        val newCount = launcherVm.favoriteItems.size
                         selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
                             0,
                             (newCount - 1).coerceAtLeast(0)
@@ -1242,23 +1014,11 @@ fun MainLauncher(
 
                         when {
                             editingApp != null -> {
-                                val pkgName = editingApp.packageName
-
-                                preferences.edit()
-                                    .putString("custom_icon_$pkgName", selectedIconName)
-                                    .apply()
-                                IconPackManager.invalidateAppIcon(pkgName)
-                                iconRefreshKey++
+                                launcherVm.setCustomAppIcon(editingApp.packageName, selectedIconName)
                             }
 
                             editingFolder != null -> {
-                                preferences.edit()
-                                    .putString(
-                                        "custom_folder_icon_${editingFolder.id}",
-                                        selectedIconName
-                                    )
-                                    .apply()
-                                folderIconRefreshKey++
+                                launcherVm.setCustomFolderIcon(editingFolder.id, selectedIconName)
                             }
                         }
 
@@ -1271,7 +1031,7 @@ fun MainLauncher(
                         iconPickerOpen = false
                         iconEditingApp = null
                         iconEditingFolder = null
-                        kawaiiIconNames = emptyList()
+                        launcherVm.clearKawaiiIconNames()
                     }
                 )
             }
@@ -1281,12 +1041,7 @@ fun MainLauncher(
                 HiddenAppsDialog(
                     hiddenApps = hiddenApps,
                     onUnhide = { app ->
-                        val pkgName = app.packageName
-                        val newHidden = hiddenPackages.toMutableSet().apply { remove(pkgName) }
-                        hiddenPackages = newHidden
-                        preferences.edit()
-                            .putStringSet("hidden_apps", newHidden)
-                            .apply()
+                        launcherVm.unhideApp(app.packageName)
                     },
                     onDismiss = { hiddenManagerOpen = false }
                 )
@@ -1314,71 +1069,19 @@ fun MainLauncher(
                         )?.let(context::startActivity)
                     },
                     onRemoveApp = { packageName ->
-                        favoriteFolders = favoriteFolders.map { folder ->
-                            if (folder.id == openedFolder.id) {
-                                folder.copy(
-                                    appPackages = folder.appPackages.filterNot {
-                                        it == packageName
-                                    }
-                                )
-                            } else {
-                                folder
-                            }
-                        }
-
-                        PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
+                        launcherVm.removeAppFromFolder(openedFolder.id, packageName)
                     },
                     onUpdateApps = { updatedPackages ->
-                        val distinctPackages = updatedPackages.distinct()
-                        favoriteFolders = favoriteFolders.map { folder ->
-                            if (folder.id == openedFolder.id) {
-                                folder.copy(appPackages = distinctPackages)
-                            } else {
-                                folder
-                            }
-                        }
-                        PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
-
-                        // Keep apps added to the folder from appearing twice in standalone favorites
-                        val updatedKeys = favoriteItemKeys.filterNot { key ->
-                            !key.startsWith("folder:") && key.removePrefix("app:") in distinctPackages
-                        }
-                        if (updatedKeys != favoriteItemKeys) {
-                            favoriteItemKeys = updatedKeys
-                            saveFavoriteItemKeys(updatedKeys)
-                        }
+                        launcherVm.updateFolderApps(openedFolder.id, updatedPackages)
                     },
                     onRename = { newName ->
-                        val duplicateName = favoriteFolders.any {
-                            it.id != openedFolder.id &&
-                                    it.name.equals(newName, ignoreCase = true)
-                        }
-
-                        if (!duplicateName && newName.isNotBlank()) {
-                            favoriteFolders = favoriteFolders.map { folder ->
-                                if (folder.id == openedFolder.id) {
-                                    folder.copy(name = newName)
-                                } else {
-                                    folder
-                                }
-                            }
-
-                            PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
-                        }
+                        launcherVm.renameFolder(openedFolder.id, newName)
                     },
                     onDeleteFolder = {
                         val deletedId = openedFolder.id
-                        favoriteFolders = favoriteFolders.filterNot { it.id == deletedId }
-                        preferences.edit()
-                            .remove("custom_folder_icon_$deletedId")
-                            .apply()
+                        launcherVm.deleteFolder(deletedId)
 
-                        PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
-                        val newKeys = favoriteItemKeys.filterNot { it == "folder:$deletedId" }
-                        favoriteItemKeys = newKeys
-                        saveFavoriteItemKeys(newKeys)
-
-                        val newCount = (favoriteItems.size - 1).coerceAtLeast(0)
+                        val newCount = launcherVm.favoriteItems.size
                         selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
                             0,
                             (newCount - 1).coerceAtLeast(0)
@@ -1429,29 +1132,43 @@ fun MainLauncher(
                         createFolderDialogOpen = false
                     },
                     onCreate = { folderName, packages ->
-                        val folder = FavoriteFolder(
-                            id = UUID.randomUUID().toString(),
-                            name = folderName,
-                            appPackages = packages.distinct()
-                        )
+                        launcherVm.createFolder(folderName, packages)
 
-                        favoriteFolders = favoriteFolders + folder
-                        PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
-
-                        // Keep apps contained in the new folder from appearing twice.
-                        val remainingKeys = favoriteItemKeys.filterNot { key ->
-                            !key.startsWith("folder:") && key.removePrefix("app:") in folder.appPackages
-                        } + "folder:${folder.id}"
-
-                        favoriteItemKeys = remainingKeys
-                        saveFavoriteItemKeys(remainingKeys)
-
-                        selectedFavoriteIndex = (remainingKeys.size - 1).coerceAtLeast(0)
+                        val newCount = launcherVm.favoriteItems.size
+                        selectedFavoriteIndex = (newCount - 1).coerceAtLeast(0)
                         savedFavoriteIndexOnHome = selectedFavoriteIndex
                         homeFocusArea = 0
                         drawerOpen = false
                         folderToCreateFrom = null
                         createFolderDialogOpen = false
+                    }
+                )
+            }
+
+            activeIncomingPreview?.let { preview ->
+                PresetPreviewDialog(
+                    previewData = preview,
+                    onApply = {
+                        val uri = pendingIncomingUri
+                        if (uri != null) {
+                            try {
+                                context.contentResolver.openInputStream(uri)?.use { stream ->
+                                    ThemeBundleManager.applyBundle(context, stream)
+                                }
+                                currentTheme = loadSavedTheme(preferences)
+                                launcherVm.reloadAllFromPreferences()
+                            } catch (e: Exception) {
+                                android.util.Log.e("MainLauncher", "Failed to apply bundle", e)
+                            }
+                        }
+                        activeIncomingPreview = null
+                        pendingIncomingUri = null
+                        onConsumeIncomingBundleUri()
+                    },
+                    onDismiss = {
+                        activeIncomingPreview = null
+                        pendingIncomingUri = null
+                        onConsumeIncomingBundleUri()
                     }
                 )
             }
