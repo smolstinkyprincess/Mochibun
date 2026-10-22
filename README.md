@@ -26,12 +26,19 @@ Mochibun pairs a **dreamy pastel aesthetic** with comfy D-pad navigation, physic
 
 ---
 
-## 📸 Screenshots
+## 📸 Gallery & Showcase ♡
 
-| Home | Folder | App Drawer | Recents | Widgets | Notifications | System Info |
-| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_home.png" width="160" alt="Home Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_folder.png" width="160" alt="Folder Dialog" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_appdrawer.png" width="160" alt="App Drawer & T9 Filter" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_recents.png" width="160" alt="Recent Tasks / QuickSwitch" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_widgets.png" width="160" alt="Widgets & Media Deck" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_notifications.png" width="160" alt="Notifications Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7_info.png" width="160" alt="System Info & Settings" /> |
+<div align="center">
 
+| 🌸 Home Screen | 🎀 Folders | 🍡 App Drawer | 🗂️ Recents |
+| :---: | :---: | :---: | :---: |
+| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_home.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Home Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_folder.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Folder Dialog" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_appdrawer.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="App Drawer & T9 Filter" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_recents.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Recents Tasks" /> |
+
+| 🎵 Widgets & Music | 💌 Notifications | ⚙️ Settings Hub |
+| :---: | :---: | :---: |
+| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_widgets.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Widgets & Media Deck" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_notifications.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Notifications Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7_info.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="System Info & Settings" /> |
+
+</div>
 ---
 
 ## 🎨 Themes, Backups & Setup Sharing
