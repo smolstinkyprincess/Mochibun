@@ -3,9 +3,26 @@
 -keep public class * extends android.app.Service
 -keep public class * extends android.accessibilityservice.AccessibilityService
 
+# Keep ViewModels and their constructors for reflection instantiation by ViewModelProvider
+-keepclassmembers class * extends androidx.lifecycle.ViewModel {
+    <init>(...);
+}
+-keep class * extends androidx.lifecycle.ViewModel {
+    <init>(...);
+}
+-keep class com.crinklecodone.mochibun.ui.LauncherViewModel {
+    public <init>(android.app.Application);
+}
+
 # Keep Mochibun's Virtual Cursor & Core Services intact
 -keep class com.crinklecodone.mochibun.service.VirtualCursorService { *; }
 -keep class com.crinklecodone.mochibun.service.MochibunAccessibilityService { *; }
+
+# Quickstep Recents & SystemUI interfaces
+-keep class com.android.quickstep.** { *; }
+-dontwarn com.android.quickstep.**
+-keep class com.android.systemui.shared.** { *; }
+-dontwarn com.android.systemui.shared.**
 
 # Preserve Compose runtime lambdas & inspection
 -keepclassmembers class * {

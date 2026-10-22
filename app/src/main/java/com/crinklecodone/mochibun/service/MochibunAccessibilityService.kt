@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MochibunAccessibilityService : AccessibilityService() {
 
@@ -116,6 +117,11 @@ class MochibunAccessibilityService : AccessibilityService() {
                     activeMappings[KeyEvent.KEYCODE_DPAD_CENTER] = config
                 }
             }
+        }
+        // Always ensure APP_SWITCH has a valid default mapping if not present
+        if (!activeMappings.containsKey(KeyEvent.KEYCODE_APP_SWITCH)) {
+            val appSwitchConfig = HardwareRemapManager.getButtonActionConfig(this, PhysicalKey.APP_SWITCH)
+            activeMappings[KeyEvent.KEYCODE_APP_SWITCH] = appSwitchConfig
         }
     }
 
@@ -239,6 +245,7 @@ class MochibunAccessibilityService : AccessibilityService() {
             }
         }
     }
+
     /** Toggles the device flashlight for hardware remap shortcut actions. */
     private fun toggleTorch() {
         try {
@@ -264,7 +271,7 @@ class MochibunAccessibilityService : AccessibilityService() {
     private fun handleRecentsAction() {
         val useFallback = HardwareRemapManager.isRootRecentsFallbackEnabled(this)
         if (useFallback) {
-            Log.d("MochibunA11y", "Recents action: using root-shell fallback")
+            Log.d("MochibunA11y", "Recents action: attempting root-shell fallback")
             executeRootRecents()
         } else {
             Log.d("MochibunA11y", "Recents action: using native implementation")
@@ -284,7 +291,8 @@ class MochibunAccessibilityService : AccessibilityService() {
             startActivity(intent)
             Log.d("MochibunA11y", "Successfully started native RecentsActivity")
         } catch (e: Exception) {
-            Log.e("MochibunA11y", "Failed to launch native RecentsActivity", e)
+            Log.e("MochibunA11y", "Failed to launch native RecentsActivity, falling back to global action", e)
+            performGlobalAction(GLOBAL_ACTION_RECENTS)
         }
     }
 
@@ -294,19 +302,26 @@ class MochibunAccessibilityService : AccessibilityService() {
             return
         }
         serviceScope.launch {
-            if (!RootShell.isSuBinaryPresent()) {
-                Log.e("MochibunA11y", "Cannot execute OpenRecentsSystem: su binary not available")
-                return@launch
-            }
-            val result = RootShell.execute("am start -n com.crinklecodone.mochibun/com.android.quickstep.RecentsActivity")
-            val hasError = !result.isSuccess ||
-                    result.stdout.any { it.startsWith("Error:") } ||
-                    result.stderr.any { it.startsWith("Error:") }
-            if (hasError) {
-                val errDetails = (result.stderr + result.stdout).joinToString("; ").ifBlank { "Exit code ${result.exitCode}" }
-                Log.e("MochibunA11y", "Failed to launch RecentsActivity via root shell: $errDetails")
+            var succeeded = false
+            if (RootShell.isSuBinaryPresent()) {
+                val result = RootShell.execute("am start -n com.crinklecodone.mochibun/com.android.quickstep.RecentsActivity")
+                val hasError = !result.isSuccess ||
+                        result.stdout.any { it.startsWith("Error:") } ||
+                        result.stderr.any { it.startsWith("Error:") }
+                if (!hasError) {
+                    succeeded = true
+                    Log.d("MochibunA11y", "Successfully started RecentsActivity via root shell")
+                } else {
+                    val errDetails = (result.stderr + result.stdout).joinToString("; ").ifBlank { "Exit code ${result.exitCode}" }
+                    Log.w("MochibunA11y", "Failed to launch RecentsActivity via root shell: $errDetails")
+                }
             } else {
-                Log.d("MochibunA11y", "Successfully started RecentsActivity via root shell")
+                Log.w("MochibunA11y", "su binary not available for root recents")
+            }
+            if (!succeeded) {
+                withContext(Dispatchers.Main) {
+                    executeNativeRecents()
+                }
             }
         }
     }

@@ -40,8 +40,7 @@ object ClamshellManager {
                 }
                 Intent.ACTION_SCREEN_ON -> {
                     Log.d(TAG, "Screen ON event received (clamshell opened or display wake)")
-                    val isKeyboardHidden = context?.resources?.configuration?.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_YES
-                    updateState(isClosed = isKeyboardHidden)
+                    updateState(isClosed = false)
                 }
             }
         }
@@ -62,11 +61,10 @@ object ClamshellManager {
             appContext.registerReceiver(screenStateReceiver, filter)
             isReceiverRegistered = true
 
-            // Initialize baseline state
+            // Initialize baseline state: if screen is interactive, the lid is open
             val powerManager = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
             val isInteractive = powerManager?.isInteractive ?: true
-            val isKeyboardHidden = appContext.resources.configuration.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_YES
-            _isLidClosed.value = !isInteractive || isKeyboardHidden
+            _isLidClosed.value = !isInteractive
             Log.d(TAG, "ClamshellManager initialized. Initial closed state: ${_isLidClosed.value}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to register screen state receiver: ${e.message}")
@@ -90,8 +88,7 @@ object ClamshellManager {
     fun isLidClosed(context: Context): Boolean {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val isInteractive = powerManager?.isInteractive ?: true
-        val isKeyboardHidden = context.resources.configuration.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_YES
-        return !isInteractive || isKeyboardHidden || _isLidClosed.value
+        return !isInteractive || _isLidClosed.value
     }
 
     fun addListener(listener: ClamshellListener) {

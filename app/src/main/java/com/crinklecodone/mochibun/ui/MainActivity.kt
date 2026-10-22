@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -95,6 +96,17 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_APP_SWITCH) {
+            val intent = Intent(this, com.android.quickstep.RecentsActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(intent)
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
 
@@ -104,7 +116,19 @@ class MainActivity : ComponentActivity() {
         }
 
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
-            homePressCount++
+            // When SystemUI triggers Recents on Android 12 with a 3rd party launcher,
+            // it starts the default Home activity with FLAG_ACTIVITY_RESET_TASK_IF_NEEDED (0x00200000)
+            // without FLAG_ACTIVITY_TASK_ON_HOME (0x00000100).
+            val isRecentAppsInvocation = (intent.flags and Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED != 0) &&
+                    (intent.flags and 0x00000100 == 0)
+            if (isRecentAppsInvocation) {
+                val recentsIntent = Intent(this, com.android.quickstep.RecentsActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+                startActivity(recentsIntent)
+            } else {
+                homePressCount++
+            }
         }
 
         if (intent.action == Intent.ACTION_VIEW && intent.data != null) {

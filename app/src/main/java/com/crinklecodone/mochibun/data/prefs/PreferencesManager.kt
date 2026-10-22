@@ -104,43 +104,46 @@ object PreferencesManager {
 
     fun init(context: Context) {
         if (!initialized) {
-            val prefs = getPrefs(context)
-            _isPixelSprayEnabled.value = prefs.getBoolean(
-                KEY_PIXELSPRAY_WALLPAPER_ENABLED,
-                DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED
-            )
-            _isSystemMonitorEnabled.value = prefs.getBoolean(
-                KEY_SYSTEM_MONITOR_ENABLED,
-                DEFAULT_SYSTEM_MONITOR_ENABLED
-            )
-            _isFolderGridMode.value = prefs.getBoolean(
-                KEY_FOLDER_GRID_MODE,
-                DEFAULT_FOLDER_GRID_MODE
-            )
-            _isT9SearchEnabled.value = prefs.getBoolean(
-                KEY_T9_SEARCH_ENABLED,
-                DEFAULT_T9_SEARCH_ENABLED
-            )
-            _systemMonitorInterval.value = prefs.getInt(
-                KEY_SYSTEM_MONITOR_INTERVAL,
-                DEFAULT_SYSTEM_MONITOR_INTERVAL
-            )
-            _customUserName.value = prefs.getString(
-                KEY_CUSTOM_USER_NAME,
-                DEFAULT_CUSTOM_USER_NAME
-            ) ?: DEFAULT_CUSTOM_USER_NAME
-            _themePreset.value = prefs.getString(
-                KEY_THEME_PRESET,
-                DEFAULT_THEME_PRESET
-            ) ?: DEFAULT_THEME_PRESET
-            _isDpadWrapAround.value = prefs.getBoolean(
-                KEY_DPAD_WRAP_AROUND,
-                DEFAULT_DPAD_WRAP_AROUND
-            )
-            _isDpadBoundaryHaptics.value = prefs.getBoolean(
-                KEY_DPAD_BOUNDARY_HAPTICS,
-                DEFAULT_DPAD_BOUNDARY_HAPTICS
-            )
+            try {
+                val prefs = getPrefs(context)
+                _isPixelSprayEnabled.value = prefs.getBoolean(
+                    KEY_PIXELSPRAY_WALLPAPER_ENABLED,
+                    DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED
+                )
+                _isSystemMonitorEnabled.value = prefs.getBoolean(
+                    KEY_SYSTEM_MONITOR_ENABLED,
+                    DEFAULT_SYSTEM_MONITOR_ENABLED
+                )
+                _isFolderGridMode.value = prefs.getBoolean(
+                    KEY_FOLDER_GRID_MODE,
+                    DEFAULT_FOLDER_GRID_MODE
+                )
+                _isT9SearchEnabled.value = prefs.getBoolean(
+                    KEY_T9_SEARCH_ENABLED,
+                    DEFAULT_T9_SEARCH_ENABLED
+                )
+                _systemMonitorInterval.value = prefs.getInt(
+                    KEY_SYSTEM_MONITOR_INTERVAL,
+                    DEFAULT_SYSTEM_MONITOR_INTERVAL
+                )
+                _customUserName.value = prefs.getString(
+                    KEY_CUSTOM_USER_NAME,
+                    DEFAULT_CUSTOM_USER_NAME
+                ) ?: DEFAULT_CUSTOM_USER_NAME
+                _themePreset.value = prefs.getString(
+                    KEY_THEME_PRESET,
+                    DEFAULT_THEME_PRESET
+                ) ?: DEFAULT_THEME_PRESET
+                _isDpadWrapAround.value = prefs.getBoolean(
+                    KEY_DPAD_WRAP_AROUND,
+                    DEFAULT_DPAD_WRAP_AROUND
+                )
+                _isDpadBoundaryHaptics.value = prefs.getBoolean(
+                    KEY_DPAD_BOUNDARY_HAPTICS,
+                    DEFAULT_DPAD_BOUNDARY_HAPTICS
+                )
+            } catch (_: Exception) {
+            }
             initialized = true
         }
     }
@@ -150,10 +153,14 @@ object PreferencesManager {
     }
 
     fun isPixelSprayWallpaperEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_PIXELSPRAY_WALLPAPER_ENABLED,
+        return try {
+            getPrefs(context).getBoolean(
+                KEY_PIXELSPRAY_WALLPAPER_ENABLED,
+                DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED
+            )
+        } catch (_: Exception) {
             DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED
-        )
+        }
     }
 
     fun setPixelSprayWallpaperEnabled(context: Context, enabled: Boolean) {
@@ -162,10 +169,14 @@ object PreferencesManager {
     }
 
     fun isSystemMonitorEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_SYSTEM_MONITOR_ENABLED,
+        return try {
+            getPrefs(context).getBoolean(
+                KEY_SYSTEM_MONITOR_ENABLED,
+                DEFAULT_SYSTEM_MONITOR_ENABLED
+            )
+        } catch (_: Exception) {
             DEFAULT_SYSTEM_MONITOR_ENABLED
-        )
+        }
     }
 
     fun setSystemMonitorEnabled(context: Context, enabled: Boolean) {
@@ -174,10 +185,14 @@ object PreferencesManager {
     }
 
     fun isFolderGridMode(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_FOLDER_GRID_MODE,
+        return try {
+            getPrefs(context).getBoolean(
+                KEY_FOLDER_GRID_MODE,
+                DEFAULT_FOLDER_GRID_MODE
+            )
+        } catch (_: Exception) {
             DEFAULT_FOLDER_GRID_MODE
-        )
+        }
     }
 
     fun setFolderGridMode(context: Context, enabled: Boolean) {
@@ -186,10 +201,14 @@ object PreferencesManager {
     }
 
     fun isT9SearchEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_T9_SEARCH_ENABLED,
+        return try {
+            getPrefs(context).getBoolean(
+                KEY_T9_SEARCH_ENABLED,
+                DEFAULT_T9_SEARCH_ENABLED
+            )
+        } catch (_: Exception) {
             DEFAULT_T9_SEARCH_ENABLED
-        )
+        }
     }
 
     fun setT9SearchEnabled(context: Context, enabled: Boolean) {
@@ -198,10 +217,14 @@ object PreferencesManager {
     }
 
     fun getSystemMonitorInterval(context: Context): Int {
-        return getPrefs(context).getInt(
-            KEY_SYSTEM_MONITOR_INTERVAL,
+        return try {
+            getPrefs(context).getInt(
+                KEY_SYSTEM_MONITOR_INTERVAL,
+                DEFAULT_SYSTEM_MONITOR_INTERVAL
+            )
+        } catch (_: Exception) {
             DEFAULT_SYSTEM_MONITOR_INTERVAL
-        )
+        }
     }
 
     fun setSystemMonitorInterval(context: Context, seconds: Int) {
@@ -210,10 +233,14 @@ object PreferencesManager {
     }
 
     fun getCustomUserName(context: Context): String {
-        return getPrefs(context).getString(
-            KEY_CUSTOM_USER_NAME,
+        return try {
+            getPrefs(context).getString(
+                KEY_CUSTOM_USER_NAME,
+                DEFAULT_CUSTOM_USER_NAME
+            ) ?: DEFAULT_CUSTOM_USER_NAME
+        } catch (_: Exception) {
             DEFAULT_CUSTOM_USER_NAME
-        ) ?: DEFAULT_CUSTOM_USER_NAME
+        }
     }
 
     fun setCustomUserName(context: Context, name: String) {
@@ -222,10 +249,14 @@ object PreferencesManager {
     }
 
     fun getThemePreset(context: Context): String {
-        return getPrefs(context).getString(
-            KEY_THEME_PRESET,
+        return try {
+            getPrefs(context).getString(
+                KEY_THEME_PRESET,
+                DEFAULT_THEME_PRESET
+            ) ?: DEFAULT_THEME_PRESET
+        } catch (_: Exception) {
             DEFAULT_THEME_PRESET
-        ) ?: DEFAULT_THEME_PRESET
+        }
     }
 
     fun setThemePreset(context: Context, preset: String) {
@@ -234,10 +265,14 @@ object PreferencesManager {
     }
 
     fun isDpadWrapAround(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_DPAD_WRAP_AROUND,
+        return try {
+            getPrefs(context).getBoolean(
+                KEY_DPAD_WRAP_AROUND,
+                DEFAULT_DPAD_WRAP_AROUND
+            )
+        } catch (_: Exception) {
             DEFAULT_DPAD_WRAP_AROUND
-        )
+        }
     }
 
     fun setDpadWrapAround(context: Context, enabled: Boolean) {
@@ -246,10 +281,14 @@ object PreferencesManager {
     }
 
     fun isDpadBoundaryHaptics(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_DPAD_BOUNDARY_HAPTICS,
+        return try {
+            getPrefs(context).getBoolean(
+                KEY_DPAD_BOUNDARY_HAPTICS,
+                DEFAULT_DPAD_BOUNDARY_HAPTICS
+            )
+        } catch (_: Exception) {
             DEFAULT_DPAD_BOUNDARY_HAPTICS
-        )
+        }
     }
 
     fun setDpadBoundaryHaptics(context: Context, enabled: Boolean) {
@@ -258,7 +297,11 @@ object PreferencesManager {
     }
 
     fun getWallpaperUri(context: Context): String? {
-        return getPrefs(context).getString(KEY_WALLPAPER_URI, null)
+        return try {
+            getPrefs(context).getString(KEY_WALLPAPER_URI, null)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun setWallpaperUri(context: Context, uri: String?) {
@@ -270,12 +313,59 @@ object PreferencesManager {
     }
 
     fun getHiddenPackages(context: Context): Set<String> {
-        val raw = getPrefs(context).getString(KEY_HIDDEN_APPS, "") ?: ""
-        return if (raw.isBlank()) emptySet() else raw.split(",").toSet()
+        val prefs = getPrefs(context)
+        return try {
+            val rawObj = prefs.all[KEY_HIDDEN_APPS]
+            when (rawObj) {
+                is Set<*> -> {
+                    val set = rawObj.filterIsInstance<String>().toSet()
+                    setHiddenPackages(context, set)
+                    set
+                }
+                is String -> {
+                    if (rawObj.isBlank()) emptySet() else rawObj.split(",").toSet()
+                }
+                else -> emptySet()
+            }
+        } catch (_: Exception) {
+            emptySet()
+        }
     }
 
     fun setHiddenPackages(context: Context, packages: Set<String>) {
         getPrefs(context).edit().putString(KEY_HIDDEN_APPS, packages.joinToString(",")).apply()
+    }
+
+    fun addHiddenPackage(context: Context, packageName: String) {
+        val current = getHiddenPackages(context).toMutableSet()
+        current.add(packageName)
+        setHiddenPackages(context, current)
+    }
+
+    fun removeHiddenPackage(context: Context, packageName: String) {
+        val current = getHiddenPackages(context).toMutableSet()
+        current.remove(packageName)
+        setHiddenPackages(context, current)
+    }
+
+    fun setCustomAppIcon(context: Context, packageName: String, iconName: String?) {
+        val key = "$KEY_CUSTOM_ICON_PREFIX$packageName"
+        val editor = getPrefs(context).edit()
+        if (iconName != null) {
+            editor.putString(key, iconName).apply()
+        } else {
+            editor.remove(key).apply()
+        }
+    }
+
+    fun setCustomFolderIcon(context: Context, folderId: String, iconName: String?) {
+        val key = "$KEY_CUSTOM_FOLDER_ICON_PREFIX$folderId"
+        val editor = getPrefs(context).edit()
+        if (iconName != null) {
+            editor.putString(key, iconName).apply()
+        } else {
+            editor.remove(key).apply()
+        }
     }
 
     fun saveFavoriteFolders(context: Context, folders: List<FavoriteFolder>) {
@@ -291,7 +381,11 @@ object PreferencesManager {
     }
 
     fun loadFavoriteFolders(context: Context): List<FavoriteFolder> {
-        val raw = getPrefs(context).getString(KEY_FAVORITE_FOLDERS, null) ?: return emptyList()
+        val raw = try {
+            getPrefs(context).getString(KEY_FAVORITE_FOLDERS, null)
+        } catch (_: Exception) {
+            null
+        } ?: return emptyList()
         return try {
             val array = JSONArray(raw)
             val list = mutableListOf<FavoriteFolder>()
@@ -313,7 +407,11 @@ object PreferencesManager {
     }
 
     fun getFavoriteItemKeys(context: Context): List<String> {
-        val raw = getPrefs(context).getString(KEY_FAVORITE_ITEMS_ORDERED, "") ?: ""
+        val raw = try {
+            getPrefs(context).getString(KEY_FAVORITE_ITEMS_ORDERED, "") ?: ""
+        } catch (_: Exception) {
+            ""
+        }
         if (raw.isBlank()) return emptyList()
         return raw.split("|").filter { it.isNotEmpty() }
     }
@@ -326,7 +424,11 @@ object PreferencesManager {
 
     fun getSpeedDialPackage(context: Context, digit: Int): String? {
         if (digit !in 2..9) return null
-        return getPrefs(context).getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
+        return try {
+            getPrefs(context).getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun setSpeedDialPackage(context: Context, digit: Int, packageName: String?) {
@@ -343,7 +445,11 @@ object PreferencesManager {
         val map = mutableMapOf<Int, String>()
         val prefs = getPrefs(context)
         for (digit in 2..9) {
-            val pkg = prefs.getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
+            val pkg = try {
+                prefs.getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
+            } catch (_: Exception) {
+                null
+            }
             if (pkg != null) {
                 map[digit] = pkg
             }

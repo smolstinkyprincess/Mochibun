@@ -3,6 +3,13 @@ package com.crinklecodone.mochibun.ui.dialogs
 import android.content.Intent
 import android.provider.Settings
 import android.view.KeyEvent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,14 +23,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,19 +52,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import com.crinklecodone.mochibun.ui.theme.ActiveTheme
-import com.crinklecodone.mochibun.ui.theme.LauncherTheme
-import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
-import com.crinklecodone.mochibun.ui.components.*
 import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.core.system.RootStatus
 import com.crinklecodone.mochibun.data.model.ActionType
@@ -63,9 +73,139 @@ import com.crinklecodone.mochibun.data.model.CONTROLLED_STATIC_KEYCODES
 import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.model.StaticModuleStatus
 import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
+import com.crinklecodone.mochibun.ui.components.MascotExpression
+import com.crinklecodone.mochibun.ui.components.PixelArtMascot
+import com.crinklecodone.mochibun.ui.theme.ActiveTheme
+import com.crinklecodone.mochibun.ui.theme.LauncherTheme
+import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import com.crinklecodone.mochibun.ui.theme.destructiveBgColor
+import com.crinklecodone.mochibun.ui.theme.destructiveColor
 import com.crinklecodone.mochibun.ui.theme.selectedContainerColor
 import kotlinx.coroutines.launch
 
+/**
+ * Checks whether a key event represents a Back, Escape, or Keypad Clear dismiss action.
+ */
+private fun isHardwareDismissKey(keyCode: Int): Boolean =
+    isBackDismissKey(keyCode) || keyCode == KeyEvent.KEYCODE_CLEAR || keyCode == KeyEvent.KEYCODE_DEL
+
+/**
+ * Cute retro pixel-art badge representation of a physical hardware button.
+ */
+data class KeyBadgeData(
+    val badgeLabel: String,
+    val iconGlyph: String
+)
+
+fun PhysicalKey.toBadgeData(): KeyBadgeData = when (this) {
+    PhysicalKey.F1 -> KeyBadgeData("F1", "★")
+    PhysicalKey.CAMERA -> KeyBadgeData("CAM", "📷")
+    PhysicalKey.KEY_ENTER -> KeyBadgeData("OK", "◉")
+    PhysicalKey.F2 -> KeyBadgeData("F2", "✦")
+    PhysicalKey.F3 -> KeyBadgeData("F3", "✧")
+    PhysicalKey.CALL -> KeyBadgeData("CALL", "📞")
+    PhysicalKey.APP_SWITCH -> KeyBadgeData("RECENTS", "⧉")
+    PhysicalKey.F4 -> KeyBadgeData("SIDE / F4", "⏵")
+    PhysicalKey.STAR -> KeyBadgeData("STAR (*)", "✱")
+    PhysicalKey.POUND -> KeyBadgeData("POUND (#)", "＃")
+}
+
+@Composable
+fun RetroKeyBadge(
+    key: PhysicalKey,
+    isFocused: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val data = key.toBadgeData()
+    RetroKeyBadge(
+        label = data.badgeLabel,
+        icon = data.iconGlyph,
+        isFocused = isFocused,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun RetroKeyBadge(
+    label: String,
+    icon: String = "⌨",
+    isFocused: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(7.dp)
+    val bg = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.surfaceTint.copy(alpha = 0.35f)
+    val borderCol = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.7f)
+    val textCol = if (isFocused) Color.White else ActiveTheme.accentDeep
+
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(bg, shape)
+            .border(1.dp, borderCol, shape)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = icon,
+            fontSize = 9.sp,
+            color = textCol
+        )
+        Text(
+            text = label,
+            fontSize = 9.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = textCol,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun ActionPill(
+    prefix: String,
+    actionText: String,
+    isConfigured: Boolean,
+    isFocused: Boolean
+) {
+    val shape = RoundedCornerShape(6.dp)
+    val bg = when {
+        isFocused && isConfigured -> ActiveTheme.surfaceTint.copy(alpha = 0.5f)
+        isConfigured -> ActiveTheme.surfaceTint.copy(alpha = 0.25f)
+        else -> Color.Transparent
+    }
+    val borderCol = if (isConfigured) ActiveTheme.cardBorder.copy(alpha = 0.5f) else Color.Transparent
+    val textCol = if (isConfigured) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.45f)
+
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .background(bg, shape)
+            .then(if (isConfigured) Modifier.border(0.5.dp, borderCol, shape) else Modifier)
+            .padding(horizontal = 4.dp, vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "$prefix: ",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isConfigured) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.45f)
+        )
+        Text(
+            text = actionText,
+            fontSize = 9.5.sp,
+            fontWeight = if (isConfigured) FontWeight.SemiBold else FontWeight.Normal,
+            color = textCol,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
+ * Refactored Hardware Button Remapper Dialog.
+ * Achieves 100% aesthetic and functional parity with the updated Settings UI and the Mochibun design system.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HardwareButtonsDialog(
@@ -95,32 +235,29 @@ fun HardwareButtonsDialog(
         mutableStateOf(HardwareRemapManager.isRootRecentsFallbackEnabled(context))
     }
 
-    // Sub-dialogs
+    // Sub-dialog states
+    var isListeningForKey by remember { mutableStateOf(false) }
     var keyForActionDialog by remember { mutableStateOf<PhysicalKey?>(null) }
     var keyForStaticDialog by remember { mutableStateOf<PhysicalKey?>(null) }
     var appPickerCallback by remember { mutableStateOf<((String, String) -> Unit)?>(null) }
     var showConfirmStageDialog by remember { mutableStateOf(false) }
 
+    val safeKeys = remember { PhysicalKey.entries.filter { it.isStaticRemapSafe } }
+
     // Initial load and reconciliation
     LaunchedEffect(Unit) {
-        // Load action configs
         for (key in PhysicalKey.entries) {
             actionConfigs[key] = HardwareRemapManager.getButtonActionConfig(context, key)
         }
-        // Load static mappings
         val savedStatic = HardwareRemapManager.getConfiguredStaticMappings(context)
         staticMappings.clear()
         staticMappings.putAll(savedStatic)
 
-        // Load root recents fallback setting (without running commands)
         useRootRecentsFallback = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
-
-        // Reconcile status
         isAccessibilityEnabled = HardwareRemapManager.isAccessibilityServiceEnabled(context)
         isKeyMapperActive = HardwareRemapManager.isKeyMapperActive(context)
         staticModuleStatus = HardwareRemapManager.reconcileModuleStatus()
 
-        // Check if su is present without prompting authorization
         if (!RootShell.isSuBinaryPresent()) {
             rootStatus = RootStatus.NotAvailable
         } else {
@@ -138,13 +275,13 @@ fun HardwareButtonsDialog(
             usePlatformDefaultWidth = false
         ),
         modifier = Modifier
-            .fillMaxWidth(0.96f)
+            .fillMaxWidth(0.95f)
             .fillMaxHeight(0.92f)
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (isHardwareDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) {
                         onDismiss()
                     }
@@ -176,9 +313,9 @@ fun HardwareButtonsDialog(
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
                         val maxIndex = when (currentTab) {
-                            0 -> PhysicalKey.entries.lastIndex
-                            1 -> PhysicalKey.entries.filter { it.isStaticRemapSafe }.size + 1
-                            else -> 4
+                            0 -> PhysicalKey.entries.size // 0 is Detect Key, 1..size are keys
+                            1 -> safeKeys.size + 2 // 0 is Detect Key, 1..size keys, +1 apply, +2 reset
+                            else -> 4 // 5 status rows (0..4)
                         }
                         if (selectedIndex < maxIndex) {
                             selectedIndex++
@@ -189,36 +326,42 @@ fun HardwareButtonsDialog(
                     KeyEvent.KEYCODE_ENTER -> {
                         when (currentTab) {
                             0 -> {
-                                if (selectedIndex < PhysicalKey.entries.size) {
-                                    keyForActionDialog = PhysicalKey.entries[selectedIndex]
+                                if (selectedIndex == 0) {
+                                    isListeningForKey = true
+                                } else {
+                                    val keyIndex = selectedIndex - 1
+                                    if (keyIndex in PhysicalKey.entries.indices) {
+                                        keyForActionDialog = PhysicalKey.entries[keyIndex]
+                                    }
                                 }
                             }
                             1 -> {
-                                val safeKeys = PhysicalKey.entries.filter { it.isStaticRemapSafe }
-                                if (selectedIndex < safeKeys.size) {
-                                    keyForStaticDialog = safeKeys[selectedIndex]
-                                } else if (selectedIndex == safeKeys.size) {
-                                    showConfirmStageDialog = true
-                                } else if (selectedIndex == safeKeys.size + 1) {
-                                    // Reset static mappings
-                                    staticMappings.clear()
-                                    for (k in PhysicalKey.entries) {
-                                        HardwareRemapManager.saveConfiguredStaticMapping(context, k, null)
+                                if (selectedIndex == 0) {
+                                    isListeningForKey = true
+                                } else {
+                                    val keyIndex = selectedIndex - 1
+                                    if (keyIndex < safeKeys.size) {
+                                        keyForStaticDialog = safeKeys[keyIndex]
+                                    } else if (keyIndex == safeKeys.size) {
+                                        showConfirmStageDialog = true
+                                    } else if (keyIndex == safeKeys.size + 1) {
+                                        staticMappings.clear()
+                                        for (k in PhysicalKey.entries) {
+                                            HardwareRemapManager.saveConfiguredStaticMapping(context, k, null)
+                                        }
+                                        statusMessage = "Static mappings cleared"
                                     }
-                                    statusMessage = "Static mappings cleared"
                                 }
                             }
                             2 -> {
                                 when (selectedIndex) {
                                     0 -> {
-                                        // Request root
                                         scope.launch {
                                             rootStatus = RootStatus.Requesting
                                             rootStatus = RootShell.requestRoot()
                                         }
                                     }
                                     1 -> {
-                                        // Open Accessibility Settings
                                         try {
                                             context.startActivity(
                                                 Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
@@ -229,7 +372,6 @@ fun HardwareButtonsDialog(
                                         }
                                     }
                                     2 -> {
-                                        // Toggle root-shell Recents fallback
                                         val newTarget = !useRootRecentsFallback
                                         if (newTarget) {
                                             if (rootStatus !is RootStatus.Granted && RootShell.isSuBinaryPresent()) {
@@ -259,7 +401,6 @@ fun HardwareButtonsDialog(
                                         }
                                     }
                                     3 -> {
-                                        // Disable Magisk Module
                                         scope.launch {
                                             val res = HardwareRemapManager.disableModule()
                                             staticModuleStatus = HardwareRemapManager.reconcileModuleStatus()
@@ -267,7 +408,6 @@ fun HardwareButtonsDialog(
                                         }
                                     }
                                     4 -> {
-                                        // Remove Magisk Module
                                         scope.launch {
                                             val res = HardwareRemapManager.removeModule()
                                             staticModuleStatus = HardwareRemapManager.reconcileModuleStatus()
@@ -283,207 +423,272 @@ fun HardwareButtonsDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(22.dp)
+        val dialogShape = RoundedCornerShape(22.dp)
 
-        Column(
+        Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(shape)
-                .background(ActiveTheme.surface)
-                .border(2.dp, ActiveTheme.cardBorder, shape)
-                .padding(10.dp)
+                .border(1.5.dp, ActiveTheme.cardBorder, dialogShape),
+            shape = dialogShape,
+            color = ActiveTheme.surface,
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp
         ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                MochibunSectionHeader(
-                    title = "Button Remapper",
-                    color = ActiveTheme.accentDeep
-                )
-                Text(
-                    text = "AT-M120",
-                    color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
-                    fontSize = 11.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Navigation Tabs (Left / Right to switch)
-            Row(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(theme.bgColor.copy(alpha = 0.5f))
-                    .padding(2.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                    .fillMaxSize()
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
-                val tabTitles = listOf("⚡ Actions", "🔧 Static .kl", "🛡 Status")
-                tabTitles.forEachIndexed { index, title ->
-                    val isTabActive = currentTab == index
+                // Header with balanced pixel ribbon bows
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    PixelRibbonBow(width = 22.dp, height = 18.dp)
+                    Text(
+                        text = "— ♡ Button Remapper ♡ —",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PixelRibbonBow(width = 22.dp, height = 18.dp)
+                }
+
+                // Subtitle device badge
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "AT-M120 • mtk-kpd & gpio-keys",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.55f),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Navigation Tabs
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(ActiveTheme.surfaceTint.copy(alpha = 0.25f))
+                        .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    val tabTitles = listOf("⚡ Actions", "🔧 Static .kl", "🛡 Status")
+                    tabTitles.forEachIndexed { index, title ->
+                        val isTabActive = currentTab == index
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isTabActive) ActiveTheme.container else Color.Transparent)
+                                .then(
+                                    if (isTabActive) Modifier.border(1.dp, ActiveTheme.selectionGlow, RoundedCornerShape(8.dp))
+                                    else Modifier
+                                )
+                                .clickable {
+                                    currentTab = index
+                                    selectedIndex = 0
+                                }
+                                .padding(vertical = 5.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = title,
+                                color = if (isTabActive) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.6f),
+                                fontSize = 11.sp,
+                                fontWeight = if (isTabActive) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                // Notification bar for feedback
+                statusMessage?.let { msg ->
+                    Spacer(modifier = Modifier.height(4.dp))
                     Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isTabActive) theme.selectedContainerColor else Color.Transparent)
-                            .clickable {
-                                currentTab = index
-                                selectedIndex = 0
-                            }
-                            .padding(vertical = 5.dp),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ActiveTheme.surfaceTint.copy(alpha = 0.35f))
+                            .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text(
-                            text = title,
-                            color = if (isTabActive) theme.fgTextColor else theme.cardTextColor.copy(alpha = 0.6f),
-                            fontSize = 11.sp,
-                            fontWeight = if (isTabActive) FontWeight.Bold else FontWeight.Normal
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "♡",
+                                fontSize = 10.sp,
+                                color = ActiveTheme.accentDeep,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = msg,
+                                color = ActiveTheme.accentDeep,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                HorizontalDivider(color = ActiveTheme.cardBorder.copy(alpha = 0.4f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Scrollable tab content container
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    when (currentTab) {
+                        0 -> ActionsTabContent(
+                            selectedIndex = selectedIndex,
+                            actionConfigs = actionConfigs,
+                            isAccessibilityEnabled = isAccessibilityEnabled,
+                            isKeyMapperActive = isKeyMapperActive,
+                            useRootRecentsFallback = useRootRecentsFallback,
+                            theme = theme,
+                            onDetectKeyClick = { isListeningForKey = true },
+                            onKeySelected = {
+                                keyForActionDialog = it
+                            }
+                        )
+                        1 -> StaticRemapTabContent(
+                            selectedIndex = selectedIndex,
+                            safeKeys = safeKeys,
+                            staticMappings = staticMappings,
+                            moduleStatus = staticModuleStatus,
+                            theme = theme,
+                            onDetectKeyClick = { isListeningForKey = true },
+                            onKeySelected = {
+                                keyForStaticDialog = it
+                            },
+                            onApplyClick = { showConfirmStageDialog = true },
+                            onResetClick = {
+                                staticMappings.clear()
+                                for (k in PhysicalKey.entries) {
+                                    HardwareRemapManager.saveConfiguredStaticMapping(context, k, null)
+                                }
+                                statusMessage = "Static mappings cleared"
+                            }
+                        )
+                        2 -> StatusTabContent(
+                            selectedIndex = selectedIndex,
+                            rootStatus = rootStatus,
+                            isAccessibilityEnabled = isAccessibilityEnabled,
+                            useRootRecentsFallback = useRootRecentsFallback,
+                            theme = theme,
+                            onRequestRoot = {
+                                scope.launch {
+                                    rootStatus = RootStatus.Requesting
+                                    rootStatus = RootShell.requestRoot()
+                                }
+                            },
+                            onOpenSettings = {
+                                try {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                } catch (e: Exception) {
+                                    statusMessage = "Cannot open settings: ${e.message}"
+                                }
+                            },
+                            onToggleRootRecentsFallback = {
+                                val newTarget = !useRootRecentsFallback
+                                if (newTarget) {
+                                    if (rootStatus !is RootStatus.Granted && RootShell.isSuBinaryPresent()) {
+                                        scope.launch {
+                                            rootStatus = RootStatus.Requesting
+                                            val res = RootShell.requestRoot()
+                                            rootStatus = res
+                                            if (res is RootStatus.Granted) {
+                                                useRootRecentsFallback = true
+                                                HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+                                                statusMessage = "Root-shell Recents fallback enabled"
+                                            } else {
+                                                statusMessage = "Root access denied. Authorize Mochibun in Magisk."
+                                            }
+                                        }
+                                    } else if (!RootShell.isSuBinaryPresent()) {
+                                        statusMessage = "su binary not found. Device is not rooted."
+                                    } else {
+                                        useRootRecentsFallback = true
+                                        HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+                                        statusMessage = "Root-shell Recents fallback enabled"
+                                    }
+                                } else {
+                                    useRootRecentsFallback = false
+                                    HardwareRemapManager.setRootRecentsFallbackEnabled(context, false)
+                                    statusMessage = "Root-shell Recents fallback disabled"
+                                }
+                            },
+                            onDisableModule = {
+                                scope.launch {
+                                    val res = HardwareRemapManager.disableModule()
+                                    staticModuleStatus = HardwareRemapManager.reconcileModuleStatus()
+                                    statusMessage = res.getOrNull() ?: res.exceptionOrNull()?.message
+                                }
+                            },
+                            onRemoveModule = {
+                                scope.launch {
+                                    val res = HardwareRemapManager.removeModule()
+                                    staticModuleStatus = HardwareRemapManager.reconcileModuleStatus()
+                                    statusMessage = res.getOrNull() ?: res.exceptionOrNull()?.message
+                                }
+                            }
                         )
                     }
                 }
-            }
 
-            // Status notification bar if any
-            statusMessage?.let { msg ->
+                Spacer(modifier = Modifier.height(6.dp))
+                HorizontalDivider(color = ActiveTheme.cardBorder.copy(alpha = 0.4f), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(theme.appActionColor.copy(alpha = 0.15f))
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
+
+                // Footer controls
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = msg,
-                        color = theme.fgTextColor,
-                        fontSize = 10.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        text = "D-Pad ◄/► Tabs • ▲/▼ Select • OK Activate • Back Close",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.5f),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.2f), thickness = 1.dp)
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Tab Content
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                when (currentTab) {
-                    0 -> ActionsTabContent(
-                        selectedIndex = selectedIndex,
-                        actionConfigs = actionConfigs,
-                        isAccessibilityEnabled = isAccessibilityEnabled,
-                        isKeyMapperActive = isKeyMapperActive,
-                        useRootRecentsFallback = useRootRecentsFallback,
-                        theme = theme,
-                        onKeySelected = { keyForActionDialog = it }
-                    )
-                    1 -> StaticRemapTabContent(
-                        selectedIndex = selectedIndex,
-                        staticMappings = staticMappings,
-                        moduleStatus = staticModuleStatus,
-                        theme = theme,
-                        onKeySelected = { keyForStaticDialog = it },
-                        onApplyClick = { showConfirmStageDialog = true },
-                        onResetClick = {
-                            staticMappings.clear()
-                            for (k in PhysicalKey.entries) {
-                                HardwareRemapManager.saveConfiguredStaticMapping(context, k, null)
-                            }
-                            statusMessage = "Static mappings cleared"
-                        }
-                    )
-                    2 -> StatusTabContent(
-                        selectedIndex = selectedIndex,
-                        rootStatus = rootStatus,
-                        isAccessibilityEnabled = isAccessibilityEnabled,
-                        useRootRecentsFallback = useRootRecentsFallback,
-                        moduleStatus = staticModuleStatus,
-                        theme = theme,
-                        onRequestRoot = {
-                            scope.launch {
-                                rootStatus = RootStatus.Requesting
-                                rootStatus = RootShell.requestRoot()
-                            }
-                        },
-                        onOpenSettings = {
-                            try {
-                                context.startActivity(
-                                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
-                            } catch (e: Exception) {
-                                statusMessage = "Cannot open settings: ${e.message}"
-                            }
-                        },
-                        onToggleRootRecentsFallback = {
-                            val newTarget = !useRootRecentsFallback
-                            if (newTarget) {
-                                if (rootStatus !is RootStatus.Granted && RootShell.isSuBinaryPresent()) {
-                                    scope.launch {
-                                        rootStatus = RootStatus.Requesting
-                                        val res = RootShell.requestRoot()
-                                        rootStatus = res
-                                        if (res is RootStatus.Granted) {
-                                            useRootRecentsFallback = true
-                                            HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
-                                            statusMessage = "Root-shell Recents fallback enabled"
-                                        } else {
-                                            statusMessage = "Root access denied. Authorize Mochibun in Magisk."
-                                        }
-                                    }
-                                } else if (!RootShell.isSuBinaryPresent()) {
-                                    statusMessage = "su binary not found. Device is not rooted."
-                                } else {
-                                    useRootRecentsFallback = true
-                                    HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
-                                    statusMessage = "Root-shell Recents fallback enabled"
-                                }
-                            } else {
-                                useRootRecentsFallback = false
-                                HardwareRemapManager.setRootRecentsFallbackEnabled(context, false)
-                                statusMessage = "Root-shell Recents fallback disabled"
-                            }
-                        },
-                        onDisableModule = {
-                            scope.launch {
-                                val res = HardwareRemapManager.disableModule()
-                                staticModuleStatus = HardwareRemapManager.reconcileModuleStatus()
-                                statusMessage = res.getOrNull() ?: res.exceptionOrNull()?.message
-                            }
-                        },
-                        onRemoveModule = {
-                            scope.launch {
-                                val res = HardwareRemapManager.removeModule()
-                                staticModuleStatus = HardwareRemapManager.reconcileModuleStatus()
-                                statusMessage = res.getOrNull() ?: res.exceptionOrNull()?.message
-                            }
-                        }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.2f), thickness = 1.dp)
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Footer controls
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "D-Pad ◄/► Tabs • ▲/▼ Select • OK Activate • Back Close",
-                    color = theme.cardTextColor.copy(alpha = 0.5f),
-                    fontSize = 9.sp
-                )
             }
         }
+    }
+
+    // Sub-dialog: Key Capture & Detection Mode
+    if (isListeningForKey) {
+        KeyCaptureListeningDialog(
+            theme = theme,
+            onDismiss = { isListeningForKey = false },
+            onConfigureActions = { detectedKey ->
+                isListeningForKey = false
+                keyForActionDialog = detectedKey
+            },
+            onConfigureStatic = { detectedKey ->
+                isListeningForKey = false
+                keyForStaticDialog = detectedKey
+            }
+        )
     }
 
     // Sub-dialog: Edit high-level actions for a key
@@ -540,7 +745,6 @@ fun HardwareButtonsDialog(
     // Sub-dialog: Confirm staging and deployment to Magisk
     if (showConfirmStageDialog) {
         ConfirmStageDialog(
-            customMappings = staticMappings,
             theme = theme,
             onDismiss = { showConfirmStageDialog = false },
             onConfirm = {
@@ -555,6 +759,9 @@ fun HardwareButtonsDialog(
     }
 }
 
+/**
+ * Tab 0: High-Level Dynamic Actions Content.
+ */
 @Composable
 private fun ActionsTabContent(
     selectedIndex: Int,
@@ -563,14 +770,13 @@ private fun ActionsTabContent(
     isKeyMapperActive: Boolean,
     useRootRecentsFallback: Boolean,
     theme: LauncherTheme,
+    onDetectKeyClick: () -> Unit,
     onKeySelected: (PhysicalKey) -> Unit
 ) {
     val listState = rememberLazyListState()
 
     LaunchedEffect(selectedIndex) {
-        if (selectedIndex in 0 until PhysicalKey.entries.size) {
-            listState.animateScrollToItem(selectedIndex)
-        }
+        listState.animateScrollToItem(selectedIndex)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -578,16 +784,23 @@ private fun ActionsTabContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFFFF9800).copy(alpha = 0.2f))
-                    .border(1.dp, Color(0xFFFF9800), RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(ActiveTheme.surfaceTint.copy(alpha = 0.35f))
+                    .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
                     .padding(6.dp)
             ) {
-                Text(
-                    text = "⚠ Accessibility Service is Disabled. Enable in Status tab to listen to keys outside Mochibun.",
-                    color = theme.fgTextColor,
-                    fontSize = 10.sp
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(text = "⚠️", fontSize = 11.sp)
+                    Text(
+                        text = "Accessibility Service is Disabled. Enable in Status tab to listen to keys outside Mochibun.",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 9.5.sp,
+                        lineHeight = 12.sp
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
         }
@@ -596,17 +809,23 @@ private fun ActionsTabContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(theme.appActionColor.copy(alpha = 0.15f))
-                    .border(1.dp, theme.appActionColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(ActiveTheme.surfaceTint.copy(alpha = 0.25f))
+                    .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                     .padding(6.dp)
             ) {
-                Text(
-                    text = "ℹ KeyMapper Active: If a button is already mapped in KeyMapper, it consumes the key first. Unmap that button in KeyMapper or use Tab 1 (Static .kl) which runs beneath it.",
-                    color = theme.fgTextColor,
-                    fontSize = 9.sp,
-                    lineHeight = 12.sp
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(text = "ℹ️", fontSize = 11.sp)
+                    Text(
+                        text = "KeyMapper Active: Unmap keys in KeyMapper if they conflict, or use Tab 1 (Static .kl).",
+                        color = ActiveTheme.textPrimary,
+                        fontSize = 9.sp,
+                        lineHeight = 12.sp
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
         }
@@ -615,43 +834,109 @@ private fun ActionsTabContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF4CAF50).copy(alpha = 0.15f))
-                    .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(ActiveTheme.surfaceTint.copy(alpha = 0.25f))
+                    .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                     .padding(6.dp)
             ) {
-                Text(
-                    text = "⚡ Root-Shell Recents Fallback is Active: Recents launches using root shell (Tab 2 to toggle).",
-                    color = theme.fgTextColor,
-                    fontSize = 9.sp,
-                    lineHeight = 12.sp
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(text = "⚡", fontSize = 11.sp)
+                    Text(
+                        text = "Root-Shell Recents Fallback is Active: Recents launches directly using root shell.",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 9.sp,
+                        lineHeight = 12.sp
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
         }
 
-        val keyCardShape = RoundedCornerShape(8.dp)
+        val keyCardShape = RoundedCornerShape(10.dp)
 
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            // Index 0: Interactive Key Capture / Detect Button
+            item {
+                val isDetectFocused = selectedIndex == 0
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(keyCardShape)
+                        .background(if (isDetectFocused) theme.selectedContainerColor else ActiveTheme.surfaceTint.copy(alpha = 0.22f))
+                        .border(
+                            width = if (isDetectFocused) 1.5.dp else 1.dp,
+                            color = if (isDetectFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.6f),
+                            shape = keyCardShape
+                        )
+                        .clickable { onDetectKeyClick() }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(ActiveTheme.surfaceTint.copy(alpha = 0.5f))
+                                    .border(1.dp, ActiveTheme.cardBorder, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = "🎯", fontSize = 11.sp)
+                            }
+                            Column {
+                                Text(
+                                    text = "Listen for Key Press",
+                                    color = if (isDetectFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Press any hardware button to identify & configure",
+                                    color = ActiveTheme.textPrimary.copy(alpha = 0.65f),
+                                    fontSize = 9.sp
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Listen ›",
+                            color = if (isDetectFocused) ActiveTheme.accentDeep else ActiveTheme.primary,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // Index 1..size: Physical Keys
             itemsIndexed(
                 items = PhysicalKey.entries,
                 key = { _, key -> key.name }
             ) { index, key ->
-                val isFocused = selectedIndex == index
+                val isFocused = selectedIndex == index + 1
                 val config = actionConfigs[key] ?: ButtonActionConfig()
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(keyCardShape)
-                        .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
+                        .background(if (isFocused) theme.selectedContainerColor else ActiveTheme.container.copy(alpha = 0.5f))
                         .border(
-                            width = if (isFocused) 2.dp else 1.dp,
-                            color = if (isFocused) theme.appActionColor else Color.Transparent,
+                            width = if (isFocused) 1.5.dp else 1.dp,
+                            color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.4f),
                             shape = keyCardShape
                         )
                         .clickable { onKeySelected(key) }
@@ -660,43 +945,53 @@ private fun ActionsTabContent(
                     Column {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                RetroKeyBadge(key = key, isFocused = isFocused)
+                                Text(
+                                    text = key.keyName,
+                                    color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold
+                                )
+                            }
                             Text(
-                                text = key.keyName,
-                                color = theme.fgTextColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${key.hexScancode} • Code ${key.defaultKeyCode}",
-                                color = theme.cardTextColor.copy(alpha = 0.5f),
-                                fontSize = 10.sp
+                                text = "${key.hexScancode} • #${key.defaultKeyCode}",
+                                color = ActiveTheme.textPrimary.copy(alpha = 0.5f),
+                                fontSize = 9.5.sp
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
-                        val summary = buildString {
-                            if (config.singlePressAction !is ActionType.None) {
-                                append("1x: ${config.singlePressAction.displayName()}  ")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (config.hasAnyAction()) {
+                                if (config.singlePressAction !is ActionType.None) {
+                                    ActionPill("1x", config.singlePressAction.displayName(), true, isFocused)
+                                }
+                                if (config.doublePressAction !is ActionType.None) {
+                                    ActionPill("2x", config.doublePressAction.displayName(), true, isFocused)
+                                }
+                                if (config.longPressAction !is ActionType.None) {
+                                    ActionPill("Hold", config.longPressAction.displayName(), true, isFocused)
+                                }
+                            } else {
+                                Text(
+                                    text = "No custom action (system default)",
+                                    color = ActiveTheme.textPrimary.copy(alpha = 0.5f),
+                                    fontSize = 9.5.sp
+                                )
                             }
-                            if (config.doublePressAction !is ActionType.None) {
-                                append("2x: ${config.doublePressAction.displayName()}  ")
-                            }
-                            if (config.longPressAction !is ActionType.None) {
-                                append("Long: ${config.longPressAction.displayName()}")
-                            }
-                            if (isEmpty()) append("No actions assigned (Default behavior)")
                         }
-
-                        Text(
-                            text = summary,
-                            color = if (config.hasAnyAction()) theme.greetingColor else theme.cardTextColor.copy(alpha = 0.6f),
-                            fontSize = 10.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                     }
                 }
             }
@@ -704,23 +999,25 @@ private fun ActionsTabContent(
     }
 }
 
+/**
+ * Tab 1: Static Magisk .kl Keylayout Remap Content.
+ */
 @Composable
 private fun StaticRemapTabContent(
     selectedIndex: Int,
+    safeKeys: List<PhysicalKey>,
     staticMappings: Map<Int, String>,
     moduleStatus: StaticModuleStatus,
     theme: LauncherTheme,
+    onDetectKeyClick: () -> Unit,
     onKeySelected: (PhysicalKey) -> Unit,
     onApplyClick: () -> Unit,
     onResetClick: () -> Unit
 ) {
-    val safeKeys = PhysicalKey.entries.filter { it.isStaticRemapSafe }
     val listState = rememberLazyListState()
 
     LaunchedEffect(selectedIndex) {
-        if (selectedIndex in 0..(safeKeys.size + 1)) {
-            listState.animateScrollToItem(selectedIndex)
-        }
+        listState.animateScrollToItem(selectedIndex)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -728,27 +1025,33 @@ private fun StaticRemapTabContent(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(6.dp))
-                .background(
-                    when (moduleStatus) {
-                        is StaticModuleStatus.Active -> Color(0xFF4CAF50).copy(alpha = 0.2f)
-                        is StaticModuleStatus.StagedPendingReboot -> Color(0xFF2196F3).copy(alpha = 0.2f)
-                        is StaticModuleStatus.Disabled -> Color(0xFFFF9800).copy(alpha = 0.2f)
-                        else -> theme.bgColor.copy(alpha = 0.4f)
-                    }
-                )
-                .padding(6.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(ActiveTheme.surfaceTint.copy(alpha = 0.35f))
+                .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(10.dp))
+                .padding(8.dp)
         ) {
             Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Magisk Module:",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ActiveTheme.accentDeep
+                    )
+                    Text(
+                        text = moduleStatus.description(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = ActiveTheme.textPrimary
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Magisk Module: ${moduleStatus.description()}",
-                    color = theme.fgTextColor,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Vendor_2454_Product_6500.kl • Never modifies Generic.kl",
-                    color = theme.cardTextColor.copy(alpha = 0.6f),
+                    text = "Target: Vendor_2454_Product_6500.kl • Generic.kl untouched",
+                    color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
                     fontSize = 9.sp
                 )
             }
@@ -756,18 +1059,78 @@ private fun StaticRemapTabContent(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        val safeKeyCardShape = RoundedCornerShape(8.dp)
+        val safeKeyCardShape = RoundedCornerShape(10.dp)
 
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            // Index 0: Interactive Key Capture / Detect Button
+            item {
+                val isDetectFocused = selectedIndex == 0
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(safeKeyCardShape)
+                        .background(if (isDetectFocused) theme.selectedContainerColor else ActiveTheme.surfaceTint.copy(alpha = 0.22f))
+                        .border(
+                            width = if (isDetectFocused) 1.5.dp else 1.dp,
+                            color = if (isDetectFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.6f),
+                            shape = safeKeyCardShape
+                        )
+                        .clickable { onDetectKeyClick() }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(ActiveTheme.surfaceTint.copy(alpha = 0.5f))
+                                    .border(1.dp, ActiveTheme.cardBorder, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = "🎯", fontSize = 11.sp)
+                            }
+                            Column {
+                                Text(
+                                    text = "Listen for Key Press",
+                                    color = if (isDetectFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Press any hardware button to select for static remap",
+                                    color = ActiveTheme.textPrimary.copy(alpha = 0.65f),
+                                    fontSize = 9.sp
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Listen ›",
+                            color = if (isDetectFocused) ActiveTheme.accentDeep else ActiveTheme.primary,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // Index 1..safeKeys.size: Safe physical keys
             itemsIndexed(
                 items = safeKeys,
                 key = { _, key -> key.name }
             ) { index, key ->
-                val isFocused = selectedIndex == index
+                val isFocused = selectedIndex == index + 1
                 val defaultKey = BASELINE_MTK_KPD_MAPPINGS[key.scancode] ?: "DEFAULT"
                 val mappedKey = staticMappings[key.scancode] ?: defaultKey
                 val isRemapped = mappedKey != defaultKey
@@ -776,10 +1139,10 @@ private fun StaticRemapTabContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(safeKeyCardShape)
-                        .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
+                        .background(if (isFocused) theme.selectedContainerColor else ActiveTheme.container.copy(alpha = 0.5f))
                         .border(
-                            width = if (isFocused) 2.dp else 1.dp,
-                            color = if (isFocused) theme.appActionColor else Color.Transparent,
+                            width = if (isFocused) 1.5.dp else 1.dp,
+                            color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.4f),
                             shape = safeKeyCardShape
                         )
                         .clickable { onKeySelected(key) }
@@ -790,67 +1153,96 @@ private fun StaticRemapTabContent(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            RetroKeyBadge(key = key, isFocused = isFocused)
+                            Column {
+                                Text(
+                                    text = key.keyName,
+                                    color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Scan ${key.scancode} • Orig: $defaultKey",
+                                    color = ActiveTheme.textPrimary.copy(alpha = 0.55f),
+                                    fontSize = 9.5.sp
+                                )
+                            }
+                        }
+
+                        if (isRemapped) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(ActiveTheme.surfaceTint.copy(alpha = 0.5f))
+                                    .border(1.dp, ActiveTheme.selectionGlow, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "➔ $mappedKey",
+                                    color = ActiveTheme.accentDeep,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else {
                             Text(
-                                text = key.keyName,
-                                color = theme.fgTextColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Scan ${key.scancode} (${key.hexScancode}) • Orig: $defaultKey",
-                                color = theme.cardTextColor.copy(alpha = 0.6f),
+                                text = "Default",
+                                color = ActiveTheme.textPrimary.copy(alpha = 0.45f),
                                 fontSize = 10.sp
                             )
                         }
-
-                        Text(
-                            text = if (isRemapped) "➔ $mappedKey" else "Default",
-                            color = if (isRemapped) theme.greetingColor else theme.cardTextColor.copy(alpha = 0.5f),
-                            fontSize = 11.sp,
-                            fontWeight = if (isRemapped) FontWeight.Bold else FontWeight.Normal
-                        )
                     }
                 }
             }
 
-            // Action: Apply / Stage to Magisk
+            // Index safeKeys.size + 1: Apply to Magisk Module
             item {
-                val isFocused = selectedIndex == safeKeys.size
+                val isFocused = selectedIndex == safeKeys.size + 1
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isFocused) theme.appActionColor else theme.selectedContainerColor)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isFocused) ActiveTheme.accentDeep else ActiveTheme.container)
+                        .border(
+                            width = if (isFocused) 1.5.dp else 1.dp,
+                            color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
+                            shape = RoundedCornerShape(10.dp)
+                        )
                         .clickable { onApplyClick() }
                         .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "💾 Apply to Magisk Module (Reboot required)",
-                        color = if (isFocused) theme.cardBgColor else theme.fgTextColor,
+                        color = if (isFocused) Color.White else ActiveTheme.accentDeep,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            // Action: Reset all static mappings
+            // Index safeKeys.size + 2: Reset static mappings
             item {
-                val isFocused = selectedIndex == safeKeys.size + 1
+                val isFocused = selectedIndex == safeKeys.size + 2
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isFocused) Color(0xFFFF5252).copy(alpha = 0.3f) else Color.Transparent)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isFocused) destructiveColor else destructiveBgColor)
+                        .border(1.dp, destructiveColor, RoundedCornerShape(10.dp))
                         .clickable { onResetClick() }
                         .padding(vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "↩ Reset Staged Mappings to Defaults",
-                        color = Color(0xFFFF5252),
-                        fontSize = 10.sp
+                        text = "↺ Reset Staged Mappings to Defaults",
+                        color = if (isFocused) Color.White else destructiveColor,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -858,13 +1250,15 @@ private fun StaticRemapTabContent(
     }
 }
 
+/**
+ * Tab 2: Status, Recovery, and Permissions Content.
+ */
 @Composable
 private fun StatusTabContent(
     selectedIndex: Int,
     rootStatus: RootStatus,
     isAccessibilityEnabled: Boolean,
     useRootRecentsFallback: Boolean,
-    moduleStatus: StaticModuleStatus,
     theme: LauncherTheme,
     onRequestRoot: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -874,10 +1268,16 @@ private fun StatusTabContent(
 ) {
     val listState = rememberLazyListState()
 
+    LaunchedEffect(selectedIndex) {
+        listState.animateScrollToItem(selectedIndex)
+    }
+
+    val itemShape = RoundedCornerShape(10.dp)
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         // Item 0: Root Access Status & Button
         item {
@@ -885,12 +1285,12 @@ private fun StatusTabContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
+                    .clip(itemShape)
+                    .background(if (isFocused) theme.selectedContainerColor else ActiveTheme.container.copy(alpha = 0.5f))
                     .border(
-                        width = if (isFocused) 2.dp else 1.dp,
-                        color = if (isFocused) theme.appActionColor else Color.Transparent,
-                        shape = RoundedCornerShape(8.dp)
+                        width = if (isFocused) 1.5.dp else 1.dp,
+                        color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.4f),
+                        shape = itemShape
                     )
                     .clickable { onRequestRoot() }
                     .padding(8.dp)
@@ -898,34 +1298,43 @@ private fun StatusTabContent(
                 Column {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Magisk Root Permission",
-                            color = theme.fgTextColor,
-                            fontSize = 12.sp,
+                            color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            text = when (rootStatus) {
-                                is RootStatus.Granted -> "✔ Granted"
-                                is RootStatus.Denied -> "❌ Denied"
-                                is RootStatus.Requesting -> "⌛ Checking..."
-                                else -> "Not Granted"
-                            },
-                            color = when (rootStatus) {
-                                is RootStatus.Granted -> Color(0xFF4CAF50)
-                                is RootStatus.Denied -> Color(0xFFFF5252)
-                                else -> theme.greetingColor
-                            },
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(ActiveTheme.surfaceTint.copy(alpha = 0.35f))
+                                .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = when (rootStatus) {
+                                    is RootStatus.Granted -> "✔ Granted"
+                                    is RootStatus.Denied -> "✖ Denied"
+                                    is RootStatus.Requesting -> "⏳ Checking..."
+                                    else -> "Not Granted"
+                                },
+                                color = when (rootStatus) {
+                                    is RootStatus.Granted -> ActiveTheme.accentDeep
+                                    is RootStatus.Denied -> destructiveColor
+                                    else -> ActiveTheme.textPrimary.copy(alpha = 0.7f)
+                                },
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Press OK to request/verify Magisk root authorization.",
-                        color = theme.cardTextColor.copy(alpha = 0.6f),
+                        text = "Press OK to request or verify Magisk root authorization.",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
                         fontSize = 9.sp
                     )
                 }
@@ -938,12 +1347,12 @@ private fun StatusTabContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
+                    .clip(itemShape)
+                    .background(if (isFocused) theme.selectedContainerColor else ActiveTheme.container.copy(alpha = 0.5f))
                     .border(
-                        width = if (isFocused) 2.dp else 1.dp,
-                        color = if (isFocused) theme.appActionColor else Color.Transparent,
-                        shape = RoundedCornerShape(8.dp)
+                        width = if (isFocused) 1.5.dp else 1.dp,
+                        color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.4f),
+                        shape = itemShape
                     )
                     .clickable { onOpenSettings() }
                     .padding(8.dp)
@@ -951,25 +1360,34 @@ private fun StatusTabContent(
                 Column {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Accessibility Service",
-                            color = theme.fgTextColor,
-                            fontSize = 12.sp,
+                            color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            text = if (isAccessibilityEnabled) "✔ Enabled" else "❌ Disabled",
-                            color = if (isAccessibilityEnabled) Color(0xFF4CAF50) else Color(0xFFFF9800),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(ActiveTheme.surfaceTint.copy(alpha = 0.35f))
+                                .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (isAccessibilityEnabled) "✔ Enabled" else "✖ Disabled",
+                                color = if (isAccessibilityEnabled) ActiveTheme.accentDeep else destructiveColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Required for real-time actions outside Mochibun. Press OK to open Accessibility Settings.",
-                        color = theme.cardTextColor.copy(alpha = 0.6f),
+                        text = "Required for real-time actions outside Mochibun. Press OK to open settings.",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
                         fontSize = 9.sp
                     )
                 }
@@ -982,12 +1400,12 @@ private fun StatusTabContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
+                    .clip(itemShape)
+                    .background(if (isFocused) theme.selectedContainerColor else ActiveTheme.container.copy(alpha = 0.5f))
                     .border(
-                        width = if (isFocused) 2.dp else 1.dp,
-                        color = if (isFocused) theme.appActionColor else Color.Transparent,
-                        shape = RoundedCornerShape(8.dp)
+                        width = if (isFocused) 1.5.dp else 1.dp,
+                        color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.4f),
+                        shape = itemShape
                     )
                     .clickable { onToggleRootRecentsFallback() }
                     .padding(8.dp)
@@ -999,33 +1417,33 @@ private fun StatusTabContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Use root-shell Recents fallback",
-                            color = theme.fgTextColor,
-                            fontSize = 11.sp,
+                            text = "Root-Shell Recents fallback",
+                            color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            text = if (useRootRecentsFallback) "✔ ON" else "✖ OFF",
-                            color = if (useRootRecentsFallback) Color(0xFF4CAF50) else theme.cardTextColor.copy(alpha = 0.6f),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(ActiveTheme.surfaceTint.copy(alpha = 0.35f))
+                                .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (useRootRecentsFallback) "✔ ON" else "✖ OFF",
+                                color = if (useRootRecentsFallback) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.6f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "If normal Recents fails on this firmware, launch the known-working Recents activity using root.",
-                        color = theme.cardTextColor.copy(alpha = 0.7f),
+                        text = "If normal Recents fails on this firmware, launch known-working Recents using root.",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
                         fontSize = 9.sp,
                         lineHeight = 12.sp
                     )
-                    if (useRootRecentsFallback && rootStatus !is RootStatus.Granted) {
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = "⚠ Root not granted. Open Magisk Manager -> Superuser to grant Mochibun root access.",
-                            color = Color(0xFFFF9800),
-                            fontSize = 8.5.sp
-                        )
-                    }
                 }
             }
         }
@@ -1036,12 +1454,12 @@ private fun StatusTabContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
+                    .clip(itemShape)
+                    .background(if (isFocused) theme.selectedContainerColor else ActiveTheme.container.copy(alpha = 0.5f))
                     .border(
-                        width = if (isFocused) 2.dp else 1.dp,
-                        color = if (isFocused) theme.appActionColor else Color.Transparent,
-                        shape = RoundedCornerShape(8.dp)
+                        width = if (isFocused) 1.5.dp else 1.dp,
+                        color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.4f),
+                        shape = itemShape
                     )
                     .clickable { onDisableModule() }
                     .padding(8.dp)
@@ -1049,13 +1467,13 @@ private fun StatusTabContent(
                 Column {
                     Text(
                         text = "🚫 Disable Module (/disable flag)",
-                        color = theme.fgTextColor,
-                        fontSize = 11.sp,
+                        color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = "Creates disable flag. Restores original key mappings on next reboot.",
-                        color = theme.cardTextColor.copy(alpha = 0.6f),
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
                         fontSize = 9.sp
                     )
                 }
@@ -1068,12 +1486,12 @@ private fun StatusTabContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
+                    .clip(itemShape)
+                    .background(if (isFocused) destructiveBgColor else ActiveTheme.container.copy(alpha = 0.5f))
                     .border(
-                        width = if (isFocused) 2.dp else 1.dp,
-                        color = if (isFocused) theme.appActionColor else Color.Transparent,
-                        shape = RoundedCornerShape(8.dp)
+                        width = if (isFocused) 1.5.dp else 1.dp,
+                        color = if (isFocused) destructiveColor else ActiveTheme.cardBorder.copy(alpha = 0.4f),
+                        shape = itemShape
                     )
                     .clickable { onRemoveModule() }
                     .padding(8.dp)
@@ -1081,33 +1499,34 @@ private fun StatusTabContent(
                 Column {
                     Text(
                         text = "🗑 Delete Module (/data/adb/modules/mochibun_keys)",
-                        color = Color(0xFFFF5252),
-                        fontSize = 11.sp,
+                        color = destructiveColor,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = "Completely deletes module files. Safe full reset.",
-                        color = theme.cardTextColor.copy(alpha = 0.6f),
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
                         fontSize = 9.sp
                     )
                 }
             }
         }
 
-        // Item 5: Emergency Recovery Documentation
+        // Emergency Recovery Info card
         item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(theme.bgColor.copy(alpha = 0.5f))
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(ActiveTheme.surfaceTint.copy(alpha = 0.25f))
+                    .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
                     .padding(8.dp)
             ) {
                 Column {
                     Text(
                         text = "🛡 Emergency Recovery (Without Mochibun)",
-                        color = theme.greetingColor,
-                        fontSize = 11.sp,
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(2.dp))
@@ -1117,9 +1536,9 @@ private fun StatusTabContent(
                             "2. Run: touch /data/adb/modules/mochibun_keys/disable\n" +
                             "   or: rm -rf /data/adb/modules/mochibun_keys\n" +
                             "3. Reboot. Android will restore default Generic.kl mappings 100% safely.",
-                        color = theme.cardTextColor.copy(alpha = 0.8f),
-                        fontSize = 9.sp,
-                        lineHeight = 12.sp
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.75f),
+                        fontSize = 8.5.sp,
+                        lineHeight = 11.5.sp
                     )
                 }
             }
@@ -1127,6 +1546,254 @@ private fun StatusTabContent(
     }
 }
 
+/**
+ * Key Capture & Listening Dialog.
+ * Intercepts physical key events live and presents soft mascot feedback.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KeyCaptureListeningDialog(
+    theme: LauncherTheme,
+    onDismiss: () -> Unit,
+    onConfigureActions: (PhysicalKey) -> Unit,
+    onConfigureStatic: (PhysicalKey) -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    var detectedKey by remember { mutableStateOf<PhysicalKey?>(null) }
+    var rawKeyEventInfo by remember { mutableStateOf<String?>(null) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_scale"
+    )
+
+    requestFocusSafely(focusRequester)
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
+        modifier = Modifier
+            .fillMaxWidth(0.92f)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (isHardwareDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        onDismiss()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type == KeyEventType.KeyDown) {
+                    val key = PhysicalKey.fromKeyCode(native.keyCode)
+                        ?: PhysicalKey.fromScancode(native.scanCode)
+                    if (key != null) {
+                        detectedKey = key
+                    } else {
+                        rawKeyEventInfo = "KeyCode: ${native.keyCode} • Scan: ${native.scanCode}"
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                false
+            }
+    ) {
+        val shape = RoundedCornerShape(22.dp)
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.5.dp, ActiveTheme.cardBorder, shape),
+            shape = shape,
+            color = ActiveTheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header with ribbon bows
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    PixelRibbonBow(width = 22.dp, height = 18.dp)
+                    Text(
+                        text = "— ♡ Key Capture ♡ —",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PixelRibbonBow(width = 22.dp, height = 18.dp)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Mascot indicator with expression feedback
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .graphicsLayer {
+                            scaleX = if (detectedKey == null) pulseScale else 1f
+                            scaleY = if (detectedKey == null) pulseScale else 1f
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    PixelArtMascot(
+                        expression = if (detectedKey != null) MascotExpression.RESPONDING else MascotExpression.THINKING,
+                        size = 48.dp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (detectedKey == null) {
+                    Text(
+                        text = "Listening for physical key...",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Press any button on your AT-M120 keypad\n(Side Key, Call, Camera, F1–F4, etc.)",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.65f),
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 13.sp
+                    )
+
+                    rawKeyEventInfo?.let { raw ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Unrecognized button: $raw",
+                            color = destructiveColor,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else {
+                    val key = detectedKey!!
+                    Text(
+                        text = "Key Captured! ♡",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(ActiveTheme.surfaceTint.copy(alpha = 0.4f))
+                            .border(1.dp, ActiveTheme.selectionGlow, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        RetroKeyBadge(key = key, isFocused = true)
+                        Column {
+                            Text(
+                                text = key.keyName,
+                                color = ActiveTheme.accentDeep,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Scan ${key.hexScancode} (${key.scancode}) • KeyCode #${key.defaultKeyCode}",
+                                color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(ActiveTheme.accentDeep)
+                                .clickable { onConfigureActions(key) }
+                                .padding(vertical = 7.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "⚡ Actions",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        if (key.isStaticRemapSafe) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(ActiveTheme.container)
+                                    .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
+                                    .clickable { onConfigureStatic(key) }
+                                    .padding(vertical = 7.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "🔧 Static .kl",
+                                    color = ActiveTheme.accentDeep,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.6f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(ActiveTheme.surfaceTint.copy(alpha = 0.25f))
+                        .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                        .clickable { onDismiss() }
+                        .padding(vertical = 5.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Cancel (Back)",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Sub-dialog: Configure Single, Double, and Long-press Actions for a specific key.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ActionConfigSubDialog(
@@ -1142,7 +1809,7 @@ private fun ActionConfigSubDialog(
     var doubleAction by remember { mutableStateOf(currentConfig.doublePressAction) }
     var longAction by remember { mutableStateOf(currentConfig.longPressAction) }
 
-    var selectedRow by remember { mutableIntStateOf(0) } // 0: single, 1: double, 2: long, 3: save
+    var selectedRow by remember { mutableIntStateOf(0) } // 0: single, 1: double, 2: long, 3: save, 4: cancel
     val focusRequester = remember { FocusRequester() }
 
     val actionOptions = listOf(
@@ -1159,14 +1826,18 @@ private fun ActionConfigSubDialog(
 
     BasicAlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
         modifier = Modifier
             .fillMaxWidth(0.92f)
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (isHardwareDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) onDismiss()
                     return@onPreviewKeyEvent true
                 }
@@ -1178,27 +1849,17 @@ private fun ActionConfigSubDialog(
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        if (selectedRow < 3) selectedRow++
+                        if (selectedRow < 4) selectedRow++
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_CENTER,
                     KeyEvent.KEYCODE_ENTER -> {
                         when (selectedRow) {
-                            0 -> {
-                                // Cycle single press
-                                cycleAction(singleAction, actionOptions, onPickApp) { singleAction = it }
-                            }
-                            1 -> {
-                                // Cycle double press
-                                cycleAction(doubleAction, actionOptions, onPickApp) { doubleAction = it }
-                            }
-                            2 -> {
-                                // Cycle long press
-                                cycleAction(longAction, actionOptions, onPickApp) { longAction = it }
-                            }
-                            3 -> {
-                                onSave(ButtonActionConfig(singleAction, doubleAction, longAction))
-                            }
+                            0 -> cycleAction(singleAction, actionOptions, onPickApp) { singleAction = it }
+                            1 -> cycleAction(doubleAction, actionOptions, onPickApp) { doubleAction = it }
+                            2 -> cycleAction(longAction, actionOptions, onPickApp) { longAction = it }
+                            3 -> onSave(ButtonActionConfig(singleAction, doubleAction, longAction))
+                            4 -> onDismiss()
                         }
                         true
                     }
@@ -1206,78 +1867,128 @@ private fun ActionConfigSubDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(12.dp)
-        Column(
+        val shape = RoundedCornerShape(20.dp)
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(theme.cardBgColor)
-                .border(2.dp, theme.appActionColor, shape)
-                .padding(12.dp)
+                .border(1.5.dp, ActiveTheme.cardBorder, shape),
+            shape = shape,
+            color = ActiveTheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
         ) {
-            Text(
-                text = "⚡ Actions: ${physicalKey.keyName}",
-                color = theme.greetingColor,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = physicalKey.description,
-                color = theme.cardTextColor.copy(alpha = 0.6f),
-                fontSize = 10.sp
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Row 0: Single Press
-            ActionRow(
-                label = "Single Press (1x)",
-                currentAction = singleAction,
-                isFocused = selectedRow == 0,
-                theme = theme,
-                onClick = { cycleAction(singleAction, actionOptions, onPickApp) { singleAction = it } }
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Row 1: Double Press
-            ActionRow(
-                label = "Double Press (2x)",
-                currentAction = doubleAction,
-                isFocused = selectedRow == 1,
-                theme = theme,
-                onClick = { cycleAction(doubleAction, actionOptions, onPickApp) { doubleAction = it } }
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Row 2: Long Press
-            ActionRow(
-                label = "Long Press (Hold 500ms)",
-                currentAction = longAction,
-                isFocused = selectedRow == 2,
-                theme = theme,
-                onClick = { cycleAction(longAction, actionOptions, onPickApp) { longAction = it } }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Row 3: Save button
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (selectedRow == 3) theme.appActionColor else theme.selectedContainerColor)
-                    .clickable { onSave(ButtonActionConfig(singleAction, doubleAction, longAction)) }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center
+                    .padding(12.dp)
             ) {
-                Text(
-                    text = "💾 Save Actions",
-                    color = if (selectedRow == 3) theme.cardBgColor else theme.fgTextColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    PixelRibbonBow(width = 20.dp, height = 16.dp)
+                    Text(
+                        text = "— ♡ Configure Actions ♡ —",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PixelRibbonBow(width = 20.dp, height = 16.dp)
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    RetroKeyBadge(key = physicalKey, isFocused = true)
+                    Text(
+                        text = physicalKey.keyName,
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Action rows
+                ActionConfigRow(
+                    label = "Single Press (1x)",
+                    currentAction = singleAction,
+                    isFocused = selectedRow == 0,
+                    onClick = { cycleAction(singleAction, actionOptions, onPickApp) { singleAction = it } }
                 )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                ActionConfigRow(
+                    label = "Double Press (2x)",
+                    currentAction = doubleAction,
+                    isFocused = selectedRow == 1,
+                    onClick = { cycleAction(doubleAction, actionOptions, onPickApp) { doubleAction = it } }
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                ActionConfigRow(
+                    label = "Long Press (Hold 500ms)",
+                    currentAction = longAction,
+                    isFocused = selectedRow == 2,
+                    onClick = { cycleAction(longAction, actionOptions, onPickApp) { longAction = it } }
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Save button
+                val isSaveFocused = selectedRow == 3
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSaveFocused) ActiveTheme.accentDeep else ActiveTheme.container)
+                        .border(
+                            width = if (isSaveFocused) 1.5.dp else 1.dp,
+                            color = if (isSaveFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .clickable { onSave(ButtonActionConfig(singleAction, doubleAction, longAction)) }
+                        .padding(vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "💾 Save Actions",
+                        color = if (isSaveFocused) Color.White else ActiveTheme.accentDeep,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Cancel button
+                val isCancelFocused = selectedRow == 4
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isCancelFocused) ActiveTheme.surfaceTint.copy(alpha = 0.45f) else Color.Transparent)
+                        .clickable { onDismiss() }
+                        .padding(vertical = 5.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Cancel",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
@@ -1300,7 +2011,6 @@ private fun cycleAction(
     val nextIndex = (currentIndex + 1) % options.size
     val nextOption = options[nextIndex].second
     if (nextOption == null) {
-        // Launch App picker requested
         onPickApp { pkg, label -> onSet(ActionType.LaunchApp(pkg, label)) }
     } else {
         onSet(nextOption)
@@ -1308,22 +2018,24 @@ private fun cycleAction(
 }
 
 @Composable
-private fun ActionRow(
+private fun ActionConfigRow(
     label: String,
     currentAction: ActionType,
     isFocused: Boolean,
-    theme: LauncherTheme,
     onClick: () -> Unit
 ) {
+    val shape = RoundedCornerShape(8.dp)
+    val isCustom = currentAction !is ActionType.None
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isFocused) theme.selectedContainerColor else theme.bgColor.copy(alpha = 0.3f))
+            .clip(shape)
+            .background(if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.45f) else ActiveTheme.container.copy(alpha = 0.5f))
             .border(
-                width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) theme.appActionColor else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
+                width = if (isFocused) 1.5.dp else 1.dp,
+                color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.4f),
+                shape = shape
             )
             .clickable { onClick() }
             .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -1335,20 +2047,31 @@ private fun ActionRow(
         ) {
             Text(
                 text = label,
-                color = theme.fgTextColor,
+                color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium
             )
-            Text(
-                text = currentAction.displayName(),
-                color = if (currentAction !is ActionType.None) theme.greetingColor else theme.cardTextColor.copy(alpha = 0.5f),
-                fontSize = 10.sp,
-                fontWeight = if (currentAction !is ActionType.None) FontWeight.Bold else FontWeight.Normal
-            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (isCustom) ActiveTheme.surfaceTint.copy(alpha = 0.5f) else Color.Transparent)
+                    .then(if (isCustom) Modifier.border(0.5.dp, ActiveTheme.cardBorder, RoundedCornerShape(6.dp)) else Modifier)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = currentAction.displayName(),
+                    color = if (isCustom) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.5f),
+                    fontSize = 9.5.sp,
+                    fontWeight = if (isCustom) FontWeight.Bold else FontWeight.Normal
+                )
+            }
         }
     }
 }
 
+/**
+ * Sub-dialog: Application picker for LaunchApp actions.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppPickerSubDialog(
@@ -1361,19 +2084,27 @@ private fun AppPickerSubDialog(
     val focusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
+    LaunchedEffect(selectedIndex) {
+        listState.animateScrollToItem(selectedIndex)
+    }
+
     requestFocusSafely(focusRequester)
 
     BasicAlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
         modifier = Modifier
             .fillMaxWidth(0.92f)
-            .fillMaxHeight(0.8f)
+            .fillMaxHeight(0.78f)
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (isHardwareDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) onDismiss()
                     return@onPreviewKeyEvent true
                 }
@@ -1399,54 +2130,93 @@ private fun AppPickerSubDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(12.dp)
-        Column(
+        val shape = RoundedCornerShape(20.dp)
+        Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(shape)
-                .background(theme.cardBgColor)
-                .border(2.dp, theme.appActionColor, shape)
-                .padding(10.dp)
+                .border(1.5.dp, ActiveTheme.cardBorder, shape),
+            shape = shape,
+            color = ActiveTheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
         ) {
-            Text(
-                text = "📱 Select Application",
-                color = theme.greetingColor,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            val appRowShape = RoundedCornerShape(6.dp)
-
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp)
             ) {
-                itemsIndexed(
-                    items = installedApps,
-                    key = { _, app -> app.packageName }
-                ) { index, app ->
-                    val isFocused = selectedIndex == index
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(appRowShape)
-                            .background(if (isFocused) theme.selectedContainerColor else Color.Transparent)
-                            .border(
-                                width = if (isFocused) 2.dp else 0.dp,
-                                color = if (isFocused) theme.appActionColor else Color.Transparent,
-                                shape = appRowShape
-                            )
-                            .clickable { onAppSelected(app.packageName, app.label) }
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = app.label,
-                            color = theme.fgTextColor,
-                            fontSize = 11.sp,
-                            fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal
-                        )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    PixelRibbonBow(width = 20.dp, height = 16.dp)
+                    Text(
+                        text = "— ♡ Select Application ♡ —",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PixelRibbonBow(width = 20.dp, height = 16.dp)
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                val appRowShape = RoundedCornerShape(8.dp)
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    itemsIndexed(
+                        items = installedApps,
+                        key = { _, app -> app.packageName }
+                    ) { index, app ->
+                        val isFocused = selectedIndex == index
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(appRowShape)
+                                .background(if (isFocused) theme.selectedContainerColor else Color.Transparent)
+                                .border(
+                                    width = if (isFocused) 1.5.dp else 0.dp,
+                                    color = if (isFocused) ActiveTheme.selectionGlow else Color.Transparent,
+                                    shape = appRowShape
+                                )
+                                .clickable { onAppSelected(app.packageName, app.label) }
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(ActiveTheme.surfaceTint.copy(alpha = 0.4f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = app.label.take(1).uppercase(),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ActiveTheme.accentDeep
+                                    )
+                                }
+                                Text(
+                                    text = app.label,
+                                    color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1454,6 +2224,9 @@ private fun AppPickerSubDialog(
     }
 }
 
+/**
+ * Sub-dialog: Map target Android KeyCode for static key layout.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StaticKeySubDialog(
@@ -1467,19 +2240,27 @@ private fun StaticKeySubDialog(
     val focusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
+    LaunchedEffect(selectedIndex) {
+        listState.animateScrollToItem(selectedIndex)
+    }
+
     requestFocusSafely(focusRequester)
 
     BasicAlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
         modifier = Modifier
             .fillMaxWidth(0.92f)
-            .fillMaxHeight(0.8f)
+            .fillMaxHeight(0.78f)
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (isHardwareDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) onDismiss()
                     return@onPreviewKeyEvent true
                 }
@@ -1503,72 +2284,108 @@ private fun StaticKeySubDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(12.dp)
-        Column(
+        val shape = RoundedCornerShape(20.dp)
+        Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(shape)
-                .background(theme.cardBgColor)
-                .border(2.dp, theme.appActionColor, shape)
-                .padding(10.dp)
+                .border(1.5.dp, ActiveTheme.cardBorder, shape),
+            shape = shape,
+            color = ActiveTheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
         ) {
-            Text(
-                text = "🔧 Map ${physicalKey.keyName}",
-                color = theme.greetingColor,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "Scan ${physicalKey.scancode} (${physicalKey.hexScancode}) • Current: $currentMappedKey",
-                color = theme.cardTextColor.copy(alpha = 0.6f),
-                fontSize = 10.sp
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            val staticKeyRowShape = RoundedCornerShape(6.dp)
-
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp)
             ) {
-                itemsIndexed(
-                    items = CONTROLLED_STATIC_KEYCODES,
-                    key = { _, code -> code }
-                ) { index, code ->
-                    val isFocused = selectedIndex == index
-                    val isCurrent = code == currentMappedKey
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    PixelRibbonBow(width = 20.dp, height = 16.dp)
+                    Text(
+                        text = "— ♡ Map ${physicalKey.keyName} ♡ —",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PixelRibbonBow(width = 20.dp, height = 16.dp)
+                }
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(staticKeyRowShape)
-                            .background(if (isFocused) theme.selectedContainerColor else Color.Transparent)
-                            .border(
-                                width = if (isFocused) 2.dp else 0.dp,
-                                color = if (isFocused) theme.appActionColor else Color.Transparent,
-                                shape = staticKeyRowShape
-                            )
-                            .clickable { onSelect(code) }
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = code,
-                                color = theme.fgTextColor,
-                                fontSize = 11.sp,
-                                fontWeight = if (isFocused || isCurrent) FontWeight.Bold else FontWeight.Normal
-                            )
-                            if (isCurrent) {
-                                Text(
-                                    text = "Current",
-                                    color = theme.greetingColor,
-                                    fontSize = 10.sp
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Scan ${physicalKey.scancode} (${physicalKey.hexScancode}) • Current: $currentMappedKey",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
+                        fontSize = 9.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                val staticKeyRowShape = RoundedCornerShape(8.dp)
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    itemsIndexed(
+                        items = CONTROLLED_STATIC_KEYCODES,
+                        key = { _, code -> code }
+                    ) { index, code ->
+                        val isFocused = selectedIndex == index
+                        val isCurrent = code == currentMappedKey
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(staticKeyRowShape)
+                                .background(if (isFocused) theme.selectedContainerColor else Color.Transparent)
+                                .border(
+                                    width = if (isFocused) 1.5.dp else 0.dp,
+                                    color = if (isFocused) ActiveTheme.selectionGlow else Color.Transparent,
+                                    shape = staticKeyRowShape
                                 )
+                                .clickable { onSelect(code) }
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = code,
+                                    color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = if (isFocused || isCurrent) FontWeight.Bold else FontWeight.Normal
+                                )
+                                if (isCurrent) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(ActiveTheme.surfaceTint.copy(alpha = 0.5f))
+                                            .border(0.5.dp, ActiveTheme.cardBorder, RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "Current",
+                                            color = ActiveTheme.accentDeep,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1578,10 +2395,12 @@ private fun StaticKeySubDialog(
     }
 }
 
+/**
+ * Sub-dialog: Confirmation before writing and staging changes to Magisk.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConfirmStageDialog(
-    customMappings: Map<Int, String>,
     theme: LauncherTheme,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
@@ -1591,14 +2410,18 @@ private fun ConfirmStageDialog(
 
     BasicAlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
         modifier = Modifier
             .fillMaxWidth(0.92f)
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (isHardwareDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) onDismiss()
                     return@onPreviewKeyEvent true
                 }
@@ -1609,59 +2432,116 @@ private fun ConfirmStageDialog(
                 false
             }
     ) {
-        val shape = RoundedCornerShape(12.dp)
-        Column(
+        val shape = RoundedCornerShape(20.dp)
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(theme.cardBgColor)
-                .border(2.dp, theme.appActionColor, shape)
-                .padding(12.dp)
+                .border(1.5.dp, ActiveTheme.cardBorder, shape),
+            shape = shape,
+            color = ActiveTheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
         ) {
-            Text(
-                text = "⚠ Confirm Magisk Staging",
-                color = theme.greetingColor,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = "This will write Vendor_2454_Product_6500.kl into Magisk module /data/adb/modules/mochibun_keys.\n\n" +
-                    "• Generic.kl is NEVER modified.\n" +
-                    "• Changes require a manual phone reboot to activate.\n" +
-                    "• Emergency rollback: touch /data/adb/modules/mochibun_keys/disable",
-                color = theme.cardTextColor.copy(alpha = 0.8f),
-                fontSize = 10.sp,
-                lineHeight = 13.sp
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(theme.bgColor.copy(alpha = 0.5f))
-                        .clickable { onDismiss() }
-                        .padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = "Cancel", color = theme.cardTextColor, fontSize = 11.sp)
+                    PixelRibbonBow(width = 20.dp, height = 16.dp)
+                    Text(
+                        text = "— ♡ Confirm Magisk Staging ♡ —",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PixelRibbonBow(width = 20.dp, height = 16.dp)
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(theme.appActionColor)
-                        .clickable { onConfirm() }
-                        .padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(ActiveTheme.surfaceTint.copy(alpha = 0.25f))
+                        .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                        .padding(8.dp)
                 ) {
-                    Text(text = "Confirm & Stage", color = theme.cardBgColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            text = "Writes Vendor_2454_Product_6500.kl into Magisk module /data/adb/modules/mochibun_keys.",
+                            color = ActiveTheme.textPrimary,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 12.sp
+                        )
+                        Text(
+                            text = "• Generic.kl is NEVER modified.",
+                            color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
+                            fontSize = 9.sp
+                        )
+                        Text(
+                            text = "• Changes require a manual phone reboot to activate.",
+                            color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
+                            fontSize = 9.sp
+                        )
+                        Text(
+                            text = "• Emergency rollback: touch /data/adb/modules/mochibun_keys/disable",
+                            color = ActiveTheme.accentDeep,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ActiveTheme.container)
+                            .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
+                            .clickable { onDismiss() }
+                            .padding(vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ActiveTheme.accentDeep)
+                            .border(1.dp, ActiveTheme.selectionGlow, RoundedCornerShape(8.dp))
+                            .clickable { onConfirm() }
+                            .padding(vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Confirm & Stage",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
