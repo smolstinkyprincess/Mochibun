@@ -18,8 +18,6 @@ Mochibun pairs a **dreamy pastel aesthetic** with comfy D-pad navigation, physic
 
 ---
 
----
-
 ## 📸 Screenshots
 
 <div align="center">
@@ -93,6 +91,15 @@ cd Mochibun
 ```
 
 The compiled APK will be located at `app/build/outputs/apk/release/app-release.apk`.
+
+---
+
+## 🌸 Sweet Credits & Special Thanks ♡
+
+Mochibun stays tiny, breezy, and cute thanks to these wonderful open-source libraries:
+
+- **[Coil](https://github.com/coil-kt/coil)** — Keeps our cute animated `.gif` and `.png` cursors dancing smoothly with an ultra-lightweight memory footprint so our flip phone RAM never gets sad! (˶ᵔ ᵕ ᵔ˶)
+- **[libsu](https://github.com/topjohnwu/libsu)** by [@topjohnwu](https://github.com/topjohnwu) — A rock-solid, persistent root bridge daemon that powers super-fast privileged clicks and smooth recents task management without dropping a single frame! (•̀ᴗ•́)و
 
 ---
 
