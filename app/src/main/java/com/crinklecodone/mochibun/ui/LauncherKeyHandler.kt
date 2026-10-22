@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
+import com.crinklecodone.mochibun.data.model.FavoriteSlotItem
 import com.crinklecodone.mochibun.data.model.LauncherApp
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
@@ -72,8 +73,9 @@ fun handleMainLauncherKeyEvent(
     centerKeyState: Int,
     selectedDrawerIndex: Int,
     visibleApps: List<LauncherApp>,
-    favoriteApps: List<LauncherApp>,
-    favoriteFolders: List<FavoriteFolder>,
+    favoriteApps: List<LauncherApp> = emptyList(),
+    favoriteFolders: List<FavoriteFolder> = emptyList(),
+    favoriteItems: List<FavoriteSlotItem> = emptyList(),
     letterStarts: Map<Char, Int>,
     onSetDrawerOpen: (Boolean) -> Unit,
     onSetSelectedDrawerIndex: (Int) -> Unit,
@@ -155,7 +157,19 @@ fun handleMainLauncherKeyEvent(
                         }
                     } else if (isHomeScreenActive) {
                         if (homeFocusArea == 0 && favoriteItemCount > 0) {
-                            if (selectedFavoriteIndex < favoriteApps.size) {
+                            if (favoriteItems.isNotEmpty()) {
+                                when (val item = favoriteItems.getOrNull(selectedFavoriteIndex)) {
+                                    is FavoriteSlotItem.App -> {
+                                        context.packageManager.getLaunchIntentForPackage(
+                                            item.app.packageName
+                                        )?.let(context::startActivity)
+                                    }
+                                    is FavoriteSlotItem.Folder -> {
+                                        onOpenFolder(item.folder.id)
+                                    }
+                                    null -> {}
+                                }
+                            } else if (selectedFavoriteIndex < favoriteApps.size) {
                                 favoriteApps.getOrNull(selectedFavoriteIndex)
                                     ?.let { app ->
                                         context.packageManager.getLaunchIntentForPackage(

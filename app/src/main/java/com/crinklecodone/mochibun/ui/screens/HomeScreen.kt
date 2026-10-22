@@ -69,6 +69,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
+import com.crinklecodone.mochibun.data.model.FavoriteSlotItem
 import com.crinklecodone.mochibun.data.model.LauncherApp
 import com.crinklecodone.mochibun.data.repository.IconPackManager
 import com.crinklecodone.mochibun.ui.components.PixelSpray
@@ -92,8 +93,9 @@ private val FavoriteSquircleShape = RoundedCornerShape(16.dp)
 @Composable
 fun HomeScreen(
     context: Context,
-    favoriteApps: List<LauncherApp>,
-    favoriteFolders: List<FavoriteFolder>,
+    favoriteApps: List<LauncherApp> = emptyList(),
+    favoriteFolders: List<FavoriteFolder> = emptyList(),
+    favoriteItems: List<FavoriteSlotItem> = emptyList(),
     modifier: Modifier = Modifier,
     userName: String = "",
     selectedFavoriteIndex: Int = 0,
@@ -157,11 +159,15 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
+            val effectiveItems = remember(favoriteItems, favoriteApps, favoriteFolders) {
+                if (favoriteItems.isNotEmpty()) favoriteItems
+                else favoriteApps.map { FavoriteSlotItem.App(it) } + favoriteFolders.map { FavoriteSlotItem.Folder(it) }
+            }
+
             // 3. Favorites Card
             FavoritesCard(
                 context = context,
-                favoriteApps = favoriteApps,
-                favoriteFolders = favoriteFolders,
+                favoriteItems = effectiveItems,
                 selectedIndex = selectedFavoriteIndex,
                 isCardFocused = isHomeScreenActive && homeFocusArea == 0,
                 folderIconRefreshKey = folderIconRefreshKey,
@@ -489,9 +495,40 @@ fun FavoritesCard(
     onFolderClick: (FavoriteFolder) -> Unit = {},
     onFolderLongClick: (FavoriteFolder) -> Unit = {}
 ) {
+    val items = remember(favoriteApps, favoriteFolders) {
+        favoriteApps.map { FavoriteSlotItem.App(it) } +
+            favoriteFolders.map { FavoriteSlotItem.Folder(it) }
+    }
+    FavoritesCard(
+        context = context,
+        favoriteItems = items,
+        modifier = modifier,
+        selectedIndex = selectedIndex,
+        isCardFocused = isCardFocused,
+        folderIconRefreshKey = folderIconRefreshKey,
+        onAppClick = onAppClick,
+        onAppLongClick = onAppLongClick,
+        onFolderClick = onFolderClick,
+        onFolderLongClick = onFolderLongClick
+    )
+}
+
+@Composable
+fun FavoritesCard(
+    context: Context,
+    favoriteItems: List<FavoriteSlotItem>,
+    modifier: Modifier = Modifier,
+    selectedIndex: Int = 0,
+    isCardFocused: Boolean = true,
+    folderIconRefreshKey: Int = 0,
+    onAppClick: (LauncherApp) -> Unit = {},
+    onAppLongClick: (LauncherApp) -> Unit = {},
+    onFolderClick: (FavoriteFolder) -> Unit = {},
+    onFolderLongClick: (FavoriteFolder) -> Unit = {}
+) {
     val theme = LocalLauncherTheme.current
     val cardShape = RoundedCornerShape(24.dp)
-    val itemCount = favoriteApps.size + favoriteFolders.size
+    val itemCount = favoriteItems.size
     val lazyRowState = rememberLazyListState()
 
     // Smooth scroll if index moves outside viewport when more than 4 favorites exist
@@ -577,37 +614,39 @@ fun FavoritesCard(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.Top
                 ) {
-                    favoriteApps.forEachIndexed { index, app ->
-                        FavoriteAppSlot(
-                            app = app,
-                            index = index,
-                            isSelected = isCardFocused && index == selectedIndex,
-                            onClick = {
-                                onAppClick(app)
-                                context.packageManager
-                                    .getLaunchIntentForPackage(app.packageName)
-                                    ?.let(context::startActivity)
-                            },
-                            onLongClick = {
-                                onAppClick(app)
-                                onAppLongClick(app)
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    favoriteFolders.forEachIndexed { fIndex, folder ->
-                        val index = favoriteApps.size + fIndex
-                        FavoriteFolderSlot(
-                            context = context,
-                            folder = folder,
-                            index = index,
-                            isSelected = isCardFocused && index == selectedIndex,
-                            folderIconRefreshKey = folderIconRefreshKey,
-                            onClick = { onFolderClick(folder) },
-                            onLongClick = { onFolderLongClick(folder) },
-                            modifier = Modifier.weight(1f)
-                        )
+                    favoriteItems.forEachIndexed { index, item ->
+                        when (item) {
+                            is FavoriteSlotItem.App -> {
+                                FavoriteAppSlot(
+                                    app = item.app,
+                                    index = index,
+                                    isSelected = isCardFocused && index == selectedIndex,
+                                    onClick = {
+                                        onAppClick(item.app)
+                                        context.packageManager
+                                            .getLaunchIntentForPackage(item.app.packageName)
+                                            ?.let(context::startActivity)
+                                    },
+                                    onLongClick = {
+                                        onAppClick(item.app)
+                                        onAppLongClick(item.app)
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            is FavoriteSlotItem.Folder -> {
+                                FavoriteFolderSlot(
+                                    context = context,
+                                    folder = item.folder,
+                                    index = index,
+                                    isSelected = isCardFocused && index == selectedIndex,
+                                    folderIconRefreshKey = folderIconRefreshKey,
+                                    onClick = { onFolderClick(item.folder) },
+                                    onLongClick = { onFolderLongClick(item.folder) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
                     }
                 }
             } else {
@@ -618,40 +657,39 @@ fun FavoritesCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    itemsIndexed(favoriteApps, key = { _, app -> app.favoriteKey }) { index, app ->
-                        FavoriteAppSlot(
-                            app = app,
-                            index = index,
-                            isSelected = isCardFocused && index == selectedIndex,
-                            onClick = {
-                                onAppClick(app)
-                                context.packageManager
-                                    .getLaunchIntentForPackage(app.packageName)
-                                    ?.let(context::startActivity)
-                            },
-                            onLongClick = {
-                                onAppClick(app)
-                                onAppLongClick(app)
-                            },
-                            modifier = Modifier.width(68.dp)
-                        )
-                    }
-
-                    itemsIndexed(
-                        favoriteFolders,
-                        key = { _, folder -> "folder:${folder.id}" }
-                    ) { fIndex, folder ->
-                        val index = favoriteApps.size + fIndex
-                        FavoriteFolderSlot(
-                            context = context,
-                            folder = folder,
-                            index = index,
-                            isSelected = isCardFocused && index == selectedIndex,
-                            folderIconRefreshKey = folderIconRefreshKey,
-                            onClick = { onFolderClick(folder) },
-                            onLongClick = { onFolderLongClick(folder) },
-                            modifier = Modifier.width(68.dp)
-                        )
+                    itemsIndexed(favoriteItems, key = { _, item -> item.key }) { index, item ->
+                        when (item) {
+                            is FavoriteSlotItem.App -> {
+                                FavoriteAppSlot(
+                                    app = item.app,
+                                    index = index,
+                                    isSelected = isCardFocused && index == selectedIndex,
+                                    onClick = {
+                                        onAppClick(item.app)
+                                        context.packageManager
+                                            .getLaunchIntentForPackage(item.app.packageName)
+                                            ?.let(context::startActivity)
+                                    },
+                                    onLongClick = {
+                                        onAppClick(item.app)
+                                        onAppLongClick(item.app)
+                                    },
+                                    modifier = Modifier.width(68.dp)
+                                )
+                            }
+                            is FavoriteSlotItem.Folder -> {
+                                FavoriteFolderSlot(
+                                    context = context,
+                                    folder = item.folder,
+                                    index = index,
+                                    isSelected = isCardFocused && index == selectedIndex,
+                                    folderIconRefreshKey = folderIconRefreshKey,
+                                    onClick = { onFolderClick(item.folder) },
+                                    onLongClick = { onFolderLongClick(item.folder) },
+                                    modifier = Modifier.width(68.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

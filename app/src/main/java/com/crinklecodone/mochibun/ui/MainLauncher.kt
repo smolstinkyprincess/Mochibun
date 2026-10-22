@@ -46,6 +46,7 @@ import com.crinklecodone.mochibun.data.repository.IconPackManager
 import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
 import com.crinklecodone.mochibun.data.model.AppInfo
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
+import com.crinklecodone.mochibun.data.model.FavoriteSlotItem
 import com.crinklecodone.mochibun.data.model.LauncherApp
 import com.crinklecodone.mochibun.core.util.loadWallpaperBitmap
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
@@ -181,14 +182,38 @@ fun MainLauncher(
         )
     }
 
-    var favoritePackages by remember {
+    var favoriteItemKeys by remember {
         mutableStateOf(
-            preferences
-                .getString("favorite_packages_ordered", "")
+            preferences.getString("favorite_items_ordered_v1", null)
                 ?.split("|")
                 ?.filter { it.isNotEmpty() }
-                ?: emptyList()
+                ?: run {
+                    val legacyPackages = preferences
+                        .getString("favorite_packages_ordered", "")
+                        ?.split("|")
+                        ?.filter { it.isNotEmpty() }
+                        ?: emptyList()
+                    val legacyFolders = PreferencesManager.loadFavoriteFolders(context)
+                    legacyPackages.map { "app:$it" } + legacyFolders.map { "folder:${it.id}" }
+                }
         )
+    }
+
+    var favoritePackages by remember(favoriteItemKeys) {
+        mutableStateOf(
+            favoriteItemKeys.filterNot { it.startsWith("folder:") }.map { it.removePrefix("app:") }
+        )
+    }
+
+    val saveFavoriteItemKeys = remember(preferences) {
+        { keys: List<String> ->
+            val appPkgs = keys.filterNot { it.startsWith("folder:") }.map { it.removePrefix("app:") }
+            favoritePackages = appPkgs
+            preferences.edit()
+                .putString("favorite_items_ordered_v1", keys.joinToString("|"))
+                .putString("favorite_packages_ordered", appPkgs.joinToString("|"))
+                .apply()
+        }
     }
 
     var drawerOpen by remember { mutableStateOf(false) }
@@ -202,9 +227,7 @@ fun MainLauncher(
     var kawaiiIconNames by remember { mutableStateOf<List<String>>(emptyList()) }
     var iconRefreshKey by remember { mutableIntStateOf(0) }
     var folderIconRefreshKey by remember { mutableIntStateOf(0) }
-    var userName by remember {
-        mutableStateOf(preferences.getString("custom_user_name", "") ?: "")
-    }
+    val userName by PreferencesManager.customUserName.collectAsState()
     LaunchedEffect(Unit) {
         PreferencesManager.init(context)
         ExternalThemeManager.init(context)
@@ -340,13 +363,81 @@ fun MainLauncher(
         }
     }
 
-    val favoriteItemCount = favoriteApps.size + favoriteFolders.size
+    val favoriteItems: List<FavoriteSlotItem> = remember(
+        favoriteItemKeys,
+        favoriteApps,
+        favoriteFolders,
+        hiddenPackages
+    ) {
+        val appsMap = favoriteApps.associateBy { it.packageName }
+        val foldersMap = favoriteFolders.associateBy { it.id }
+
+        val items = mutableListOf<FavoriteSlotItem>()
+        val seen = mutableSetOf<String>()
+
+        for (key in favoriteItemKeys) {
+            if (key.startsWith("folder:")) {
+                val folderId = key.removePrefix("folder:")
+                val folder = foldersMap[folderId]
+                if (folder != null && seen.add(key)) {
+                    items.add(FavoriteSlotItem.Folder(folder))
+                }
+            } else {
+                val pkg = key.removePrefix("app:")
+                val app = appsMap[pkg]
+                if (app != null && pkg !in hiddenPackages && seen.add("app:$pkg")) {
+                    items.add(FavoriteSlotItem.App(app))
+                }
+            }
+        }
+
+        // Safety fallback: ensure any folder not in keys is still accessible
+        for (folder in favoriteFolders) {
+            val fKey = "folder:${folder.id}"
+            if (seen.add(fKey)) {
+                items.add(FavoriteSlotItem.Folder(folder))
+            }
+        }
+
+        // Safety fallback: ensure any favorite apps not in keys are still accessible
+        for (app in favoriteApps) {
+            val aKey = "app:${app.packageName}"
+            if (app.packageName !in hiddenPackages && seen.add(aKey)) {
+                items.add(FavoriteSlotItem.App(app))
+            }
+        }
+
+        items
+    }
+
+    val favoriteItemCount = favoriteItems.size
     var selectedFavoriteIndex by remember { mutableIntStateOf(0) }
     var savedFavoriteIndexOnHome by remember { mutableIntStateOf(0) }
     val homeTracker = remember { HomeTransitionTracker() }
     var selectedDrawerIndex by remember { mutableIntStateOf(0) }
     // Home focus area: 0 = FavoritesCard row, 1 = StatusCard (launcher options / page switcher)
     var homeFocusArea by remember { mutableIntStateOf(0) }
+
+    val moveFavoriteSlotItem: (itemKey: String, direction: Int) -> Unit = remember(favoriteItems, favoriteItemKeys) {
+        { itemKey, direction ->
+            val currentKeys = favoriteItems.map { it.key }
+            val currentIndex = currentKeys.indexOf(itemKey)
+            if (currentIndex != -1) {
+                val targetIndex = currentIndex + direction
+                if (targetIndex in currentKeys.indices) {
+                    val newKeys = currentKeys.toMutableList()
+                    val moved = newKeys.removeAt(currentIndex)
+                    newKeys.add(targetIndex, moved)
+
+                    favoriteItemKeys = newKeys
+                    saveFavoriteItemKeys(newKeys)
+                    selectedFavoriteIndex = targetIndex
+                    savedFavoriteIndexOnHome = targetIndex
+                    homeFocusArea = 0
+                }
+            }
+        }
+    }
 
     // 0 = center not pressed, 1 = pressed, 2 = held long (menu already opened)
     var centerKeyState by remember { mutableIntStateOf(0) }
@@ -431,7 +522,7 @@ fun MainLauncher(
         }
     }
 
-    LaunchedEffect(favoriteApps.size, favoriteFolders.size) {
+    LaunchedEffect(favoriteItemCount) {
         selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
             0,
             (favoriteItemCount - 1).coerceAtLeast(0)
@@ -474,15 +565,15 @@ fun MainLauncher(
             }
         } else if (isHomeScreenActive) {
             if (homeFocusArea == 0 && favoriteItemCount > 0) {
-                if (selectedFavoriteIndex < favoriteApps.size) {
-                    favoriteApps.getOrNull(selectedFavoriteIndex)?.let { app ->
-                        selectedApp = app
+                when (val item = favoriteItems.getOrNull(selectedFavoriteIndex)) {
+                    is FavoriteSlotItem.App -> {
+                        selectedApp = item.app
                     }
-                } else {
-                    favoriteFolders.getOrNull(selectedFavoriteIndex - favoriteApps.size)?.let { folder ->
-                        iconEditingFolder = folder
+                    is FavoriteSlotItem.Folder -> {
+                        iconEditingFolder = item.folder
                         folderIconMenuOpen = true
                     }
+                    null -> {}
                 }
             } else if (homeFocusArea == 2) {
                 selectedDrawerIndex = 0
@@ -588,6 +679,7 @@ fun MainLauncher(
                         visibleApps = visibleApps,
                         favoriteApps = favoriteApps,
                         favoriteFolders = favoriteFolders,
+                        favoriteItems = favoriteItems,
                         letterStarts = letterStarts,
                         onSetDrawerOpen = { drawerOpen = it },
                         onSetSelectedDrawerIndex = { selectedDrawerIndex = it },
@@ -629,9 +721,12 @@ fun MainLauncher(
 
             BackHandler(enabled = openedFolderId != null) {
                 lastOpenedFolderId?.let { id ->
-                    val folderIdx = favoriteFolders.indexOfFirst { it.id == id }
-                    if (folderIdx != -1) {
-                        selectedFavoriteIndex = favoriteApps.size + folderIdx
+                    val itemIdx = favoriteItems.indexOfFirst {
+                        it is FavoriteSlotItem.Folder && it.folder.id == id
+                    }
+                    if (itemIdx != -1) {
+                        selectedFavoriteIndex = itemIdx
+                        savedFavoriteIndexOnHome = itemIdx
                         homeFocusArea = 0
                     }
                 }
@@ -672,10 +767,10 @@ fun MainLauncher(
                     launcherMenuOpen = true
                 }
             }
-            val onHomeAppClick: (LauncherApp) -> Unit = remember(favoriteApps) {
+            val onHomeAppClick: (LauncherApp) -> Unit = remember(favoriteItems) {
                 { app ->
-                    val appIdx = favoriteApps.indexOfFirst {
-                        it.packageName == app.packageName
+                    val appIdx = favoriteItems.indexOfFirst {
+                        it is FavoriteSlotItem.App && it.app.packageName == app.packageName
                     }
                     if (appIdx != -1) {
                         homeFocusArea = 0
@@ -684,10 +779,10 @@ fun MainLauncher(
                     }
                 }
             }
-            val onHomeAppLongClick: (LauncherApp) -> Unit = remember(favoriteApps) {
+            val onHomeAppLongClick: (LauncherApp) -> Unit = remember(favoriteItems) {
                 { app ->
-                    val appIdx = favoriteApps.indexOfFirst {
-                        it.packageName == app.packageName
+                    val appIdx = favoriteItems.indexOfFirst {
+                        it is FavoriteSlotItem.App && it.app.packageName == app.packageName
                     }
                     if (appIdx != -1) {
                         homeFocusArea = 0
@@ -697,15 +792,15 @@ fun MainLauncher(
                     selectedApp = app
                 }
             }
-            val onHomeFolderClick: (FavoriteFolder) -> Unit = remember(favoriteApps, favoriteFolders) {
+            val onHomeFolderClick: (FavoriteFolder) -> Unit = remember(favoriteItems) {
                 { folder ->
-                    val folderIdx =
-                        favoriteFolders.indexOfFirst { it.id == folder.id }
+                    val folderIdx = favoriteItems.indexOfFirst {
+                        it is FavoriteSlotItem.Folder && it.folder.id == folder.id
+                    }
                     if (folderIdx != -1) {
-                        val targetIdx = favoriteApps.size + folderIdx
                         homeFocusArea = 0
-                        selectedFavoriteIndex = targetIdx
-                        savedFavoriteIndexOnHome = targetIdx
+                        selectedFavoriteIndex = folderIdx
+                        savedFavoriteIndexOnHome = folderIdx
                     }
                     folderOpenStartRename = false
                     folderOpenStartPicker = false
@@ -713,15 +808,15 @@ fun MainLauncher(
                     openedFolderId = folder.id
                 }
             }
-            val onHomeFolderLongClick: (FavoriteFolder) -> Unit = remember(favoriteApps, favoriteFolders) {
+            val onHomeFolderLongClick: (FavoriteFolder) -> Unit = remember(favoriteItems) {
                 { folder ->
-                    val folderIdx =
-                        favoriteFolders.indexOfFirst { it.id == folder.id }
+                    val folderIdx = favoriteItems.indexOfFirst {
+                        it is FavoriteSlotItem.Folder && it.folder.id == folder.id
+                    }
                     if (folderIdx != -1) {
-                        val targetIdx = favoriteApps.size + folderIdx
                         homeFocusArea = 0
-                        selectedFavoriteIndex = targetIdx
-                        savedFavoriteIndexOnHome = targetIdx
+                        selectedFavoriteIndex = folderIdx
+                        savedFavoriteIndexOnHome = folderIdx
                     }
                     iconEditingFolder = folder
                     folderIconMenuOpen = true
@@ -782,8 +877,7 @@ fun MainLauncher(
                         if (!drawerOpen) {
                             HomeScreen(
                                 context = context,
-                                favoriteApps = favoriteApps,
-                                favoriteFolders = favoriteFolders,
+                                favoriteItems = favoriteItems,
                                 userName = userName,
                                 selectedFavoriteIndex = selectedFavoriteIndex,
                                 folderIconRefreshKey = folderIconRefreshKey,
@@ -904,10 +998,7 @@ fun MainLauncher(
                         editUserNameDialogOpen = false
                     },
                     onSave = { newName ->
-                        userName = newName
-                        preferences.edit()
-                            .putString("custom_user_name", newName)
-                            .apply()
+                        PreferencesManager.setCustomUserName(context, newName)
                         editUserNameDialogOpen = false
                     }
                 )
@@ -961,49 +1052,27 @@ fun MainLauncher(
                         selectedApp = null
                     },
                     onMoveFavoriteLeft = {
-                        val pkgName = targetApp.packageName
-                        val list = favoritePackages.toMutableList()
-                        val index = list.indexOf(pkgName)
-                        if (index > 0) {
-                            list.removeAt(index)
-                            list.add(index - 1, pkgName)
-                            favoritePackages = list
-                            preferences.edit()
-                                .putString("favorite_packages_ordered", list.joinToString("|"))
-                                .apply()
-                            selectedFavoriteIndex = (index - 1).coerceAtLeast(0)
-                            homeFocusArea = 0
-                        }
+                        moveFavoriteSlotItem("app:${targetApp.packageName}", -1)
                         selectedApp = null
                     },
                     onMoveFavoriteRight = {
-                        val pkgName = targetApp.packageName
-                        val list = favoritePackages.toMutableList()
-                        val index = list.indexOf(pkgName)
-                        if (index >= 0 && index < list.lastIndex) {
-                            list.removeAt(index)
-                            list.add(index + 1, pkgName)
-                            favoritePackages = list
-                            preferences.edit()
-                                .putString("favorite_packages_ordered", list.joinToString("|"))
-                                .apply()
-                            selectedFavoriteIndex = index + 1
-                            homeFocusArea = 0
-                        }
+                        moveFavoriteSlotItem("app:${targetApp.packageName}", 1)
                         selectedApp = null
                     },
                     onToggleFavorite = {
                         val pkgName = targetApp.packageName
-                        val list = favoritePackages.toMutableList()
-                        if (pkgName in list) {
-                            list.remove(pkgName)
+                        val isFav = pkgName in favoritePackages
+                        if (isFav) {
+                            val newKeys = favoriteItemKeys.filterNot {
+                                it == "app:$pkgName" || it == pkgName
+                            }
+                            favoriteItemKeys = newKeys
+                            saveFavoriteItemKeys(newKeys)
                         } else {
-                            list.add(pkgName)
+                            val newKeys = favoriteItemKeys + "app:$pkgName"
+                            favoriteItemKeys = newKeys
+                            saveFavoriteItemKeys(newKeys)
                         }
-                        favoritePackages = list
-                        preferences.edit()
-                            .putString("favorite_packages_ordered", list.joinToString("|"))
-                            .apply()
                         selectedApp = null
                     },
                     onAppInfo = {
@@ -1057,36 +1126,24 @@ fun MainLauncher(
                 val targetFolder = favoriteFolders.firstOrNull {
                     it.id == iconEditingFolder!!.id
                 } ?: iconEditingFolder!!
-                val folderIndex = favoriteFolders.indexOfFirst {
-                    it.id == targetFolder.id
+                val folderItemIndex = favoriteItems.indexOfFirst {
+                    it is FavoriteSlotItem.Folder && it.folder.id == targetFolder.id
                 }
 
                 FolderActionDialog(
                     folder = targetFolder,
-                    canMoveLeft = folderIndex > 0,
-                    canMoveRight = folderIndex >= 0 && folderIndex < favoriteFolders.lastIndex,
+                    canMoveLeft = folderItemIndex > 0,
+                    canMoveRight = folderItemIndex in 0 until favoriteItems.lastIndex,
                     onMoveLeft = {
-                        if (folderIndex > 0) {
-                            val reordered = favoriteFolders.toMutableList()
-                            val folder = reordered.removeAt(folderIndex)
-                            reordered.add(folderIndex - 1, folder)
-                            favoriteFolders = reordered
-                            PreferencesManager.saveFavoriteFolders(context, reordered)
-                            selectedFavoriteIndex = favoriteApps.size + folderIndex - 1
-                            homeFocusArea = 0
+                        if (folderItemIndex > 0) {
+                            moveFavoriteSlotItem("folder:${targetFolder.id}", -1)
                         }
                         folderIconMenuOpen = false
                         iconEditingFolder = null
                     },
                     onMoveRight = {
-                        if (folderIndex >= 0 && folderIndex < favoriteFolders.lastIndex) {
-                            val reordered = favoriteFolders.toMutableList()
-                            val folder = reordered.removeAt(folderIndex)
-                            reordered.add(folderIndex + 1, folder)
-                            favoriteFolders = reordered
-                            PreferencesManager.saveFavoriteFolders(context, reordered)
-                            selectedFavoriteIndex = favoriteApps.size + folderIndex + 1
-                            homeFocusArea = 0
+                        if (folderItemIndex in 0 until favoriteItems.lastIndex) {
+                            moveFavoriteSlotItem("folder:${targetFolder.id}", 1)
                         }
                         folderIconMenuOpen = false
                         iconEditingFolder = null
@@ -1133,12 +1190,18 @@ fun MainLauncher(
                         preferences.edit()
                             .remove("custom_folder_icon_$deletedId")
                             .apply()
+
                         PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
-                        val newCount = favoriteApps.size + favoriteFolders.size
+                        val newKeys = favoriteItemKeys.filterNot { it == "folder:$deletedId" }
+                        favoriteItemKeys = newKeys
+                        saveFavoriteItemKeys(newKeys)
+
+                        val newCount = (favoriteItems.size - 1).coerceAtLeast(0)
                         selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
                             0,
                             (newCount - 1).coerceAtLeast(0)
                         )
+                        savedFavoriteIndexOnHome = selectedFavoriteIndex
                         homeFocusArea = if (newCount > 0) 0 else 1
                         folderIconMenuOpen = false
                         iconEditingFolder = null
@@ -1152,9 +1215,12 @@ fun MainLauncher(
                         launcherMenuOpen = true
                     },
                     onDismiss = {
-                        val idx = favoriteFolders.indexOfFirst { it.id == targetFolder.id }
+                        val idx = favoriteItems.indexOfFirst {
+                            it is FavoriteSlotItem.Folder && it.folder.id == targetFolder.id
+                        }
                         if (idx != -1) {
-                            selectedFavoriteIndex = favoriteApps.size + idx
+                            selectedFavoriteIndex = idx
+                            savedFavoriteIndexOnHome = idx
                             homeFocusArea = 0
                         }
                         folderIconMenuOpen = false
@@ -1274,17 +1340,12 @@ fun MainLauncher(
                         PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
 
                         // Keep apps added to the folder from appearing twice in standalone favorites
-                        val updatedFavorites = favoritePackages.filterNot {
-                            it in distinctPackages
+                        val updatedKeys = favoriteItemKeys.filterNot { key ->
+                            !key.startsWith("folder:") && key.removePrefix("app:") in distinctPackages
                         }
-                        if (updatedFavorites != favoritePackages) {
-                            favoritePackages = updatedFavorites
-                            preferences.edit()
-                                .putString(
-                                    "favorite_packages_ordered",
-                                    updatedFavorites.joinToString("|")
-                                )
-                                .apply()
+                        if (updatedKeys != favoriteItemKeys) {
+                            favoriteItemKeys = updatedKeys
+                            saveFavoriteItemKeys(updatedKeys)
                         }
                     },
                     onRename = { newName ->
@@ -1313,11 +1374,16 @@ fun MainLauncher(
                             .apply()
 
                         PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
-                        val newCount = favoriteApps.size + favoriteFolders.size
+                        val newKeys = favoriteItemKeys.filterNot { it == "folder:$deletedId" }
+                        favoriteItemKeys = newKeys
+                        saveFavoriteItemKeys(newKeys)
+
+                        val newCount = (favoriteItems.size - 1).coerceAtLeast(0)
                         selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
                             0,
                             (newCount - 1).coerceAtLeast(0)
                         )
+                        savedFavoriteIndexOnHome = selectedFavoriteIndex
                         homeFocusArea = if (newCount > 0) 0 else 1
                         openedFolderId = null
                         lastOpenedFolderId = null
@@ -1333,9 +1399,12 @@ fun MainLauncher(
                     },
                     onDismiss = {
                         lastOpenedFolderId?.let { id ->
-                            val folderIdx = favoriteFolders.indexOfFirst { it.id == id }
-                            if (folderIdx != -1) {
-                                selectedFavoriteIndex = favoriteApps.size + folderIdx
+                            val itemIdx = favoriteItems.indexOfFirst {
+                                it is FavoriteSlotItem.Folder && it.folder.id == id
+                            }
+                            if (itemIdx != -1) {
+                                selectedFavoriteIndex = itemIdx
+                                savedFavoriteIndexOnHome = itemIdx
                                 homeFocusArea = 0
                             }
                         }
@@ -1370,22 +1439,15 @@ fun MainLauncher(
                         PreferencesManager.saveFavoriteFolders(context, favoriteFolders)
 
                         // Keep apps contained in the new folder from appearing twice.
-                        val remainingFavApps = favoritePackages.filterNot {
-                            it in folder.appPackages && it !in hiddenPackages
-                        }
-                        favoritePackages = remainingFavApps
+                        val remainingKeys = favoriteItemKeys.filterNot { key ->
+                            !key.startsWith("folder:") && key.removePrefix("app:") in folder.appPackages
+                        } + "folder:${folder.id}"
 
-                        preferences.edit()
-                            .putString(
-                                "favorite_packages_ordered",
-                                favoritePackages.joinToString("|")
-                            )
-                            .apply()
+                        favoriteItemKeys = remainingKeys
+                        saveFavoriteItemKeys(remainingKeys)
 
-                        val newFavAppCount = remainingFavApps.count { it !in hiddenPackages }
-                        selectedFavoriteIndex =
-                            (newFavAppCount + favoriteFolders.size - 1)
-                                .coerceAtLeast(0)
+                        selectedFavoriteIndex = (remainingKeys.size - 1).coerceAtLeast(0)
+                        savedFavoriteIndexOnHome = selectedFavoriteIndex
                         homeFocusArea = 0
                         drawerOpen = false
                         folderToCreateFrom = null
