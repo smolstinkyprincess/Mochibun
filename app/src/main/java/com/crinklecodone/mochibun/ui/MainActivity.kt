@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.crinklecodone.mochibun.core.system.ClamshellListener
+import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.ui.theme.MochibunTheme
 import com.crinklecodone.mochibun.ui.theme.ThemeBackground
 import androidx.core.view.WindowCompat
@@ -37,6 +40,22 @@ class MainActivity : ComponentActivity() {
 
     var appListRefreshCount by mutableIntStateOf(0)
 
+    var lidOpenCount by mutableIntStateOf(0)
+        private set
+
+    var lidClosedCount by mutableIntStateOf(0)
+        private set
+
+    private val clamshellListener = object : ClamshellListener {
+        override fun onLidClosed() {
+            lidClosedCount++
+        }
+
+        override fun onLidOpened() {
+            lidOpenCount++
+        }
+    }
+
     private val packageChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (
@@ -50,7 +69,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        ClamshellManager.onConfigurationChanged(newConfig)
+    }
+
     override fun onDestroy() {
+        ClamshellManager.removeListener(clamshellListener)
         try {
             unregisterReceiver(packageChangeReceiver)
         } catch (_: IllegalArgumentException) {}
@@ -95,6 +120,8 @@ class MainActivity : ComponentActivity() {
         }
 
         registerReceiver(packageChangeReceiver, packageFilter)
+        ClamshellManager.init(this)
+        ClamshellManager.addListener(clamshellListener)
 
         enableEdgeToEdge()
         setContent {
@@ -108,6 +135,8 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding),
                         homePressCount = homePressCount,
                         appListRefreshCount = appListRefreshCount,
+                        lidOpenCount = lidOpenCount,
+                        lidClosedCount = lidClosedCount,
                         requestedPage = requestedPage,
                         onPageConsumed = ::consumeRequestedPage
                     )

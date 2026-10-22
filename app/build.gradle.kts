@@ -97,6 +97,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.libsu.core)
     implementation(libs.kaml)
     implementation(libs.coil.compose)

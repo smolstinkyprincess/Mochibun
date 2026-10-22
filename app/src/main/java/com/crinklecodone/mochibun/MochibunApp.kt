@@ -1,10 +1,13 @@
 package com.crinklecodone.mochibun
 
 import android.app.Application
+import android.os.Build
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.memory.MemoryCache
+import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
 import com.topjohnwu.superuser.Shell
@@ -22,6 +25,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        ClamshellManager.init(this)
         PreferencesManager.init(this)
         ExternalThemeManager.init(this)
     }
@@ -29,7 +33,11 @@ class MochibunApp : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .components {
-                add(ImageDecoderDecoder.Factory())
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
             }
             .memoryCache {
                 MemoryCache.Builder(this)

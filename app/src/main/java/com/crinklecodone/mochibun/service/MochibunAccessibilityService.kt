@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.hardware.camera2.CameraManager
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +13,8 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import com.android.quickstep.RecentsActivity
+import com.crinklecodone.mochibun.core.system.ClamshellListener
+import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.ButtonActionConfig
@@ -61,16 +64,32 @@ class MochibunAccessibilityService : AccessibilityService() {
         loadConfiguration()
     }
 
+    private val clamshellListener = object : ClamshellListener {
+        override fun onLidClosed() {
+            clearPendingHandlers()
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         isServiceRunning = true
+
+        ClamshellManager.init(this)
+        ClamshellManager.addListener(clamshellListener)
+
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         prefs.registerOnSharedPreferenceChangeListener(prefChangeListener)
         loadConfiguration()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        ClamshellManager.onConfigurationChanged(newConfig)
+    }
+
     override fun onDestroy() {
+        ClamshellManager.removeListener(clamshellListener)
         prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
         clearPendingHandlers()
         serviceScope.cancel()
@@ -101,6 +120,12 @@ class MochibunAccessibilityService : AccessibilityService() {
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
+        // Suppress hardware button shortcuts while closed in pocket to prevent accidental triggering
+        if (ClamshellManager.isLidClosed(this)) {
+            clearPendingHandlers()
+            return false
+        }
+
         // Fast lookup from in-memory cache without blocking UI-thread disk I/O
         var config = activeMappings[event.keyCode]
         if (config == null && event.scanCode > 0) {

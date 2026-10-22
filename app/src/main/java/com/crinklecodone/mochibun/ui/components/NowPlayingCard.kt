@@ -285,12 +285,18 @@ fun NowPlayingCard(
     onOpenMediaApp: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val theme = com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme.current
     val cardShape = RoundedCornerShape(22.dp)
+
+    val mascotMood = when {
+        mediaState.isPlaying -> MascotMood.MUSIC
+        else -> getDefaultTimeOfDayMood()
+    }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 10.dp) // space for overlapping bunny pin
+            .padding(top = 18.dp) // space for prominent mascot pin
     ) {
         // Main Card Container
         Box(
@@ -331,7 +337,11 @@ fun NowPlayingCard(
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {
-                            PixelStrawberrySprite(size = 46.dp)
+                            MochibunMascot(
+                                mood = mascotMood,
+                                size = 52.dp,
+                                themeTintColor = theme.mascotTintColor
+                            )
                         }
                     }
 
@@ -394,18 +404,22 @@ fun NowPlayingCard(
             }
         }
 
-        // Overlapping Bunny Pin Badge anchored at the top-left edge
+        // Overlapping Mascot Pin Badge anchored at the top-left edge
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .offset(x = 10.dp, y = (-8).dp)
-                .clip(RoundedCornerShape(8.dp))
+                .offset(x = 12.dp, y = (-16).dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFFFFFDFE))
-                .border(1.5.dp, Color(0xFFE5A4B4), RoundedCornerShape(8.dp))
-                .padding(horizontal = 4.dp, vertical = 3.dp),
+                .border(1.5.dp, Color(0xFFE5A4B4), RoundedCornerShape(12.dp))
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
-            PixelBunnyAvatar(size = 20.dp)
+            MochibunMascot(
+                mood = mascotMood,
+                size = 48.dp,
+                themeTintColor = theme.mascotTintColor
+            )
         }
     }
 }

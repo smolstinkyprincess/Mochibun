@@ -16,6 +16,8 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import com.crinklecodone.mochibun.core.system.ClamshellListener
+import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.service.MochibunNotificationListenerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +94,23 @@ object MediaSessionTracker {
         }
     }
 
+    private val clamshellListener = object : ClamshellListener {
+        override fun onLidClosed() {
+            artworkDecodeJob?.cancel()
+            artworkDecodeJob = null
+        }
+
+        override fun onLidOpened() {
+            val context = appContext ?: return
+            val mgr = sessionManager ?: return
+            val listener = activeSessionsListener ?: return
+            val comp = notificationListenerComponent
+            if (comp != null) {
+                tryRegisterSessions(context, mgr, listener, comp)
+            }
+        }
+    }
+
     fun hasNotificationAccess(context: Context): Boolean {
         val enabledListeners = Settings.Secure.getString(
             context.contentResolver,
@@ -103,6 +122,9 @@ object MediaSessionTracker {
 
     fun startTracking(context: Context) {
         appContext = context.applicationContext
+        ClamshellManager.init(context)
+        ClamshellManager.addListener(clamshellListener)
+
         val mgr = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager ?: return
         sessionManager = mgr
         val comp = ComponentName(context, MochibunNotificationListenerService::class.java)
@@ -286,6 +308,7 @@ object MediaSessionTracker {
     }
 
     fun stopTracking() {
+        ClamshellManager.removeListener(clamshellListener)
         artworkDecodeJob?.cancel()
         artworkDecodeJob = null
         try {

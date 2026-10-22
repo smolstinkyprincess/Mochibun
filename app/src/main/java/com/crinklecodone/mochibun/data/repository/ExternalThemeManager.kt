@@ -102,6 +102,7 @@ colors:
   cloudFront: "#FFF5F8"
   catOutline: "#880E4F"
   catBlush: "#FF4081"
+  mascotTint: "#FFEBF2"
 
 decorations:
   greetingText: "— ♡ Sweet Strawberries ♡ —"

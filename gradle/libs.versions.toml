@@ -12,6 +12,7 @@ composeBom = "2026.02.01"
 foundation = "1.12.1"
 kaml = "0.72.0"
 coil = "2.6.0"
+profileinstaller = "1.4.1"
 
 [libraries]
 libsu-core = { group = "com.github.topjohnwu.libsu", name = "core", version.ref= "libsu" }
@@ -30,6 +31,7 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 kaml = { group = "com.charleskorn.kaml", name = "kaml", version.ref = "kaml" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }

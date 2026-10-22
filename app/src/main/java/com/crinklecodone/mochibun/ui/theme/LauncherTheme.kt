@@ -33,6 +33,7 @@ data class MochibunThemePalette(
     val cloudFront: Color,
     val catOutline: Color,
     val catBlush: Color = Color(0xFFFFADC9),
+    val mascotTint: Color? = null,
     val selectionGlow: Color = primary,
     val focusedCardContainer: Color = Color(0xFFF3E9F8),
     val focusedCardContainerEnd: Color = Color(0xFFFCEFF2),
@@ -57,6 +58,7 @@ val SakuraDreamPalette = MochibunThemePalette(
     cloudFront = Color(0xFFFFF2F7),
     catOutline = Color(0xFFA04064),
     catBlush = Color(0xFFFFADC9),
+    mascotTint = Color(0xFFFFEBF2),
     selectionGlow = Color(0xFFF8BBD0),
     focusedCardContainer = Color(0xFFFCE4EC),
     focusedCardContainerEnd = Color(0xFFFFF0F5),
@@ -81,6 +83,7 @@ val LavenderMistPalette = MochibunThemePalette(
     cloudFront = Color(0xFFF7ECFD),
     catOutline = Color(0xFF5E35B1),
     catBlush = Color(0xFFFFADC9),
+    mascotTint = Color(0xFFF3EDFF),
     selectionGlow = Color(0xFFC8A8E9),
     focusedCardContainer = Color(0xFFF3E9F8),
     focusedCardContainerEnd = Color(0xFFFCEFF2),
@@ -105,6 +108,7 @@ val MintyMatchaPalette = MochibunThemePalette(
     cloudFront = Color(0xFFF2FAF2),
     catOutline = Color(0xFF2E7D32),
     catBlush = Color(0xFFFFB6C1),
+    mascotTint = Color(0xFFEDF8F1),
     selectionGlow = Color(0xFFA5D6A7),
     focusedCardContainer = Color(0xFFE8F5E9),
     focusedCardContainerEnd = Color(0xFFF1F8F1),
@@ -129,6 +133,7 @@ val MilkyPeachPalette = MochibunThemePalette(
     cloudFront = Color(0xFFFFF7EF),
     catOutline = Color(0xFF8D4E28),
     catBlush = Color(0xFFFFAB91),
+    mascotTint = Color(0xFFFFF0E6),
     selectionGlow = Color(0xFFFFCC80),
     focusedCardContainer = Color(0xFFFFF3E0),
     focusedCardContainerEnd = Color(0xFFFFF8EE),
@@ -147,7 +152,8 @@ fun MochibunThemePalette.toLauncherTheme(roundnessDp: Float = 24f): LauncherThem
     greetingOutlineColor = outline,
     greetingBgColor = background,
     appActionColor = deepAccent,
-    cardRoundnessDp = roundnessDp
+    cardRoundnessDp = roundnessDp,
+    mascotTint = mascotTint
 )
 
 data class LauncherTheme(
@@ -160,7 +166,8 @@ data class LauncherTheme(
     val greetingOutlineColor: Color = Color(0xFFF3CADC),
     val greetingBgColor: Color = Color(0xFFFFF5F8),
     val appActionColor: Color = Color(0xFFA04064),
-    val cardRoundnessDp: Float = 24f
+    val cardRoundnessDp: Float = 24f,
+    val mascotTint: Color? = null
 )
 
 val SakuraDreamTheme = SakuraDreamPalette.toLauncherTheme(24f)
@@ -293,6 +300,11 @@ object ActiveTheme {
         @Composable
         @ReadOnlyComposable
         get() = palette.unfocusedCardBorder
+
+    val mascotTint: Color?
+        @Composable
+        @ReadOnlyComposable
+        get() = current.mascotTint ?: palette.mascotTint
 }
 
 data class CustomPreset(
@@ -478,7 +490,8 @@ fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
         cardRoundnessDp = prefs.getFloat(
             "theme_card_roundness",
             base.cardRoundnessDp
-        )
+        ),
+        mascotTint = base.mascotTint
     )
 }
 

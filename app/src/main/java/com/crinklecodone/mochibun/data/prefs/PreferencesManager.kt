@@ -37,6 +37,14 @@ object PreferencesManager {
     const val KEY_THEME_PRESET = "theme_preset"
     const val DEFAULT_THEME_PRESET = "sakura_dream"
 
+    const val KEY_DPAD_WRAP_AROUND = "pref_dpad_wrap_around"
+    const val DEFAULT_DPAD_WRAP_AROUND = true
+
+    const val KEY_DPAD_BOUNDARY_HAPTICS = "pref_dpad_boundary_haptics"
+    const val DEFAULT_DPAD_BOUNDARY_HAPTICS = true
+
+    const val KEY_SPEED_DIAL_PREFIX = "pref_speed_dial_"
+
     private val _isPixelSprayEnabled = MutableStateFlow(DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED)
     val isPixelSprayEnabled: StateFlow<Boolean> = _isPixelSprayEnabled.asStateFlow()
 
@@ -48,6 +56,12 @@ object PreferencesManager {
 
     private val _isT9SearchEnabled = MutableStateFlow(DEFAULT_T9_SEARCH_ENABLED)
     val isT9SearchEnabled: StateFlow<Boolean> = _isT9SearchEnabled.asStateFlow()
+
+    private val _isDpadWrapAround = MutableStateFlow(DEFAULT_DPAD_WRAP_AROUND)
+    val isDpadWrapAround: StateFlow<Boolean> = _isDpadWrapAround.asStateFlow()
+
+    private val _isDpadBoundaryHaptics = MutableStateFlow(DEFAULT_DPAD_BOUNDARY_HAPTICS)
+    val isDpadBoundaryHaptics: StateFlow<Boolean> = _isDpadBoundaryHaptics.asStateFlow()
 
     private val _systemMonitorInterval = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_INTERVAL)
     val systemMonitorInterval: StateFlow<Int> = _systemMonitorInterval.asStateFlow()
@@ -91,6 +105,14 @@ object PreferencesManager {
                 KEY_THEME_PRESET,
                 DEFAULT_THEME_PRESET
             ) ?: DEFAULT_THEME_PRESET
+            _isDpadWrapAround.value = prefs.getBoolean(
+                KEY_DPAD_WRAP_AROUND,
+                DEFAULT_DPAD_WRAP_AROUND
+            )
+            _isDpadBoundaryHaptics.value = prefs.getBoolean(
+                KEY_DPAD_BOUNDARY_HAPTICS,
+                DEFAULT_DPAD_BOUNDARY_HAPTICS
+            )
             initialized = true
         }
     }
@@ -208,5 +230,53 @@ object PreferencesManager {
     fun setThemePreset(context: Context, presetId: String) {
         getPrefs(context).edit().putString(KEY_THEME_PRESET, presetId).apply()
         _themePreset.value = presetId
+    }
+
+    fun isDpadWrapAround(context: Context): Boolean {
+        init(context)
+        return _isDpadWrapAround.value
+    }
+
+    fun setDpadWrapAround(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_DPAD_WRAP_AROUND, enabled).apply()
+        _isDpadWrapAround.value = enabled
+    }
+
+    fun isDpadBoundaryHaptics(context: Context): Boolean {
+        init(context)
+        return _isDpadBoundaryHaptics.value
+    }
+
+    fun setDpadBoundaryHaptics(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_DPAD_BOUNDARY_HAPTICS, enabled).apply()
+        _isDpadBoundaryHaptics.value = enabled
+    }
+
+    fun getSpeedDialPackage(context: Context, digit: Int): String? {
+        if (digit !in 2..9) return null
+        return getPrefs(context).getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
+    }
+
+    fun setSpeedDialPackage(context: Context, digit: Int, packageName: String?) {
+        if (digit !in 2..9) return
+        val editor = getPrefs(context).edit()
+        if (packageName.isNullOrBlank()) {
+            editor.remove("$KEY_SPEED_DIAL_PREFIX$digit")
+        } else {
+            editor.putString("$KEY_SPEED_DIAL_PREFIX$digit", packageName)
+        }
+        editor.apply()
+    }
+
+    fun getAllSpeedDials(context: Context): Map<Int, String> {
+        val prefs = getPrefs(context)
+        return buildMap {
+            for (digit in 2..9) {
+                val pkg = prefs.getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
+                if (!pkg.isNullOrBlank()) {
+                    put(digit, pkg)
+                }
+            }
+        }
     }
 }

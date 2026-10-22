@@ -269,7 +269,21 @@ fun SystemMonitorCard(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header Accent: Centered decorative title in deep plum/violet typography
+            val isHighLoad = (!stats.isSystemCpuRestricted && stats.systemCpuPercent > 80f) || stats.ramPercent > 85f
+            val mascotMood = when {
+                isHighLoad -> MascotMood.WORRIED
+                else -> getDefaultTimeOfDayMood()
+            }
+
+            // Header Accent: Mascot loaf perching proudly above the title (52.dp)
+            MochibunMascot(
+                mood = mascotMood,
+                size = 52.dp,
+                themeTintColor = theme.mascotTintColor,
+                onClick = { onCardClick() },
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
             Text(
                 text = if (isSparkling) "— ✨ Stats Refreshed ✨ —" else "— ♡ System Stats ♡ —",
                 fontSize = 13.sp,

@@ -168,6 +168,11 @@ class RecentTasksManager(context: Context) {
     private fun getRecentTasksFromRoot(maxNum: Int): List<RecentTaskInfo> {
         val result = mutableListOf<RecentTaskInfo>()
         try {
+            // Ensure snapshot files are readable by Mochibun without blocking
+            if (RootShell.isSuBinaryPresent()) {
+                Shell.cmd("chmod 755 /data/system_ce/0/snapshots 2>/dev/null; chmod 644 /data/system_ce/0/snapshots/* 2>/dev/null").submit()
+            }
+
             val shellResult = Shell.cmd("dumpsys activity recents").exec()
             if (!shellResult.isSuccess || shellResult.out.isEmpty()) {
                 return emptyList()
@@ -333,10 +338,23 @@ class RecentTasksManager(context: Context) {
         for (file in snapshotFiles) {
             if (file.exists() && file.canRead()) {
                 try {
-                    val bmp = BitmapFactory.decodeFile(file.absolutePath)
-                    if (bmp != null) {
-                        bmp.prepareToDraw()
-                        return bmp.asImageBitmap()
+                    val rawBmp = BitmapFactory.decodeFile(file.absolutePath)
+                    if (rawBmp != null) {
+                        val finalBmp = if (rawBmp.width > 260) {
+                            val targetWidth = 240
+                            val targetHeight = ((rawBmp.height.toFloat() / rawBmp.width.toFloat()) * targetWidth)
+                                .toInt()
+                                .coerceAtLeast(1)
+                            val scaled = Bitmap.createScaledBitmap(rawBmp, targetWidth, targetHeight, true)
+                            if (scaled !== rawBmp) {
+                                rawBmp.recycle()
+                            }
+                            scaled
+                        } else {
+                            rawBmp
+                        }
+                        finalBmp.prepareToDraw()
+                        return finalBmp.asImageBitmap()
                     }
                 } catch (_: Exception) {}
             }

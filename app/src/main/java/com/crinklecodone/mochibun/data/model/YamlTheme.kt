@@ -37,7 +37,8 @@ data class YamlThemeColors(
     val cloudMid: String? = null,
     val cloudFront: String? = null,
     val catOutline: String? = null,
-    val catBlush: String? = null
+    val catBlush: String? = null,
+    val mascotTint: String? = null
 )
 
 @Serializable
@@ -48,18 +49,50 @@ data class YamlThemeDecorations(
 )
 
 /**
+ * Parses an optional hex string (#RRGGBB, #AARRGGBB, #RGB, #ARGB, or without leading #) into a Compose [Color] or null.
+ * Never throws exceptions, returning null if empty, invalid, or explicitly "none"/"null".
+ */
+fun safeParseColorOrNull(hex: String?): Color? {
+    if (hex.isNullOrBlank() || hex.equals("none", ignoreCase = true) || hex.equals("null", ignoreCase = true)) return null
+    val trimmed = hex.trim().removePrefix("#")
+    return try {
+        when (trimmed.length) {
+            6 -> {
+                val value = trimmed.toLong(16)
+                Color((0xFF000000 or value).toInt())
+            }
+            8 -> {
+                val value = trimmed.toLong(16)
+                Color(value.toInt())
+            }
+            3 -> {
+                val r = trimmed[0].toString().repeat(2)
+                val g = trimmed[1].toString().repeat(2)
+                val b = trimmed[2].toString().repeat(2)
+                val value = "$r$g$b".toLong(16)
+                Color((0xFF000000 or value).toInt())
+            }
+            4 -> {
+                val a = trimmed[0].toString().repeat(2)
+                val r = trimmed[1].toString().repeat(2)
+                val g = trimmed[2].toString().repeat(2)
+                val b = trimmed[3].toString().repeat(2)
+                val value = "$a$r$g$b".toLong(16)
+                Color(value.toInt())
+            }
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/**
  * Parses a hex string (#RRGGBB, #AARRGGBB, or without leading #) into a Compose [Color].
  * Never throws exceptions, falling back to [fallback] if parsing fails.
  */
 fun safeParseColor(hex: String?, fallback: Color): Color {
-    if (hex.isNullOrBlank()) return fallback
-    val trimmed = hex.trim()
-    return try {
-        val formatted = if (trimmed.startsWith("#")) trimmed else "#$trimmed"
-        Color(android.graphics.Color.parseColor(formatted))
-    } catch (_: Exception) {
-        fallback
-    }
+    return safeParseColorOrNull(hex) ?: fallback
 }
 
 /**
@@ -84,6 +117,7 @@ fun YamlTheme.toLauncherPalette(fallback: MochibunThemePalette = SakuraDreamPale
     val parsedCloudFront = safeParseColor(colors.cloudFront, fallback.cloudFront)
     val parsedCatOutline = safeParseColor(colors.catOutline, parsedAccentDeep)
     val parsedCatBlush = safeParseColor(colors.catBlush, fallback.catBlush)
+    val parsedMascotTint = safeParseColorOrNull(colors.mascotTint)
 
     val effectiveId = id.ifBlank { "custom_${System.currentTimeMillis()}" }
     val effectiveName = name.ifBlank { "Custom Theme" }
@@ -104,6 +138,7 @@ fun YamlTheme.toLauncherPalette(fallback: MochibunThemePalette = SakuraDreamPale
         cloudFront = parsedCloudFront,
         catOutline = parsedCatOutline,
         catBlush = parsedCatBlush,
+        mascotTint = parsedMascotTint,
         selectionGlow = parsedGlow,
         focusedCardContainer = parsedContainer,
         focusedCardContainerEnd = parsedContainer,

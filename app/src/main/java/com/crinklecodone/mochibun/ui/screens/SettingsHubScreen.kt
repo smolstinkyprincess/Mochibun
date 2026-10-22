@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityManager
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
@@ -83,6 +85,7 @@ fun SettingsHubScreen(
     onOpenHardwareButtons: (() -> Unit)? = null,
     onOpenHiddenApps: (() -> Unit)? = null,
     onCreateFolderClick: (() -> Unit)? = null,
+    onOpenSpeedDial: (() -> Unit)? = null,
     onPickWallpaperClick: (() -> Unit)? = null,
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false
@@ -121,6 +124,7 @@ fun SettingsHubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onOpenHiddenApps = onOpenHiddenApps,
                 onCreateFolderClick = onCreateFolderClick,
+                onOpenSpeedDial = onOpenSpeedDial,
                 modifier = modifier
             )
         }
@@ -244,7 +248,7 @@ private fun SettingsHubRootScreen(
                 SettingsCard(categoryTitle = "System & Specs") {
                     SettingsNavigationRow(
                         title = "About Mochibun",
-                        subtitle = "Version, target hardware stats & credits",
+                        subtitle = "Version, hardware specs & credits",
                         icon = "♡",
                         isFocused = focusedIndex == 3,
                         onClick = { onNavigate(SettingsDestination.About) }
@@ -829,6 +833,7 @@ private fun BehaviorSettingsSubScreen(
     onBack: () -> Unit,
     onOpenHiddenApps: (() -> Unit)?,
     onCreateFolderClick: (() -> Unit)?,
+    onOpenSpeedDial: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -839,6 +844,8 @@ private fun BehaviorSettingsSubScreen(
 
     val isFolderGridMode by PreferencesManager.isFolderGridMode.collectAsState()
     val isT9SearchEnabled by PreferencesManager.isT9SearchEnabled.collectAsState()
+    val isDpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
+    val isDpadBoundaryHaptics by PreferencesManager.isDpadBoundaryHaptics.collectAsState()
     val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
     val systemMonitorInterval by PreferencesManager.systemMonitorInterval.collectAsState()
 
@@ -850,6 +857,9 @@ private fun BehaviorSettingsSubScreen(
             }
             add("folder_grid")
             add("t9_search")
+            add("speed_dial")
+            add("dpad_wrap")
+            add("boundary_haptics")
             add("hidden_apps")
             add("system_monitor")
             if (isSystemMonitorEnabled) {
@@ -888,6 +898,9 @@ private fun BehaviorSettingsSubScreen(
                             "create_folder" -> onCreateFolderClick?.invoke()
                             "folder_grid" -> PreferencesManager.setFolderGridMode(context, !isFolderGridMode)
                             "t9_search" -> PreferencesManager.setT9SearchEnabled(context, !isT9SearchEnabled)
+                            "speed_dial" -> onOpenSpeedDial?.invoke()
+                            "dpad_wrap" -> PreferencesManager.setDpadWrapAround(context, !isDpadWrapAround)
+                            "boundary_haptics" -> PreferencesManager.setDpadBoundaryHaptics(context, !isDpadBoundaryHaptics)
                             "hidden_apps" -> onOpenHiddenApps?.invoke()
                             "system_monitor" -> PreferencesManager.setSystemMonitorEnabled(context, !isSystemMonitorEnabled)
                             "monitor_interval" -> {
@@ -990,6 +1003,34 @@ private fun BehaviorSettingsSubScreen(
             }
 
             item {
+                SettingsCard(categoryTitle = "Keypad & D-Pad") {
+                    SettingsNavigationRow(
+                        title = "Speed Dial (Keys 2-9)",
+                        subtitle = "Assign numeric shortcuts for home screen long-press",
+                        icon = "⚡",
+                        isFocused = items.getOrNull(focusedIndex) == "speed_dial",
+                        onClick = { onOpenSpeedDial?.invoke() }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "D-Pad Wrap-Around",
+                        subtitle = if (isDpadWrapAround) "Navigation loops top to bottom & left to right" else "Navigation stops at list boundaries",
+                        checked = isDpadWrapAround,
+                        isFocused = items.getOrNull(focusedIndex) == "dpad_wrap",
+                        onCheckedChange = { PreferencesManager.setDpadWrapAround(context, it) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Boundary Haptics",
+                        subtitle = if (isDpadBoundaryHaptics) "Subtle buzz when hitting edge limits" else "Silent boundaries",
+                        checked = isDpadBoundaryHaptics,
+                        isFocused = items.getOrNull(focusedIndex) == "boundary_haptics",
+                        onCheckedChange = { PreferencesManager.setDpadBoundaryHaptics(context, it) }
+                    )
+                }
+            }
+
+            item {
                 SettingsCard(categoryTitle = "System Monitor Card") {
                     SettingsToggleRow(
                         title = "System Monitor Deck",
@@ -1039,12 +1080,45 @@ private fun AboutMochibunSubScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
 
     val rt = Runtime.getRuntime()
     val usedRamMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
     val maxRamMb = rt.maxMemory() / (1024 * 1024)
+
+    val dm = context.resources.displayMetrics
+    val displayResolution = remember(configuration, dm.widthPixels, dm.heightPixels) {
+        "${dm.widthPixels} × ${dm.heightPixels} px (${configuration.densityDpi} dpi)"
+    }
+
+    val manufacturer = remember {
+        Build.MANUFACTURER.orEmpty().replaceFirstChar {
+            if (it.isLowerCase()) it.titlecase() else it.toString()
+        }
+    }
+    val model = remember { Build.MODEL.orEmpty() }
+    val deviceDisplay = remember(manufacturer, model) {
+        if (manufacturer.isNotEmpty() && !model.startsWith(manufacturer, ignoreCase = true)) {
+            "$manufacturer $model".trim()
+        } else {
+            model.ifEmpty { manufacturer.ifEmpty { "Android Device" } }
+        }
+    }
+
+    val osVersion = remember {
+        "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+    }
+
+    val primaryAbi = remember {
+        Build.SUPPORTED_ABIS?.firstOrNull() ?: "Unknown"
+    }
+
+    val isTargetDevice = remember {
+        Build.MODEL.contains("M120", ignoreCase = true) || Build.DEVICE.contains("M120", ignoreCase = true)
+    }
 
     requestFocusSafely(focusRequester)
 
@@ -1070,6 +1144,19 @@ private fun AboutMochibunSubScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item {
+                val theme = LocalLauncherTheme.current
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MochibunMascot(
+                        mood = MascotMood.DEFAULT,
+                        size = 78.dp,
+                        themeTintColor = theme.mascotTintColor
+                    )
+                }
                 SettingsCard(categoryTitle = "Application Info") {
                     SettingsInfoRow(label = "Application", value = "Mochibun Launcher")
                     SettingsInfoRow(label = "Version", value = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
@@ -1078,12 +1165,38 @@ private fun AboutMochibunSubScreen(
             }
 
             item {
-                SettingsCard(categoryTitle = "Target Hardware") {
-                    SettingsInfoRow(label = "Device", value = "ALT Mive Style Folder AT-M120")
-                    SettingsInfoRow(label = "SoC", value = "MediaTek MT6761 (Helio A22)")
-                    SettingsInfoRow(label = "Architecture", value = "ARMv7 (armeabi-v7a 32-bit)")
-                    SettingsInfoRow(label = "Display", value = "480 × 800 px (xhdpi)")
-                    SettingsInfoRow(label = "Target OS", value = "Android 12 (API 31)")
+                SettingsCard(categoryTitle = "Hardware Specifications") {
+                    SettingsInfoRow(label = "Model / Device", value = deviceDisplay)
+                    if (isTargetDevice) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(ActiveTheme.surfaceTint.copy(alpha = 0.25f))
+                                .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "🌸",
+                                    fontSize = 11.5.sp
+                                )
+                                Text(
+                                    text = "Home sweet home! Running on native M120 hardware ✨",
+                                    color = ActiveTheme.accentDeep,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                    SettingsInfoRow(label = "OS Version", value = osVersion)
+                    SettingsInfoRow(label = "Architecture", value = primaryAbi)
+                    SettingsInfoRow(label = "Display", value = displayResolution)
                     SettingsInfoRow(label = "Active RAM Envelope", value = "$usedRamMb MB / $maxRamMb MB")
                 }
             }
@@ -1111,6 +1224,7 @@ fun SettingsHubDialog(
     onOpenHardwareButtons: (() -> Unit)? = null,
     onOpenHiddenApps: (() -> Unit)? = null,
     onCreateFolderClick: (() -> Unit)? = null,
+    onOpenSpeedDial: (() -> Unit)? = null,
     onPickWallpaperClick: (() -> Unit)? = null,
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false
@@ -1131,6 +1245,7 @@ fun SettingsHubDialog(
             onOpenHardwareButtons = onOpenHardwareButtons,
             onOpenHiddenApps = onOpenHiddenApps,
             onCreateFolderClick = onCreateFolderClick,
+            onOpenSpeedDial = onOpenSpeedDial,
             onPickWallpaperClick = onPickWallpaperClick,
             onResetWallpaperClick = onResetWallpaperClick,
             hasCustomWallpaper = hasCustomWallpaper

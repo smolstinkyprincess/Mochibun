@@ -451,7 +451,13 @@ fun ClockWidget(
             }
         }
 
-        Spacer(modifier = Modifier.height(2.dp))
+        // Centerpiece companion mascot loaf
+        MochibunMascot(
+            mood = getDefaultTimeOfDayMood(),
+            size = 58.dp,
+            themeTintColor = theme.mascotTintColor,
+            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+        )
 
         // Subtitle formatted date
         Text(

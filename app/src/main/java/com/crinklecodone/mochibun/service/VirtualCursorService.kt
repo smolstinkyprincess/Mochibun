@@ -19,6 +19,8 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import com.crinklecodone.mochibun.core.system.ClamshellListener
+import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.ui.overlay.CursorOverlayView
 import com.crinklecodone.mochibun.core.system.RootTouchInjector
 import com.crinklecodone.mochibun.core.util.CursorPhysics
@@ -69,10 +71,23 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         reloadConfig()
     }
 
+    private val clamshellListener = object : ClamshellListener {
+        override fun onLidClosed() {
+            handleLidClosed()
+        }
+
+        override fun onLidOpened() {
+            handleLidOpened()
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         isServiceRunning = true
+
+        ClamshellManager.init(this)
+        ClamshellManager.addListener(clamshellListener)
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val metrics = resources.displayMetrics
@@ -99,6 +114,25 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         val width = metrics.widthPixels.toFloat().coerceAtLeast(480f)
         val height = metrics.heightPixels.toFloat().coerceAtLeast(800f)
         physics.setBounds(width, height)
+        ClamshellManager.onConfigurationChanged(newConfig)
+    }
+
+    private fun handleLidClosed() {
+        Log.d(TAG, "Clamshell lid closed: suspending cursor ticker and auto-dismissing overlay")
+        stopMovementTicker()
+        overlayView?.pauseAnimation()
+        if (isCursorVisible) {
+            isCursorVisible = false
+            overlayView?.visibility = View.GONE
+        }
+    }
+
+    private fun handleLidOpened() {
+        Log.d(TAG, "Clamshell lid opened: refreshing display bounds")
+        val metrics = resources.displayMetrics
+        val width = metrics.widthPixels.toFloat().coerceAtLeast(480f)
+        val height = metrics.heightPixels.toFloat().coerceAtLeast(800f)
+        physics.setBounds(width, height)
     }
 
     override fun onDestroy() {
@@ -106,6 +140,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         isCursorVisible = false
         instance = null
 
+        ClamshellManager.removeListener(clamshellListener)
         stopMovementTicker()
 
         prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
