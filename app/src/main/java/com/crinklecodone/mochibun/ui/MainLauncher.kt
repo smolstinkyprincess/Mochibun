@@ -467,6 +467,39 @@ fun MainLauncher(
         }
     }
 
+    val keypadActions = remember(launcherVm) {
+        object : LauncherKeypadActions {
+            override fun setDrawerOpen(open: Boolean) { drawerOpen = open }
+            override fun setSelectedDrawerIndex(index: Int) { selectedDrawerIndex = index }
+            override fun setHomeFocusArea(area: Int) { homeFocusArea = area }
+            override fun setSelectedFavoriteIndex(index: Int) { selectedFavoriteIndex = index }
+            override fun setSavedFavoriteIndexOnHome(index: Int) { savedFavoriteIndexOnHome = index }
+            override fun setPendingTargetPage(page: Int?) { pendingTargetPage = page }
+            override fun setCenterKeyState(state: Int) { centerKeyState = state }
+            override fun openContextActionForCurrentFocus() = openContextActionForCurrentFocus()
+            override fun openFolder(folderId: String) {
+                folderOpenStartRename = false
+                folderOpenStartPicker = false
+                lastOpenedFolderId = folderId
+                openedFolderId = folderId
+            }
+            override fun openLauncherMenu() { launcherMenuOpen = true }
+            override fun openSpeedDial(digit: Int) { speedDialDialogOpen = true }
+        }
+    }
+
+    val keyHandler = remember(context, scope, pagerState, listState, homeTracker, t9State, keypadActions) {
+        LauncherKeyHandler(
+            context = context,
+            scope = scope,
+            pagerState = pagerState,
+            listState = listState,
+            homeTracker = homeTracker,
+            t9State = t9State,
+            actions = keypadActions
+        )
+    }
+
     CompositionLocalProvider(LocalLauncherTheme provides currentTheme) {
         Box(
             modifier = Modifier
@@ -475,17 +508,11 @@ fun MainLauncher(
                 .focusable()
                 .focusRequester(focusRequester)
                 .onPreviewKeyEvent { event ->
-                    handleMainLauncherKeyEvent(
-                        event = event,
-                        context = context,
-                        scope = scope,
-                        pagerState = pagerState,
-                        listState = listState,
-                        homeTracker = homeTracker,
-                        t9State = t9State,
+                    val keypadState = LauncherKeypadState(
                         anyModalOpen = anyModalOpen,
                         drawerOpen = drawerOpen,
                         isHomeScreenActive = isHomeScreenActive,
+                        isPageTransitioning = !drawerOpen && (pagerState.isScrollInProgress || (pendingTargetPage != null && pendingTargetPage != pagerState.settledPage)),
                         pendingTargetPage = pendingTargetPage,
                         favoriteItemCount = favoriteItemCount,
                         selectedFavoriteIndex = selectedFavoriteIndex,
@@ -497,24 +524,9 @@ fun MainLauncher(
                         favoriteApps = launcherVm.favoriteApps,
                         favoriteFolders = favoriteFolders,
                         favoriteItems = favoriteItems,
-                        letterStarts = letterStarts,
-                        onSetDrawerOpen = { drawerOpen = it },
-                        onSetSelectedDrawerIndex = { selectedDrawerIndex = it },
-                        onSetHomeFocusArea = { homeFocusArea = it },
-                        onSetSelectedFavoriteIndex = { selectedFavoriteIndex = it },
-                        onSetSavedFavoriteIndexOnHome = { savedFavoriteIndexOnHome = it },
-                        onSetPendingTargetPage = { pendingTargetPage = it },
-                        onSetCenterKeyState = { centerKeyState = it },
-                        onOpenContextActionForCurrentFocus = openContextActionForCurrentFocus,
-                        onOpenFolder = { id ->
-                            folderOpenStartRename = false
-                            folderOpenStartPicker = false
-                            lastOpenedFolderId = id
-                            openedFolderId = id
-                        },
-                        onOpenLauncherMenu = { launcherMenuOpen = true },
-                        onOpenSpeedDial = { speedDialDialogOpen = true }
+                        letterStarts = letterStarts
                     )
+                    keyHandler.handleKeyEvent(event, keypadState)
                 }
                 .combinedClickable(
                     onClick = {},
