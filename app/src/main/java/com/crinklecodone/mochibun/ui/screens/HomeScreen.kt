@@ -126,14 +126,6 @@ fun HomeScreen(
                 tintBehavior = PixelSprayTintBehavior.MIXED
             )
         }
-        // Bottom cloud & peeking cat illustration layer drawn via lightweight Canvas pass
-        /*
-        BottomIllustrationLayer(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(240.dp)
-                .align(Alignment.BottomCenter)
-        )*/
 
         // Main content column anchored to top within the 800px vertical envelope
         Column(
@@ -558,7 +550,6 @@ fun FavoritesCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .graphicsLayer { clip = false }
                 .kawaiiCardMotifs(
                     isFocused = isCardFocused,
                     cornerRadius = 24.dp

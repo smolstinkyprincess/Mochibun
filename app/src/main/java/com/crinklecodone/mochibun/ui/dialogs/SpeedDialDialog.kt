@@ -173,7 +173,7 @@ fun SpeedDialDialog(
                     state = listState,
                     modifier = Modifier.heightIn(max = 280.dp)
                 ) {
-                    items(8) { index ->
+                    items(count = 8, key = { index -> index + 2 }) { index ->
                         val digit = index + 2
                         val pkg = speedDials[digit]
                         val app = apps.firstOrNull { it.packageName == pkg }
