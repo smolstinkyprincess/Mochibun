@@ -31,7 +31,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import com.crinklecodone.mochibun.core.system.RootShell
-import com.topjohnwu.superuser.Shell
 import java.io.File
 import java.lang.reflect.Method
 
@@ -170,10 +169,10 @@ class RecentTasksManager(context: Context) {
         try {
             // Ensure snapshot files are readable by Mochibun without blocking
             if (RootShell.isSuBinaryPresent()) {
-                Shell.cmd("chmod 755 /data/system_ce/0/snapshots 2>/dev/null; chmod 644 /data/system_ce/0/snapshots/* 2>/dev/null").submit()
+                RootShell.submit("chmod 755 /data/system_ce/0/snapshots 2>/dev/null; chmod 644 /data/system_ce/0/snapshots/* 2>/dev/null")
             }
 
-            val shellResult = Shell.cmd("dumpsys activity recents").exec()
+            val shellResult = RootShell.executeBlocking("dumpsys activity recents")
             if (!shellResult.isSuccess || shellResult.out.isEmpty()) {
                 return emptyList()
             }
@@ -458,7 +457,7 @@ class RecentTasksManager(context: Context) {
         // 3. Root shell: bring task to front via am start
         if (RootShell.isSuBinaryPresent()) {
             try {
-                val result = Shell.cmd("am start --activity-brought-to-front -p ${task.packageName}").exec()
+                val result = RootShell.executeBlocking("am start --activity-brought-to-front -p ${task.packageName}")
                 if (result.isSuccess) return true
             } catch (e: Exception) {
                 Log.w(TAG, "Root am start failed for ${task.packageName}", e)
@@ -515,7 +514,7 @@ class RecentTasksManager(context: Context) {
         // 2. Shell fallback for Android 11/12 (am stack remove <taskId>)
         if (RootShell.isSuBinaryPresent()) {
             try {
-                val result = Shell.cmd("am stack remove $taskId").exec()
+                val result = RootShell.executeBlocking("am stack remove $taskId")
                 Log.d(TAG, "Root am stack remove $taskId result: isSuccess=${result.isSuccess}, code=${result.code}")
                 removed = result.isSuccess || removed
             } catch (e: Exception) {
@@ -542,7 +541,7 @@ class RecentTasksManager(context: Context) {
             // If root is available, issue am force-stop to guarantee complete termination
             if (RootShell.isSuBinaryPresent()) {
                 try {
-                    Shell.cmd("am force-stop $packageName").submit()
+                    RootShell.submit("am force-stop $packageName")
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to force-stop $packageName", e)
                 }

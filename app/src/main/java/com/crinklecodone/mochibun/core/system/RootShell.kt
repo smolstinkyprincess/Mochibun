@@ -1,36 +1,29 @@
-/**
- * Privileged root execution bridge for the Chinoe AT-M120.
- * Backed by libsu's persistent daemon to eliminate process-fork latency,
- * thread-allocation GC pressure, and pipe buffer deadlocks.
- */
 package com.crinklecodone.mochibun.core.system
 
+import com.crinklecodone.mochibun.core.shell.RootOperations
+import com.crinklecodone.mochibun.core.shell.RootResult
+import com.crinklecodone.mochibun.core.shell.RootStatus
 import com.topjohnwu.superuser.NoShellException
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
-sealed class RootStatus {
-    object Unknown : RootStatus()
-    object NotAvailable : RootStatus()
-    object Requesting : RootStatus()
-    data class Granted(val identity: String) : RootStatus()
-    data class Denied(val message: String) : RootStatus()
-    data class Error(val message: String) : RootStatus()
-}
+// Backward-compatible typealiases for callers targeting core.system
+typealias RootStatus = com.crinklecodone.mochibun.core.shell.RootStatus
+typealias RootResult = com.crinklecodone.mochibun.core.shell.RootResult
+typealias RootOperations = com.crinklecodone.mochibun.core.shell.RootOperations
 
-data class RootResult(
-    val exitCode: Int,
-    val stdout: List<String>,
-    val stderr: List<String>
-) {
-    val isSuccess: Boolean = exitCode == 0
-}
+/**
+ * Privileged root execution bridge for the Chinoe AT-M120 (MediaTek MT6761 / Android 12).
+ * Backed by libsu's persistent daemon to avoid process-fork latency, GC churn,
+ * and pipe deadlocks on low-RAM (2GB) hardware.
+ */
+object RootShell : RootOperations {
 
-object RootShell {
+    const val DEFAULT_TIMEOUT_MS: Long = 10_000L
 
-    // Common standard paths where su binary may reside
     private val SU_PATHS = listOf(
         "/system/bin/su",
         "/system/xbin/su",
@@ -41,10 +34,10 @@ object RootShell {
     )
 
     /**
-     * Quickly checks whether a su binary exists in PATH or standard system directories.
-     * Does NOT execute su or trigger a Magisk/KernelSU authorization prompt.
+     * Fast filesystem check to verify if a su binary exists in PATH or standard paths.
+     * Non-blocking and never triggers Magisk/KernelSU authorization prompts.
      */
-    fun isSuBinaryPresent(): Boolean {
+    override fun isSuBinaryPresent(): Boolean {
         for (path in SU_PATHS) {
             if (File(path).exists()) return true
         }
@@ -57,33 +50,30 @@ object RootShell {
     }
 
     /**
-     * Checks whether root access has already been granted and the shell daemon is root.
-     * Non-blocking and does NOT prompt the user if ungranted.
+     * Checks if root access is granted without displaying an interactive prompt.
      */
-    suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
         if (!isSuBinaryPresent()) return@withContext false
         val cachedStatus = Shell.isAppGrantedRoot()
         if (cachedStatus != null) return@withContext cachedStatus
 
         try {
             Shell.getShell().isRoot
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             false
         }
     }
 
     /**
-     * Explicitly requests root privileges. If not yet granted or denied, Magisk/KernelSU
-     * will display its superuser permission prompt.
-     * Dispatched off the main thread (Dispatchers.IO) to prevent UI stalls.
+     * Requests root privileges, triggering the Magisk/KernelSU prompt if not yet granted.
+     * Dispatched to Dispatchers.IO with a timeout guard to prevent UI thread starvation.
      */
-    suspend fun requestRoot(): RootStatus = withContext(Dispatchers.IO) {
+    override suspend fun requestRoot(): RootStatus = withContext(Dispatchers.IO) {
         if (!isSuBinaryPresent()) {
             return@withContext RootStatus.NotAvailable
         }
 
         try {
-            // Shell.getShell() lazily connects or spawns the root daemon
             val shell = Shell.getShell()
             if (!shell.isRoot) {
                 return@withContext RootStatus.Denied("Shell spawned without root privileges (UID != 0)")
@@ -106,54 +96,84 @@ object RootShell {
             }
         } catch (e: NoShellException) {
             RootStatus.Denied(e.message ?: "Superuser access denied")
-        } catch (e: Exception) {
-            RootStatus.Error(e.message ?: "Failed to acquire root shell")
+        } catch (e: Throwable) {
+            RootStatus.Error(e.message ?: "Failed to acquire root shell", e)
         }
     }
 
     /**
-     * Executes a command synchronously on Dispatchers.IO via the persistent root daemon.
-     * Returns a [RootResult] containing exitCode, stdout, and stderr.
+     * Executes a shell command synchronously on Dispatchers.IO with explicit timeout protection.
      */
-    suspend fun execute(command: String): RootResult = withContext(Dispatchers.IO) {
+    override suspend fun execute(command: String, timeoutMs: Long): RootResult = withContext(Dispatchers.IO) {
         if (!isSuBinaryPresent()) {
-            return@withContext RootResult(-1, emptyList(), listOf("su binary not found"))
+            return@withContext RootResult.failure("su binary not found")
         }
 
         try {
-            val result = Shell.cmd(command).exec()
-            RootResult(
-                exitCode = result.code,
-                stdout = result.out,
-                stderr = result.err
-            )
-        } catch (e: Exception) {
-            RootResult(-1, emptyList(), listOf(e.message ?: "Execution error"))
+            val executionResult = withTimeoutOrNull(timeoutMs) {
+                val res = Shell.cmd(command).exec()
+                RootResult(
+                    exitCode = res.code,
+                    stdout = res.out,
+                    stderr = res.err
+                )
+            }
+            executionResult ?: RootResult.failure("Command timed out after ${timeoutMs}ms")
+        } catch (e: Throwable) {
+            RootResult.failure(e.message ?: "Execution error")
         }
     }
 
     /**
-     * Convenience helper to execute a command and collect standard output lines.
-     * Returns an empty list if execution fails or root is unavailable.
+     * Synchronous blocking shell execution for non-coroutine contexts.
+     * Callers must ensure they are already running off the main thread.
      */
-    suspend fun executeWithOutput(command: String): List<String> = withContext(Dispatchers.IO) {
+    override fun executeBlocking(command: String): RootResult {
+        if (!isSuBinaryPresent()) {
+            return RootResult.failure("su binary not found")
+        }
+        return try {
+            val res = Shell.cmd(command).exec()
+            RootResult(
+                exitCode = res.code,
+                stdout = res.out,
+                stderr = res.err
+            )
+        } catch (e: Throwable) {
+            RootResult.failure(e.message ?: "Execution error")
+        }
+    }
+
+    /**
+     * Executes a command returning a typed [Result] for callers preferring standard Kotlin error handling.
+     */
+    override suspend fun executeSafe(command: String, timeoutMs: Long): Result<RootResult> = runCatching {
+        execute(command, timeoutMs)
+    }
+
+    /**
+     * Executes a command and returns stdout lines, returning emptyList on error or timeout.
+     */
+    override suspend fun executeWithOutput(command: String, timeoutMs: Long): List<String> = withContext(Dispatchers.IO) {
         if (!isSuBinaryPresent()) return@withContext emptyList()
         try {
-            Shell.cmd(command).exec().out
-        } catch (_: Exception) {
+            withTimeoutOrNull(timeoutMs) {
+                Shell.cmd(command).exec().out
+            } ?: emptyList()
+        } catch (_: Throwable) {
             emptyList()
         }
     }
 
     /**
-     * Submits a command asynchronously to the persistent daemon without waiting for its output.
-     * Ideal for fire-and-forget operations off the main thread.
+     * Submits an asynchronous command to the persistent root daemon without blocking the caller.
      */
-    fun submit(command: String) {
+    override fun submit(command: String) {
+        if (!isSuBinaryPresent()) return
         try {
-            Shell.cmd(command).submit { /* no-op */ }
-        } catch (_: Exception) {
-            // Silently ignore if root shell cannot be acquired
+            Shell.cmd(command).submit { /* daemon execution, no-op callback */ }
+        } catch (_: Throwable) {
+            // Ignored if daemon cannot be acquired
         }
     }
 }

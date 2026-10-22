@@ -4,7 +4,7 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.crinklecodone.mochibun.core.system.RootShell
-import com.crinklecodone.mochibun.core.system.RootStatus
+import com.crinklecodone.mochibun.core.shell.RootStatus
 import com.crinklecodone.mochibun.core.system.RootTouchInjector
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.ButtonActionConfig

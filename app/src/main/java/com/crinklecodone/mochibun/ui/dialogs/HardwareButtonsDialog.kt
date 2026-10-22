@@ -64,7 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.crinklecodone.mochibun.core.system.RootShell
-import com.crinklecodone.mochibun.core.system.RootStatus
+import com.crinklecodone.mochibun.core.shell.RootStatus
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.AppInfo
 import com.crinklecodone.mochibun.data.model.BASELINE_MTK_KPD_MAPPINGS
