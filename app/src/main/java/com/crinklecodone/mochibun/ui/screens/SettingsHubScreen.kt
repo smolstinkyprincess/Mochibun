@@ -244,7 +244,7 @@ private fun SettingsHubRootScreen(
                 SettingsCard(categoryTitle = "System & Specs") {
                     SettingsNavigationRow(
                         title = "About Mochibun",
-                        subtitle = "Version, MT6761 hardware stats & credits",
+                        subtitle = "Version, target hardware stats & credits",
                         icon = "♡",
                         isFocused = focusedIndex == 3,
                         onClick = { onNavigate(SettingsDestination.About) }
@@ -1089,10 +1089,10 @@ private fun AboutMochibunSubScreen(
             }
 
             item {
-                SettingsCard(categoryTitle = "Open Source & License") {
-                    SettingsInfoRow(label = "License", value = "MIT License")
+                SettingsCard(categoryTitle = "Open Source, License & Credits") {
+                    SettingsInfoRow(label = "License", value = "Apache 2.0 License")
                     SettingsInfoRow(label = "Root Bridge", value = "libsu:core daemon")
-                    SettingsInfoRow(label = "Styling", value = "Kawaii Pastel Design System")
+                    SettingsInfoRow(label = "Image Loader", value = "Coil (GIF & Bitmap)")
                 }
             }
         }

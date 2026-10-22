@@ -22,6 +22,7 @@ import android.app.ActivityOptions
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.drawable.Drawable
 import android.util.Log
 import android.util.LruCache
@@ -29,6 +30,9 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import com.crinklecodone.mochibun.core.system.RootShell
+import com.topjohnwu.superuser.Shell
+import java.io.File
 import java.lang.reflect.Method
 
 /**
@@ -63,80 +67,226 @@ class RecentTasksManager(context: Context) {
     private val packageManager = appContext.packageManager
 
     /**
-     * Fetches up to maxNum recent tasks using ActivityManager and ActivityTaskManager.
+     * Fetches up to maxNum recent tasks using ActivityManager, with root fallback for Android 12
+     * third-party application process isolation.
      */
     fun getRecentTasks(maxNum: Int = 15): List<RecentTaskInfo> {
         val result = mutableListOf<RecentTaskInfo>()
+        val currentPackage = appContext.packageName
+
+        // 1. Try standard framework ActivityManager first
         try {
             val recentTasks = activityManager.getRecentTasks(maxNum, ActivityManager.RECENT_IGNORE_UNAVAILABLE)
-            val currentPackage = appContext.packageName
             Log.d(TAG, "getRecentTasks queried: received ${recentTasks?.size ?: 0} raw tasks from system (currentPackage=$currentPackage)")
 
-            for (rawInfo in recentTasks) {
-                val taskId = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    rawInfo.taskId
-                } else {
-                    rawInfo.persistentId
-                }
-                if (taskId < 0) continue
+            if (recentTasks != null) {
+                for (rawInfo in recentTasks) {
+                    val taskId = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        rawInfo.taskId
+                    } else {
+                        rawInfo.persistentId
+                    }
+                    if (taskId < 0) continue
 
-                val baseIntent = rawInfo.baseIntent ?: continue
-                val component = baseIntent.component ?: rawInfo.origActivity
-                val pkgName = component?.packageName ?: baseIntent.`package` ?: continue
-                val isHomeCategory = baseIntent.hasCategory(Intent.CATEGORY_HOME)
-                val className = component?.className ?: ""
+                    val baseIntent = rawInfo.baseIntent ?: continue
+                    val component = baseIntent.component ?: rawInfo.origActivity
+                    val pkgName = component?.packageName ?: baseIntent.`package` ?: continue
+                    val isHomeCategory = baseIntent.hasCategory(Intent.CATEGORY_HOME)
+                    val className = component?.className ?: ""
 
-                // Exclude Mochibun's own launcher and recents activities from the switcher
-                val isLauncherActivity = (pkgName == currentPackage && (
-                    isHomeCategory ||
-                    className == RecentsActivity::class.java.name ||
-                    className == "com.android.quickstep.RecentsActivity" ||
-                    className.endsWith("MainActivity") ||
-                    className.endsWith("RecentsActivity")
-                ))
+                    // Exclude Mochibun's own launcher and recents activities from the switcher
+                    val isLauncherActivity = (pkgName == currentPackage && (
+                        isHomeCategory ||
+                        className == RecentsActivity::class.java.name ||
+                        className == "com.android.quickstep.RecentsActivity" ||
+                        className.endsWith("MainActivity") ||
+                        className.endsWith("RecentsActivity")
+                    ))
 
-                if (isLauncherActivity) {
-                    Log.d(TAG, "Filtered out launcher task: id=$taskId, pkg=$pkgName, component=$component, isHome=$isHomeCategory")
-                    continue
-                }
+                    if (isLauncherActivity) {
+                        Log.d(TAG, "Filtered out launcher task: id=$taskId, pkg=$pkgName, component=$component, isHome=$isHomeCategory")
+                        continue
+                    }
 
-                var title = rawInfo.description?.toString() ?: ""
-                var icon: Drawable? = null
-                var iconBitmap: ImageBitmap? = null
+                    var title = rawInfo.description?.toString() ?: ""
+                    var icon: Drawable? = null
+                    var iconBitmap: ImageBitmap? = null
 
-                val cachedMeta = getOrLoadAppMeta(pkgName)
-                if (cachedMeta != null) {
-                    if (title.isEmpty()) title = cachedMeta.label
-                    icon = cachedMeta.icon
-                    iconBitmap = cachedMeta.iconBitmap
-                } else if (title.isEmpty()) {
-                    title = pkgName
-                }
+                    val cachedMeta = getOrLoadAppMeta(pkgName)
+                    if (cachedMeta != null) {
+                        if (title.isEmpty()) title = cachedMeta.label
+                        icon = cachedMeta.icon
+                        iconBitmap = cachedMeta.iconBitmap
+                    } else if (title.isEmpty()) {
+                        title = pkgName
+                    }
 
-                // Downscaled snapshot thumbnail to protect 1.8GB RAM budget
-                val thumbnailBitmap = getTaskThumbnail(taskId)
+                    // Downscaled snapshot thumbnail to protect 1.8GB RAM budget
+                    val thumbnailBitmap = getTaskThumbnail(taskId)
 
-                // Assign coordinated pastel tint index based on package hash
-                val tintIndex = (Math.abs(pkgName.hashCode())) % 4
+                    // Assign coordinated pastel tint index based on package hash
+                    val tintIndex = (Math.abs(pkgName.hashCode())) % 4
 
-                Log.d(TAG, "Added task to recents: id=$taskId, title=$title, pkg=$pkgName, component=$component")
+                    Log.d(TAG, "Added task to recents: id=$taskId, title=$title, pkg=$pkgName, component=$component")
 
-                result.add(
-                    RecentTaskInfo(
-                        taskId = taskId,
-                        title = title,
-                        packageName = pkgName,
-                        icon = icon,
-                        iconBitmap = iconBitmap,
-                        thumbnail = thumbnailBitmap,
-                        baseIntent = baseIntent,
-                        tintIndex = tintIndex
+                    result.add(
+                        RecentTaskInfo(
+                            taskId = taskId,
+                            title = title,
+                            packageName = pkgName,
+                            icon = icon,
+                            iconBitmap = iconBitmap,
+                            thumbnail = thumbnailBitmap,
+                            baseIntent = baseIntent,
+                            tintIndex = tintIndex
+                        )
                     )
-                )
+                }
             }
-            Log.d(TAG, "getRecentTasks completed: ${result.size} tasks survived filtering")
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching recent tasks", e)
+            Log.w(TAG, "Standard getRecentTasks failed, checking root fallback: ${e.message}")
+        }
+
+        // 2. If standard API returned 0 tasks (due to Android 12 third-party caller isolation)
+        // and root is present, query recent tasks via dumpsys activity recents!
+        if (result.isEmpty() && RootShell.isSuBinaryPresent()) {
+            val rootTasks = getRecentTasksFromRoot(maxNum)
+            if (rootTasks.isNotEmpty()) {
+                Log.d(TAG, "Retrieved ${rootTasks.size} tasks via root dumpsys activity recents")
+                return rootTasks
+            }
+        }
+
+        Log.d(TAG, "getRecentTasks completed: ${result.size} tasks survived filtering")
+        return result
+    }
+
+    /**
+     * Fallback parser for Android 12 when standard getRecentTasks() is restricted to caller tasks.
+     * Parses dumpsys activity recents using libsu's persistent daemon.
+     */
+    private fun getRecentTasksFromRoot(maxNum: Int): List<RecentTaskInfo> {
+        val result = mutableListOf<RecentTaskInfo>()
+        try {
+            val shellResult = Shell.cmd("dumpsys activity recents").exec()
+            if (!shellResult.isSuccess || shellResult.out.isEmpty()) {
+                return emptyList()
+            }
+
+            val lines = shellResult.out
+            var currentTaskId = -1
+            var currentType: String
+            var currentPkg = ""
+            var currentCmp = ""
+            var isCurrentHome = false
+            val currentPackage = appContext.packageName
+
+            fun commitCurrentTask() {
+                if (currentTaskId > 0 && currentPkg.isNotEmpty() && !isCurrentHome) {
+                    val isLauncher = currentPkg == currentPackage ||
+                            currentCmp.contains("RecentsActivity") ||
+                            currentCmp.contains("MainActivity")
+                    if (!isLauncher && result.none { it.taskId == currentTaskId }) {
+                        val cachedMeta = getOrLoadAppMeta(currentPkg)
+                        val title = cachedMeta?.label ?: currentPkg
+                        val icon = cachedMeta?.icon
+                        val iconBitmap = cachedMeta?.iconBitmap
+                        val thumbnailBitmap = getTaskThumbnail(currentTaskId)
+                        val tintIndex = (Math.abs(currentPkg.hashCode())) % 4
+
+                        val baseIntent = if (currentCmp.isNotEmpty() && currentCmp.contains("/")) {
+                            val parts = currentCmp.split("/")
+                            val cls = if (parts[1].startsWith(".")) parts[0] + parts[1] else parts[1]
+                            Intent(Intent.ACTION_MAIN).apply {
+                                setClassName(parts[0], cls)
+                                addCategory(Intent.CATEGORY_LAUNCHER)
+                            }
+                        } else {
+                            packageManager.getLaunchIntentForPackage(currentPkg)
+                        }
+
+                        result.add(
+                            RecentTaskInfo(
+                                taskId = currentTaskId,
+                                title = title,
+                                packageName = currentPkg,
+                                icon = icon,
+                                iconBitmap = iconBitmap,
+                                thumbnail = thumbnailBitmap,
+                                baseIntent = baseIntent,
+                                tintIndex = tintIndex
+                            )
+                        )
+                    }
+                }
+                currentTaskId = -1
+                currentType = ""
+                currentPkg = ""
+                currentCmp = ""
+                isCurrentHome = false
+            }
+
+            for (line in lines) {
+                val trimmed = line.trim()
+                if (trimmed.startsWith("* Recent #")) {
+                    commitCurrentTask()
+                    if (result.size >= maxNum) break
+
+                    // e.g. * Recent #1: Task{b3b3168 #3466 type=standard A=10151:com.sevenshifts.android ...}
+                    if (trimmed.contains("Task{")) {
+                        val afterTask = trimmed.substringAfter("Task{")
+                        if (afterTask.contains("#")) {
+                            val idStr = afterTask.substringAfter("#").substringBefore(" ").substringBefore("}")
+                            currentTaskId = idStr.toIntOrNull() ?: -1
+                        }
+                    }
+                    val typeMatch = Regex("type=(\\w+)").find(trimmed)
+                    if (typeMatch != null) {
+                        currentType = typeMatch.groupValues[1]
+                        if (currentType == "home") {
+                            isCurrentHome = true
+                        }
+                    }
+                } else {
+                    if (trimmed.startsWith("taskId=")) {
+                        val tid = trimmed.substringAfter("taskId=").substringBefore(" ").toIntOrNull()
+                        if (tid != null && tid > 0) {
+                            currentTaskId = tid
+                        }
+                    } else if (trimmed.startsWith("mActivityComponent=")) {
+                        val comp = trimmed.substringAfter("mActivityComponent=").trim()
+                        if (comp.contains("/")) {
+                            currentCmp = comp
+                            currentPkg = comp.substringBefore("/")
+                        }
+                    } else if (trimmed.startsWith("intent=")) {
+                        if (trimmed.contains("cat=[android.intent.category.HOME]")) {
+                            isCurrentHome = true
+                        }
+                        if (currentPkg.isEmpty()) {
+                            val cmpMatch = Regex("cmp=([a-zA-Z0-9._]+)/([a-zA-Z0-9._$]+)").find(trimmed)
+                            if (cmpMatch != null) {
+                                currentPkg = cmpMatch.groupValues[1]
+                                currentCmp = "${cmpMatch.groupValues[1]}/${cmpMatch.groupValues[2]}"
+                            } else {
+                                val pkgMatch = Regex("pkg=([a-zA-Z0-9._]+)").find(trimmed)
+                                if (pkgMatch != null) {
+                                    currentPkg = pkgMatch.groupValues[1]
+                                }
+                            }
+                        }
+                    } else if (trimmed.startsWith("affinity=") && currentPkg.isEmpty()) {
+                        val aff = trimmed.substringAfter("affinity=").trim()
+                        val pkg = if (aff.contains(":")) aff.substringAfter(":") else aff
+                        if (pkg.isNotEmpty() && !pkg.contains(" ")) {
+                            currentPkg = pkg
+                        }
+                    }
+                }
+            }
+            commitCurrentTask()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get recent tasks from root", e)
         }
         return result
     }
@@ -166,10 +316,37 @@ class RecentTasksManager(context: Context) {
     }
 
     /**
-     * Extracts hardware buffer task snapshot bitmap via reflection, downscaling to card preview size.
+     * Extracts hardware buffer task snapshot bitmap via reflection or cached snapshot files.
      */
-    @SuppressLint("BlockedPrivateApi")
     private fun getTaskThumbnail(taskId: Int): ImageBitmap? {
+        // 1. Try reflection via ActivityTaskManager
+        val reflectionThumb = getTaskThumbnailViaReflection(taskId)
+        if (reflectionThumb != null) return reflectionThumb
+
+        // 2. Try reading cached snapshot file from system storage if accessible
+        val snapshotFiles = listOf(
+            File("/data/system_ce/0/snapshots/${taskId}_reduced.jpg"),
+            File("/data/system_ce/0/snapshots/${taskId}.jpg"),
+            File("/data/system/users/0/snapshots/${taskId}_reduced.jpg"),
+            File("/data/system/users/0/snapshots/${taskId}.jpg")
+        )
+        for (file in snapshotFiles) {
+            if (file.exists() && file.canRead()) {
+                try {
+                    val bmp = BitmapFactory.decodeFile(file.absolutePath)
+                    if (bmp != null) {
+                        bmp.prepareToDraw()
+                        return bmp.asImageBitmap()
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        return null
+    }
+
+    @SuppressLint("BlockedPrivateApi")
+    private fun getTaskThumbnailViaReflection(taskId: Int): ImageBitmap? {
         return try {
             val service = getAtmService() ?: return null
             val getTaskSnapshotMethod = getTaskSnapshotMethod ?: return null
@@ -232,7 +409,6 @@ class RecentTasksManager(context: Context) {
                 hardwareBuffer.close()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get thumbnail for task $taskId", e)
             null
         }
     }
@@ -261,7 +437,17 @@ class RecentTasksManager(context: Context) {
             Log.w(TAG, "moveTaskToFront failed for task ${task.taskId}", e)
         }
 
-        // 3. Fallback: launch app via standard launch intent or task baseIntent
+        // 3. Root shell: bring task to front via am start
+        if (RootShell.isSuBinaryPresent()) {
+            try {
+                val result = Shell.cmd("am start --activity-brought-to-front -p ${task.packageName}").exec()
+                if (result.isSuccess) return true
+            } catch (e: Exception) {
+                Log.w(TAG, "Root am start failed for ${task.packageName}", e)
+            }
+        }
+
+        // 4. Fallback: launch app via standard launch intent or task baseIntent
         try {
             val intent = task.baseIntent?.cloneFilter()
                 ?: packageManager.getLaunchIntentForPackage(task.packageName)
@@ -274,14 +460,7 @@ class RecentTasksManager(context: Context) {
             Log.w(TAG, "Failed to launch intent fallback for ${task.packageName}", e)
         }
 
-        // 4. Shell fallback if stock firmware restricts standard API
-        return try {
-            Runtime.getRuntime().exec(arrayOf("am", "start", "--activity-brought-to-front", "-p", task.packageName))
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Shell am start failed for ${task.packageName}", e)
-            false
-        }
+        return false
     }
 
     /**
@@ -315,20 +494,20 @@ class RecentTasksManager(context: Context) {
             Log.w(TAG, "Reflection removeTask failed for $taskId", e)
         }
 
-        // 2. Shell fallback for Android 11/12 (am task remove <taskId>)
-        if (!removed) {
+        // 2. Shell fallback for Android 11/12 (am stack remove <taskId>)
+        if (RootShell.isSuBinaryPresent()) {
             try {
-                // Check root first for clean task removal
-                if (com.crinklecodone.mochibun.core.system.RootShell.isSuBinaryPresent()) {
-                    val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "am stack remove $taskId"))
-                    proc.waitFor()
-                    removed = proc.exitValue() == 0
-                }
-                if (!removed) {
-                    val process = Runtime.getRuntime().exec(arrayOf("am", "stack", "remove", taskId.toString()))
-                    process.waitFor()
-                    removed = process.exitValue() == 0
-                }
+                val result = Shell.cmd("am stack remove $taskId").exec()
+                Log.d(TAG, "Root am stack remove $taskId result: isSuccess=${result.isSuccess}, code=${result.code}")
+                removed = result.isSuccess || removed
+            } catch (e: Exception) {
+                Log.e(TAG, "Root am stack remove failed for $taskId", e)
+            }
+        } else if (!removed) {
+            try {
+                val process = Runtime.getRuntime().exec(arrayOf("am", "stack", "remove", taskId.toString()))
+                process.waitFor()
+                removed = process.exitValue() == 0
             } catch (e: Exception) {
                 Log.e(TAG, "Shell fallback removeTask failed for $taskId", e)
             }
@@ -343,10 +522,9 @@ class RecentTasksManager(context: Context) {
             }
 
             // If root is available, issue am force-stop to guarantee complete termination
-            if (com.crinklecodone.mochibun.core.system.RootShell.isSuBinaryPresent()) {
+            if (RootShell.isSuBinaryPresent()) {
                 try {
-                    val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "am force-stop $packageName"))
-                    proc.waitFor()
+                    Shell.cmd("am force-stop $packageName").submit()
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to force-stop $packageName", e)
                 }

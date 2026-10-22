@@ -530,6 +530,7 @@ fun MainLauncher(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(currentTheme.bgColor)
                 .focusable()
                 .focusRequester(focusRequester)
                 .onPreviewKeyEvent { event ->
@@ -911,11 +912,91 @@ fun MainLauncher(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(currentTheme.bgColor)
+                )
             }
 
             val keyboardController = LocalSoftwareKeyboardController.current
             LaunchedEffect(pagerState.currentPage) {
                 keyboardController?.hide()
+            }
+
+            val onHomeHeaderClick = remember {
+                {
+                    homeFocusArea = 1
+                    launcherMenuOpen = true
+                }
+            }
+            val onHomeHeaderLongClick = remember {
+                {
+                    homeFocusArea = 1
+                    launcherMenuOpen = true
+                }
+            }
+            val onHomeAppClick: (LauncherApp) -> Unit = remember(favoriteApps) {
+                { app ->
+                    val appIdx = favoriteApps.indexOfFirst {
+                        it.packageName == app.packageName
+                    }
+                    if (appIdx != -1) {
+                        homeFocusArea = 0
+                        selectedFavoriteIndex = appIdx
+                        savedFavoriteIndexOnHome = appIdx
+                    }
+                }
+            }
+            val onHomeAppLongClick: (LauncherApp) -> Unit = remember(favoriteApps) {
+                { app ->
+                    val appIdx = favoriteApps.indexOfFirst {
+                        it.packageName == app.packageName
+                    }
+                    if (appIdx != -1) {
+                        homeFocusArea = 0
+                        selectedFavoriteIndex = appIdx
+                        savedFavoriteIndexOnHome = appIdx
+                    }
+                    selectedApp = app
+                }
+            }
+            val onHomeFolderClick: (FavoriteFolder) -> Unit = remember(favoriteApps, favoriteFolders) {
+                { folder ->
+                    val folderIdx =
+                        favoriteFolders.indexOfFirst { it.id == folder.id }
+                    if (folderIdx != -1) {
+                        val targetIdx = favoriteApps.size + folderIdx
+                        homeFocusArea = 0
+                        selectedFavoriteIndex = targetIdx
+                        savedFavoriteIndexOnHome = targetIdx
+                    }
+                    folderOpenStartRename = false
+                    folderOpenStartPicker = false
+                    lastOpenedFolderId = folder.id
+                    openedFolderId = folder.id
+                }
+            }
+            val onHomeFolderLongClick: (FavoriteFolder) -> Unit = remember(favoriteApps, favoriteFolders) {
+                { folder ->
+                    val folderIdx =
+                        favoriteFolders.indexOfFirst { it.id == folder.id }
+                    if (folderIdx != -1) {
+                        val targetIdx = favoriteApps.size + folderIdx
+                        homeFocusArea = 0
+                        selectedFavoriteIndex = targetIdx
+                        savedFavoriteIndexOnHome = targetIdx
+                    }
+                    iconEditingFolder = folder
+                    folderIconMenuOpen = true
+                }
+            }
+            val onHomeOpenDrawer = remember {
+                {
+                    selectedDrawerIndex = 0
+                    drawerOpen = true
+                }
             }
 
             HorizontalPager(
@@ -974,65 +1055,13 @@ fun MainLauncher(
                                 homeFocusArea = homeFocusArea,
                                 isHomeScreenActive = isHomeScreenActive,
                                 isPixelSprayEnabled = isPixelSprayEnabled,
-                                onHeaderClick = {
-                                    homeFocusArea = 1
-                                    launcherMenuOpen = true
-                                },
-                                onHeaderLongClick = {
-                                    homeFocusArea = 1
-                                    launcherMenuOpen = true
-                                },
-                                onAppClick = { app ->
-                                    val appIdx = favoriteApps.indexOfFirst {
-                                        it.packageName == app.packageName
-                                    }
-                                    if (appIdx != -1) {
-                                        homeFocusArea = 0
-                                        selectedFavoriteIndex = appIdx
-                                        savedFavoriteIndexOnHome = appIdx
-                                    }
-                                },
-                                onAppLongClick = { app ->
-                                    val appIdx = favoriteApps.indexOfFirst {
-                                        it.packageName == app.packageName
-                                    }
-                                    if (appIdx != -1) {
-                                        homeFocusArea = 0
-                                        selectedFavoriteIndex = appIdx
-                                        savedFavoriteIndexOnHome = appIdx
-                                    }
-                                    selectedApp = app
-                                },
-                                onFolderClick = { folder ->
-                                    val folderIdx =
-                                        favoriteFolders.indexOfFirst { it.id == folder.id }
-                                    if (folderIdx != -1) {
-                                        val targetIdx = favoriteApps.size + folderIdx
-                                        homeFocusArea = 0
-                                        selectedFavoriteIndex = targetIdx
-                                        savedFavoriteIndexOnHome = targetIdx
-                                    }
-                                    folderOpenStartRename = false
-                                    folderOpenStartPicker = false
-                                    lastOpenedFolderId = folder.id
-                                    openedFolderId = folder.id
-                                },
-                                onFolderLongClick = { folder ->
-                                    val folderIdx =
-                                        favoriteFolders.indexOfFirst { it.id == folder.id }
-                                    if (folderIdx != -1) {
-                                        val targetIdx = favoriteApps.size + folderIdx
-                                        homeFocusArea = 0
-                                        selectedFavoriteIndex = targetIdx
-                                        savedFavoriteIndexOnHome = targetIdx
-                                    }
-                                    iconEditingFolder = folder
-                                    folderIconMenuOpen = true
-                                },
-                                onOpenDrawer = {
-                                    selectedDrawerIndex = 0
-                                    drawerOpen = true
-                                }
+                                onHeaderClick = onHomeHeaderClick,
+                                onHeaderLongClick = onHomeHeaderLongClick,
+                                onAppClick = onHomeAppClick,
+                                onAppLongClick = onHomeAppLongClick,
+                                onFolderClick = onHomeFolderClick,
+                                onFolderLongClick = onHomeFolderLongClick,
+                                onOpenDrawer = onHomeOpenDrawer
                             )
                         }
                     }

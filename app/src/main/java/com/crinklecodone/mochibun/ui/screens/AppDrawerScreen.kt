@@ -41,6 +41,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,15 +79,17 @@ private val SQUIRCLE_TINTS = listOf(
     SquircleTint(container = Color(0xFFE2D9F7), border = Color(0xFFC7B6EE))  // Soft Lilac
 )
 
+private val DrawerCardShape = RoundedCornerShape(22.dp)
+private val DrawerSquircleShape = RoundedCornerShape(16.dp)
+
 private val DRAWER_ALPHABET = ('A'..'Z').toList()
+private val DRAWER_ALPHABET_STRINGS = ('A'..'Z').map { it.toString() }
 
 // Helper for A-Z section grouping and fast scrolling
 fun firstLetterOf(label: String): Char {
     val c = label.trim().firstOrNull()?.uppercaseChar() ?: return '#'
     return if (c in 'A'..'Z') c else '#'
 }
-
-
 
 /**
  * Standardized close pill button for dialogs and modals:
@@ -146,18 +149,18 @@ fun AppDrawerCard(
 ) {
     val theme = LocalLauncherTheme.current
     val squircleTint = SQUIRCLE_TINTS[index % SQUIRCLE_TINTS.size]
-    val cardShape = RoundedCornerShape(22.dp)
-    val squircleShape = RoundedCornerShape(16.dp)
 
-    val cardBrush = if (isSelected) {
-        Brush.horizontalGradient(
-            colors = listOf(
-                theme.focusedContainerColor,
-                theme.focusedContainerEndColor
+    val cardBrush = remember(isSelected, theme) {
+        if (isSelected) {
+            Brush.horizontalGradient(
+                colors = listOf(
+                    theme.focusedContainerColor,
+                    theme.focusedContainerEndColor
+                )
             )
-        )
-    } else {
-        SolidColor(theme.unfocusedCardBgColor)
+        } else {
+            SolidColor(theme.unfocusedCardBgColor)
+        }
     }
 
     Card(
@@ -170,7 +173,7 @@ fun AppDrawerCard(
                 onClick = { onAppClick(app) },
                 onLongClick = { onAppLongClick(app) }
             ),
-        shape = cardShape,
+        shape = DrawerCardShape,
         colors = CardDefaults.cardColors(
             containerColor = Color.Transparent
         ),
@@ -192,9 +195,9 @@ fun AppDrawerCard(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .clip(squircleShape)
+                        .clip(DrawerSquircleShape)
                         .background(squircleTint.container)
-                        .border(1.dp, squircleTint.border, squircleShape),
+                        .border(1.dp, squircleTint.border, DrawerSquircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     // FilterQuality.None avoids bilinear blurring on low-resolution / pixel icons at 480x800
@@ -221,6 +224,28 @@ fun AppDrawerCard(
             }
         }
     }
+}
+
+@Composable
+private fun AlphabetRailItem(
+    letterStr: String,
+    isActive: Boolean,
+    isAvailable: Boolean,
+    theme: LauncherTheme,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = letterStr,
+        fontSize = if (isActive) 10.5.sp else 9.5.sp,
+        fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.SemiBold,
+        textAlign = TextAlign.Center,
+        color = when {
+            isActive -> theme.palette.textColor
+            isAvailable -> theme.palette.textColor.copy(alpha = 0.65f)
+            else -> theme.palette.outline.copy(alpha = 0.5f)
+        },
+        modifier = modifier
+    )
 }
 
 /**
@@ -265,19 +290,14 @@ fun DrawerAlphabetRail(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        DRAWER_ALPHABET.forEach { letter ->
+        DRAWER_ALPHABET.forEachIndexed { index, letter ->
             val isActive = letter == activeLetter
             val isAvailable = letter in availableLetters
-            Text(
-                text = letter.toString(),
-                fontSize = if (isActive) 10.5.sp else 9.5.sp,
-                fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                color = when {
-                    isActive -> theme.palette.textColor
-                    isAvailable -> theme.palette.textColor.copy(alpha = 0.65f)
-                    else -> theme.palette.outline.copy(alpha = 0.5f)
-                },
+            AlphabetRailItem(
+                letterStr = DRAWER_ALPHABET_STRINGS[index],
+                isActive = isActive,
+                isAvailable = isAvailable,
+                theme = theme,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
@@ -389,15 +409,5 @@ fun AppDrawerScreen(
         BottomLavenderClouds(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
-
-        // 6. Bottom Home Navigation Pill: ^ ♥ Back to Home ♥
-        /*
-        DrawerHomeNavigation(
-            isFocused = selectedDrawerIndex == -1,
-            onClick = onBackToHome,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp)
-        )*/
     }
 }

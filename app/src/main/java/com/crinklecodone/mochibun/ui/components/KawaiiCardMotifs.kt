@@ -8,14 +8,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -62,7 +65,7 @@ enum class KawaiiMotifType {
     /** Four-pointed sparkle star (✧ hollow outline). */
     SPARKLE_FOUR_POINT_HOLLOW,
 
-    /** Tiny cross-glint / diamond sparkle (✢ with fine horizontal & vertical rays). */
+    /** Tiny cross-glint / diamond sparkle (🞢 with fine horizontal & vertical rays). */
     DIAMOND_GLINT,
 
     /** Soft miniature outline heart (♡). */
@@ -240,7 +243,7 @@ fun DrawScope.drawFourPointSparkle(
 }
 
 /**
- * Draws a delicate diamond sparkle with slender cross-glint rays (✢).
+ * Draws a delicate diamond sparkle with slender cross-glint rays (🞢).
  */
 fun DrawScope.drawDiamondGlint(
     center: Offset,
@@ -471,6 +474,9 @@ fun KawaiiCard(
     )
 }
 
+private val GLOW_EXPANSIONS_DP = floatArrayOf(3.5f, 2.4f, 1.4f, 0.6f)
+private val GLOW_ALPHAS = floatArrayOf(0.16f, 0.35f, 0.60f, 0.78f)
+
 fun Modifier.softGlowFocus(
     isSelected: Boolean,
     cornerRadius: Dp = 22.dp,
@@ -487,21 +493,20 @@ fun Modifier.softGlowFocus(
         .graphicsLayer { clip = false }
         .drawWithContent {
             val cornerPx = cornerRadius.toPx()
+            val d = density
+            val glowStroke = Stroke(width = 2.0f * d)
+            val borderStroke = Stroke(width = 1.8f * d)
 
             // 1. Concentric halo passes extending 0.6dp to 3.5dp beyond the component boundary
-            val glowSteps = listOf(
-                Pair(3.5.dp.toPx(), 0.16f),
-                Pair(2.4.dp.toPx(), 0.35f),
-                Pair(1.4.dp.toPx(), 0.60f),
-                Pair(0.6.dp.toPx(), 0.78f)
-            )
-            for ((expansion, alpha) in glowSteps) {
+            for (i in 0 until 4) {
+                val expansion = GLOW_EXPANSIONS_DP[i] * d
+                val alpha = GLOW_ALPHAS[i]
                 drawRoundRect(
                     color = effectiveGlow.copy(alpha = alpha),
                     topLeft = Offset(-expansion, -expansion),
                     size = Size(size.width + expansion * 2f, size.height + expansion * 2f),
                     cornerRadius = CornerRadius(cornerPx + expansion, cornerPx + expansion),
-                    style = Stroke(width = 2.0.dp.toPx())
+                    style = glowStroke
                 )
             }
 
@@ -522,23 +527,23 @@ fun Modifier.softGlowFocus(
                 topLeft = Offset.Zero,
                 size = size,
                 cornerRadius = CornerRadius(cornerPx, cornerPx),
-                style = Stroke(width = 1.8.dp.toPx())
+                style = borderStroke
             )
 
             // 5. Delicate outer glow halo focus accents (1–2 tiny sparkles)
-            val focusSparkleTopRight = Offset(size.width + 1.5.dp.toPx(), -2.dp.toPx())
+            val focusSparkleTopRight = Offset(size.width + 1.5f * d, -2f * d)
             drawFourPointSparkle(
                 center = focusSparkleTopRight,
-                sizePx = 7.5.dp.toPx(),
+                sizePx = 7.5f * d,
                 color = effectiveGlow.copy(alpha = 0.85f),
                 hollow = false
             )
-            val focusGlintBottomLeft = Offset(-2.dp.toPx(), size.height + 1.5.dp.toPx())
+            val focusGlintBottomLeft = Offset(-2f * d, size.height + 1.5f * d)
             drawDiamondGlint(
                 center = focusGlintBottomLeft,
-                sizePx = 6.0.dp.toPx(),
+                sizePx = 6.0f * d,
                 color = effectiveGlow.copy(alpha = 0.75f),
-                strokeWidthPx = 1.0.dp.toPx()
+                strokeWidthPx = 1.0f * d
             )
         }
 }
@@ -558,27 +563,55 @@ fun Modifier.glowingDoubleBorder(
 
 /**
  * Standardized Mochibun Section Header formatted as:
- * — ♡ [Screen/Section Name] ♡ —
+ * — ♡ Title ♡ —
  */
 @Composable
 fun MochibunSectionHeader(
     title: String,
     modifier: Modifier = Modifier,
-    color: Color = ActiveTheme.accentDeep
+    color: Color? = null
 ) {
-    val formatted = if (title.startsWith("— ♡") && title.endsWith("♡ —")) {
-        title
-    } else {
-        "— ♡ $title ♡ —"
+    val theme = LocalLauncherTheme.current
+    val palette = theme.palette
+    val textColor = color ?: palette.textColor
+
+    Row(
+        modifier = modifier.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(26.dp)
+                .height(1.dp)
+                .background(palette.outline)
+        )
+        Text(
+            text = "♡",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = palette.primary
+        )
+        Text(
+            text = title,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = textColor,
+            letterSpacing = 0.5.sp
+        )
+        Text(
+            text = "♡",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = palette.primary
+        )
+        Box(
+            modifier = Modifier
+                .width(26.dp)
+                .height(1.dp)
+                .background(palette.outline)
+        )
     }
-    Text(
-        text = formatted,
-        fontSize = 17.5.sp,
-        fontWeight = FontWeight.Bold,
-        color = color,
-        textAlign = TextAlign.Center,
-        modifier = modifier
-    )
 }
 
 /**
@@ -592,6 +625,8 @@ fun TopLavenderClouds(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
+    val backPath = remember { Path() }
+    val frontPath = remember { Path() }
 
     Canvas(
         modifier = modifier
@@ -599,35 +634,35 @@ fun TopLavenderClouds(
             .height(58.dp)
     ) {
         val w = size.width
+        val d = density
+        val outlineStroke = Stroke(width = 1.5f * d)
 
         // Back cloud layer
-        val backPath = Path().apply {
-            moveTo(0f, 0f)
-            lineTo(0f, 28.dp.toPx())
-            cubicTo(w * 0.05f, 54.dp.toPx(), w * 0.14f, 56.dp.toPx(), w * 0.20f, 38.dp.toPx())
-            cubicTo(w * 0.27f, 62.dp.toPx(), w * 0.40f, 64.dp.toPx(), w * 0.47f, 40.dp.toPx())
-            cubicTo(w * 0.54f, 60.dp.toPx(), w * 0.67f, 62.dp.toPx(), w * 0.74f, 42.dp.toPx())
-            cubicTo(w * 0.81f, 58.dp.toPx(), w * 0.93f, 57.dp.toPx(), w, 32.dp.toPx())
-            lineTo(w, 0f)
-            close()
-        }
+        backPath.reset()
+        backPath.moveTo(0f, 0f)
+        backPath.lineTo(0f, 28f * d)
+        backPath.cubicTo(w * 0.05f, 54f * d, w * 0.14f, 56f * d, w * 0.20f, 38f * d)
+        backPath.cubicTo(w * 0.27f, 62f * d, w * 0.40f, 64f * d, w * 0.47f, 40f * d)
+        backPath.cubicTo(w * 0.54f, 60f * d, w * 0.67f, 62f * d, w * 0.74f, 42f * d)
+        backPath.cubicTo(w * 0.81f, 58f * d, w * 0.93f, 57f * d, w, 32f * d)
+        backPath.lineTo(w, 0f)
+        backPath.close()
         drawPath(backPath, palette.cloudMid)
-        drawPath(backPath, palette.outline, style = Stroke(width = 1.5.dp.toPx()))
+        drawPath(backPath, palette.outline, style = outlineStroke)
 
         // Front cloud layer
-        val frontPath = Path().apply {
-            moveTo(0f, 0f)
-            lineTo(0f, 18.dp.toPx())
-            cubicTo(w * 0.04f, 42.dp.toPx(), w * 0.12f, 44.dp.toPx(), w * 0.17f, 26.dp.toPx())
-            cubicTo(w * 0.24f, 48.dp.toPx(), w * 0.35f, 49.dp.toPx(), w * 0.42f, 28.dp.toPx())
-            cubicTo(w * 0.48f, 46.dp.toPx(), w * 0.59f, 48.dp.toPx(), w * 0.65f, 30.dp.toPx())
-            cubicTo(w * 0.72f, 49.dp.toPx(), w * 0.85f, 48.dp.toPx(), w * 0.91f, 28.dp.toPx())
-            cubicTo(w * 0.96f, 38.dp.toPx(), w * 0.99f, 36.dp.toPx(), w, 20.dp.toPx())
-            lineTo(w, 0f)
-            close()
-        }
+        frontPath.reset()
+        frontPath.moveTo(0f, 0f)
+        frontPath.lineTo(0f, 18f * d)
+        frontPath.cubicTo(w * 0.04f, 42f * d, w * 0.12f, 44f * d, w * 0.17f, 26f * d)
+        frontPath.cubicTo(w * 0.24f, 48f * d, w * 0.35f, 49f * d, w * 0.42f, 28f * d)
+        frontPath.cubicTo(w * 0.48f, 46f * d, w * 0.59f, 48f * d, w * 0.65f, 30f * d)
+        frontPath.cubicTo(w * 0.72f, 49f * d, w * 0.85f, 48f * d, w * 0.91f, 28f * d)
+        frontPath.cubicTo(w * 0.96f, 38f * d, w * 0.99f, 36f * d, w, 20f * d)
+        frontPath.lineTo(w, 0f)
+        frontPath.close()
         drawPath(frontPath, palette.cloudFront)
-        drawPath(frontPath, palette.primary, style = Stroke(width = 1.5.dp.toPx()))
+        drawPath(frontPath, palette.primary, style = outlineStroke)
     }
 }
 
@@ -640,6 +675,8 @@ fun BottomLavenderClouds(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
+    val backPath = remember { Path() }
+    val frontPath = remember { Path() }
 
     Canvas(
         modifier = modifier
@@ -648,35 +685,35 @@ fun BottomLavenderClouds(
     ) {
         val w = size.width
         val h = size.height
+        val d = density
+        val outlineStroke = Stroke(width = 1.5f * d)
 
         // Back cloud layer rising from bottom
-        val backPath = Path().apply {
-            moveTo(0f, h)
-            lineTo(0f, h - 30.dp.toPx())
-            cubicTo(w * 0.06f, h - 58.dp.toPx(), w * 0.17f, h - 60.dp.toPx(), w * 0.24f, h - 40.dp.toPx())
-            cubicTo(w * 0.31f, h - 64.dp.toPx(), w * 0.44f, h - 66.dp.toPx(), w * 0.51f, h - 44.dp.toPx())
-            cubicTo(w * 0.58f, h - 62.dp.toPx(), w * 0.71f, h - 64.dp.toPx(), w * 0.77f, h - 42.dp.toPx())
-            cubicTo(w * 0.84f, h - 58.dp.toPx(), w * 0.95f, h - 57.dp.toPx(), w, h - 28.dp.toPx())
-            lineTo(w, h)
-            close()
-        }
+        backPath.reset()
+        backPath.moveTo(0f, h)
+        backPath.lineTo(0f, h - 30f * d)
+        backPath.cubicTo(w * 0.06f, h - 58f * d, w * 0.17f, h - 60f * d, w * 0.24f, h - 40f * d)
+        backPath.cubicTo(w * 0.31f, h - 64f * d, w * 0.44f, h - 66f * d, w * 0.51f, h - 44f * d)
+        backPath.cubicTo(w * 0.58f, h - 62f * d, w * 0.71f, h - 64f * d, w * 0.77f, h - 42f * d)
+        backPath.cubicTo(w * 0.84f, h - 58f * d, w * 0.95f, h - 57f * d, w, h - 28f * d)
+        backPath.lineTo(w, h)
+        backPath.close()
         drawPath(backPath, palette.cloudMid)
-        drawPath(backPath, palette.outline, style = Stroke(width = 1.5.dp.toPx()))
+        drawPath(backPath, palette.outline, style = outlineStroke)
 
         // Front cloud layer rising from bottom
-        val frontPath = Path().apply {
-            moveTo(0f, h)
-            lineTo(0f, h - 20.dp.toPx())
-            cubicTo(w * 0.05f, h - 42.dp.toPx(), w * 0.13f, h - 44.dp.toPx(), w * 0.19f, h - 26.dp.toPx())
-            cubicTo(w * 0.25f, h - 48.dp.toPx(), w * 0.37f, h - 50.dp.toPx(), w * 0.43f, h - 30.dp.toPx())
-            cubicTo(w * 0.50f, h - 46.dp.toPx(), w * 0.61f, h - 48.dp.toPx(), w * 0.67f, h - 32.dp.toPx())
-            cubicTo(w * 0.73f, h - 50.dp.toPx(), w * 0.86f, h - 48.dp.toPx(), w * 0.92f, h - 30.dp.toPx())
-            cubicTo(w * 0.97f, h - 38.dp.toPx(), w * 0.99f, h - 36.dp.toPx(), w, h - 20.dp.toPx())
-            lineTo(w, h)
-            close()
-        }
+        frontPath.reset()
+        frontPath.moveTo(0f, h)
+        frontPath.lineTo(0f, h - 20f * d)
+        frontPath.cubicTo(w * 0.05f, h - 42f * d, w * 0.13f, h - 44f * d, w * 0.19f, h - 26f * d)
+        frontPath.cubicTo(w * 0.25f, h - 48f * d, w * 0.37f, h - 50f * d, w * 0.43f, h - 30f * d)
+        frontPath.cubicTo(w * 0.50f, h - 46f * d, w * 0.61f, h - 48f * d, w * 0.67f, h - 32f * d)
+        frontPath.cubicTo(w * 0.73f, h - 50f * d, w * 0.86f, h - 48f * d, w * 0.92f, h - 30f * d)
+        frontPath.cubicTo(w * 0.97f, h - 38f * d, w * 0.99f, h - 36f * d, w, h - 20f * d)
+        frontPath.lineTo(w, h)
+        frontPath.close()
         drawPath(frontPath, palette.cloudFront)
-        drawPath(frontPath, palette.primary, style = Stroke(width = 1.5.dp.toPx()))
+        drawPath(frontPath, palette.primary, style = outlineStroke)
     }
 }
 

@@ -4,9 +4,9 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.ImageDecoder
 import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.drawable.Animatable
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -17,11 +17,12 @@ import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
+import coil.imageLoader
+import coil.request.Disposable
+import coil.request.ImageRequest
 import com.crinklecodone.mochibun.R
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
 import com.crinklecodone.mochibun.data.prefs.HotspotAlignment
-import java.nio.ByteBuffer
-import kotlin.math.roundToInt
 
 /**
  * High-performance, pixel-crisp overlay view for the system-wide virtual mouse pointer.
@@ -45,6 +46,8 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     private var currentDrawable: Drawable? = null
     private var defaultCursorBitmap: Bitmap? = null
     private var clickFeedbackAnimator: ValueAnimator? = null
+    private var currentDisposable: Disposable? = null
+    private var isOverlayVisible = false
 
     var currentX: Float = 240f
         private set
@@ -114,92 +117,94 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     }
 
     /**
-     * Patches the Graphic Control Extension (GCE) delay bytes in a GIF file byte stream
-     * so that playback speed matches the user's chosen playback speed slider.
+     * Pauses running animated drawables (e.g. GIF) when the cursor is hidden.
+     * Prevents unnecessary CPU / Choreographer overhead in the background.
      */
-    private fun patchGifPlaybackSpeed(rawBytes: ByteArray, speed: Float): ByteArray {
-        if (rawBytes.size < 13) return rawBytes
-        // Verify GIF header (GIF87a or GIF89a)
-        if (rawBytes[0] != 'G'.code.toByte() || rawBytes[1] != 'I'.code.toByte() || rawBytes[2] != 'F'.code.toByte()) {
-            return rawBytes
-        }
-        val output = rawBytes.clone()
-        val safeSpeed = speed.coerceIn(0.1f, 3.0f)
-        var i = 0
-        val limit = output.size - 7
-        while (i < limit) {
-            // GCE block signature: 0x21, 0xF9, 0x04
-            if (output[i] == 0x21.toByte() &&
-                output[i + 1] == 0xF9.toByte() &&
-                output[i + 2] == 0x04.toByte()
-            ) {
-                val low = output[i + 4].toInt() and 0xFF
-                val high = output[i + 5].toInt() and 0xFF
-                val oldDelay = low or (high shl 8)
-                // When original delay is 0 (like in cursor.gif) or too small (<2), default base delay is 10 (100ms / 10 fps)
-                val baseDelay = if (oldDelay >= 2) oldDelay else 10
-                val newDelay = (baseDelay / safeSpeed).roundToInt().coerceIn(1, 65535)
-
-                output[i + 4] = (newDelay and 0xFF).toByte()
-                output[i + 5] = ((newDelay shr 8) and 0xFF).toByte()
-                i += 7
-            } else {
-                i++
-            }
-        }
-        return output
+    fun pauseAnimation() {
+        isOverlayVisible = false
+        (currentDrawable as? Animatable)?.stop()
     }
 
-    private fun decodeToDrawable(rawBytes: ByteArray): Drawable {
-        val patched = patchGifPlaybackSpeed(rawBytes, gifPlaybackSpeed)
-        val source = ImageDecoder.createSource(ByteBuffer.wrap(patched))
-        val decoded = ImageDecoder.decodeDrawable(source) { decoder, _, _ ->
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            decoder.isMutableRequired = false
-        }
-
-        if (decoded is AnimatedImageDrawable) {
-            decoded.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
-            decoded.start()
-        } else if (decoded is BitmapDrawable) {
-            // Disable bilinear filtering to keep pixel art crisp
-            decoded.paint.isFilterBitmap = false
-            decoded.paint.isDither = false
-        }
-        return decoded
+    /**
+     * Resumes animation when the cursor becomes visible on screen.
+     */
+    fun resumeAnimation() {
+        isOverlayVisible = true
+        (currentDrawable as? Animatable)?.start()
     }
 
+    /**
+     * Loads the cursor asset asynchronously using Coil. Supports custom file/content URIs
+     * and animated GIFs, falling back gracefully to bundled R.drawable.cursor or programmatic pixel art.
+     */
     private fun loadCursorAsset(uri: Uri?) {
-        // Stop any running animated drawable
-        (currentDrawable as? AnimatedImageDrawable)?.stop()
+        currentDisposable?.dispose()
+        currentDisposable = null
+        (currentDrawable as? Animatable)?.stop()
 
-        if (uri != null) {
-            try {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (bytes != null && bytes.isNotEmpty()) {
-                    val decoded = decodeToDrawable(bytes)
-                    currentDrawable = decoded
-                    imageView.setImageDrawable(decoded)
-                    return
+        val targetData: Any = uri ?: R.drawable.cursor
+
+        val request = ImageRequest.Builder(context)
+            .data(targetData)
+            .target(
+                onSuccess = { drawable ->
+                    applyCursorDrawable(drawable)
+                },
+                onError = {
+                    if (uri != null) {
+                        Log.w(TAG, "Failed to load custom cursor URI ($uri), falling back to default cursor")
+                        loadDefaultBundledCursor()
+                    } else {
+                        Log.w(TAG, "Failed to load default bundled cursor, falling back to programmatic cursor")
+                        applyProgrammaticFallback()
+                    }
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to load custom cursor URI ($uri), using default: ${e.message}")
-            }
+            )
+            .build()
+
+        currentDisposable = context.imageLoader.enqueue(request)
+    }
+
+    private fun loadDefaultBundledCursor() {
+        val fallbackRequest = ImageRequest.Builder(context)
+            .data(R.drawable.cursor)
+            .target(
+                onSuccess = { drawable ->
+                    applyCursorDrawable(drawable)
+                },
+                onError = {
+                    Log.w(TAG, "Failed to load bundled fallback cursor, applying programmatic cursor")
+                    applyProgrammaticFallback()
+                }
+            )
+            .build()
+        currentDisposable = context.imageLoader.enqueue(fallbackRequest)
+    }
+
+    private fun applyCursorDrawable(drawable: Drawable) {
+        (currentDrawable as? Animatable)?.stop()
+
+        if (drawable is AnimatedImageDrawable) {
+            drawable.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
         }
 
-        // Fallback to default cursor.gif located in res/drawable-nodpi/
-        try {
-            @Suppress("ResourceType")
-            val bytes = context.resources.openRawResource(R.drawable.cursor).use { it.readBytes() }
-            val decoded = decodeToDrawable(bytes)
-            currentDrawable = decoded
-            imageView.setImageDrawable(decoded)
-            return
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to load default R.drawable.cursor: ${e.message}")
+        if (drawable is BitmapDrawable) {
+            // Disable bilinear filtering to keep pixel art crisp
+            drawable.paint.isFilterBitmap = false
+            drawable.paint.isDither = false
+            drawable.paint.isAntiAlias = false
         }
 
-        // Secondary fallback to programmatic kawaii pixel cursor
+        currentDrawable = drawable
+        imageView.setImageDrawable(drawable)
+
+        if (isOverlayVisible && drawable is Animatable) {
+            drawable.start()
+        }
+    }
+
+    private fun applyProgrammaticFallback() {
+        (currentDrawable as? Animatable)?.stop()
         val bitmap = getDefaultCursorBitmap()
         val bitmapDrawable = BitmapDrawable(context.resources, bitmap).apply {
             paint.isFilterBitmap = false
@@ -356,7 +361,9 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     fun release() {
         clickFeedbackAnimator?.cancel()
         clickFeedbackAnimator = null
-        (currentDrawable as? AnimatedImageDrawable)?.stop()
+        currentDisposable?.dispose()
+        currentDisposable = null
+        pauseAnimation()
         imageView.setImageDrawable(null)
         currentDrawable = null
         defaultCursorBitmap?.recycle()

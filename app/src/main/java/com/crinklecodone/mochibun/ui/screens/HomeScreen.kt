@@ -39,8 +39,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -750,16 +754,16 @@ private fun FavoriteFolderSlot(
         label = "favFolderScale"
     )
 
-    val preferences = remember(context) {
-        context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
-    }
-
-    val folderIconName = remember(preferences, folder.id, folderIconRefreshKey) {
-        preferences.getString("custom_folder_icon_${folder.id}", null)
-    }
-
-    val folderIconBitmap = remember(context, folderIconName, folderIconRefreshKey) {
-        IconPackManager.getCachedImageBitmap(context, folderIconName, 96)
+    val folderIconBitmap by produceState<ImageBitmap?>(
+        initialValue = null,
+        folder.id,
+        folderIconRefreshKey
+    ) {
+        withContext(Dispatchers.IO) {
+            val preferences = context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
+            val folderIconName = preferences.getString("custom_folder_icon_${folder.id}", null)
+            value = IconPackManager.getCachedImageBitmap(context, folderIconName, 96)
+        }
     }
 
     val squircleBg = if (index % 2 == 0) palette.squirclePrimary else palette.squircleSecondary
@@ -795,10 +799,11 @@ private fun FavoriteFolderSlot(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            if (folderIconBitmap != null) {
+            val currentIcon = folderIconBitmap
+            if (currentIcon != null) {
                 // FilterQuality.None preserves crisp 1:1 pixel rendering on 480x800
                 Image(
-                    bitmap = folderIconBitmap,
+                    bitmap = currentIcon,
                     contentDescription = folder.name,
                     filterQuality = FilterQuality.None,
                     modifier = Modifier.size(34.dp)
@@ -1110,13 +1115,16 @@ fun FolderWithHeartIcon(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
+    val folderPath = remember { Path() }
+    val heartPath = remember { Path() }
 
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
 
         // Folder back tab & body
-        val folderPath = Path().apply {
+        folderPath.reset()
+        folderPath.apply {
             moveTo(w * 0.12f, h * 0.28f)
             lineTo(w * 0.42f, h * 0.28f)
             lineTo(w * 0.52f, h * 0.38f)
@@ -1137,7 +1145,8 @@ fun FolderWithHeartIcon(
         val hh = h * 0.22f
         val cx = w * 0.50f
         val cy = h * 0.62f
-        val heartPath = Path().apply {
+        heartPath.reset()
+        heartPath.apply {
             moveTo(cx, cy + hh * 0.35f)
             cubicTo(cx - hw * 0.5f, cy - hh * 0.15f, cx - hw * 0.5f, cy - hh * 0.5f, cx, cy - hh * 0.15f)
             cubicTo(cx + hw * 0.5f, cy - hh * 0.5f, cx + hw * 0.5f, cy - hh * 0.15f, cx, cy + hh * 0.35f)

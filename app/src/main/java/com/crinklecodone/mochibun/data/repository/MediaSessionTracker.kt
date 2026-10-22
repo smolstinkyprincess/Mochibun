@@ -17,9 +17,14 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import com.crinklecodone.mochibun.service.MochibunNotificationListenerService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 data class MochibunMediaState(
     val isPlaying: Boolean = false,
@@ -55,6 +60,9 @@ object MediaSessionTracker {
 
     private val _mediaState = MutableStateFlow(MochibunMediaState())
     val mediaState: StateFlow<MochibunMediaState> = _mediaState.asStateFlow()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var artworkDecodeJob: Job? = null
 
     private var activeController: MediaController? = null
     private var sessionManager: MediaSessionManager? = null
@@ -168,6 +176,9 @@ object MediaSessionTracker {
     }
 
     fun updateFromController(controller: MediaController?) {
+        artworkDecodeJob?.cancel()
+        artworkDecodeJob = null
+
         if (controller == null) {
             _mediaState.value = MochibunMediaState()
             return
@@ -189,20 +200,14 @@ object MediaSessionTracker {
             ?: "Unknown Artist"
         val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
 
-        var artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+        val artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
 
-        if (artwork == null && appContext != null) {
-            val artUri = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+        val artUri = if (artwork == null) {
+            metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
                 ?: metadata?.getString(MediaMetadata.METADATA_KEY_ART_URI)
-            if (artUri != null) {
-                try {
-                    val uri = Uri.parse(artUri)
-                    val stream = appContext?.contentResolver?.openInputStream(uri)
-                    artwork = BitmapFactory.decodeStream(stream)
-                    stream?.close()
-                } catch (_: java.io.IOException) {}
-            }
+        } else {
+            null
         }
 
         _mediaState.value = MochibunMediaState(
@@ -217,6 +222,21 @@ object MediaSessionTracker {
             packageName = controller.packageName,
             sessionActivity = controller.sessionActivity
         )
+
+        if (artwork == null && artUri != null && appContext != null) {
+            val context = appContext
+            artworkDecodeJob = scope.launch(Dispatchers.IO) {
+                try {
+                    val uri = Uri.parse(artUri)
+                    val bitmap = context?.contentResolver?.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream)
+                    }
+                    if (bitmap != null) {
+                        _mediaState.value = _mediaState.value.copy(artwork = bitmap)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     fun skipToPrevious() {
@@ -266,6 +286,8 @@ object MediaSessionTracker {
     }
 
     fun stopTracking() {
+        artworkDecodeJob?.cancel()
+        artworkDecodeJob = null
         try {
             activeController?.unregisterCallback(controllerCallback)
         } catch (_: IllegalArgumentException) {}

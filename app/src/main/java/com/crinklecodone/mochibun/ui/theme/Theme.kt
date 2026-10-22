@@ -7,7 +7,6 @@ package com.crinklecodone.mochibun.ui.theme
 
 import android.app.Activity
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -30,17 +29,17 @@ private val PinkLightColorScheme = lightColorScheme(
     onSurface = ThemeOnSurface
 )
 
-// High-contrast fallback scheme for dark mode contexts
+// Cohesive pastel scheme for dark mode contexts (maintains pastel background instead of dark purple)
 private val PinkDarkColorScheme = darkColorScheme(
     primary = PinkPrimary,
     onPrimary = PinkOnPrimary,
     secondary = LavenderSecondary,
     onSecondary = LavenderOnSecondary,
     tertiary = PinkTertiary,
-    background = ThemeOnBackground,
-    onBackground = ThemeBackground,
-    surface = ThemeOnBackground,
-    onSurface = ThemeBackground
+    background = ThemeBackground,
+    onBackground = ThemeOnBackground,
+    surface = ThemeSurface,
+    onSurface = ThemeOnSurface
 )
 
 /**
@@ -49,10 +48,11 @@ private val PinkDarkColorScheme = darkColorScheme(
  * Note: Dynamic Material You wallpaper coloring is disabled by default (dynamicColor = false).
  * System wallpaper extraction on Android 12 frequently generates muddy brown/olive tones that
  * clash with Mochibun's bespoke pastel pinks and break focus ring visibility on low-contrast screens.
+ * Defaults to light/pastel scheme to preserve the launcher's signature aesthetic.
  */
 @Composable
 fun MochibunTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {

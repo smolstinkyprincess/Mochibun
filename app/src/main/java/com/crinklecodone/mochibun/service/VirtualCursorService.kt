@@ -133,6 +133,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
 
     override fun onInterrupt() {
         stopMovementTicker()
+        overlayView?.pauseAnimation()
     }
 
     private fun reloadConfig() {
@@ -160,9 +161,11 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
             }
             view.visibility = View.VISIBLE
             view.updatePosition(physics.posX, physics.posY)
+            view.resumeAnimation()
             Log.d(TAG, "Virtual cursor activated at (${physics.posX}, ${physics.posY})")
         } else {
             stopMovementTicker()
+            view.pauseAnimation()
             view.visibility = View.GONE
             Log.d(TAG, "Virtual cursor hidden")
         }

@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.crinklecodone.mochibun.ui.theme.MochibunTheme
+import com.crinklecodone.mochibun.ui.theme.ThemeBackground
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -98,7 +99,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MochibunTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = ThemeBackground
+                ) { innerPadding ->
                     MainLauncher(
                         name = "Android",
                         modifier = Modifier.padding(innerPadding),

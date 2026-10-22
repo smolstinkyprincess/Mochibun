@@ -40,3 +40,7 @@
 # kaml (YAML parser)
 -dontwarn com.charleskorn.kaml.**
 -keep class com.charleskorn.kaml.** { *; }
+
+# coil (animated cursors)
+-keep class coil.decode.GifDecoder { *; }
+-keep class coil.decode.AnimatedImageDecoder { *; }

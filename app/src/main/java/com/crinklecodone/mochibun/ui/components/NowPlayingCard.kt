@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,12 +34,49 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.data.repository.MochibunMediaState
+
+private val STRAWBERRY_ROWS = listOf(
+    "......SS........", // Row 0: stem
+    ".....SSS........", // Row 1: stem curve
+    "...GLLSSLLG.....", // Row 2: leaves top
+    "..GLLLLLLLLG....", // Row 3: leaves spread
+    "..OGGGLLGGGO....", // Row 4: leaf base / crown
+    ".ORRRRRRRRRRO...", // Row 5: top of strawberry
+    "ORRWRRRRRRWRRO..", // Row 6: upper seeds
+    "ORRRRRRRRRRRRO..", // Row 7: body
+    "ORRERRRRRRERRO..", // Row 8: eyes
+    "ORBBERRRREBBRO..", // Row 9: blush & eye lower
+    "ORRRRM..MRRRRO..", // Row 10: smile corners
+    "ORRRR.MM.RRRRO..", // Row 11: smile bottom
+    ".OKRRWRRRRWRKO..", // Row 12: lower seeds & shadow
+    "..OKKRRRRKKO....", // Row 13: tapering body
+    "...OKKKKKKO.....", // Row 14: bottom tip
+    ".....OOOO......."  // Row 15: tip outline
+)
+
+private val BUNNY_AVATAR_ROWS = listOf(
+    "..O.O....O.O..",
+    ".OWPWO..OWPWO.",
+    ".OWPWO..OWPWO.",
+    ".OWWWO..OWWWO.",
+    ".OOOOOOOOOOOO.",
+    "OWWWWWWWWWWWWO",
+    "OWWWWWWWWWWWWO",
+    "OWWDWWWWWWWDWO",
+    "OWWWWWWWWWWWWO",
+    "OWPPWWDDWWPPO.",
+    "OWWWWWWWWWWWWO",
+    ".OWWWWWWWWWWO.",
+    "..OOOOOOOOOO..",
+    ".............."
+)
 
 /**
  * Crisp pixel-art smiling strawberry sprite matching the reference mockup.
@@ -53,26 +91,7 @@ fun PixelStrawberrySprite(
     Canvas(modifier = modifier.size(size)) {
         val pixelSize = this.size.width / 16f
 
-        val rows = listOf(
-            "......SS........", // Row 0: stem
-            ".....SSS........", // Row 1: stem curve
-            "...GLLSSLLG.....", // Row 2: leaves top
-            "..GLLLLLLLLG....", // Row 3: leaves spread
-            "..OGGGLLGGGO....", // Row 4: leaf base / crown
-            ".ORRRRRRRRRRO...", // Row 5: top of strawberry
-            "ORRWRRRRRRWRRO..", // Row 6: upper seeds
-            "ORRRRRRRRRRRRO..", // Row 7: body
-            "ORRERRRRRRERRO..", // Row 8: eyes
-            "ORBBERRRREBBRO..", // Row 9: blush & eye lower
-            "ORRRRM..MRRRRO..", // Row 10: smile corners
-            "ORRRR.MM.RRRRO..", // Row 11: smile bottom
-            ".OKRRWRRRRWRKO..", // Row 12: lower seeds & shadow
-            "..OKKRRRRKKO....", // Row 13: tapering body
-            "...OKKKKKKO.....", // Row 14: bottom tip
-            ".....OOOO......."  // Row 15: tip outline
-        )
-
-        rows.forEachIndexed { y, row ->
+        STRAWBERRY_ROWS.forEachIndexed { y, row ->
             row.forEachIndexed { x, char ->
                 val color = when (char) {
                     'S' -> Color(0xFF2C6B33) // stem
@@ -107,6 +126,10 @@ fun HeartScrubberProgressBar(
     progress: Float,
     modifier: Modifier = Modifier
 ) {
+    val heartPath = remember { Path() }
+    val density = LocalDensity.current
+    val scrubberStroke = remember(density) { Stroke(width = with(density) { 1.2.dp.toPx() }) }
+
     Canvas(
         modifier = modifier
             .fillMaxWidth()
@@ -143,14 +166,13 @@ fun HeartScrubberProgressBar(
         val hy = h / 2f
         val s = thumbRadius
 
-        val heartPath = Path().apply {
-            moveTo(hx, hy + s * 0.75f)
-            cubicTo(hx - s * 1.15f, hy + s * 0.1f, hx - s * 1.15f, hy - s * 0.85f, hx, hy - s * 0.35f)
-            cubicTo(hx + s * 1.15f, hy - s * 0.85f, hx + s * 1.15f, hy + s * 0.1f, hx, hy + s * 0.75f)
-            close()
-        }
+        heartPath.reset()
+        heartPath.moveTo(hx, hy + s * 0.75f)
+        heartPath.cubicTo(hx - s * 1.15f, hy + s * 0.1f, hx - s * 1.15f, hy - s * 0.85f, hx, hy - s * 0.35f)
+        heartPath.cubicTo(hx + s * 1.15f, hy - s * 0.85f, hx + s * 1.15f, hy + s * 0.1f, hx, hy + s * 0.75f)
+        heartPath.close()
         drawPath(heartPath, Color(0xFFFCD3DE))
-        drawPath(heartPath, Color(0xFFE59AA8), style = Stroke(width = 1.2.dp.toPx()))
+        drawPath(heartPath, Color(0xFFE59AA8), style = scrubberStroke)
     }
 }
 
@@ -228,24 +250,7 @@ fun PixelBunnyAvatar(
     Canvas(modifier = modifier.size(size)) {
         val pixelSize = this.size.width / 14f
 
-        val rows = listOf(
-            "..O.O....O.O..",
-            ".OWPWO..OWPWO.",
-            ".OWPWO..OWPWO.",
-            ".OWWWO..OWWWO.",
-            ".OOOOOOOOOOOO.",
-            "OWWWWWWWWWWWWO",
-            "OWWWWWWWWWWWWO",
-            "OWWDWWWWWWWDWO",
-            "OWWWWWWWWWWWWO",
-            "OWPPWWDDWWPPO.",
-            "OWWWWWWWWWWWWO",
-            ".OWWWWWWWWWWO.",
-            "..OOOOOOOOOO..",
-            ".............."
-        )
-
-        rows.forEachIndexed { y, row ->
+        BUNNY_AVATAR_ROWS.forEachIndexed { y, row ->
             row.forEachIndexed { x, ch ->
                 val color = when (ch) {
                     'O' -> Color(0xFF4A2E56) // deep plum outline

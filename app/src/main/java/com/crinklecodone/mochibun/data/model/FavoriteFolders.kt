@@ -10,7 +10,3 @@ data class FavoriteFolder(
     val appPackages: List<String>
 )
 
-sealed class FavoriteItem {
-    data class App(val packageName: String) : FavoriteItem()
-    data class Folder(val folderId: String) : FavoriteItem()
-}
