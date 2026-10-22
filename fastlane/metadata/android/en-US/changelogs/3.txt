@@ -1,0 +1,4 @@
+- Unified Hardware Button Remapper UI to match updated Settings and Theme Studio
+- Improved D-pad navigation and dialog layouts for 480x800 flip screens
+- Refined pixel art mascot assets and border themes
+- Stability fixes for QuickSwitch recents provider integration
