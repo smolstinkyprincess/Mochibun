@@ -37,6 +37,27 @@ object PreferencesManager {
     const val KEY_THEME_PRESET = "theme_preset"
     const val DEFAULT_THEME_PRESET = "sakura_dream"
 
+    const val KEY_THEME_BG_COLOR = "theme_bg_color"
+    const val KEY_THEME_FG_TEXT_COLOR = "theme_fg_text_color"
+    const val KEY_THEME_CARD_BG_COLOR = "theme_card_bg_color"
+    const val KEY_THEME_CARD_TEXT_COLOR = "theme_card_text_color"
+    const val KEY_THEME_GREETING_COLOR = "theme_greeting_color"
+    const val KEY_THEME_GREETING_OUTLINE_COLOR = "theme_greeting_outline_color"
+    const val KEY_THEME_GREETING_BG_COLOR = "theme_greeting_bg_color"
+    const val KEY_THEME_APP_ACTION_COLOR = "theme_app_action_color"
+    const val KEY_THEME_CARD_ROUNDNESS = "theme_card_roundness"
+
+    val THEME_COLOR_KEYS = listOf(
+        KEY_THEME_BG_COLOR,
+        KEY_THEME_FG_TEXT_COLOR,
+        KEY_THEME_CARD_BG_COLOR,
+        KEY_THEME_CARD_TEXT_COLOR,
+        KEY_THEME_GREETING_COLOR,
+        KEY_THEME_GREETING_OUTLINE_COLOR,
+        KEY_THEME_GREETING_BG_COLOR,
+        KEY_THEME_APP_ACTION_COLOR
+    )
+
     const val KEY_DPAD_WRAP_AROUND = "pref_dpad_wrap_around"
     const val DEFAULT_DPAD_WRAP_AROUND = true
 
@@ -124,54 +145,15 @@ object PreferencesManager {
         }
     }
 
-    fun loadFavoriteFolders(context: Context): List<FavoriteFolder> {
-        val preferences = getPrefs(context)
-        val saved = preferences.getString(KEY_FAVORITE_FOLDERS, null) ?: return emptyList()
-        return try {
-            val json = JSONArray(saved)
-            buildList {
-                for (i in 0 until json.length()) {
-                    val item = json.optJSONObject(i) ?: continue
-                    val id = item.optString("id")
-                    val name = item.optString("name")
-                    val packages = item.optJSONArray("apps") ?: JSONArray()
-                    if (id.isBlank() || name.isBlank()) continue
-                    val appPackages = buildList {
-                        for (j in 0 until packages.length()) {
-                            val pkg = packages.optString(j)
-                            if (pkg.isNotBlank() && pkg !in this) add(pkg)
-                        }
-                    }
-                    add(FavoriteFolder(id = id, name = name, appPackages = appPackages))
-                }
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
-    fun saveFavoriteFolders(context: Context, folders: List<FavoriteFolder>) {
-        val json = JSONArray()
-        folders.forEach { folder ->
-            json.put(
-                JSONObject()
-                    .put("id", folder.id)
-                    .put("name", folder.name)
-                    .put("apps", JSONArray(folder.appPackages))
-            )
-        }
-        getPrefs(context).edit()
-            .putString(KEY_FAVORITE_FOLDERS, json.toString())
-            .apply()
-    }
-
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     fun isPixelSprayWallpaperEnabled(context: Context): Boolean {
-        init(context)
-        return _isPixelSprayEnabled.value
+        return getPrefs(context).getBoolean(
+            KEY_PIXELSPRAY_WALLPAPER_ENABLED,
+            DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED
+        )
     }
 
     fun setPixelSprayWallpaperEnabled(context: Context, enabled: Boolean) {
@@ -180,8 +162,10 @@ object PreferencesManager {
     }
 
     fun isSystemMonitorEnabled(context: Context): Boolean {
-        init(context)
-        return _isSystemMonitorEnabled.value
+        return getPrefs(context).getBoolean(
+            KEY_SYSTEM_MONITOR_ENABLED,
+            DEFAULT_SYSTEM_MONITOR_ENABLED
+        )
     }
 
     fun setSystemMonitorEnabled(context: Context, enabled: Boolean) {
@@ -190,18 +174,22 @@ object PreferencesManager {
     }
 
     fun isFolderGridMode(context: Context): Boolean {
-        init(context)
-        return _isFolderGridMode.value
+        return getPrefs(context).getBoolean(
+            KEY_FOLDER_GRID_MODE,
+            DEFAULT_FOLDER_GRID_MODE
+        )
     }
 
-    fun setFolderGridMode(context: Context, isGrid: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_FOLDER_GRID_MODE, isGrid).apply()
-        _isFolderGridMode.value = isGrid
+    fun setFolderGridMode(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_FOLDER_GRID_MODE, enabled).apply()
+        _isFolderGridMode.value = enabled
     }
 
     fun isT9SearchEnabled(context: Context): Boolean {
-        init(context)
-        return _isT9SearchEnabled.value
+        return getPrefs(context).getBoolean(
+            KEY_T9_SEARCH_ENABLED,
+            DEFAULT_T9_SEARCH_ENABLED
+        )
     }
 
     fun setT9SearchEnabled(context: Context, enabled: Boolean) {
@@ -210,18 +198,22 @@ object PreferencesManager {
     }
 
     fun getSystemMonitorInterval(context: Context): Int {
-        init(context)
-        return _systemMonitorInterval.value
+        return getPrefs(context).getInt(
+            KEY_SYSTEM_MONITOR_INTERVAL,
+            DEFAULT_SYSTEM_MONITOR_INTERVAL
+        )
     }
 
-    fun setSystemMonitorInterval(context: Context, intervalSec: Int) {
-        getPrefs(context).edit().putInt(KEY_SYSTEM_MONITOR_INTERVAL, intervalSec).apply()
-        _systemMonitorInterval.value = intervalSec
+    fun setSystemMonitorInterval(context: Context, seconds: Int) {
+        getPrefs(context).edit().putInt(KEY_SYSTEM_MONITOR_INTERVAL, seconds).apply()
+        _systemMonitorInterval.value = seconds
     }
 
     fun getCustomUserName(context: Context): String {
-        init(context)
-        return _customUserName.value
+        return getPrefs(context).getString(
+            KEY_CUSTOM_USER_NAME,
+            DEFAULT_CUSTOM_USER_NAME
+        ) ?: DEFAULT_CUSTOM_USER_NAME
     }
 
     fun setCustomUserName(context: Context, name: String) {
@@ -230,18 +222,22 @@ object PreferencesManager {
     }
 
     fun getThemePreset(context: Context): String {
-        init(context)
-        return _themePreset.value
+        return getPrefs(context).getString(
+            KEY_THEME_PRESET,
+            DEFAULT_THEME_PRESET
+        ) ?: DEFAULT_THEME_PRESET
     }
 
-    fun setThemePreset(context: Context, presetId: String) {
-        getPrefs(context).edit().putString(KEY_THEME_PRESET, presetId).apply()
-        _themePreset.value = presetId
+    fun setThemePreset(context: Context, preset: String) {
+        getPrefs(context).edit().putString(KEY_THEME_PRESET, preset).apply()
+        _themePreset.value = preset
     }
 
     fun isDpadWrapAround(context: Context): Boolean {
-        init(context)
-        return _isDpadWrapAround.value
+        return getPrefs(context).getBoolean(
+            KEY_DPAD_WRAP_AROUND,
+            DEFAULT_DPAD_WRAP_AROUND
+        )
     }
 
     fun setDpadWrapAround(context: Context, enabled: Boolean) {
@@ -250,13 +246,82 @@ object PreferencesManager {
     }
 
     fun isDpadBoundaryHaptics(context: Context): Boolean {
-        init(context)
-        return _isDpadBoundaryHaptics.value
+        return getPrefs(context).getBoolean(
+            KEY_DPAD_BOUNDARY_HAPTICS,
+            DEFAULT_DPAD_BOUNDARY_HAPTICS
+        )
     }
 
     fun setDpadBoundaryHaptics(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_DPAD_BOUNDARY_HAPTICS, enabled).apply()
         _isDpadBoundaryHaptics.value = enabled
+    }
+
+    fun getWallpaperUri(context: Context): String? {
+        return getPrefs(context).getString(KEY_WALLPAPER_URI, null)
+    }
+
+    fun setWallpaperUri(context: Context, uri: String?) {
+        if (uri == null) {
+            getPrefs(context).edit().remove(KEY_WALLPAPER_URI).apply()
+        } else {
+            getPrefs(context).edit().putString(KEY_WALLPAPER_URI, uri).apply()
+        }
+    }
+
+    fun getHiddenPackages(context: Context): Set<String> {
+        val raw = getPrefs(context).getString(KEY_HIDDEN_APPS, "") ?: ""
+        return if (raw.isBlank()) emptySet() else raw.split(",").toSet()
+    }
+
+    fun setHiddenPackages(context: Context, packages: Set<String>) {
+        getPrefs(context).edit().putString(KEY_HIDDEN_APPS, packages.joinToString(",")).apply()
+    }
+
+    fun saveFavoriteFolders(context: Context, folders: List<FavoriteFolder>) {
+        val array = JSONArray()
+        folders.forEach { folder ->
+            val obj = JSONObject()
+            obj.put("id", folder.id)
+            obj.put("name", folder.name)
+            obj.put("apps", JSONArray(folder.appPackages))
+            array.put(obj)
+        }
+        getPrefs(context).edit().putString(KEY_FAVORITE_FOLDERS, array.toString()).apply()
+    }
+
+    fun loadFavoriteFolders(context: Context): List<FavoriteFolder> {
+        val raw = getPrefs(context).getString(KEY_FAVORITE_FOLDERS, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            val list = mutableListOf<FavoriteFolder>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val id = obj.getString("id")
+                val name = obj.getString("name")
+                val appsArray = obj.getJSONArray("apps")
+                val apps = mutableListOf<String>()
+                for (j in 0 until appsArray.length()) {
+                    apps.add(appsArray.getString(j))
+                }
+                list.add(FavoriteFolder(id = id, name = name, appPackages = apps))
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun getFavoriteItemKeys(context: Context): List<String> {
+        val raw = getPrefs(context).getString(KEY_FAVORITE_ITEMS_ORDERED, "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return raw.split("|").filter { it.isNotEmpty() }
+    }
+
+    fun saveFavoriteItemKeys(context: Context, keys: List<String>) {
+        getPrefs(context).edit()
+            .putString(KEY_FAVORITE_ITEMS_ORDERED, keys.joinToString("|"))
+            .apply()
     }
 
     fun getSpeedDialPackage(context: Context, digit: Int): String? {
@@ -266,110 +331,23 @@ object PreferencesManager {
 
     fun setSpeedDialPackage(context: Context, digit: Int, packageName: String?) {
         if (digit !in 2..9) return
-        val editor = getPrefs(context).edit()
-        if (packageName.isNullOrBlank()) {
-            editor.remove("$KEY_SPEED_DIAL_PREFIX$digit")
+        val prefs = getPrefs(context)
+        if (packageName == null) {
+            prefs.edit().remove("$KEY_SPEED_DIAL_PREFIX$digit").apply()
         } else {
-            editor.putString("$KEY_SPEED_DIAL_PREFIX$digit", packageName)
+            prefs.edit().putString("$KEY_SPEED_DIAL_PREFIX$digit", packageName).apply()
         }
-        editor.apply()
     }
 
     fun getAllSpeedDials(context: Context): Map<Int, String> {
+        val map = mutableMapOf<Int, String>()
         val prefs = getPrefs(context)
-        return buildMap {
-            for (digit in 2..9) {
-                val pkg = prefs.getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
-                if (!pkg.isNullOrBlank()) {
-                    put(digit, pkg)
-                }
+        for (digit in 2..9) {
+            val pkg = prefs.getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
+            if (pkg != null) {
+                map[digit] = pkg
             }
         }
-    }
-
-    fun getWallpaperUri(context: Context): String? {
-        return getPrefs(context).getString(KEY_WALLPAPER_URI, null)
-    }
-
-    fun setWallpaperUri(context: Context, uri: String?) {
-        val editor = getPrefs(context).edit()
-        if (uri == null) {
-            editor.remove(KEY_WALLPAPER_URI)
-        } else {
-            editor.putString(KEY_WALLPAPER_URI, uri)
-        }
-        editor.apply()
-    }
-
-    fun getHiddenPackages(context: Context): Set<String> {
-        return getPrefs(context).getStringSet(KEY_HIDDEN_APPS, emptySet())?.toSet() ?: emptySet()
-    }
-
-    fun setHiddenPackages(context: Context, packages: Set<String>) {
-        getPrefs(context).edit().putStringSet(KEY_HIDDEN_APPS, packages).apply()
-    }
-
-    fun addHiddenPackage(context: Context, packageName: String) {
-        val current = getHiddenPackages(context).toMutableSet()
-        if (current.add(packageName)) {
-            setHiddenPackages(context, current)
-        }
-    }
-
-    fun removeHiddenPackage(context: Context, packageName: String) {
-        val current = getHiddenPackages(context).toMutableSet()
-        if (current.remove(packageName)) {
-            setHiddenPackages(context, current)
-        }
-    }
-
-    fun getFavoriteItemKeys(context: Context): List<String> {
-        val prefs = getPrefs(context)
-        val saved = prefs.getString(KEY_FAVORITE_ITEMS_ORDERED, null)
-        if (saved != null) {
-            return saved.split("|").filter { it.isNotEmpty() }
-        }
-        val legacyPackages = prefs.getString(KEY_FAVORITE_PACKAGES_ORDERED, "")
-            ?.split("|")
-            ?.filter { it.isNotEmpty() }
-            ?: emptyList()
-        val legacyFolders = loadFavoriteFolders(context)
-        return legacyPackages.map { "app:$it" } + legacyFolders.map { "folder:${it.id}" }
-    }
-
-    fun saveFavoriteItemKeys(context: Context, keys: List<String>) {
-        val appPkgs = keys.filterNot { it.startsWith("folder:") }.map { it.removePrefix("app:") }
-        getPrefs(context).edit()
-            .putString(KEY_FAVORITE_ITEMS_ORDERED, keys.joinToString("|"))
-            .putString(KEY_FAVORITE_PACKAGES_ORDERED, appPkgs.joinToString("|"))
-            .apply()
-    }
-
-    fun getCustomAppIcon(context: Context, packageName: String): String? {
-        return getPrefs(context).getString("$KEY_CUSTOM_ICON_PREFIX$packageName", null)
-    }
-
-    fun setCustomAppIcon(context: Context, packageName: String, iconName: String?) {
-        val editor = getPrefs(context).edit()
-        if (iconName == null) {
-            editor.remove("$KEY_CUSTOM_ICON_PREFIX$packageName")
-        } else {
-            editor.putString("$KEY_CUSTOM_ICON_PREFIX$packageName", iconName)
-        }
-        editor.apply()
-    }
-
-    fun getCustomFolderIcon(context: Context, folderId: String): String? {
-        return getPrefs(context).getString("$KEY_CUSTOM_FOLDER_ICON_PREFIX$folderId", null)
-    }
-
-    fun setCustomFolderIcon(context: Context, folderId: String, iconName: String?) {
-        val editor = getPrefs(context).edit()
-        if (iconName == null) {
-            editor.remove("$KEY_CUSTOM_FOLDER_ICON_PREFIX$folderId")
-        } else {
-            editor.putString("$KEY_CUSTOM_FOLDER_ICON_PREFIX$folderId", iconName)
-        }
-        editor.apply()
+        return map
     }
 }

@@ -19,7 +19,6 @@ import com.crinklecodone.mochibun.ui.theme.toLauncherTheme
 import kotlinx.serialization.encodeToString
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -47,6 +46,7 @@ data class BundlePreviewData(
  */
 object ThemeBundleManager {
 
+    private const val TAG = "ThemeBundleManager"
     private const val MANIFEST_ENTRY = "manifest.json"
     private const val WALLPAPER_ENTRY = "wallpaper.png"
     private const val CURSOR_GIF_ENTRY = "cursor.gif"
@@ -54,6 +54,13 @@ object ThemeBundleManager {
 
     private const val MAX_WALLPAPER_WIDTH = 480
     private const val MAX_WALLPAPER_HEIGHT = 800
+    private const val MAX_PREVIEW_WALLPAPER_BYTES = 5 * 1024 * 1024 // 5MB guard against MT6761 memory spike
+
+    // Default pastel theme color fallbacks
+    const val DEFAULT_FALLBACK_BG_INT = 0xFFFFF5F8.toInt()
+    const val DEFAULT_FALLBACK_CARD_INT = 0xFFFCE4EC.toInt()
+    const val DEFAULT_FALLBACK_GREETING_INT = 0xFFA04064.toInt()
+    const val DEFAULT_FALLBACK_ACTION_INT = 0xFFA04064.toInt()
 
     fun generateBundleFileName(bundleName: String): String {
         val sanitized = bundleName.trim()
@@ -144,7 +151,7 @@ object ThemeBundleManager {
                             zipOut.closeEntry()
                         }
                     } catch (e: Exception) {
-                        android.util.Log.w("ThemeBundleManager", "Failed to bundle wallpaper", e)
+                        android.util.Log.w(TAG, "Failed to bundle wallpaper", e)
                     }
                 }
 
@@ -162,7 +169,7 @@ object ThemeBundleManager {
                             zipOut.closeEntry()
                         }
                     } catch (e: Exception) {
-                        android.util.Log.w("ThemeBundleManager", "Failed to bundle cursor", e)
+                        android.util.Log.w(TAG, "Failed to bundle cursor", e)
                     }
                 }
 
@@ -181,7 +188,6 @@ object ThemeBundleManager {
     fun readBundleManifest(inputStream: InputStream): Result<BundlePreviewData> {
         return try {
             val bufferedIn = BufferedInputStream(inputStream)
-            bufferedIn.mark(2 * 1024 * 1024) // Mark up to 2MB for two-pass asset inspection
 
             var manifest: MochibunBundleManifest? = null
             var wallpaperBitmap: Bitmap? = null
@@ -196,9 +202,16 @@ object ThemeBundleManager {
                             manifest = bundleJsonFormat.decodeFromString<MochibunBundleManifest>(text)
                         }
                         WALLPAPER_ENTRY -> {
-                            // Extract downsampled thumbnail preview
+                            // Extract downsampled thumbnail preview with strict memory bounds
                             val bytesOut = ByteArrayOutputStream()
-                            zipIn.copyTo(bytesOut, bufferSize = 8192)
+                            val buffer = ByteArray(8192)
+                            var bytesReadTotal = 0
+                            var read = zipIn.read(buffer)
+                            while (read != -1 && bytesReadTotal < MAX_PREVIEW_WALLPAPER_BYTES) {
+                                bytesOut.write(buffer, 0, read)
+                                bytesReadTotal += read
+                                read = zipIn.read(buffer)
+                            }
                             val wallBytes = bytesOut.toByteArray()
                             val opts = BitmapFactory.Options().apply {
                                 inJustDecodeBounds = true
@@ -207,6 +220,7 @@ object ThemeBundleManager {
                             val sample = calculateInSampleSize(opts, 120, 200)
                             val decodeOpts = BitmapFactory.Options().apply {
                                 inSampleSize = sample
+                                inPreferredConfig = Bitmap.Config.RGB_565 // Conserves graphics memory on MT6761
                             }
                             wallpaperBitmap = BitmapFactory.decodeByteArray(wallBytes, 0, wallBytes.size, decodeOpts)
                         }
@@ -255,13 +269,18 @@ object ThemeBundleManager {
                         WALLPAPER_ENTRY -> {
                             // Bitmap dimension guard: ensure incoming wallpaper is downsampled to AT-M120 screen
                             val tempFile = File(context.cacheDir, "temp_wall_import.png")
-                            FileOutputStream(tempFile).use { out ->
-                                zipIn.copyTo(out, bufferSize = 8192)
+                            try {
+                                FileOutputStream(tempFile).use { out ->
+                                    zipIn.copyTo(out, bufferSize = 8192)
+                                }
+                                val destFile = File(context.filesDir, "bundle_wallpaper.png")
+                                downsampleAndSaveImage(tempFile, destFile, MAX_WALLPAPER_WIDTH, MAX_WALLPAPER_HEIGHT)
+                                extractedWallpaperFile = destFile
+                            } finally {
+                                if (tempFile.exists()) {
+                                    tempFile.delete()
+                                }
                             }
-                            val destFile = File(context.filesDir, "bundle_wallpaper.png")
-                            downsampleAndSaveImage(tempFile, destFile, MAX_WALLPAPER_WIDTH, MAX_WALLPAPER_HEIGHT)
-                            tempFile.delete()
-                            extractedWallpaperFile = destFile
                         }
                         CURSOR_GIF_ENTRY -> {
                             val cursorFile = File(context.filesDir, "bundle_cursor.gif")
@@ -294,20 +313,20 @@ object ThemeBundleManager {
             PreferencesManager.setThemePreset(context, targetManifest.palette.activePresetId)
 
             val p = targetManifest.palette
-            val bgInt = hexToColorInt(p.bgColorHex, -436488)
-            val cardInt = hexToColorInt(p.cardColorHex, -203540)
-            val greetingInt = hexToColorInt(p.greetingColorHex, -6274972)
-            val actionInt = hexToColorInt(p.actionColorHex, -6274972)
+            val bgInt = hexToColorInt(p.bgColorHex, DEFAULT_FALLBACK_BG_INT)
+            val cardInt = hexToColorInt(p.cardColorHex, DEFAULT_FALLBACK_CARD_INT)
+            val greetingInt = hexToColorInt(p.greetingColorHex, DEFAULT_FALLBACK_GREETING_INT)
+            val actionInt = hexToColorInt(p.actionColorHex, DEFAULT_FALLBACK_ACTION_INT)
 
-            editor.putInt("theme_bg_color", bgInt)
-            editor.putInt("theme_fg_text_color", greetingInt)
-            editor.putInt("theme_card_bg_color", cardInt)
-            editor.putInt("theme_card_text_color", greetingInt)
-            editor.putInt("theme_greeting_color", greetingInt)
-            editor.putInt("theme_greeting_outline_color", cardInt)
-            editor.putInt("theme_greeting_bg_color", bgInt)
-            editor.putInt("theme_app_action_color", actionInt)
-            editor.putFloat("theme_card_roundness", p.cardRoundnessDp)
+            editor.putInt(PreferencesManager.KEY_THEME_BG_COLOR, bgInt)
+            editor.putInt(PreferencesManager.KEY_THEME_FG_TEXT_COLOR, greetingInt)
+            editor.putInt(PreferencesManager.KEY_THEME_CARD_BG_COLOR, cardInt)
+            editor.putInt(PreferencesManager.KEY_THEME_CARD_TEXT_COLOR, greetingInt)
+            editor.putInt(PreferencesManager.KEY_THEME_GREETING_COLOR, greetingInt)
+            editor.putInt(PreferencesManager.KEY_THEME_GREETING_OUTLINE_COLOR, cardInt)
+            editor.putInt(PreferencesManager.KEY_THEME_GREETING_BG_COLOR, bgInt)
+            editor.putInt(PreferencesManager.KEY_THEME_APP_ACTION_COLOR, actionInt)
+            editor.putFloat(PreferencesManager.KEY_THEME_CARD_ROUNDNESS, p.cardRoundnessDp)
 
             // 2. Apply Greeting
             if (targetManifest.greeting.userName.isNotBlank() &&
@@ -323,10 +342,14 @@ object ThemeBundleManager {
             CursorPreferences.setCursorSizeDp(context, c.pointerSizeDp.toInt())
             try {
                 CursorPreferences.setClickMethod(context, ClickMethod.valueOf(c.clickMethod))
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Unknown click method: ${c.clickMethod}", e)
+            }
             try {
                 CursorPreferences.setHotspotAlignment(context, HotspotAlignment.valueOf(c.hotspot))
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Unknown hotspot alignment: ${c.hotspot}", e)
+            }
 
             // 4. Set Assets if present
             if (extractedWallpaperFile != null && extractedWallpaperFile.exists()) {

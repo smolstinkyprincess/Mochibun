@@ -61,6 +61,7 @@ fun ExportBundleDialog(
     var includeDisplayName by remember { mutableStateOf(true) }
 
     val focusRequester = remember { FocusRequester() }
+    val nameFieldFocusRequester = remember { FocusRequester() }
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
@@ -97,6 +98,11 @@ fun ExportBundleDialog(
                         } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                             sawCenterDown = false
                             when (focusedIndex) {
+                                0 -> {
+                                    try {
+                                        nameFieldFocusRequester.requestFocus()
+                                    } catch (_: Exception) {}
+                                }
                                 1 -> includeWallpaper = !includeWallpaper
                                 2 -> includeCustomCursor = !includeCustomCursor
                                 3 -> includeDisplayName = !includeDisplayName
@@ -176,7 +182,9 @@ fun ExportBundleDialog(
                         cursorBrush = SolidColor(theme.greetingColor),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { focusedIndex = 1 }),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(nameFieldFocusRequester)
                     )
                 }
 
@@ -319,6 +327,10 @@ fun PresetPreviewDialog(
                             focusedButton = 1
                             true
                         }
+                        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            focusedButton = if (focusedButton == 0) 1 else 0
+                            true
+                        }
                         else -> false
                     }
                 }
@@ -359,9 +371,9 @@ fun PresetPreviewDialog(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     val p = manifest.palette
-                    val c1 = Color(ThemeBundleManager.hexToColorInt(p.bgColorHex, -436488))
-                    val c2 = Color(ThemeBundleManager.hexToColorInt(p.cardColorHex, -203540))
-                    val c3 = Color(ThemeBundleManager.hexToColorInt(p.greetingColorHex, -6274972))
+                    val c1 = Color(ThemeBundleManager.hexToColorInt(p.bgColorHex, ThemeBundleManager.DEFAULT_FALLBACK_BG_INT))
+                    val c2 = Color(ThemeBundleManager.hexToColorInt(p.cardColorHex, ThemeBundleManager.DEFAULT_FALLBACK_CARD_INT))
+                    val c3 = Color(ThemeBundleManager.hexToColorInt(p.greetingColorHex, ThemeBundleManager.DEFAULT_FALLBACK_GREETING_INT))
 
                     ColorDot(c1)
                     ColorDot(c2)

@@ -55,7 +55,7 @@ object BackupRestoreManager {
         root.put("timestamp", System.currentTimeMillis())
         root.put("app_version", BuildConfig.VERSION_NAME)
 
-        // ── 1. Theme & Look ──────────────────────────────────────────────────
+        // ── 1. Theme & Look ──────────────────────────────────────────
         val launcherPrefs = PreferencesManager.getPrefs(context)
         val themeObj = JSONObject()
         themeObj.put("preset", PreferencesManager.getThemePreset(context))
@@ -63,27 +63,21 @@ object BackupRestoreManager {
         themeObj.put("pixelspray_enabled", PreferencesManager.isPixelSprayWallpaperEnabled(context))
 
         val colorsObj = JSONObject()
-        listOf(
-            "theme_bg_color",
-            "theme_fg_text_color",
-            "theme_card_bg_color",
-            "theme_card_text_color",
-            "theme_greeting_color",
-            "theme_greeting_outline_color",
-            "theme_greeting_bg_color",
-            "theme_app_action_color"
-        ).forEach { key ->
+        PreferencesManager.THEME_COLOR_KEYS.forEach { key ->
             if (launcherPrefs.contains(key)) {
                 colorsObj.put(key, launcherPrefs.getInt(key, 0))
             }
         }
-        if (launcherPrefs.contains("theme_card_roundness")) {
-            colorsObj.put("theme_card_roundness", launcherPrefs.getFloat("theme_card_roundness", 24f).toDouble())
+        if (launcherPrefs.contains(PreferencesManager.KEY_THEME_CARD_ROUNDNESS)) {
+            colorsObj.put(
+                PreferencesManager.KEY_THEME_CARD_ROUNDNESS,
+                launcherPrefs.getFloat(PreferencesManager.KEY_THEME_CARD_ROUNDNESS, 24f).toDouble()
+            )
         }
         themeObj.put("colors", colorsObj)
         root.put("theme", themeObj)
 
-        // ── 2. Layout, Favorites & Folders ───────────────────────────────────
+        // ── 2. Layout, Favorites & Folders ───────────────────────────
         val layoutObj = JSONObject()
         val favItemKeys = PreferencesManager.getFavoriteItemKeys(context)
         layoutObj.put("favorite_items_ordered", JSONArray(favItemKeys))
@@ -138,9 +132,8 @@ object BackupRestoreManager {
         }
         root.put("layout", layoutObj)
 
-        // ── 3. Hardware Key Remaps ───────────────────────────────────────────
+        // ── 3. Hardware Key Remaps ───────────────────────────────────
         val remapsObj = JSONObject()
-        val remapPrefs = HardwareRemapManager.getPrefs(context)
         val buttonActionsObj = JSONObject()
         for (key in PhysicalKey.entries) {
             val config = HardwareRemapManager.getButtonActionConfig(context, key)
@@ -168,7 +161,7 @@ object BackupRestoreManager {
         remapsObj.put("use_root_recents_fallback", HardwareRemapManager.isRootRecentsFallbackEnabled(context))
         root.put("hardware_remaps", remapsObj)
 
-        // ── 4. Launcher Behavior ─────────────────────────────────────────────
+        // ── 4. Launcher Behavior ─────────────────────────────────────
         val behaviorObj = JSONObject()
         behaviorObj.put("dpad_wrap_around", PreferencesManager.isDpadWrapAround(context))
         behaviorObj.put("dpad_boundary_haptics", PreferencesManager.isDpadBoundaryHaptics(context))
@@ -177,8 +170,7 @@ object BackupRestoreManager {
         behaviorObj.put("system_monitor_interval_sec", PreferencesManager.getSystemMonitorInterval(context))
         root.put("behavior", behaviorObj)
 
-        // ── 5. Virtual Cursor Physics & Pointer ──────────────────────────────
-        val cursorPrefs = CursorPreferences.getPrefs(context)
+        // ── 5. Virtual Cursor Physics & Pointer ──────────────────────
         val cursorObj = JSONObject()
         cursorObj.put("toggle_keycode", CursorPreferences.getToggleKeyCode(context))
         cursorObj.put("move_speed", CursorPreferences.getMoveSpeed(context).toDouble())
@@ -232,7 +224,7 @@ object BackupRestoreManager {
             val launcherPrefs = PreferencesManager.getPrefs(context)
             val launcherEditor = launcherPrefs.edit()
 
-            // ── 1. Restore Theme ─────────────────────────────────────────────
+            // ── 1. Restore Theme ─────────────────────────────────────────
             val themeObj = root.optJSONObject("theme")
             val themePreset = themeObj?.optString("preset", null)
             if (!themePreset.isNullOrBlank()) {
@@ -250,27 +242,20 @@ object BackupRestoreManager {
 
             val colorsObj = themeObj?.optJSONObject("colors")
             if (colorsObj != null) {
-                val colorKeys = listOf(
-                    "theme_bg_color",
-                    "theme_fg_text_color",
-                    "theme_card_bg_color",
-                    "theme_card_text_color",
-                    "theme_greeting_color",
-                    "theme_greeting_outline_color",
-                    "theme_greeting_bg_color",
-                    "theme_app_action_color"
-                )
-                colorKeys.forEach { key ->
+                PreferencesManager.THEME_COLOR_KEYS.forEach { key ->
                     if (colorsObj.has(key)) {
                         launcherEditor.putInt(key, colorsObj.getInt(key))
                     }
                 }
-                if (colorsObj.has("theme_card_roundness")) {
-                    launcherEditor.putFloat("theme_card_roundness", colorsObj.getDouble("theme_card_roundness").toFloat())
+                if (colorsObj.has(PreferencesManager.KEY_THEME_CARD_ROUNDNESS)) {
+                    launcherEditor.putFloat(
+                        PreferencesManager.KEY_THEME_CARD_ROUNDNESS,
+                        colorsObj.getDouble(PreferencesManager.KEY_THEME_CARD_ROUNDNESS).toFloat()
+                    )
                 }
             }
 
-            // ── 2. Restore Layout, Favorites & Folders ───────────────────────
+            // ── 2. Restore Layout, Favorites & Folders ───────────────────
             val layoutObj = root.optJSONObject("layout")
             var folderCount = 0
             var favoriteCount = 0
@@ -366,7 +351,7 @@ object BackupRestoreManager {
             }
             launcherEditor.apply()
 
-            // ── 3. Restore Hardware Remaps ───────────────────────────────────
+            // ── 3. Restore Hardware Remaps ───────────────────────────────
             var remapCount = 0
             val remapsObj = root.optJSONObject("hardware_remaps")
             if (remapsObj != null) {
@@ -412,7 +397,7 @@ object BackupRestoreManager {
                 MochibunAccessibilityService.reloadActiveConfig(context)
             }
 
-            // ── 4. Restore Behavior ──────────────────────────────────────────
+            // ── 4. Restore Behavior ──────────────────────────────────────
             val behaviorObj = root.optJSONObject("behavior")
             if (behaviorObj != null) {
                 if (behaviorObj.has("dpad_wrap_around")) {
@@ -432,7 +417,7 @@ object BackupRestoreManager {
                 }
             }
 
-            // ── 5. Restore Virtual Cursor ────────────────────────────────────
+            // ── 5. Restore Virtual Cursor ────────────────────────────────
             val cursorObj = root.optJSONObject("cursor")
             if (cursorObj != null) {
                 if (cursorObj.has("toggle_keycode")) {

@@ -46,6 +46,9 @@ class MainActivity : ComponentActivity() {
 
     fun consumePendingThemeBundleUri() {
         pendingThemeBundleUri = null
+        try {
+            intent?.data = null
+        } catch (_: Exception) {}
     }
 
     var appListRefreshCount by mutableIntStateOf(0)

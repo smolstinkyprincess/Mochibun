@@ -117,10 +117,18 @@ fun MainLauncher(
                         activeIncomingPreview = previewRes.getOrThrow()
                         pendingIncomingUri = uri
                     } else {
+                        android.util.Log.e("MainLauncher", "Invalid theme bundle", previewRes.exceptionOrNull())
+                        android.widget.Toast.makeText(context, "Invalid .mochibun theme bundle", android.widget.Toast.LENGTH_SHORT).show()
                         onConsumeIncomingBundleUri()
                     }
+                } ?: run {
+                    android.util.Log.e("MainLauncher", "Could not open stream for uri: $uri")
+                    android.widget.Toast.makeText(context, "Could not open theme bundle", android.widget.Toast.LENGTH_SHORT).show()
+                    onConsumeIncomingBundleUri()
                 }
             } catch (e: Exception) {
+                android.util.Log.e("MainLauncher", "Failed to inspect theme bundle", e)
+                android.widget.Toast.makeText(context, "Failed to read theme bundle: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                 onConsumeIncomingBundleUri()
             }
         }
@@ -265,7 +273,8 @@ fun MainLauncher(
         createFolderDialogOpen ||
         folderToCreateFrom != null ||
         folderIconMenuOpen ||
-        speedDialDialogOpen
+        speedDialDialogOpen ||
+        activeIncomingPreview != null
 
     LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress) {
         if (!pagerState.isScrollInProgress && (pendingTargetPage == null || pendingTargetPage == pagerState.settledPage)) {
@@ -1161,11 +1170,17 @@ fun MainLauncher(
                                 android.util.Log.e("MainLauncher", "Failed to apply bundle", e)
                             }
                         }
+                        try {
+                            preview.wallpaperPreview?.recycle()
+                        } catch (_: Exception) {}
                         activeIncomingPreview = null
                         pendingIncomingUri = null
                         onConsumeIncomingBundleUri()
                     },
                     onDismiss = {
+                        try {
+                            preview.wallpaperPreview?.recycle()
+                        } catch (_: Exception) {}
                         activeIncomingPreview = null
                         pendingIncomingUri = null
                         onConsumeIncomingBundleUri()

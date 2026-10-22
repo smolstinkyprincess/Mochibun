@@ -1254,7 +1254,7 @@ private fun BackupRestoreSettingsSubScreen(
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var showExportBundleDialog by remember { mutableStateOf(false) }
     var pendingImportPreviewData by remember { mutableStateOf<com.crinklecodone.mochibun.data.repository.BundlePreviewData?>(null) }
-    var pendingImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
 
     // State for pending export configuration awaiting file creation URI
     var pendingBundleName by remember { mutableStateOf("Mochibun Setup") }
@@ -1501,10 +1501,16 @@ private fun BackupRestoreSettingsSubScreen(
                         statusMessage = "Apply failed: ${e.message}"
                     }
                 }
+                try {
+                    preview.wallpaperPreview?.recycle()
+                } catch (_: Exception) {}
                 pendingImportPreviewData = null
                 pendingImportUri = null
             },
             onDismiss = {
+                try {
+                    preview.wallpaperPreview?.recycle()
+                } catch (_: Exception) {}
                 pendingImportPreviewData = null
                 pendingImportUri = null
             }
