@@ -6,15 +6,23 @@
 package com.crinklecodone.mochibun.ui.theme
 
 import android.app.Activity
+import android.content.ContextWrapper
 import android.os.Build
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import com.crinklecodone.mochibun.data.repository.TypographyManager
 
 // Baseline pastel pink palette used across launcher surfaces and interactive cards
 private val PinkLightColorScheme = lightColorScheme(
@@ -44,11 +52,7 @@ private val PinkDarkColorScheme = darkColorScheme(
 
 /**
  * Root theme composable wrapping all launcher activities and dialogs.
- *
- * Note: Dynamic Material You wallpaper coloring is disabled by default (dynamicColor = false).
- * System wallpaper extraction on Android 12 frequently generates muddy brown/olive tones that
- * clash with Mochibun's bespoke pastel pinks and break focus ring visibility on low-contrast screens.
- * Defaults to light/pastel scheme to preserve the launcher's signature aesthetic.
+ * Dynamically resolves active color schemes and authentic Keitai/pixel typography.
  */
 @Composable
 fun MochibunTheme(
@@ -64,6 +68,14 @@ fun MochibunTheme(
         else -> PinkLightColorScheme
     }
 
+    val fontId by PreferencesManager.themeFontFamily.collectAsState()
+    val resolvedFontFamily = remember(fontId) {
+        TypographyManager.resolveFontFamily(fontId)
+    }
+    val typography = remember(resolvedFontFamily) {
+        getLauncherTypography(resolvedFontFamily)
+    }
+
     val view = LocalView.current
 
     // Synchronize the window status bar and navigation bar with the launcher surface.
@@ -71,20 +83,33 @@ fun MochibunTheme(
     // eliminates awkward letterbox seams while light foreground icons ensure time/battery legibility.
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
-            window.statusBarColor = ThemeBackground.toArgb()
-            window.navigationBarColor = ThemeBackground.toArgb()
+            view.isSoundEffectsEnabled = false
+            val activity = generateSequence(view.context) { (it as? ContextWrapper)?.baseContext }
+                .filterIsInstance<Activity>()
+                .firstOrNull()
+            val window = activity?.window
+            window?.decorView?.isSoundEffectsEnabled = false
 
-            WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = true
-                isAppearanceLightNavigationBars = true
+            if (window != null) {
+                window.statusBarColor = ThemeBackground.toArgb()
+                window.navigationBarColor = ThemeBackground.toArgb()
+
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = true
+                    isAppearanceLightNavigationBars = true
+                }
             }
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalLauncherFontFamily provides resolvedFontFamily,
+        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = resolvedFontFamily)
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = typography,
+            content = content
+        )
+    }
 }

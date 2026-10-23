@@ -28,7 +28,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.crinklecodone.mochibun.data.repository.IconPackManager
 
-
 class MainActivity : ComponentActivity() {
     private val launcherViewModel: LauncherViewModel by viewModels()
 
@@ -149,6 +148,7 @@ class MainActivity : ComponentActivity() {
         }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.decorView.isSoundEffectsEnabled = false
         WindowInsetsControllerCompat(
             window,
             window.decorView

@@ -64,6 +64,27 @@ object PreferencesManager {
     const val KEY_DPAD_BOUNDARY_HAPTICS = "pref_dpad_boundary_haptics"
     const val DEFAULT_DPAD_BOUNDARY_HAPTICS = true
 
+    const val KEY_KEYPAD_SOUND_MODE = "pref_keypad_sound_mode"
+    const val DEFAULT_KEYPAD_SOUND_MODE = "kawaii" // "kawaii", "retro", "off"
+
+    const val KEY_LID_LED_ENABLED = "pref_lid_led_enabled"
+    const val DEFAULT_LID_LED_ENABLED = true
+
+    const val KEY_LID_LED_CHARGING = "pref_lid_led_charging"
+    const val DEFAULT_LID_LED_CHARGING = true
+
+    const val KEY_LID_LED_COLOR = "pref_lid_led_color"
+    const val DEFAULT_LID_LED_COLOR = "pink" // "pink", "purple", "white", "green"
+
+    const val KEY_MEDIA_VOLUME_LOCK_ENABLED = "pref_media_volume_lock_enabled"
+    const val DEFAULT_MEDIA_VOLUME_LOCK_ENABLED = false
+
+    const val KEY_THEME_FONT_FAMILY = "pref_theme_font_family"
+    const val DEFAULT_THEME_FONT_FAMILY = "default"
+
+    const val KEY_QUICK_MEMO = "pref_quick_memo"
+    const val DEFAULT_QUICK_MEMO = ""
+
     const val KEY_SPEED_DIAL_PREFIX = "pref_speed_dial_"
 
     const val KEY_WALLPAPER_URI = "wallpaper_uri"
@@ -91,6 +112,21 @@ object PreferencesManager {
     private val _isDpadBoundaryHaptics = MutableStateFlow(DEFAULT_DPAD_BOUNDARY_HAPTICS)
     val isDpadBoundaryHaptics: StateFlow<Boolean> = _isDpadBoundaryHaptics.asStateFlow()
 
+    private val _keypadSoundMode = MutableStateFlow(DEFAULT_KEYPAD_SOUND_MODE)
+    val keypadSoundMode: StateFlow<String> = _keypadSoundMode.asStateFlow()
+
+    private val _isLidLedEnabled = MutableStateFlow(DEFAULT_LID_LED_ENABLED)
+    val isLidLedEnabled: StateFlow<Boolean> = _isLidLedEnabled.asStateFlow()
+
+    private val _isLidLedChargingEnabled = MutableStateFlow(DEFAULT_LID_LED_CHARGING)
+    val isLidLedChargingEnabled: StateFlow<Boolean> = _isLidLedChargingEnabled.asStateFlow()
+
+    private val _lidLedColor = MutableStateFlow(DEFAULT_LID_LED_COLOR)
+    val lidLedColor: StateFlow<String> = _lidLedColor.asStateFlow()
+
+    private val _isMediaVolumeLockEnabled = MutableStateFlow(DEFAULT_MEDIA_VOLUME_LOCK_ENABLED)
+    val isMediaVolumeLockEnabled: StateFlow<Boolean> = _isMediaVolumeLockEnabled.asStateFlow()
+
     private val _systemMonitorInterval = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_INTERVAL)
     val systemMonitorInterval: StateFlow<Int> = _systemMonitorInterval.asStateFlow()
 
@@ -99,6 +135,9 @@ object PreferencesManager {
 
     private val _themePreset = MutableStateFlow(DEFAULT_THEME_PRESET)
     val themePreset: StateFlow<String> = _themePreset.asStateFlow()
+
+    private val _themeFontFamily = MutableStateFlow(DEFAULT_THEME_FONT_FAMILY)
+    val themeFontFamily: StateFlow<String> = _themeFontFamily.asStateFlow()
 
     private var initialized = false
 
@@ -142,6 +181,30 @@ object PreferencesManager {
                     KEY_DPAD_BOUNDARY_HAPTICS,
                     DEFAULT_DPAD_BOUNDARY_HAPTICS
                 )
+                _keypadSoundMode.value = prefs.getString(
+                    KEY_KEYPAD_SOUND_MODE,
+                    DEFAULT_KEYPAD_SOUND_MODE
+                ) ?: DEFAULT_KEYPAD_SOUND_MODE
+                _isLidLedEnabled.value = prefs.getBoolean(
+                    KEY_LID_LED_ENABLED,
+                    DEFAULT_LID_LED_ENABLED
+                )
+                _isLidLedChargingEnabled.value = prefs.getBoolean(
+                    KEY_LID_LED_CHARGING,
+                    DEFAULT_LID_LED_CHARGING
+                )
+                _lidLedColor.value = prefs.getString(
+                    KEY_LID_LED_COLOR,
+                    DEFAULT_LID_LED_COLOR
+                ) ?: DEFAULT_LID_LED_COLOR
+                _isMediaVolumeLockEnabled.value = prefs.getBoolean(
+                    KEY_MEDIA_VOLUME_LOCK_ENABLED,
+                    DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
+                )
+                _themeFontFamily.value = prefs.getString(
+                    KEY_THEME_FONT_FAMILY,
+                    DEFAULT_THEME_FONT_FAMILY
+                ) ?: DEFAULT_THEME_FONT_FAMILY
             } catch (_: Exception) {
             }
             initialized = true
@@ -294,6 +357,126 @@ object PreferencesManager {
     fun setDpadBoundaryHaptics(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_DPAD_BOUNDARY_HAPTICS, enabled).apply()
         _isDpadBoundaryHaptics.value = enabled
+    }
+
+    fun getKeypadSoundMode(context: Context? = null): String {
+        return try {
+            if (initialized) {
+                _keypadSoundMode.value
+            } else if (context != null) {
+                getPrefs(context).getString(
+                    KEY_KEYPAD_SOUND_MODE,
+                    DEFAULT_KEYPAD_SOUND_MODE
+                ) ?: DEFAULT_KEYPAD_SOUND_MODE
+            } else {
+                _keypadSoundMode.value
+            }
+        } catch (_: Exception) {
+            DEFAULT_KEYPAD_SOUND_MODE
+        }
+    }
+
+    fun setKeypadSoundMode(context: Context, mode: String) {
+        getPrefs(context).edit().putString(KEY_KEYPAD_SOUND_MODE, mode).commit()
+        _keypadSoundMode.value = mode
+    }
+
+    fun isLidLedEnabled(context: Context): Boolean {
+        return try {
+            getPrefs(context).getBoolean(
+                KEY_LID_LED_ENABLED,
+                DEFAULT_LID_LED_ENABLED
+            )
+        } catch (_: Exception) {
+            DEFAULT_LID_LED_ENABLED
+        }
+    }
+
+    fun setLidLedEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_LID_LED_ENABLED, enabled).apply()
+        _isLidLedEnabled.value = enabled
+    }
+
+    fun isLidLedChargingEnabled(context: Context): Boolean {
+        return try {
+            getPrefs(context).getBoolean(
+                KEY_LID_LED_CHARGING,
+                DEFAULT_LID_LED_CHARGING
+            )
+        } catch (_: Exception) {
+            DEFAULT_LID_LED_CHARGING
+        }
+    }
+
+    fun setLidLedChargingEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_LID_LED_CHARGING, enabled).apply()
+        _isLidLedChargingEnabled.value = enabled
+    }
+
+    fun getLidLedColor(context: Context): String {
+        return try {
+            getPrefs(context).getString(
+                KEY_LID_LED_COLOR,
+                DEFAULT_LID_LED_COLOR
+            ) ?: DEFAULT_LID_LED_COLOR
+        } catch (_: Exception) {
+            DEFAULT_LID_LED_COLOR
+        }
+    }
+
+    fun setLidLedColor(context: Context, color: String) {
+        getPrefs(context).edit().putString(KEY_LID_LED_COLOR, color).apply()
+        _lidLedColor.value = color
+    }
+
+    fun isMediaVolumeLockEnabled(context: Context): Boolean {
+        return try {
+            getPrefs(context).getBoolean(
+                KEY_MEDIA_VOLUME_LOCK_ENABLED,
+                DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
+            )
+        } catch (_: Exception) {
+            DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
+        }
+    }
+
+    fun setMediaVolumeLockEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_MEDIA_VOLUME_LOCK_ENABLED, enabled).apply()
+        _isMediaVolumeLockEnabled.value = enabled
+    }
+
+    fun getQuickMemo(context: Context): String {
+        return try {
+            getPrefs(context).getString(KEY_QUICK_MEMO, DEFAULT_QUICK_MEMO) ?: DEFAULT_QUICK_MEMO
+        } catch (_: Exception) {
+            DEFAULT_QUICK_MEMO
+        }
+    }
+
+    fun setQuickMemo(context: Context, memo: String) {
+        getPrefs(context).edit().putString(KEY_QUICK_MEMO, memo).apply()
+    }
+
+    fun getThemeFontFamily(context: Context? = null): String {
+        return try {
+            if (initialized) {
+                _themeFontFamily.value
+            } else if (context != null) {
+                getPrefs(context).getString(
+                    KEY_THEME_FONT_FAMILY,
+                    DEFAULT_THEME_FONT_FAMILY
+                ) ?: DEFAULT_THEME_FONT_FAMILY
+            } else {
+                _themeFontFamily.value
+            }
+        } catch (_: Exception) {
+            DEFAULT_THEME_FONT_FAMILY
+        }
+    }
+
+    fun setThemeFontFamily(context: Context, family: String) {
+        getPrefs(context).edit().putString(KEY_THEME_FONT_FAMILY, family).commit()
+        _themeFontFamily.value = family
     }
 
     fun getWallpaperUri(context: Context): String? {

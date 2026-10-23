@@ -170,7 +170,8 @@ data class LauncherTheme(
     val greetingBgColor: Color = Color(0xFFFFF5F8),
     val appActionColor: Color = Color(0xFFA04064),
     val cardRoundnessDp: Float = 24f,
-    val mascotTint: Color? = null
+    val mascotTint: Color? = null,
+    val fontFamilyId: String = "default"
 )
 
 val SakuraDreamTheme = SakuraDreamPalette.toLauncherTheme(24f)
@@ -494,13 +495,16 @@ fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
             "theme_card_roundness",
             base.cardRoundnessDp
         ),
-        mascotTint = base.mascotTint
+        mascotTint = base.mascotTint,
+        fontFamilyId = prefs.getString("pref_theme_font_family", prefs.getString("theme_font_family", "default")) ?: "default"
     )
 }
 
 fun saveTheme(prefs: SharedPreferences, theme: LauncherTheme) {
     prefs.edit()
         .putString("theme_preset", theme.name)
+        .putString("pref_theme_font_family", theme.fontFamilyId)
+        .putString("theme_font_family", theme.fontFamilyId)
         .putInt("theme_bg_color", theme.bgColor.toArgb())
         .putInt("theme_fg_text_color", theme.fgTextColor.toArgb())
         .putInt("theme_card_bg_color", theme.cardBgColor.toArgb())

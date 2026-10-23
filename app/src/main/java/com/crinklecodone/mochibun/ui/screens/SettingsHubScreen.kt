@@ -54,10 +54,17 @@ import com.crinklecodone.mochibun.service.VirtualCursorService
 import com.crinklecodone.mochibun.ui.components.*
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
+import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import android.widget.Toast
+import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
 import com.crinklecodone.mochibun.data.repository.BackupRestoreManager
+import com.crinklecodone.mochibun.data.repository.TypographyManager
+import com.crinklecodone.mochibun.core.system.LidLedManager
+import com.crinklecodone.mochibun.core.sound.SoundEffect
+import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -156,6 +163,7 @@ private fun SettingsHubRootScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
     var focusedIndex by remember { mutableIntStateOf(0) }
@@ -180,6 +188,7 @@ private fun SettingsHubRootScreen(
                 val native = event.nativeKeyEvent
                 if (isBackDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
                         onClose()
                     }
                     return@onPreviewKeyEvent true
@@ -187,8 +196,10 @@ private fun SettingsHubRootScreen(
                 if (isCenterActivateKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (focusedIndex) {
                             0 -> onNavigate(SettingsDestination.Appearance)
                             1 -> onNavigate(SettingsDestination.CursorHardware)
@@ -199,19 +210,19 @@ private fun SettingsHubRootScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-
-                when (native.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        focusedIndex = if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
-                        true
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                            if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
+                        } else {
+                            if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
+                        }
+                        SoundEffectManager.play(context, SoundEffect.NAV)
                     }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        focusedIndex = if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
-                        true
-                    }
-                    else -> false
+                    return@onPreviewKeyEvent true
                 }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                false
             }
     ) {
         LazyColumn(
@@ -307,11 +318,14 @@ private fun AppearanceSettingsSubScreen(
     var tempNameInput by remember { mutableStateOf(customName) }
 
     val isPixelSprayEnabled by PreferencesManager.isPixelSprayEnabled.collectAsState()
+    val fontId by PreferencesManager.themeFontFamily.collectAsState()
+    val fontOptions by TypographyManager.options.collectAsState()
 
     // Dynamic item list based on custom wallpaper state
     val items = remember(hasCustomWallpaper) {
         buildList {
             add("theme")
+            add("typography")
             add("name")
             add("icon_pack")
             add("pick_wallpaper")
@@ -341,6 +355,7 @@ private fun AppearanceSettingsSubScreen(
                 val native = event.nativeKeyEvent
                 if (isBackDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
                         if (isEditingName) {
                             isEditingName = false
                         } else {
@@ -352,32 +367,72 @@ private fun AppearanceSettingsSubScreen(
                 if (isCenterActivateKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         when (items.getOrNull(focusedIndex)) {
-                            "theme" -> onOpenThemeStudio?.invoke()
-                            "name" -> isEditingName = true
-                            "icon_pack" -> onOpenIconPackDialog?.invoke()
-                            "pick_wallpaper" -> onPickWallpaperClick?.invoke()
-                            "reset_wallpaper" -> onResetWallpaperClick?.invoke()
-                            "pixelspray" -> PreferencesManager.setPixelSprayWallpaperEnabled(context, !isPixelSprayEnabled)
+                            "theme" -> {
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                                onOpenThemeStudio?.invoke()
+                            }
+                            "typography" -> {
+                                val curIdx = fontOptions.indexOfFirst { it.id == fontId }.coerceAtLeast(0)
+                                val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
+                                PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                            }
+                            "name" -> {
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                                isEditingName = true
+                            }
+                            "icon_pack" -> {
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                                onOpenIconPackDialog?.invoke()
+                            }
+                            "pick_wallpaper" -> {
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                                onPickWallpaperClick?.invoke()
+                            }
+                            "reset_wallpaper" -> {
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                                onResetWallpaperClick?.invoke()
+                            }
+                            "pixelspray" -> {
+                                PreferencesManager.setPixelSprayWallpaperEnabled(context, !isPixelSprayEnabled)
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                            if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
+                        } else {
+                            if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
+                        }
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        if (items.getOrNull(focusedIndex) == "typography") {
+                            val curIdx = fontOptions.indexOfFirst { it.id == fontId }.coerceAtLeast(0)
+                            val nextIdx = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                                if (curIdx > 0) curIdx - 1 else fontOptions.size - 1
+                            } else {
+                                if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
+                            }
+                            PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
                         }
                     }
                     return@onPreviewKeyEvent true
                 }
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-
-                when (native.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        focusedIndex = if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
-                        true
-                    }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        focusedIndex = if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
-                        true
-                    }
-                    else -> false
-                }
+                false
             }
     ) {
         LazyColumn(
@@ -393,6 +448,28 @@ private fun AppearanceSettingsSubScreen(
                         icon = "🎨",
                         isFocused = items.getOrNull(focusedIndex) == "theme",
                         onClick = { onOpenThemeStudio?.invoke() }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val currentFont = remember(fontId, fontOptions) {
+                        fontOptions.firstOrNull { it.id == fontId } ?: TypographyManager.BuiltInTypographyOptions.first()
+                    }
+                    SettingsStepperRow(
+                        title = "Typography",
+                        subtitle = currentFont.subtitle,
+                        valueDisplay = currentFont.name,
+                        isFocused = items.getOrNull(focusedIndex) == "typography",
+                        onDecrement = {
+                            val curIdx = fontOptions.indexOfFirst { it.id == fontId }.coerceAtLeast(0)
+                            val prevIdx = if (curIdx > 0) curIdx - 1 else fontOptions.size - 1
+                            PreferencesManager.setThemeFontFamily(context, fontOptions[prevIdx].id)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        },
+                        onIncrement = {
+                            val curIdx = fontOptions.indexOfFirst { it.id == fontId }.coerceAtLeast(0)
+                            val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
+                            PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        }
                     )
                 }
             }
@@ -611,14 +688,19 @@ private fun CursorHardwareSettingsSubScreen(
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 if (isBackDismissKey(native.keyCode)) {
-                    if (event.type == KeyEventType.KeyUp) onBack()
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onBack()
+                    }
                     return@onPreviewKeyEvent true
                 }
                 if (isCenterActivateKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (focusedIndex) {
                             0 -> {
                                 try {
@@ -644,65 +726,76 @@ private fun CursorHardwareSettingsSubScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-
-                when (native.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        focusedIndex = if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
-                        true
-                    }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        focusedIndex = if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
-                        true
-                    }
-                    KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        when (focusedIndex) {
-                            1 -> {
-                                val newSpeed = (moveSpeed - 2f).coerceIn(4f, 26f)
-                                CursorPreferences.setMoveSpeed(context, newSpeed)
-                                moveSpeed = newSpeed
-                                true
-                            }
-                            2 -> {
-                                val newAccel = (acceleration - 0.02f).coerceIn(1.00f, 1.25f)
-                                CursorPreferences.setAcceleration(context, newAccel)
-                                acceleration = newAccel
-                                true
-                            }
-                            3 -> {
-                                val newSize = (cursorSizeDp - 4).coerceIn(20, 52)
-                                CursorPreferences.setCursorSizeDp(context, newSize)
-                                cursorSizeDp = newSize
-                                true
-                            }
-                            else -> false
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                            if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
+                        } else {
+                            if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
                         }
+                        SoundEffectManager.play(context, SoundEffect.NAV)
                     }
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        when (focusedIndex) {
-                            1 -> {
-                                val newSpeed = (moveSpeed + 2f).coerceIn(4f, 26f)
-                                CursorPreferences.setMoveSpeed(context, newSpeed)
-                                moveSpeed = newSpeed
-                                true
-                            }
-                            2 -> {
-                                val newAccel = (acceleration + 0.02f).coerceIn(1.00f, 1.25f)
-                                CursorPreferences.setAcceleration(context, newAccel)
-                                acceleration = newAccel
-                                true
-                            }
-                            3 -> {
-                                val newSize = (cursorSizeDp + 4).coerceIn(20, 52)
-                                CursorPreferences.setCursorSizeDp(context, newSize)
-                                cursorSizeDp = newSize
-                                true
-                            }
-                            else -> false
-                        }
-                    }
-                    else -> false
+                    return@onPreviewKeyEvent true
                 }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        val handled = when (native.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                when (focusedIndex) {
+                                    1 -> {
+                                        val newSpeed = (moveSpeed - 2f).coerceIn(4f, 26f)
+                                        CursorPreferences.setMoveSpeed(context, newSpeed)
+                                        moveSpeed = newSpeed
+                                        true
+                                    }
+                                    2 -> {
+                                        val newAccel = (acceleration - 0.02f).coerceIn(1.00f, 1.25f)
+                                        CursorPreferences.setAcceleration(context, newAccel)
+                                        acceleration = newAccel
+                                        true
+                                    }
+                                    3 -> {
+                                        val newSize = (cursorSizeDp - 4).coerceIn(20, 52)
+                                        CursorPreferences.setCursorSizeDp(context, newSize)
+                                        cursorSizeDp = newSize
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            }
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                when (focusedIndex) {
+                                    1 -> {
+                                        val newSpeed = (moveSpeed + 2f).coerceIn(4f, 26f)
+                                        CursorPreferences.setMoveSpeed(context, newSpeed)
+                                        moveSpeed = newSpeed
+                                        true
+                                    }
+                                    2 -> {
+                                        val newAccel = (acceleration + 0.02f).coerceIn(1.00f, 1.25f)
+                                        CursorPreferences.setAcceleration(context, newAccel)
+                                        acceleration = newAccel
+                                        true
+                                    }
+                                    3 -> {
+                                        val newSize = (cursorSizeDp + 4).coerceIn(20, 52)
+                                        CursorPreferences.setCursorSizeDp(context, newSize)
+                                        cursorSizeDp = newSize
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            }
+                            else -> false
+                        }
+                        if (handled) {
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                false
             }
     ) {
         LazyColumn(
@@ -869,21 +962,33 @@ private fun BehaviorSettingsSubScreen(
     val isT9SearchEnabled by PreferencesManager.isT9SearchEnabled.collectAsState()
     val isDpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
     val isDpadBoundaryHaptics by PreferencesManager.isDpadBoundaryHaptics.collectAsState()
+    val keypadSoundMode by PreferencesManager.keypadSoundMode.collectAsState()
+    val isLidLedEnabled by PreferencesManager.isLidLedEnabled.collectAsState()
+    val isLidLedChargingEnabled by PreferencesManager.isLidLedChargingEnabled.collectAsState()
+    val lidLedColor by PreferencesManager.lidLedColor.collectAsState()
+    val isMediaVolumeLockEnabled by PreferencesManager.isMediaVolumeLockEnabled.collectAsState()
     val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
     val systemMonitorInterval by PreferencesManager.systemMonitorInterval.collectAsState()
 
-    // Dynamic item list
-    val items = remember(onCreateFolderClick, isSystemMonitorEnabled) {
+    // Dynamic item list matching LazyColumn visual card order
+    val items = remember(onCreateFolderClick, isSystemMonitorEnabled, isLidLedEnabled) {
         buildList {
             if (onCreateFolderClick != null) {
                 add("create_folder")
             }
             add("folder_grid")
             add("t9_search")
+            add("hidden_apps")
             add("speed_dial")
             add("dpad_wrap")
             add("boundary_haptics")
-            add("hidden_apps")
+            add("keypad_sound")
+            add("media_volume_lock")
+            add("lid_led_notification")
+            if (isLidLedEnabled) {
+                add("lid_led_color")
+                add("lid_led_charging")
+            }
             add("system_monitor")
             if (isSystemMonitorEnabled) {
                 add("monitor_interval")
@@ -909,12 +1014,16 @@ private fun BehaviorSettingsSubScreen(
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 if (isBackDismissKey(native.keyCode)) {
-                    if (event.type == KeyEventType.KeyUp) onBack()
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onBack()
+                    }
                     return@onPreviewKeyEvent true
                 }
                 if (isCenterActivateKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         when (items.getOrNull(focusedIndex)) {
@@ -924,6 +1033,57 @@ private fun BehaviorSettingsSubScreen(
                             "speed_dial" -> onOpenSpeedDial?.invoke()
                             "dpad_wrap" -> PreferencesManager.setDpadWrapAround(context, !isDpadWrapAround)
                             "boundary_haptics" -> PreferencesManager.setDpadBoundaryHaptics(context, !isDpadBoundaryHaptics)
+                            "keypad_sound" -> {
+                                val nextMode = when (keypadSoundMode) {
+                                    "kawaii" -> "retro"
+                                    "retro" -> "off"
+                                    else -> "kawaii"
+                                }
+                                PreferencesManager.setKeypadSoundMode(context, nextMode)
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                            }
+                            "media_volume_lock" -> {
+                                val next = !isMediaVolumeLockEnabled
+                                if (next && !HardwareRemapManager.isAccessibilityServiceEnabled(context)) {
+                                    Toast.makeText(
+                                        context,
+                                        "Please enable Mochibun in Accessibility Services ♡",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    try {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                    } catch (_: Exception) {}
+                                } else {
+                                    PreferencesManager.setMediaVolumeLockEnabled(context, next)
+                                    if (next) {
+                                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                                    } else {
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                }
+                            }
+                            "lid_led_notification" -> {
+                                val next = !isLidLedEnabled
+                                PreferencesManager.setLidLedEnabled(context, next)
+                                if (next) LidLedManager.updateLedState() else LidLedManager.clearAllLeds()
+                            }
+                            "lid_led_color" -> {
+                                val nextColor = when (lidLedColor) {
+                                    "pink" -> "purple"
+                                    "purple" -> "white"
+                                    "white" -> "green"
+                                    else -> "pink"
+                                }
+                                PreferencesManager.setLidLedColor(context, nextColor)
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                            }
+                            "lid_led_charging" -> {
+                                val next = !isLidLedChargingEnabled
+                                PreferencesManager.setLidLedChargingEnabled(context, next)
+                                LidLedManager.updateLedState()
+                            }
                             "hidden_apps" -> onOpenHiddenApps?.invoke()
                             "system_monitor" -> PreferencesManager.setSystemMonitorEnabled(context, !isSystemMonitorEnabled)
                             "monitor_interval" -> {
@@ -939,43 +1099,92 @@ private fun BehaviorSettingsSubScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-
-                when (native.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        focusedIndex = if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
-                        true
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                            if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
+                        } else {
+                            if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
+                        }
+                        SoundEffectManager.play(context, SoundEffect.NAV)
                     }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        focusedIndex = if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
-                        true
-                    }
-                    KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        if (items.getOrNull(focusedIndex) == "monitor_interval") {
-                            val nextInterval = when (systemMonitorInterval) {
-                                5 -> 3
-                                3 -> 2
-                                2 -> 1
-                                else -> 5
-                            }
-                            PreferencesManager.setSystemMonitorInterval(context, nextInterval)
-                            true
-                        } else false
-                    }
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        if (items.getOrNull(focusedIndex) == "monitor_interval") {
-                            val nextInterval = when (systemMonitorInterval) {
-                                1 -> 2
-                                2 -> 3
-                                3 -> 5
-                                else -> 1
-                            }
-                            PreferencesManager.setSystemMonitorInterval(context, nextInterval)
-                            true
-                        } else false
-                    }
-                    else -> false
+                    return@onPreviewKeyEvent true
                 }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (native.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                when (items.getOrNull(focusedIndex)) {
+                                    "keypad_sound" -> {
+                                        val nextMode = when (keypadSoundMode) {
+                                            "kawaii" -> "off"
+                                            "retro" -> "kawaii"
+                                            else -> "retro"
+                                        }
+                                        PreferencesManager.setKeypadSoundMode(context, nextMode)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                    "lid_led_color" -> {
+                                        val nextColor = when (lidLedColor) {
+                                            "pink" -> "green"
+                                            "purple" -> "pink"
+                                            "white" -> "purple"
+                                            else -> "white"
+                                        }
+                                        PreferencesManager.setLidLedColor(context, nextColor)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                    "monitor_interval" -> {
+                                        val nextInterval = when (systemMonitorInterval) {
+                                            5 -> 3
+                                            3 -> 2
+                                            2 -> 1
+                                            else -> 5
+                                        }
+                                        PreferencesManager.setSystemMonitorInterval(context, nextInterval)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                }
+                            }
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                when (items.getOrNull(focusedIndex)) {
+                                    "keypad_sound" -> {
+                                        val nextMode = when (keypadSoundMode) {
+                                            "kawaii" -> "retro"
+                                            "retro" -> "off"
+                                            else -> "kawaii"
+                                        }
+                                        PreferencesManager.setKeypadSoundMode(context, nextMode)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                    "lid_led_color" -> {
+                                        val nextColor = when (lidLedColor) {
+                                            "pink" -> "purple"
+                                            "purple" -> "white"
+                                            "white" -> "green"
+                                            else -> "pink"
+                                        }
+                                        PreferencesManager.setLidLedColor(context, nextColor)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                    "monitor_interval" -> {
+                                        val nextInterval = when (systemMonitorInterval) {
+                                            1 -> 2
+                                            2 -> 3
+                                            3 -> 5
+                                            else -> 1
+                                        }
+                                        PreferencesManager.setSystemMonitorInterval(context, nextInterval)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                false
             }
     ) {
         LazyColumn(
@@ -1050,6 +1259,134 @@ private fun BehaviorSettingsSubScreen(
                         isFocused = items.getOrNull(focusedIndex) == "boundary_haptics",
                         onCheckedChange = { PreferencesManager.setDpadBoundaryHaptics(context, it) }
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val soundModeLabel = when (keypadSoundMode) {
+                        "kawaii" -> "Kawaii Pop"
+                        "retro" -> "Retro Keitai"
+                        else -> "Muted / Off"
+                    }
+                    val soundModeSubtitle = when (keypadSoundMode) {
+                        "kawaii" -> "Sweet 8-bit resonant chimes & bubbles"
+                        "retro" -> "Crisp tactile mechanical switch clicks"
+                        else -> "Silent keypad navigation"
+                    }
+                    SettingsStepperRow(
+                        title = "Keypad Audio FX",
+                        subtitle = soundModeSubtitle,
+                        valueDisplay = soundModeLabel,
+                        isFocused = items.getOrNull(focusedIndex) == "keypad_sound",
+                        onDecrement = {
+                            val nextMode = when (keypadSoundMode) {
+                                "kawaii" -> "off"
+                                "retro" -> "kawaii"
+                                else -> "retro"
+                            }
+                            PreferencesManager.setKeypadSoundMode(context, nextMode)
+                            if (nextMode != "off") {
+                                SoundEffectManager.play(context, SoundEffect.NAV)
+                            }
+                        },
+                        onIncrement = {
+                            val nextMode = when (keypadSoundMode) {
+                                "kawaii" -> "retro"
+                                "retro" -> "off"
+                                else -> "kawaii"
+                            }
+                            PreferencesManager.setKeypadSoundMode(context, nextMode)
+                            if (nextMode != "off") {
+                                SoundEffectManager.play(context, SoundEffect.NAV)
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Lock Volume Keys to Media",
+                        subtitle = if (isMediaVolumeLockEnabled) "Physical volume buttons adjust media only & keep call vol max" else "System default volume behavior",
+                        checked = isMediaVolumeLockEnabled,
+                        isFocused = items.getOrNull(focusedIndex) == "media_volume_lock",
+                        onCheckedChange = { enabled ->
+                            if (enabled && !HardwareRemapManager.isAccessibilityServiceEnabled(context)) {
+                                Toast.makeText(
+                                    context,
+                                    "Please enable Mochibun in Accessibility Services ♡",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                try {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                } catch (_: Exception) {}
+                            } else {
+                                PreferencesManager.setMediaVolumeLockEnabled(context, enabled)
+                                if (enabled) {
+                                    SoundEffectManager.play(context, SoundEffect.SELECT)
+                                } else {
+                                    SoundEffectManager.play(context, SoundEffect.NAV)
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+
+            item {
+                SettingsCard(categoryTitle = "Clamshell & Exterior LED") {
+                    SettingsToggleRow(
+                        title = "Lid Notification LED",
+                        subtitle = if (isLidLedEnabled) "Pulse exterior breathing LED when lid is closed" else "Exterior notification LED disabled",
+                        checked = isLidLedEnabled,
+                        isFocused = items.getOrNull(focusedIndex) == "lid_led_notification",
+                        onCheckedChange = {
+                            PreferencesManager.setLidLedEnabled(context, it)
+                            if (it) LidLedManager.updateLedState() else LidLedManager.clearAllLeds()
+                        }
+                    )
+                    if (isLidLedEnabled) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val colorLabel = when (lidLedColor) {
+                            "purple" -> "💜 Lavender Purple"
+                            "white" -> "🤍 Pure White"
+                            "green" -> "🌿 Retro Green"
+                            else -> "🌸 Sakura Pink"
+                        }
+                        SettingsStepperRow(
+                            title = "Lid LED Color",
+                            subtitle = "Exterior light accent for notifications & charging",
+                            valueDisplay = colorLabel,
+                            isFocused = items.getOrNull(focusedIndex) == "lid_led_color",
+                            onDecrement = {
+                                val nextColor = when (lidLedColor) {
+                                    "pink" -> "green"
+                                    "purple" -> "pink"
+                                    "white" -> "purple"
+                                    else -> "white"
+                                }
+                                PreferencesManager.setLidLedColor(context, nextColor)
+                                SoundEffectManager.play(context, SoundEffect.NAV)
+                            },
+                            onIncrement = {
+                                val nextColor = when (lidLedColor) {
+                                    "pink" -> "purple"
+                                    "purple" -> "white"
+                                    "white" -> "green"
+                                    else -> "pink"
+                                }
+                                PreferencesManager.setLidLedColor(context, nextColor)
+                                SoundEffectManager.play(context, SoundEffect.NAV)
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsToggleRow(
+                            title = "Lid Charging Indicator",
+                            subtitle = if (isLidLedChargingEnabled) "Light exterior LED while charging with lid closed" else "Charging light disabled",
+                            checked = isLidLedChargingEnabled,
+                            isFocused = items.getOrNull(focusedIndex) == "lid_led_charging",
+                            onCheckedChange = {
+                                PreferencesManager.setLidLedChargingEnabled(context, it)
+                                LidLedManager.updateLedState()
+                            }
+                        )
+                    }
                 }
             }
 
@@ -1155,7 +1492,10 @@ private fun AboutMochibunSubScreen(
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 if (isBackDismissKey(native.keyCode)) {
-                    if (event.type == KeyEventType.KeyUp) onBack()
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onBack()
+                    }
                     return@onPreviewKeyEvent true
                 }
                 false
@@ -1365,14 +1705,19 @@ private fun BackupRestoreSettingsSubScreen(
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 if (isBackDismissKey(native.keyCode)) {
-                    if (event.type == KeyEventType.KeyUp) onBack()
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onBack()
+                    }
                     return@onPreviewKeyEvent true
                 }
                 if (isCenterActivateKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (items.getOrNull(focusedIndex)) {
                             "export_bundle" -> showExportBundleDialog = true
                             "import_bundle" -> bundleImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
@@ -1383,19 +1728,19 @@ private fun BackupRestoreSettingsSubScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-
-                when (native.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        focusedIndex = if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
-                        true
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                            if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
+                        } else {
+                            if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
+                        }
+                        SoundEffectManager.play(context, SoundEffect.NAV)
                     }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        focusedIndex = if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
-                        true
-                    }
-                    else -> false
+                    return@onPreviewKeyEvent true
                 }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                false
             }
     ) {
         LazyColumn(

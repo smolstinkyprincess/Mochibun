@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Configuration
+import android.media.AudioManager
 import android.hardware.camera2.CameraManager
 import android.os.Handler
 import android.os.Looper
@@ -19,6 +20,7 @@ import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.ButtonActionConfig
 import com.crinklecodone.mochibun.data.model.PhysicalKey
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +67,11 @@ class MochibunAccessibilityService : AccessibilityService() {
         loadConfiguration()
     }
 
+    private var audioManager: AudioManager? = null
+
+    @Volatile
+    private var isMediaVolumeLockActive: Boolean = false
+
     private val clamshellListener = object : ClamshellListener {
         override fun onLidClosed() {
             clearPendingHandlers()
@@ -81,6 +88,15 @@ class MochibunAccessibilityService : AccessibilityService() {
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         prefs.registerOnSharedPreferenceChangeListener(prefChangeListener)
+
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        isMediaVolumeLockActive = PreferencesManager.isMediaVolumeLockEnabled(this)
+        serviceScope.launch {
+            PreferencesManager.isMediaVolumeLockEnabled.collect { enabled ->
+                isMediaVolumeLockActive = enabled
+            }
+        }
+
         loadConfiguration()
     }
 
@@ -123,6 +139,7 @@ class MochibunAccessibilityService : AccessibilityService() {
             val appSwitchConfig = HardwareRemapManager.getButtonActionConfig(this, PhysicalKey.APP_SWITCH)
             activeMappings[KeyEvent.KEYCODE_APP_SWITCH] = appSwitchConfig
         }
+        isMediaVolumeLockActive = PreferencesManager.isMediaVolumeLockEnabled(this)
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -130,6 +147,35 @@ class MochibunAccessibilityService : AccessibilityService() {
         if (ClamshellManager.isLidClosed(this)) {
             clearPendingHandlers()
             return false
+        }
+
+        // Intercept hardware volume keys when Media Volume Lock is active
+        if (isMediaVolumeLockActive && (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    val audio = audioManager ?: (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.also {
+                        audioManager = it
+                    }
+                    if (audio != null) {
+                        val direction = if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                            AudioManager.ADJUST_RAISE
+                        } else {
+                            AudioManager.ADJUST_LOWER
+                        }
+                        audio.adjustStreamVolume(
+                            AudioManager.STREAM_MUSIC,
+                            direction,
+                            AudioManager.FLAG_SHOW_UI
+                        )
+                        val maxCallVol = audio.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
+                        if (audio.getStreamVolume(AudioManager.STREAM_VOICE_CALL) < maxCallVol) {
+                            audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, maxCallVol, 0)
+                        }
+                    }
+                    return true
+                }
+                KeyEvent.ACTION_UP -> return true
+            }
         }
 
         // Fast lookup from in-memory cache without blocking UI-thread disk I/O

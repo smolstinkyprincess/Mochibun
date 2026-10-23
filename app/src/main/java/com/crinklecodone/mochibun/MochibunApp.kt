@@ -7,9 +7,12 @@ import coil.ImageLoaderFactory
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.memory.MemoryCache
+import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.core.system.ClamshellManager
+import com.crinklecodone.mochibun.core.system.LidLedManager
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
+import com.crinklecodone.mochibun.data.repository.TypographyManager
 import com.topjohnwu.superuser.Shell
 
 class MochibunApp : Application(), ImageLoaderFactory {
@@ -28,6 +31,9 @@ class MochibunApp : Application(), ImageLoaderFactory {
         ClamshellManager.init(this)
         PreferencesManager.init(this)
         ExternalThemeManager.init(this)
+        TypographyManager.scanFonts(this)
+        LidLedManager.init(this)
+        SoundEffectManager.init(this)
     }
 
     override fun newImageLoader(): ImageLoader {

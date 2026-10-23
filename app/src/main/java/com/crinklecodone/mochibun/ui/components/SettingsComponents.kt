@@ -352,7 +352,11 @@ fun SettingsStepperRow(
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onIncrement() }
+        ) {
             Text(
                 text = title,
                 color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
@@ -402,6 +406,7 @@ fun SettingsStepperRow(
                     .clip(RoundedCornerShape(8.dp))
                     .background(ActiveTheme.surfaceTint.copy(alpha = 0.45f))
                     .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
+                    .clickable { onIncrement() }
                     .padding(horizontal = 8.dp, vertical = 3.dp),
                 contentAlignment = Alignment.Center
             ) {

@@ -59,4 +59,5 @@ interface LauncherKeypadActions {
     fun openFolder(folderId: String)
     fun openLauncherMenu()
     fun openSpeedDial(digit: Int)
+    fun openQuickMemo() {}
 }

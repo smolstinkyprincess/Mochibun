@@ -37,6 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
+import com.crinklecodone.mochibun.data.repository.TypographyManager
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import com.crinklecodone.mochibun.core.sound.SoundEffect
+import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.ui.dialogs.KawaiiDialogPillButton
 import com.crinklecodone.mochibun.ui.dialogs.PixelRibbonBow
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
@@ -82,8 +86,15 @@ fun ThemeStudioDialog(
         )
     }
 
+    val currentSavedFont = remember { PreferencesManager.getThemeFontFamily(context) }
     var draft by remember(currentTheme) {
-        mutableStateOf(currentTheme)
+        mutableStateOf(
+            if (currentTheme.fontFamilyId == "default" && currentSavedFont != "default") {
+                currentTheme.copy(fontFamilyId = currentSavedFont)
+            } else {
+                currentTheme
+            }
+        )
     }
     var editingColorField by remember { mutableStateOf<String?>(null) }
     var customPresets by remember { mutableStateOf(loadCustomPresets(prefs)) }
@@ -92,9 +103,11 @@ fun ThemeStudioDialog(
 
     val themeOptions by ExternalThemeManager.themes.collectAsState()
     val externalThemes = remember(themeOptions) { themeOptions.filter { it.isExternal } }
+    val fontOptions by TypographyManager.options.collectAsState()
 
     LaunchedEffect(Unit) {
         ExternalThemeManager.scanThemes(context)
+        TypographyManager.scanFonts(context)
     }
 
     // Main dialog focus state:
@@ -104,8 +117,9 @@ fun ThemeStudioDialog(
     // Row 3: External YAML themes (index 0 until externalThemes.size)
     // Row 4: Custom presets (index 0 until customPresets.size; subCol 0 = select, 1 = delete)
     // Row 5: Card Roundness slider (LEFT/RIGHT adjusts by 1dp)
-    // Row 6..11: Individual Color rows (0..5)
-    // Row 12: Footer buttons (col 0 = Cancel, col 1 = Apply)
+    // Row 6: Typography selector (LEFT/RIGHT cycles fonts, CENTER selects next)
+    // Row 7..12: Individual Color rows (0..5)
+    // Row 13: Footer buttons (col 0 = Cancel, col 1 = Apply)
     var focusRow by remember { mutableIntStateOf(1) }
     var focusCol by remember { mutableIntStateOf(0) }
     var externalThemeIndex by remember { mutableIntStateOf(0) }
@@ -137,8 +151,8 @@ fun ThemeStudioDialog(
         val targetScroll = when {
             editingColorField != null -> scrollState.maxValue
             focusRow <= 1 -> 0
-            focusRow in 2..5 -> (scrollState.maxValue * 0.35f).toInt()
-            focusRow in 6..11 -> (scrollState.maxValue * 0.78f).toInt()
+            focusRow in 2..6 -> (scrollState.maxValue * 0.35f).toInt()
+            focusRow in 7..12 -> (scrollState.maxValue * 0.78f).toInt()
             else -> scrollState.maxValue
         }
         scrollState.animateScrollTo(targetScroll)
@@ -325,15 +339,24 @@ fun ThemeStudioDialog(
                                     val next = if (draft.cardRoundnessDp >= 32f) 8f else (draft.cardRoundnessDp + 4f).coerceAtMost(32f)
                                     draft = draft.copy(cardRoundnessDp = next)
                                 }
-                                in 6..11 -> {
-                                    val fieldKey = COLOR_FIELD_DEFS[focusRow - 6].first
+                                6 -> {
+                                    val curIdx = fontOptions.indexOfFirst { it.id == draft.fontFamilyId }.coerceAtLeast(0)
+                                    val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
+                                    val nextOption = fontOptions[nextIdx]
+                                    draft = draft.copy(fontFamilyId = nextOption.id)
+                                    PreferencesManager.setThemeFontFamily(context, nextOption.id)
+                                    SoundEffectManager.play(context, SoundEffect.SELECT)
+                                }
+                                in 7..12 -> {
+                                    val fieldKey = COLOR_FIELD_DEFS[focusRow - 7].first
                                     selectedSwatchIndex = 0
                                     editingColorField = fieldKey
                                 }
-                                12 -> {
+                                13 -> {
                                     if (focusCol == 0) {
                                         onDismiss()
                                     } else {
+                                        PreferencesManager.setThemeFontFamily(context, draft.fontFamilyId)
                                         onApply(draft)
                                     }
                                 }
@@ -348,7 +371,7 @@ fun ThemeStudioDialog(
                         KeyEvent.KEYCODE_DPAD_UP -> {
                             when (focusRow) {
                                 0 -> {
-                                    focusRow = 12
+                                    focusRow = 13
                                     focusCol = 1
                                 }
                                 3 -> {
@@ -379,6 +402,8 @@ fun ThemeStudioDialog(
                                         focusRow = 2
                                     }
                                 }
+                                6 -> focusRow = 5
+                                7 -> focusRow = 6
                                 else -> {
                                     focusRow = (focusRow - 1).coerceAtLeast(0)
                                 }
@@ -415,35 +440,53 @@ fun ThemeStudioDialog(
                                         focusRow = 5
                                     }
                                 }
-                                12 -> {
+                                5 -> focusRow = 6
+                                6 -> focusRow = 7
+                                13 -> {
                                     focusRow = 0
                                 }
                                 else -> {
-                                    focusRow = (focusRow + 1).coerceAtMost(12)
+                                    focusRow = (focusRow + 1).coerceAtMost(13)
                                 }
                             }
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
                             when (focusRow) {
-                                1, 2, 12 -> focusCol = 0
+                                1, 2, 13 -> focusCol = 0
                                 4 -> customPresetDeleteCol = 0
                                 5 -> {
                                     draft = draft.copy(
                                         cardRoundnessDp = (draft.cardRoundnessDp - 2f).coerceIn(8f, 32f)
                                     )
                                 }
+                                6 -> {
+                                    val curIdx = fontOptions.indexOfFirst { it.id == draft.fontFamilyId }.coerceAtLeast(0)
+                                    val prevIdx = if (curIdx > 0) curIdx - 1 else fontOptions.size - 1
+                                    val prevOption = fontOptions[prevIdx]
+                                    draft = draft.copy(fontFamilyId = prevOption.id)
+                                    PreferencesManager.setThemeFontFamily(context, prevOption.id)
+                                    SoundEffectManager.play(context, SoundEffect.NAV)
+                                }
                             }
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             when (focusRow) {
-                                1, 2, 12 -> focusCol = 1
+                                1, 2, 13 -> focusCol = 1
                                 4 -> customPresetDeleteCol = 1
                                 5 -> {
                                     draft = draft.copy(
                                         cardRoundnessDp = (draft.cardRoundnessDp + 2f).coerceIn(8f, 32f)
                                     )
+                                }
+                                6 -> {
+                                    val curIdx = fontOptions.indexOfFirst { it.id == draft.fontFamilyId }.coerceAtLeast(0)
+                                    val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
+                                    val nextOption = fontOptions[nextIdx]
+                                    draft = draft.copy(fontFamilyId = nextOption.id)
+                                    PreferencesManager.setThemeFontFamily(context, nextOption.id)
+                                    SoundEffectManager.play(context, SoundEffect.NAV)
                                 }
                             }
                             true
@@ -841,6 +884,92 @@ fun ThemeStudioDialog(
                         )
                     }
 
+                    // Typography Selector (Row 6)
+                    val typographyFocused = editingColorField == null && focusRow == 6
+                    val selectedFontOption = remember(draft.fontFamilyId, fontOptions) {
+                        fontOptions.firstOrNull { it.id == draft.fontFamilyId } ?: TypographyManager.BuiltInTypographyOptions.first()
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (typographyFocused) draft.selectedContainerColor else Color.Transparent
+                            )
+                            .border(
+                                width = if (typographyFocused) 2.dp else 0.dp,
+                                color = if (typographyFocused) draft.appActionColor else Color.Transparent,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable {
+                                focusRow = 6
+                                val curIdx = fontOptions.indexOfFirst { it.id == draft.fontFamilyId }.coerceAtLeast(0)
+                                val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
+                                val nextOption = fontOptions[nextIdx]
+                                draft = draft.copy(fontFamilyId = nextOption.id)
+                                PreferencesManager.setThemeFontFamily(context, nextOption.id)
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                            }
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    "Typography \uD83D\uDD24",
+                                    fontWeight = FontWeight.Bold,
+                                    color = draft.fgTextColor,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    selectedFontOption.subtitle,
+                                    fontSize = 10.5.sp,
+                                    color = draft.fgTextColor.copy(alpha = 0.7f)
+                                )
+                            }
+                            if (typographyFocused) {
+                                Text(
+                                    "\u25c0 / \u25b6",
+                                    fontWeight = FontWeight.Bold,
+                                    color = draft.appActionColor,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(5.dp))
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(draft.greetingBgColor.copy(alpha = 0.65f))
+                                .border(1.dp, draft.greetingOutlineColor, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedFontOption.name,
+                                fontWeight = FontWeight.Bold,
+                                color = draft.fgTextColor,
+                                fontSize = 12.sp,
+                                fontFamily = selectedFontOption.fontFamily
+                            )
+                            Text(
+                                text = selectedFontOption.sampleText,
+                                color = draft.appActionColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                fontFamily = selectedFontOption.fontFamily
+                            )
+                        }
+                    }
+
                     Text(
                         "Individual Colors 🎨",
                         fontWeight = FontWeight.Bold,
@@ -860,10 +989,10 @@ fun ThemeStudioDialog(
                         ColorRow(
                             label = label,
                             color = colorVal,
-                            isFocused = editingColorField == null && focusRow == 6 + idx,
+                            isFocused = editingColorField == null && focusRow == 7 + idx,
                             theme = draft
                         ) {
-                            focusRow = 6 + idx
+                            focusRow = 7 + idx
                             selectedSwatchIndex = 0
                             editingColorField = key
                         }
@@ -949,15 +1078,18 @@ fun ThemeStudioDialog(
                 ) {
                     KawaiiDialogPillButton(
                         text = "Cancel",
-                        isFocused = editingColorField == null && focusRow == 12 && focusCol == 0,
+                        isFocused = editingColorField == null && focusRow == 13 && focusCol == 0,
                         onClick = onDismiss
                     )
 
                     KawaiiDialogPillButton(
                         text = "Apply ♡",
-                        isFocused = editingColorField == null && focusRow == 12 && focusCol == 1,
+                        isFocused = editingColorField == null && focusRow == 13 && focusCol == 1,
                         isPrimary = true,
-                        onClick = { onApply(draft) }
+                        onClick = {
+                            PreferencesManager.setThemeFontFamily(context, draft.fontFamilyId)
+                            onApply(draft)
+                        }
                     )
                 }
             }

@@ -60,6 +60,7 @@ import com.crinklecodone.mochibun.ui.dialogs.HardwareButtonsDialog
 import com.crinklecodone.mochibun.ui.dialogs.HiddenAppsDialog
 import com.crinklecodone.mochibun.ui.dialogs.IconPackSelectionDialog
 import com.crinklecodone.mochibun.ui.dialogs.KawaiiIconPicker
+import com.crinklecodone.mochibun.ui.dialogs.QuickMemoDialog
 import com.crinklecodone.mochibun.ui.dialogs.SpeedDialDialog
 import com.crinklecodone.mochibun.ui.dialogs.dialogWidth
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
@@ -260,6 +261,7 @@ fun MainLauncher(
     val t9State = remember { T9InputState() }
     val focusRequester = remember { FocusRequester() }
     var speedDialDialogOpen by remember { mutableStateOf(false) }
+    var quickMemoDialogOpen by remember { mutableStateOf(false) }
 
     val anyModalOpen = selectedApp != null ||
         launcherMenuOpen ||
@@ -274,6 +276,7 @@ fun MainLauncher(
         folderToCreateFrom != null ||
         folderIconMenuOpen ||
         speedDialDialogOpen ||
+        quickMemoDialogOpen ||
         activeIncomingPreview != null
 
     LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress) {
@@ -306,6 +309,7 @@ fun MainLauncher(
             folderToCreateFrom = null
             folderIconMenuOpen = false
             speedDialDialogOpen = false
+            quickMemoDialogOpen = false
             drawerOpen = false
             centerKeyState = 0
             t9State.t9Key = null
@@ -485,6 +489,7 @@ fun MainLauncher(
             }
             override fun openLauncherMenu() { launcherMenuOpen = true }
             override fun openSpeedDial(digit: Int) { speedDialDialogOpen = true }
+            override fun openQuickMemo() { quickMemoDialogOpen = true }
         }
     }
 
@@ -862,6 +867,14 @@ fun MainLauncher(
                     apps = visibleApps,
                     onDismiss = {
                         speedDialDialogOpen = false
+                    }
+                )
+            }
+
+            if (quickMemoDialogOpen) {
+                QuickMemoDialog(
+                    onDismiss = {
+                        quickMemoDialogOpen = false
                     }
                 )
             }
