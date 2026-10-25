@@ -108,11 +108,20 @@ internal class LauncherKeyHandler(
         }
 
         if (nativeEvent.action == KeyEvent.ACTION_UP) {
+            if (nativeEvent.keyCode == KeyEvent.KEYCODE_POUND) {
+                val wasShortPress = state.poundKeyState == 1
+                actions.setPoundKeyState(0)
+                if (wasShortPress) {
+                    SoundEffectManager.play(context, SoundEffect.SELECT)
+                    actions.openLauncherMenu()
+                }
+                return true
+            }
+
             if (isDpadOrActionKey(nativeEvent.keyCode) ||
                 nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
                 (nativeEvent.keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) ||
                 nativeEvent.keyCode == KeyEvent.KEYCODE_STAR ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_POUND ||
                 isBackDismissKey(nativeEvent.keyCode) ||
                 nativeEvent.keyCode == KeyEvent.KEYCODE_F4
             ) {
@@ -216,11 +225,12 @@ internal class LauncherKeyHandler(
             KeyEvent.KEYCODE_POUND -> {
                 if (nativeEvent.repeatCount == 0) {
                     SoundEffectManager.play(context, SoundEffect.CLICK)
-                    actions.openLauncherMenu()
-                } else if (nativeEvent.repeatCount == 1) {
+                    actions.setPoundKeyState(1)
+                } else if (state.poundKeyState == 1 || nativeEvent.isLongPress) {
+                    actions.setPoundKeyState(2)
                     performBoundaryHaptic(context)
-                    SoundEffectManager.play(context, SoundEffect.SELECT)
-                    actions.openQuickMemo()
+                    SoundEffectManager.play(context, SoundEffect.CLICK)
+                    actions.openKaomojiWheel()
                 }
                 return true
             }

@@ -25,6 +25,15 @@ enum class SoundEffect {
 }
 
 /**
+ * Descriptor for selectable keypad sound themes.
+ */
+data class SoundTheme(
+    val id: String,
+    val name: String,
+    val description: String
+)
+
+/**
  * Low-latency keypad audio feedback coordinator.
  * Synthesizes tiny 16-bit PCM waveforms procedurally in memory on first run,
  * caching them to avoid bundling binary audio assets in the APK.
@@ -34,6 +43,18 @@ object SoundEffectManager {
 
     private const val TAG = "SoundEffectManager"
     private const val SAMPLE_RATE = 22050
+
+    val SoundThemes = listOf(
+        SoundTheme("kawaii", "Kawaii Pop", "Sweet resonant chimes & bubbly drops"),
+        SoundTheme("retro", "Retro Keitai", "Authentic 2000s flip phone button click"),
+        SoundTheme("chiptune", "8-Bit Chiptune", "Classic Game Boy & Famicom pulse waves"),
+        SoundTheme("pager", "Cyber Pager", "90s Pokebell & Tamagotchi crystal pings"),
+        SoundTheme("thock", "Tactile Thock", "Deep mechanical switch & clamshell acoustics"),
+        SoundTheme("water", "Water Drop", "Organic calming water bubbles & droplets"),
+        SoundTheme("off", "Muted / Off", "Silent keypad navigation")
+    )
+
+    private val ALL_SYNTHESIZED_THEMES = listOf("kawaii", "retro", "chiptune", "pager", "thock", "water")
 
     private var soundPool: SoundPool? = null
     private val soundMap = mutableMapOf<Pair<String, SoundEffect>, Int>()
@@ -50,15 +71,16 @@ object SoundEffectManager {
                 .build()
 
             val pool = SoundPool.Builder()
-                .setMaxStreams(3)
+                .setMaxStreams(4)
                 .setAudioAttributes(audioAttributes)
                 .build()
 
             soundPool = pool
             val soundDir = File(context.cacheDir, "mochibun_sounds").apply { mkdirs() }
 
-            loadTheme(soundDir, "kawaii")
-            loadTheme(soundDir, "retro")
+            for (theme in ALL_SYNTHESIZED_THEMES) {
+                loadTheme(soundDir, theme)
+            }
 
             isInitialized = true
         } catch (e: Exception) {
@@ -107,10 +129,13 @@ object SoundEffectManager {
      * Synthesizes 16-bit PCM waveforms in memory.
      */
     internal fun synthesizePcm(theme: String, effect: SoundEffect): ShortArray {
-        return if (theme == "retro") {
-            synthesizeRetroPcm(effect)
-        } else {
-            synthesizeKawaiiPcm(effect)
+        return when (theme) {
+            "retro" -> synthesizeRetroPcm(effect)
+            "chiptune" -> synthesizeChiptunePcm(effect)
+            "pager" -> synthesizePagerPcm(effect)
+            "thock" -> synthesizeThockPcm(effect)
+            "water" -> synthesizeWaterPcm(effect)
+            else -> synthesizeKawaiiPcm(effect)
         }
     }
 
@@ -244,6 +269,299 @@ object SoundEffectManager {
                     val t = i.toDouble() / SAMPLE_RATE
                     val envelope = exp(-t * 220.0)
                     val s = sin(2.0 * PI * 180.0 * t) * envelope
+                    (s * 19000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+        }
+    }
+
+    private fun pulseWave(phase: Double, duty: Double = 0.5): Double {
+        val norm = (phase % 1.0 + 1.0) % 1.0
+        return if (norm < duty) 1.0 else -1.0
+    }
+
+    private fun synthesizeChiptunePcm(effect: SoundEffect): ShortArray {
+        return when (effect) {
+            SoundEffect.NAV -> {
+                // 14ms crisp 8-bit cursor pulse blip (1760 Hz, A6)
+                val durationMs = 14
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val envelope = exp(-t * 200.0)
+                    val s = pulseWave(t * 1760.0, 0.5) * envelope
+                    (s * 17000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.CLICK -> {
+                // 22ms snappy 8-bit pitch slide (880 Hz -> 1320 Hz) with 25% pulse width
+                val durationMs = 22
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val progress = i.toDouble() / samples
+                    val freq = 880.0 + (progress * 440.0)
+                    val envelope = exp(-t * 140.0)
+                    val s = pulseWave(t * freq, 0.25) * envelope
+                    (s * 18000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.SELECT -> {
+                // 60ms 8-bit coin pickup arpeggio (B5 987 Hz -> E6 1318 Hz)
+                val durationMs = 60
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val isFirstNote = t < 0.030
+                    val freq = if (isFirstNote) 987.77 else 1318.51
+                    val noteT = if (isFirstNote) t else t - 0.030
+                    val envelope = exp(-noteT * 75.0)
+                    val s = pulseWave(t * freq, 0.5) * envelope
+                    (s * 20000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.BACK -> {
+                // 28ms descending 8-bit blip (660 Hz -> 330 Hz)
+                val durationMs = 28
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val progress = i.toDouble() / samples
+                    val freq = 660.0 - (progress * 330.0)
+                    val envelope = exp(-t * 120.0)
+                    val s = pulseWave(t * freq, 0.5) * envelope
+                    (s * 17000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.BOUNDARY -> {
+                // 18ms low 110 Hz square bounce
+                val durationMs = 18
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val envelope = exp(-t * 160.0)
+                    val s = pulseWave(t * 110.0, 0.5) * envelope
+                    (s * 16000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+        }
+    }
+
+    private fun synthesizePagerPcm(effect: SoundEffect): ShortArray {
+        return when (effect) {
+            SoundEffect.NAV -> {
+                // 12ms high-crystal Pokebell micro-ping (C7 = 2093 Hz)
+                val durationMs = 12
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val envelope = exp(-t * 260.0)
+                    val s = sin(2.0 * PI * 2093.0 * t) * envelope
+                    (s * 21000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.CLICK -> {
+                // 20ms cyber FM chirp (1800 Hz modulated by 300 Hz)
+                val durationMs = 20
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val mod = sin(2.0 * PI * 300.0 * t) * 350.0
+                    val envelope = exp(-t * 180.0)
+                    val s = sin(2.0 * PI * (1800.0 + mod) * t) * envelope
+                    (s * 20000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.SELECT -> {
+                // 66ms Y2K digital tri-tone chime: G6 (1568 Hz) -> B6 (1975 Hz) -> D7 (2349 Hz)
+                val durationMs = 66
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val step = (t / 0.022).toInt().coerceIn(0, 2)
+                    val freq = when (step) {
+                        0 -> 1567.98
+                        1 -> 1975.53
+                        else -> 2349.32
+                    }
+                    val stepT = t - (step * 0.022)
+                    val envelope = exp(-stepT * 120.0)
+                    val s = sin(2.0 * PI * freq * t) * envelope
+                    (s * 23000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.BACK -> {
+                // 24ms fast laser sweep: 1400 Hz -> 400 Hz
+                val durationMs = 24
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val progress = i.toDouble() / samples
+                    val freq = 1400.0 - (progress * 1000.0)
+                    val envelope = exp(-t * 150.0)
+                    val s = sin(2.0 * PI * freq * t) * envelope
+                    (s * 19000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.BOUNDARY -> {
+                // 16ms double micro-chirp
+                val durationMs = 16
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val localT = if (t < 0.008) t else t - 0.008
+                    val envelope = exp(-localT * 320.0)
+                    val s = sin(2.0 * PI * 650.0 * localT) * envelope
+                    (s * 17000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+        }
+    }
+
+    private fun synthesizeThockPcm(effect: SoundEffect): ShortArray {
+        return when (effect) {
+            SoundEffect.NAV -> {
+                // 14ms crisp latch + 480 Hz body resonance
+                val durationMs = 14
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val latch = if (t < 0.0025) sin(2.0 * PI * 2400.0 * t) * 0.4 else 0.0
+                    val body = sin(2.0 * PI * 480.0 * t) * exp(-t * 280.0) * 0.6
+                    val s = latch + body
+                    (s * 23000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.CLICK -> {
+                // 20ms deep mechanical spacebar/switch thock (320 Hz + 160 Hz sub)
+                val durationMs = 20
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s1 = sin(2.0 * PI * 320.0 * t) * 0.65
+                    val s2 = sin(2.0 * PI * 160.0 * t) * 0.35
+                    val envelope = exp(-t * 210.0)
+                    val s = (s1 + s2) * envelope
+                    (s * 27000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.SELECT -> {
+                // 36ms double-latch tactile confirmation click
+                val durationMs = 36
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s1 = sin(2.0 * PI * 520.0 * t) * exp(-t * 260.0) * 0.55
+                    val s2 = if (t >= 0.014) {
+                        val t2 = t - 0.014
+                        sin(2.0 * PI * 680.0 * t2) * exp(-t2 * 240.0) * 0.45
+                    } else 0.0
+                    val s = s1 + s2
+                    (s * 26000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.BACK -> {
+                // 16ms return stroke switch release (400 Hz)
+                val durationMs = 16
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val envelope = exp(-t * 260.0)
+                    val s = sin(2.0 * PI * 400.0 * t) * envelope
+                    (s * 21000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.BOUNDARY -> {
+                // 16ms muted bottom-out thud (140 Hz low damped)
+                val durationMs = 16
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val envelope = exp(-t * 220.0)
+                    val s = sin(2.0 * PI * 140.0 * t) * envelope
+                    (s * 22000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+        }
+    }
+
+    private fun synthesizeWaterPcm(effect: SoundEffect): ShortArray {
+        return when (effect) {
+            SoundEffect.NAV -> {
+                // 22ms rising bubble pop: 850 Hz -> 1350 Hz
+                val durationMs = 22
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val progress = i.toDouble() / samples
+                    val freq = 850.0 + (progress * 500.0)
+                    val envelope = sin(PI * progress) * exp(-t * 70.0)
+                    val s = sin(2.0 * PI * freq * t) * envelope
+                    (s * 23000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.CLICK -> {
+                // 26ms crystal dewdrop ping (1568 Hz)
+                val durationMs = 26
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val progress = i.toDouble() / samples
+                    val envelope = sin(PI * progress) * exp(-t * 85.0)
+                    val s = sin(2.0 * PI * 1568.0 * t) * envelope
+                    (s * 24000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.SELECT -> {
+                // 55ms dual ripple droplet chord (1200 Hz + 1800 Hz)
+                val durationMs = 55
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s1 = sin(2.0 * PI * 1200.0 * t) * 0.55
+                    val s2 = sin(2.0 * PI * 1800.0 * t) * 0.45
+                    val envelope = exp(-t * 65.0)
+                    val s = (s1 + s2) * envelope
+                    (s * 25000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.BACK -> {
+                // 30ms water droplet drip (750 Hz -> 420 Hz)
+                val durationMs = 30
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val progress = i.toDouble() / samples
+                    val freq = 750.0 - (progress * 330.0)
+                    val envelope = exp(-t * 85.0)
+                    val s = sin(2.0 * PI * freq * t) * envelope
+                    (s * 22000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.BOUNDARY -> {
+                // 18ms hollow wooden/underwater tap (260 Hz)
+                val durationMs = 18
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val envelope = exp(-t * 170.0)
+                    val s = sin(2.0 * PI * 260.0 * t) * envelope
                     (s * 19000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }

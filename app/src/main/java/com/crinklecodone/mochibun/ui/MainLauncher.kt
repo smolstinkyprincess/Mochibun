@@ -58,7 +58,10 @@ import com.crinklecodone.mochibun.ui.dialogs.FavoriteFolderDialog
 import com.crinklecodone.mochibun.ui.dialogs.FolderActionDialog
 import com.crinklecodone.mochibun.ui.dialogs.HardwareButtonsDialog
 import com.crinklecodone.mochibun.ui.dialogs.HiddenAppsDialog
+import com.crinklecodone.mochibun.core.sound.SoundEffect
+import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.ui.dialogs.IconPackSelectionDialog
+import com.crinklecodone.mochibun.ui.dialogs.KaomojiWheelDialog
 import com.crinklecodone.mochibun.ui.dialogs.KawaiiIconPicker
 import com.crinklecodone.mochibun.ui.dialogs.QuickMemoDialog
 import com.crinklecodone.mochibun.ui.dialogs.SpeedDialDialog
@@ -258,10 +261,12 @@ fun MainLauncher(
 
     // 0 = center not pressed, 1 = pressed, 2 = held long (menu already opened)
     var centerKeyState by remember { mutableIntStateOf(0) }
+    var poundKeyState by remember { mutableIntStateOf(0) }
     val t9State = remember { T9InputState() }
     val focusRequester = remember { FocusRequester() }
     var speedDialDialogOpen by remember { mutableStateOf(false) }
     var quickMemoDialogOpen by remember { mutableStateOf(false) }
+    var kaomojiWheelDialogOpen by remember { mutableStateOf(false) }
 
     val anyModalOpen = selectedApp != null ||
         launcherMenuOpen ||
@@ -277,6 +282,7 @@ fun MainLauncher(
         folderIconMenuOpen ||
         speedDialDialogOpen ||
         quickMemoDialogOpen ||
+        kaomojiWheelDialogOpen ||
         activeIncomingPreview != null
 
     LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress) {
@@ -310,8 +316,10 @@ fun MainLauncher(
             folderIconMenuOpen = false
             speedDialDialogOpen = false
             quickMemoDialogOpen = false
+            kaomojiWheelDialogOpen = false
             drawerOpen = false
             centerKeyState = 0
+            poundKeyState = 0
             t9State.t9Key = null
             t9State.t9Time = 0L
             homeFocusArea = if (favoriteItemCount > 0) 0 else 1
@@ -416,6 +424,19 @@ fun MainLauncher(
         }
     }
 
+    // Timed long-press detection for Pound (#) key to open Kaomoji radial wheel
+    LaunchedEffect(poundKeyState, drawerOpen, isHomeScreenActive, anyModalOpen) {
+        if (poundKeyState == 1 && !anyModalOpen && (drawerOpen || isHomeScreenActive)) {
+            delay(400L)
+            if (poundKeyState == 1 && !anyModalOpen) {
+                poundKeyState = 2
+                performBoundaryHaptic(context)
+                SoundEffectManager.play(context, SoundEffect.CLICK)
+                kaomojiWheelDialogOpen = true
+            }
+        }
+    }
+
     // focus requester handling for physical hardware key navigation
     LaunchedEffect(
         drawerOpen,
@@ -455,6 +476,8 @@ fun MainLauncher(
             folderToCreateFrom = null
             createFolderDialogOpen = false
             folderIconMenuOpen = false
+            kaomojiWheelDialogOpen = false
+            poundKeyState = 0
             homeFocusArea = if (favoriteItemCount > 0) 0 else 1
             pendingTargetPage = 1
             scope.launch {
@@ -490,6 +513,8 @@ fun MainLauncher(
             override fun openLauncherMenu() { launcherMenuOpen = true }
             override fun openSpeedDial(digit: Int) { speedDialDialogOpen = true }
             override fun openQuickMemo() { quickMemoDialogOpen = true }
+            override fun setPoundKeyState(state: Int) { poundKeyState = state }
+            override fun openKaomojiWheel() { kaomojiWheelDialogOpen = true }
         }
     }
 
@@ -529,7 +554,8 @@ fun MainLauncher(
                         favoriteApps = launcherVm.favoriteApps,
                         favoriteFolders = favoriteFolders,
                         favoriteItems = favoriteItems,
-                        letterStarts = letterStarts
+                        letterStarts = letterStarts,
+                        poundKeyState = poundKeyState
                     )
                     keyHandler.handleKeyEvent(event, keypadState)
                 }
@@ -875,6 +901,15 @@ fun MainLauncher(
                 QuickMemoDialog(
                     onDismiss = {
                         quickMemoDialogOpen = false
+                    }
+                )
+            }
+
+            if (kaomojiWheelDialogOpen) {
+                KaomojiWheelDialog(
+                    onDismiss = {
+                        kaomojiWheelDialogOpen = false
+                        poundKeyState = 0
                     }
                 )
             }

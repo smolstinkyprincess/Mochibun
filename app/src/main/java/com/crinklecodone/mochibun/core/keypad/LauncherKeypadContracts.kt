@@ -41,7 +41,8 @@ data class LauncherKeypadState(
     val favoriteApps: List<LauncherApp> = emptyList(),
     val favoriteFolders: List<FavoriteFolder> = emptyList(),
     val favoriteItems: List<FavoriteSlotItem> = emptyList(),
-    val letterStarts: Map<Char, Int>
+    val letterStarts: Map<Char, Int>,
+    val poundKeyState: Int = 0
 )
 
 /**
@@ -55,9 +56,11 @@ interface LauncherKeypadActions {
     fun setSavedFavoriteIndexOnHome(index: Int)
     fun setPendingTargetPage(page: Int?)
     fun setCenterKeyState(state: Int)
+    fun setPoundKeyState(state: Int) {}
     fun openContextActionForCurrentFocus()
     fun openFolder(folderId: String)
     fun openLauncherMenu()
     fun openSpeedDial(digit: Int)
     fun openQuickMemo() {}
+    fun openKaomojiWheel() {}
 }

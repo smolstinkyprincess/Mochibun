@@ -1109,14 +1109,8 @@ fun BottomDrawerHandle(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "⌃",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = theme.appActionColor
-        )
-        Text(
-            text = "♥  Swipe up for apps  ♥",
-            fontSize = 13.sp,
+            text = "⇣✦ ♡ ♥ ♡ ⇣✦⇣ ♡ ♥ ♡ ✦⇣",
+            fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
             color = theme.appActionColor
         )

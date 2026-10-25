@@ -577,10 +577,10 @@ fun WidgetPage(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "✦  —  ♡  Widgets  ♡  —  ✦",
+                                text = "✦ ♡ Widgets ♡ ✦",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF3E2452)
+                                color = theme.cardTextColor
                             )
                         }
                     }

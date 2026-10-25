@@ -172,7 +172,14 @@ private fun SettingsHubRootScreen(
     val totalItems = 5 // 5 primary navigation cards
 
     LaunchedEffect(focusedIndex) {
-        listState.animateScrollToItem(focusedIndex)
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+        if (visible.isEmpty() || focusedIndex in visible) return@LaunchedEffect
+        if (focusedIndex > visible.last()) {
+            val scrollTarget = (focusedIndex - 1).coerceAtLeast(0)
+            listState.animateScrollToItem(scrollTarget)
+        } else if (focusedIndex < visible.first()) {
+            listState.animateScrollToItem(focusedIndex)
+        }
     }
 
     requestFocusSafely(focusRequester)
@@ -338,8 +345,26 @@ private fun AppearanceSettingsSubScreen(
 
     val totalItems = items.size
 
-    LaunchedEffect(focusedIndex) {
-        listState.animateScrollToItem(focusedIndex)
+    val targetCardIndex = remember(focusedIndex, items) {
+        when (items.getOrNull(focusedIndex)) {
+            "theme", "typography" -> 0
+            "name" -> 1
+            "icon_pack" -> 2
+            "pick_wallpaper", "reset_wallpaper" -> 3
+            "pixelspray" -> 4
+            else -> 0
+        }
+    }
+
+    LaunchedEffect(targetCardIndex) {
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+        if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
+        if (targetCardIndex > visible.last()) {
+            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
+            listState.animateScrollToItem(scrollTarget)
+        } else if (targetCardIndex < visible.first()) {
+            listState.animateScrollToItem(targetCardIndex)
+        }
     }
 
     requestFocusSafely(focusRequester)
@@ -672,8 +697,25 @@ private fun CursorHardwareSettingsSubScreen(
 
     val totalItems = 7 // Service, Speed, Accel, Size, ClickMethod, SpritePicker, HardwareKeys
 
-    LaunchedEffect(focusedIndex) {
-        listState.animateScrollToItem(focusedIndex)
+    val targetCardIndex = remember(focusedIndex) {
+        when (focusedIndex) {
+            0 -> 0
+            1, 2, 3 -> 1
+            4, 5 -> 2
+            6 -> 3
+            else -> 0
+        }
+    }
+
+    LaunchedEffect(targetCardIndex) {
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+        if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
+        if (targetCardIndex > visible.last()) {
+            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
+            listState.animateScrollToItem(scrollTarget)
+        } else if (targetCardIndex < visible.first()) {
+            listState.animateScrollToItem(targetCardIndex)
+        }
     }
 
     requestFocusSafely(focusRequester)
@@ -998,8 +1040,26 @@ private fun BehaviorSettingsSubScreen(
 
     val totalItems = items.size
 
-    LaunchedEffect(focusedIndex) {
-        listState.animateScrollToItem(focusedIndex)
+    val targetCardIndex = remember(focusedIndex, items) {
+        when (items.getOrNull(focusedIndex)) {
+            "create_folder", "folder_grid" -> 0
+            "t9_search", "hidden_apps" -> 1
+            "speed_dial", "dpad_wrap", "boundary_haptics", "keypad_sound", "media_volume_lock" -> 2
+            "lid_led_notification", "lid_led_color", "lid_led_charging" -> 3
+            "system_monitor", "monitor_interval" -> 4
+            else -> 0
+        }
+    }
+
+    LaunchedEffect(targetCardIndex) {
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+        if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
+        if (targetCardIndex > visible.last()) {
+            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
+            listState.animateScrollToItem(scrollTarget)
+        } else if (targetCardIndex < visible.first()) {
+            listState.animateScrollToItem(targetCardIndex)
+        }
     }
 
     requestFocusSafely(focusRequester)
@@ -1689,8 +1749,24 @@ private fun BackupRestoreSettingsSubScreen(
     val items = listOf("export_bundle", "import_bundle", "export", "restore", "reset")
     val totalItems = items.size
 
-    LaunchedEffect(focusedIndex) {
-        listState.animateScrollToItem(focusedIndex)
+    val targetCardIndex = remember(focusedIndex, items) {
+        when (items.getOrNull(focusedIndex)) {
+            "export_bundle", "import_bundle" -> 0
+            "export", "restore" -> 1
+            "reset" -> 2
+            else -> 0
+        }
+    }
+
+    LaunchedEffect(targetCardIndex) {
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+        if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
+        if (targetCardIndex > visible.last()) {
+            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
+            listState.animateScrollToItem(scrollTarget)
+        } else if (targetCardIndex < visible.first()) {
+            listState.animateScrollToItem(targetCardIndex)
+        }
     }
 
     requestFocusSafely(focusRequester)

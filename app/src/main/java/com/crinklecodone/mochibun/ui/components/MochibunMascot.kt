@@ -28,6 +28,8 @@ import coil.compose.rememberAsyncImagePainter
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.crinklecodone.mochibun.R
+import com.crinklecodone.mochibun.core.sound.SoundEffect
+import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
 import com.crinklecodone.mochibun.ui.theme.LauncherTheme
 import kotlinx.coroutines.delay
@@ -60,6 +62,11 @@ enum class MascotMood(
         pngResId = R.drawable.mochibunny_worried,
         gifResId = null,
         description = "Worried / concerned loaf"
+    ),
+    CHEER(
+        pngResId = R.drawable.mochibunny_cheer,
+        gifResId = null,
+        description = "Cheering / celebratory loaf"
     )
 }
 
@@ -126,6 +133,10 @@ fun createPastelTintMatrix(tintColor: Color, intensity: Float = 0.22f): ColorMat
  * Decodes animated GIF loops via Coil (`ImageDecoderDecoder`/`GifDecoder`) when
  * [useAnimation] is enabled, with seamless fallback to static PNGs.
  *
+ * When booped (tapped / clicked), the mascot bounces with a cheerful vertical hop,
+ * plays a tactile audio cue, and displays `mochibunny_cheer.png` before returning
+ * smoothly to its base idle loop.
+ *
  * Supports dynamic pastel theme tinting via [createPastelTintMatrix] with zero
  * per-recomposition allocations.
  */
@@ -136,20 +147,25 @@ fun MochibunMascot(
     themeTintColor: Color? = null,
     modifier: Modifier = Modifier,
     size: Dp = 48.dp,
+    isBooped: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    var isBounce by remember { mutableStateOf(false) }
+    var boopTrigger by remember { mutableIntStateOf(0) }
+    var internalBounce by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isBounce) {
-        if (isBounce) {
-            delay(1200)
-            isBounce = false
+    LaunchedEffect(boopTrigger) {
+        if (boopTrigger > 0) {
+            internalBounce = true
+            delay(1000)
+            internalBounce = false
         }
     }
 
+    val isBounce = isBooped || internalBounce
+
     val scale by animateFloatAsState(
-        targetValue = if (isBounce) 1.15f else 1f,
+        targetValue = if (isBounce) 1.22f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
@@ -157,12 +173,31 @@ fun MochibunMascot(
         label = "mascotScale"
     )
 
+    val bounceTranslationY by animateFloatAsState(
+        targetValue = if (isBounce) -14f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "mascotTranslationY"
+    )
+
     // Cached ColorFilter matrix preserving dark outline contrast
     val colorFilter = remember(themeTintColor) {
         themeTintColor?.let { ColorFilter.colorMatrix(createPastelTintMatrix(it)) }
     }
 
-    val activeGifRes = if (useAnimation) mood.gifResId else null
+    // When bouncing (booped), pause GIF loop to showcase cheer sprite
+    val activeGifRes = if (useAnimation && !isBounce) mood.gifResId else null
+
+    // Pre-cache cheer bitmap and mood bitmap with nearest-neighbor rendering
+    val cheerBitmap = remember(context) {
+        runCatching { ImageBitmap.imageResource(context.resources, R.drawable.mochibunny_cheer) }.getOrNull()
+    }
+    val defaultBitmap = remember(mood.pngResId, context) {
+        ImageBitmap.imageResource(context.resources, mood.pngResId)
+    }
+    val activeStaticBitmap = if (isBounce && cheerBitmap != null) cheerBitmap else defaultBitmap
 
     Box(
         modifier = modifier
@@ -170,12 +205,14 @@ fun MochibunMascot(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                translationY = bounceTranslationY
             }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                isBounce = true
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                boopTrigger++
                 onClick?.invoke()
             },
         contentAlignment = Alignment.Center
@@ -198,12 +235,9 @@ fun MochibunMascot(
             )
         } else {
             // Render static PNG using direct ImageBitmap with nearest-neighbor FilterQuality.None
-            val imageBitmap = remember(mood.pngResId, context) {
-                ImageBitmap.imageResource(context.resources, mood.pngResId)
-            }
             Image(
-                bitmap = imageBitmap,
-                contentDescription = mood.description,
+                bitmap = activeStaticBitmap,
+                contentDescription = if (isBounce) "Cheering loaf" else mood.description,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
                 filterQuality = FilterQuality.None,
@@ -223,6 +257,7 @@ fun KawaiiMascot(
     size: Dp = 48.dp,
     themeTintColor: Color? = null,
     useAnimation: Boolean = true,
+    isBooped: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     MochibunMascot(
@@ -231,6 +266,7 @@ fun KawaiiMascot(
         themeTintColor = themeTintColor,
         modifier = modifier,
         size = size,
+        isBooped = isBooped,
         onClick = onClick
     )
 }

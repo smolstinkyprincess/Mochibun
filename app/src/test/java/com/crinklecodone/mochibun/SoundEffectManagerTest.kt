@@ -18,8 +18,23 @@ class SoundEffectManagerTest {
     val tempFolder = TemporaryFolder()
 
     @Test
+    fun testSoundThemesIntegrity() {
+        val themes = SoundEffectManager.SoundThemes
+        assertEquals(7, themes.size)
+
+        val ids = themes.map { it.id }
+        assertTrue(ids.contains("kawaii"))
+        assertTrue(ids.contains("retro"))
+        assertTrue(ids.contains("chiptune"))
+        assertTrue(ids.contains("pager"))
+        assertTrue(ids.contains("thock"))
+        assertTrue(ids.contains("water"))
+        assertTrue(ids.contains("off"))
+    }
+
+    @Test
     fun testSynthesizePcmThemesGenerateValidSamples() {
-        val themes = listOf("kawaii", "retro")
+        val themes = listOf("kawaii", "retro", "chiptune", "pager", "thock", "water")
         for (theme in themes) {
             for (effect in SoundEffect.entries) {
                 val pcm = SoundEffectManager.synthesizePcm(theme, effect)
