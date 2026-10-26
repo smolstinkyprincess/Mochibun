@@ -2720,6 +2720,7 @@ private fun AboutMochibunSubScreen(
                     SettingsInfoRow(label = "License", value = "Apache 2.0 License")
                     SettingsInfoRow(label = "Root Bridge", value = "libsu:core daemon")
                     SettingsInfoRow(label = "Image Loader", value = "Coil (GIF & Bitmap)")
+                    SettingsInfoRow(label = "Typography", value = "MaruMinya (マルミーニャ)")
                 }
             }
         }
