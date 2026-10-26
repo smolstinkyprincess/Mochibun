@@ -174,7 +174,7 @@ Mochibun stays tiny, breezy, and cute thanks to these wonderful open-source libr
 - **[Coil](https://github.com/coil-kt/coil)** — Keeps our cute animated `.gif` and `.png` cursors(and our adorable mochibunny mascot!!!) dancing smoothly with an ultra-lightweight memory footprint so our flip phone RAM never gets sad! (˶ᵔ ᵕ ᵔ˶)
 - **[libsu](https://github.com/topjohnwu/libsu)** by [@topjohnwu](https://github.com/topjohnwu) — A rock-solid, persistent root bridge daemon that powers super-fast privileged clicks and smooth recents task management without dropping a single frame! (•̀ᴗ•́)و
 - **[kaml](https://github.com/charleskorn/kaml)** — Brings clean, whitespace-friendly YAML parsing to `kotlinx.serialization` so creating and editing custom themes on a flip phone is sweet and painless! ♡
-
+- **[MaruMinya (マルミーニャ)](https://www.freejapanesefont.com/maruminya-cute-free-font/)** — The darling rounded dot-matrix font powering Mochibun's nostalgic typography! ♡
 ---
 
 ## 🤖 Disclaimer
