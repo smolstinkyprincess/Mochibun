@@ -24,11 +24,6 @@ data class RootResult(
     val outputString: String get() = stdout.joinToString("\n")
     val errorString: String get() = stderr.joinToString("\n")
 
-    // Compatibility aliases for libsu Shell.Result consumers
-    val code: Int get() = exitCode
-    val out: List<String> get() = stdout
-    val err: List<String> get() = stderr
-
     companion object {
         fun failure(message: String, exitCode: Int = -1): RootResult =
             RootResult(exitCode = exitCode, stderr = listOf(message))
@@ -40,11 +35,8 @@ data class RootResult(
  */
 interface RootOperations {
     fun isSuBinaryPresent(): Boolean
-    suspend fun isRootAvailable(): Boolean
     suspend fun requestRoot(): RootStatus
     suspend fun execute(command: String, timeoutMs: Long = 10_000L): RootResult
     fun executeBlocking(command: String): RootResult
-    suspend fun executeSafe(command: String, timeoutMs: Long = 10_000L): Result<RootResult>
-    suspend fun executeWithOutput(command: String, timeoutMs: Long = 10_000L): List<String>
     fun submit(command: String)
 }

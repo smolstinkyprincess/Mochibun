@@ -75,6 +75,8 @@ enum class PhysicalKey(
 sealed class ActionType {
     object None : ActionType()
     data class LaunchApp(val packageName: String, val appLabel: String) : ActionType()
+    object OpenWidgetsPage : ActionType()
+    object OpenNotificationsPage : ActionType()
     object GlobalBack : ActionType()
     object GlobalRecents : ActionType()
     object OpenRecentsSystem : ActionType()
@@ -84,6 +86,8 @@ sealed class ActionType {
     fun displayName(): String = when (this) {
         is None -> "None (Default)"
         is LaunchApp -> "Launch $appLabel"
+        is OpenWidgetsPage -> "Widgets / Stats Page"
+        is OpenNotificationsPage -> "Notifications Page"
         is GlobalBack -> "Global Back"
         is GlobalRecents -> "Overview / Recents"
         is OpenRecentsSystem -> "Open Recents (System)"
@@ -94,6 +98,8 @@ sealed class ActionType {
     fun serialize(): String = when (this) {
         is None -> "NONE"
         is LaunchApp -> "LAUNCH_APP:$packageName:$appLabel"
+        is OpenWidgetsPage -> "OPEN_WIDGETS_PAGE"
+        is OpenNotificationsPage -> "OPEN_NOTIFICATIONS_PAGE"
         is GlobalBack -> "GLOBAL_BACK"
         is GlobalRecents -> "GLOBAL_RECENTS"
         is OpenRecentsSystem -> "OPEN_RECENTS_SYSTEM"
@@ -113,6 +119,8 @@ sealed class ActionType {
                 }
             }
             return when (raw) {
+                "OPEN_WIDGETS_PAGE" -> OpenWidgetsPage
+                "OPEN_NOTIFICATIONS_PAGE" -> OpenNotificationsPage
                 "GLOBAL_BACK" -> GlobalBack
                 "GLOBAL_RECENTS" -> GlobalRecents
                 "OPEN_RECENTS_SYSTEM" -> OpenRecentsSystem

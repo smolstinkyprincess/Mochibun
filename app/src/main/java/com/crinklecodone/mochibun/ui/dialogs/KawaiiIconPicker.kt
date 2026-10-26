@@ -57,7 +57,6 @@ import com.crinklecodone.mochibun.data.repository.IconPackManager
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.selectedContainerColor
 import com.crinklecodone.mochibun.ui.theme.softSurfaceColor
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,24 +115,10 @@ fun KawaiiIconPicker(
 
     LaunchedEffect(focusZone) {
         if (focusZone == 0) {
-            repeat(6) {
-                try {
-                    searchFieldFocusRequester.requestFocus()
-                    return@LaunchedEffect
-                } catch (_: Exception) {
-                    delay(35)
-                }
-            }
+            searchFieldFocusRequester.awaitFocusSafely(attempts = 6)
         } else {
             keyboardController?.hide()
-            repeat(6) {
-                try {
-                    dialogFocusRequester.requestFocus()
-                    return@LaunchedEffect
-                } catch (_: Exception) {
-                    delay(35)
-                }
-            }
+            dialogFocusRequester.awaitFocusSafely(attempts = 6)
         }
     }
 

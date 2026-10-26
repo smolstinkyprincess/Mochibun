@@ -94,6 +94,23 @@ fun safeParseColor(hex: String?, fallback: Color): Color {
 }
 
 /**
+ * Formats an ARGB color integer as an uppercase `#AARRGGBB` hex string.
+ */
+fun colorIntToHex(colorInt: Int): String = String.format("#%08X", colorInt)
+
+/**
+ * Parses a hex color string into an ARGB color integer, falling back to [defaultColor].
+ */
+fun safeParseColorInt(hex: String?, defaultColor: Int): Int {
+    val parsed = safeParseColorOrNull(hex) ?: return defaultColor
+    val a = (parsed.alpha * 255f + 0.5f).toInt().coerceIn(0, 255)
+    val r = (parsed.red * 255f + 0.5f).toInt().coerceIn(0, 255)
+    val g = (parsed.green * 255f + 0.5f).toInt().coerceIn(0, 255)
+    val b = (parsed.blue * 255f + 0.5f).toInt().coerceIn(0, 255)
+    return (a shl 24) or (r shl 16) or (g shl 8) or b
+}
+
+/**
  * Converts this [YamlTheme] into a full [MochibunThemePalette].
  * Missing or invalid color tokens gracefully fall back to [fallback] (default Sakura Dream).
  */

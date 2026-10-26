@@ -36,6 +36,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.data.repository.MediaSessionTracker
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
@@ -109,15 +111,6 @@ fun WidgetPage(
         }
         onDispose {
             MediaSessionTracker.stopTracking()
-        }
-    }
-
-    // Periodic progress updates while actively playing
-    var playbackTick by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(isActivePage, mediaState.isPlaying) {
-        while (isActivePage && mediaState.isPlaying) {
-            delay(500)
-            playbackTick++
         }
     }
 
@@ -577,10 +570,10 @@ fun WidgetPage(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "✦ ♡ Widgets ♡ ✦",
-                                fontSize = 20.sp,
+                                text = "— ♡ Widgets ♡ —",
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = theme.cardTextColor
+                                color = ActiveTheme.accentDeep
                             )
                         }
                     }
@@ -680,11 +673,12 @@ fun WidgetPage(
                                     (info.minHeight.takeIf { it > 0 } ?: 100).dp
                                 }
                             )
+                            .graphicsLayer { clip = false }
+                            .glowingDoubleBorder(isSelected = isWidgetFocused, shape = cardShape, cornerRadius = 18.dp)
                             .clip(cardShape)
                             .background(Color(0xFFFFF6F8))
-                            .glowingDoubleBorder(isSelected = isWidgetFocused, shape = cardShape, cornerRadius = 18.dp)
                             .border(
-                                width = if (isWidgetFocused) 2.5.dp else 1.5.dp,
+                                width = 1.5.dp,
                                 color = if (isWidgetFocused) Color(0xFFE06287) else Color(0xFFE5A4B4),
                                 shape = cardShape
                             )
@@ -766,9 +760,10 @@ fun WidgetPage(
                 ) {
                     Box(
                         modifier = Modifier
+                            .graphicsLayer { clip = false }
+                            .glowingDoubleBorder(isSelected = isAddFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
                             .clip(RoundedCornerShape(50))
                             .background(if (isAddFocused) Color(0xFFFFF0F4) else Color(0xFFF6F0FD))
-                            .glowingDoubleBorder(isSelected = isAddFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
                             .border(1.5.dp, if (isAddFocused) Color(0xFFE06287) else Color(0xFFB5A4CB), RoundedCornerShape(50))
                             .clickable {
                                 focusSection = WidgetFocusSection.ADD_WIDGET

@@ -17,6 +17,8 @@ import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
 import coil.imageLoader
 import coil.request.Disposable
 import coil.request.ImageRequest
@@ -60,9 +62,6 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     var cursorSizePx: Int = 32
         private set
 
-    var gifPlaybackSpeed: Float = CursorPreferences.DEFAULT_GIF_PLAYBACK_SPEED
-        private set
-
     val windowLayoutParams: WindowManager.LayoutParams = WindowManager.LayoutParams().apply {
         type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
         flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
@@ -95,7 +94,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     }
 
     /**
-     * Re-reads SharedPreferences settings (size, URI, hotspot alignment, gif playback speed)
+     * Re-reads SharedPreferences settings (size, URI, hotspot alignment)
      * and refreshes the overlay rendering and dimensions.
      */
     fun reloadConfiguration() {
@@ -103,7 +102,6 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
         val density = context.resources.displayMetrics.density
         cursorSizePx = (sizeDp * density).toInt().coerceIn(16, 128)
         hotspotAlignment = CursorPreferences.getHotspotAlignment(context)
-        gifPlaybackSpeed = CursorPreferences.getGifPlaybackSpeed(context)
 
         imageView.layoutParams = (imageView.layoutParams as? LayoutParams)?.apply {
             width = cursorSizePx
@@ -130,7 +128,9 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
      */
     fun resumeAnimation() {
         isOverlayVisible = true
-        (currentDrawable as? Animatable)?.start()
+        val anim = currentDrawable as? Animatable
+        Log.d(TAG, "resumeAnimation: anim=$anim, isRunning=${anim?.isRunning}")
+        anim?.start()
     }
 
     /**
@@ -146,6 +146,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
 
         val request = ImageRequest.Builder(context)
             .data(targetData)
+            .decoderFactory(GifDecoder.Factory())
             .target(
                 onSuccess = { drawable ->
                     applyCursorDrawable(drawable)
@@ -168,6 +169,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     private fun loadDefaultBundledCursor() {
         val fallbackRequest = ImageRequest.Builder(context)
             .data(R.drawable.cursor)
+            .decoderFactory(GifDecoder.Factory())
             .target(
                 onSuccess = { drawable ->
                     applyCursorDrawable(drawable)
@@ -182,10 +184,16 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     }
 
     private fun applyCursorDrawable(drawable: Drawable) {
+        Log.d(TAG, "applyCursorDrawable: loaded ${drawable::class.java.name}, isAnimatable=${drawable is Animatable}, isOverlayVisible=$isOverlayVisible")
         (currentDrawable as? Animatable)?.stop()
 
-        if (drawable is AnimatedImageDrawable) {
-            drawable.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
+        var inner: Drawable? = drawable
+        while (inner is coil.drawable.ScaleDrawable) {
+            inner = inner.child
+        }
+
+        if (inner is AnimatedImageDrawable) {
+            inner.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
         }
 
         if (drawable is BitmapDrawable) {
@@ -198,8 +206,10 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
         currentDrawable = drawable
         imageView.setImageDrawable(drawable)
 
-        if (isOverlayVisible && drawable is Animatable) {
-            drawable.start()
+        if (isOverlayVisible) {
+            val anim = (drawable as? Animatable) ?: (inner as? Animatable)
+            Log.d(TAG, "applyCursorDrawable: starting animation on visible overlay (anim=$anim)")
+            anim?.start()
         }
     }
 
@@ -299,7 +309,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
      * Updates cursor position on screen via hardware layer translation
      * without triggering heavy WindowManager layout recalculations.
      */
-    fun updatePosition(newX: Float, newY: Float, windowManager: WindowManager? = null) {
+    fun updatePosition(newX: Float, newY: Float) {
         currentX = newX
         currentY = newY
         val renderX = when (hotspotAlignment) {

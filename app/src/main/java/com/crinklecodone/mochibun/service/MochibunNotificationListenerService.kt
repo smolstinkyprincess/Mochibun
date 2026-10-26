@@ -22,7 +22,6 @@ class MochibunNotificationListenerService : NotificationListenerService() {
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         Log.d("MochibunNotification", "NotificationListenerService disconnected")
-        MediaSessionTracker.onNotificationListenerServiceDisconnected()
         NotificationTracker.onNotificationListenerDisconnected()
     }
 

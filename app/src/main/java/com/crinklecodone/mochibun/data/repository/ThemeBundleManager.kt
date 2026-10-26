@@ -5,17 +5,19 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.ui.graphics.toArgb
+import com.crinklecodone.mochibun.core.util.calculateInSampleSize
+import com.crinklecodone.mochibun.core.util.downsampleAndSaveImage
 import com.crinklecodone.mochibun.data.model.BundleCursorConfig
 import com.crinklecodone.mochibun.data.model.BundleGreetingConfig
 import com.crinklecodone.mochibun.data.model.BundlePaletteConfig
 import com.crinklecodone.mochibun.data.model.MochibunBundleManifest
 import com.crinklecodone.mochibun.data.model.bundleJsonFormat
+import com.crinklecodone.mochibun.data.model.colorIntToHex
+import com.crinklecodone.mochibun.data.model.safeParseColorInt
 import com.crinklecodone.mochibun.data.prefs.ClickMethod
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
 import com.crinklecodone.mochibun.data.prefs.HotspotAlignment
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
-import com.crinklecodone.mochibun.ui.theme.ActiveTheme
-import com.crinklecodone.mochibun.ui.theme.toLauncherTheme
 import kotlinx.serialization.encodeToString
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -89,10 +91,10 @@ object ThemeBundleManager {
 
             // 1. Resolve active theme colors
             val currentTheme = com.crinklecodone.mochibun.ui.theme.loadSavedTheme(launcherPrefs)
-            val bgColorHex = colorToHex(currentTheme.bgColor.toArgb())
-            val cardColorHex = colorToHex(currentTheme.cardBgColor.toArgb())
-            val greetingColorHex = colorToHex(currentTheme.greetingColor.toArgb())
-            val actionColorHex = colorToHex(currentTheme.appActionColor.toArgb())
+            val bgColorHex = colorIntToHex(currentTheme.bgColor.toArgb())
+            val cardColorHex = colorIntToHex(currentTheme.cardBgColor.toArgb())
+            val greetingColorHex = colorIntToHex(currentTheme.greetingColor.toArgb())
+            val actionColorHex = colorIntToHex(currentTheme.appActionColor.toArgb())
             val cardRoundness = currentTheme.cardRoundnessDp
 
             // 2. Check wallpaper & cursor availability
@@ -371,48 +373,6 @@ object ThemeBundleManager {
         }
     }
 
-    private fun downsampleAndSaveImage(srcFile: File, destFile: File, reqWidth: Int, reqHeight: Int) {
-        val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(srcFile.absolutePath, boundsOpts)
-
-        val sample = calculateInSampleSize(boundsOpts, reqWidth, reqHeight)
-        val decodeOpts = BitmapFactory.Options().apply {
-            inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.RGB_565 // Conserves graphics RAM on MT6761
-        }
-        val bitmap = BitmapFactory.decodeFile(srcFile.absolutePath, decodeOpts) ?: return
-
-        FileOutputStream(destFile).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
-            out.flush()
-        }
-        bitmap.recycle()
-    }
-
-    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
-        val (height: Int, width: Int) = options.outHeight to options.outWidth
-        var inSampleSize = 1
-
-        if (height > reqHeight || width > reqWidth) {
-            val halfHeight: Int = height / 2
-            val halfWidth: Int = width / 2
-
-            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
-                inSampleSize *= 2
-            }
-        }
-        return inSampleSize
-    }
-
-    private fun colorToHex(colorInt: Int): String {
-        return String.format("#%08X", colorInt)
-    }
-
-    fun hexToColorInt(hex: String, defaultColor: Int): Int {
-        return try {
-            android.graphics.Color.parseColor(hex)
-        } catch (_: Exception) {
-            defaultColor
-        }
-    }
+    fun hexToColorInt(hex: String, defaultColor: Int): Int =
+        safeParseColorInt(hex, defaultColor)
 }

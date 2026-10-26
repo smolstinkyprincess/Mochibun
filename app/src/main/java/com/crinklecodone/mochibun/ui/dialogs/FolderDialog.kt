@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.imageResource
@@ -86,27 +87,6 @@ private val SQUIRCLE_TINTS = listOf(
     FolderSquircleTint(container = Color(0xFFD4F1E8), border = Color(0xFFA5E2CD)),
     FolderSquircleTint(container = Color(0xFFFFE5D9), border = Color(0xFFF9C6B3))
 )
-
-/**
- * Crisp pixel-art ribbon bow badge overlapping the top perimeter border of the folder card.
- * Uses the pixel-art ribbon bow asset from the home screen greeting card ([com.crinklecodone.mochibun.R.drawable.bow]).
- *
- * FilterQuality.None is strictly required here: on the AT-M120's 480x800 display, default bilinear
- * filtering causes muddy interpolation artifacts along 1-bit pixel art edges.
- */
-@Composable
-fun PixelRibbonBow(
-    modifier: Modifier = Modifier,
-    width: Dp = 56.dp,
-    height: Dp = 46.dp
-) {
-    Image(
-        bitmap = ImageBitmap.imageResource(id = R.drawable.bow),
-        contentDescription = "Ribbon Bow",
-        filterQuality = FilterQuality.None,
-        modifier = modifier.size(width = width, height = height)
-    )
-}
 
 /**
  * Centered pill button anchored at or slightly overlapping the bottom rim:
@@ -157,37 +137,39 @@ fun FolderClosePillButton(
 /**
  * Subtle floating pixel sparkle stars and hearts on the dialog backdrop.
  */
+private val BACKDROP_SPARKLES = listOf(
+    Triple(0.08f, 0.28f, Color(0xFF4A2A56) to 10.dp),
+    Triple(0.28f, 0.16f, Color(0xFF4A2A56) to 7.dp),
+    Triple(0.34f, 0.18f, Color(0xFFFFA6B8) to 6.dp),
+    Triple(0.64f, 0.15f, Color(0xFF4A2A56) to 6.dp),
+    Triple(0.77f, 0.24f, Color(0xFF3B1B44) to 13.dp),
+    Triple(0.88f, 0.32f, Color(0xFF4A2A56) to 7.dp),
+    Triple(0.09f, 0.34f, Color(0xFF5A3066) to 6.dp),
+    Triple(0.92f, 0.38f, Color(0xFFFFA6B8) to 6.dp),
+    Triple(0.22f, 0.76f, Color(0xFF3B1B44) to 12.dp),
+    Triple(0.27f, 0.79f, Color(0xFFFFA6B8) to 6.dp),
+    Triple(0.18f, 0.85f, Color(0xFF5A3066) to 7.dp),
+    Triple(0.75f, 0.79f, Color(0xFFFFA6B8) to 6.dp),
+    Triple(0.81f, 0.78f, Color(0xFF3B1B44) to 6.dp),
+    Triple(0.93f, 0.76f, Color(0xFF5A3066) to 7.dp)
+)
+
 @Composable
 fun FloatingPixelBackdrop(
     modifier: Modifier = Modifier
 ) {
+    val path = remember { Path() }
     Canvas(modifier = modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
 
-        val sparkles = listOf(
-            Triple(0.08f, 0.28f, Color(0xFF4A2A56) to 10.dp),
-            Triple(0.28f, 0.16f, Color(0xFF4A2A56) to 7.dp),
-            Triple(0.34f, 0.18f, Color(0xFFFFA6B8) to 6.dp),
-            Triple(0.64f, 0.15f, Color(0xFF4A2A56) to 6.dp),
-            Triple(0.77f, 0.24f, Color(0xFF3B1B44) to 13.dp),
-            Triple(0.88f, 0.32f, Color(0xFF4A2A56) to 7.dp),
-            Triple(0.09f, 0.34f, Color(0xFF5A3066) to 6.dp),
-            Triple(0.92f, 0.38f, Color(0xFFFFA6B8) to 6.dp),
-            Triple(0.22f, 0.76f, Color(0xFF3B1B44) to 12.dp),
-            Triple(0.27f, 0.79f, Color(0xFFFFA6B8) to 6.dp),
-            Triple(0.18f, 0.85f, Color(0xFF5A3066) to 7.dp),
-            Triple(0.75f, 0.79f, Color(0xFFFFA6B8) to 6.dp),
-            Triple(0.81f, 0.78f, Color(0xFF3B1B44) to 6.dp),
-            Triple(0.93f, 0.76f, Color(0xFF5A3066) to 7.dp)
-        )
-
-        for ((fx, fy, item) in sparkles) {
+        for ((fx, fy, item) in BACKDROP_SPARKLES) {
             val (col, sDp) = item
             val cx = w * fx
             val cy = h * fy
             val s = sDp.toPx()
-            val path = Path().apply {
+            path.reset()
+            path.apply {
                 moveTo(cx, cy - s / 2f)
                 cubicTo(cx, cy, cx, cy, cx + s / 2f, cy)
                 cubicTo(cx, cy, cx, cy, cx, cy + s / 2f)
@@ -219,16 +201,12 @@ fun FavoriteFolderDialog(
     existingFolders: List<FavoriteFolder> = emptyList(),
     initialEditingName: Boolean = false,
     initialPickingApps: Boolean = false,
-    cardBgColor: Color,
-    cardTextColor: Color,
-    appActionColor: Color,
     cardRoundness: Dp,
     onLaunchApp: (LauncherApp) -> Unit,
     onRemoveApp: (String) -> Unit,
     onUpdateApps: (List<String>) -> Unit = {},
     onRename: (String) -> Unit,
     onDeleteFolder: () -> Unit,
-    onOpenFolderOptions: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
@@ -297,26 +275,12 @@ fun FavoriteFolderDialog(
 
     LaunchedEffect(editingName, renameFocusZone, isEditingRenameField, pickingApps, confirmingDelete) {
         if (editingName && renameFocusZone == 0 && isEditingRenameField) {
-            repeat(6) {
-                try {
-                    renameFieldFocusRequester.requestFocus()
-                    return@LaunchedEffect
-                } catch (_: Exception) {
-                    delay(35)
-                }
-            }
+            renameFieldFocusRequester.awaitFocusSafely(attempts = 6)
         } else {
             focusManager.clearFocus(force = true)
             keyboardController?.hide()
             delay(16)
-            repeat(6) {
-                try {
-                    folderFocusRequester.requestFocus()
-                    return@LaunchedEffect
-                } catch (_: Exception) {
-                    delay(35)
-                }
-            }
+            folderFocusRequester.awaitFocusSafely(attempts = 6)
         }
     }
 
@@ -772,7 +736,7 @@ fun FavoriteFolderDialog(
                             ) {
                                 Text(
                                     text = "— ♡ Apps in ${folder.name} ♡ —",
-                                    color = ActiveTheme.textPrimary,
+                                    color = ActiveTheme.accentDeep,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                     textAlign = TextAlign.Center,
@@ -785,7 +749,8 @@ fun FavoriteFolderDialog(
                                     state = pickerListState,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .heightIn(max = 240.dp),
+                                        .heightIn(max = 240.dp)
+                                        .graphicsLayer { clip = false },
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     itemsIndexed(
@@ -800,12 +765,14 @@ fun FavoriteFolderDialog(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
+                                                .graphicsLayer { clip = false }
+                                                .softGlowFocus(isSelected = isRowFocused, cornerRadius = 12.dp)
                                                 .clip(rowShape)
                                                 .background(
                                                     if (isRowFocused) theme.selectedContainerColor else Color.Transparent
                                                 )
                                                 .border(
-                                                    width = if (isRowFocused) 2.dp else 0.dp,
+                                                    width = if (isRowFocused) 1.5.dp else 0.dp,
                                                     color = if (isRowFocused) Color(0xFFE06287) else Color.Transparent,
                                                     shape = rowShape
                                                 )
@@ -893,7 +860,7 @@ fun FavoriteFolderDialog(
                             ) {
                                 Text(
                                     text = "— ♡ Rename Folder ♡ —",
-                                    color = ActiveTheme.textPrimary,
+                                    color = ActiveTheme.accentDeep,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )

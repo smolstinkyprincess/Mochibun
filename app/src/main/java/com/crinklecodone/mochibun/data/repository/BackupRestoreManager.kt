@@ -82,13 +82,6 @@ object BackupRestoreManager {
         val favItemKeys = PreferencesManager.getFavoriteItemKeys(context)
         layoutObj.put("favorite_items_ordered", JSONArray(favItemKeys))
 
-        val favPackages = PreferencesManager.getPrefs(context)
-            .getString(PreferencesManager.KEY_FAVORITE_PACKAGES_ORDERED, "")
-            ?.split("|")
-            ?.filter { it.isNotEmpty() }
-            ?: emptyList()
-        layoutObj.put("favorite_packages_ordered", JSONArray(favPackages))
-
         val folders = PreferencesManager.loadFavoriteFolders(context)
         val foldersArray = JSONArray()
         folders.forEach { folder ->
@@ -165,6 +158,8 @@ object BackupRestoreManager {
         val behaviorObj = JSONObject()
         behaviorObj.put("dpad_wrap_around", PreferencesManager.isDpadWrapAround(context))
         behaviorObj.put("dpad_boundary_haptics", PreferencesManager.isDpadBoundaryHaptics(context))
+        behaviorObj.put("launcher_audio_stream", PreferencesManager.getLauncherAudioStream(context))
+        behaviorObj.put("launcher_sound_volume", PreferencesManager.getLauncherSoundVolume(context))
         behaviorObj.put("t9_search_enabled", PreferencesManager.isT9SearchEnabled(context))
         behaviorObj.put("system_monitor_enabled", PreferencesManager.isSystemMonitorEnabled(context))
         behaviorObj.put("system_monitor_interval_sec", PreferencesManager.getSystemMonitorInterval(context))
@@ -405,6 +400,12 @@ object BackupRestoreManager {
                 }
                 if (behaviorObj.has("dpad_boundary_haptics")) {
                     PreferencesManager.setDpadBoundaryHaptics(context, behaviorObj.optBoolean("dpad_boundary_haptics", true))
+                }
+                if (behaviorObj.has("launcher_audio_stream")) {
+                    PreferencesManager.setLauncherAudioStream(context, behaviorObj.optString("launcher_audio_stream", PreferencesManager.DEFAULT_LAUNCHER_AUDIO_STREAM))
+                }
+                if (behaviorObj.has("launcher_sound_volume")) {
+                    PreferencesManager.setLauncherSoundVolume(context, behaviorObj.optInt("launcher_sound_volume", PreferencesManager.DEFAULT_LAUNCHER_SOUND_VOLUME))
                 }
                 if (behaviorObj.has("t9_search_enabled")) {
                     PreferencesManager.setT9SearchEnabled(context, behaviorObj.optBoolean("t9_search_enabled", true))

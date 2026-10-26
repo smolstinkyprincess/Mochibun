@@ -29,6 +29,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -41,82 +42,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.data.repository.MochibunMediaState
-
-private val STRAWBERRY_ROWS = listOf(
-    "......SS........", // Row 0: stem
-    ".....SSS........", // Row 1: stem curve
-    "...GLLSSLLG.....", // Row 2: leaves top
-    "..GLLLLLLLLG....", // Row 3: leaves spread
-    "..OGGGLLGGGO....", // Row 4: leaf base / crown
-    ".ORRRRRRRRRRO...", // Row 5: top of strawberry
-    "ORRWRRRRRRWRRO..", // Row 6: upper seeds
-    "ORRRRRRRRRRRRO..", // Row 7: body
-    "ORRERRRRRRERRO..", // Row 8: eyes
-    "ORBBERRRREBBRO..", // Row 9: blush & eye lower
-    "ORRRRM..MRRRRO..", // Row 10: smile corners
-    "ORRRR.MM.RRRRO..", // Row 11: smile bottom
-    ".OKRRWRRRRWRKO..", // Row 12: lower seeds & shadow
-    "..OKKRRRRKKO....", // Row 13: tapering body
-    "...OKKKKKKO.....", // Row 14: bottom tip
-    ".....OOOO......."  // Row 15: tip outline
-)
-
-private val BUNNY_AVATAR_ROWS = listOf(
-    "..O.O....O.O..",
-    ".OWPWO..OWPWO.",
-    ".OWPWO..OWPWO.",
-    ".OWWWO..OWWWO.",
-    ".OOOOOOOOOOOO.",
-    "OWWWWWWWWWWWWO",
-    "OWWWWWWWWWWWWO",
-    "OWWDWWWWWWWDWO",
-    "OWWWWWWWWWWWWO",
-    "OWPPWWDDWWPPO.",
-    "OWWWWWWWWWWWWO",
-    ".OWWWWWWWWWWO.",
-    "..OOOOOOOOOO..",
-    ".............."
-)
-
-/**
- * Crisp pixel-art smiling strawberry sprite matching the reference mockup.
- * Rendered using 1:1 direct Canvas pixel rectangles with no bilinear filtering/blur
- * to remain ultra lightweight on the MediaTek MT6761.
- */
-@Composable
-fun PixelStrawberrySprite(
-    modifier: Modifier = Modifier,
-    size: Dp = 46.dp
-) {
-    Canvas(modifier = modifier.size(size)) {
-        val pixelSize = this.size.width / 16f
-
-        STRAWBERRY_ROWS.forEachIndexed { y, row ->
-            row.forEachIndexed { x, char ->
-                val color = when (char) {
-                    'S' -> Color(0xFF2C6B33) // stem
-                    'L' -> Color(0xFF58BD66) // bright leaf
-                    'G' -> Color(0xFF1F4D25) // dark leaf outline
-                    'O' -> Color(0xFF691322) // dark strawberry outline
-                    'R' -> Color(0xFFEE3357) // strawberry red
-                    'K' -> Color(0xFFC01A3D) // shadow red
-                    'E' -> Color(0xFF261217) // eye
-                    'B' -> Color(0xFFFFAAB9) // blush
-                    'M' -> Color(0xFF261217) // mouth
-                    'W' -> Color(0xFFFFF4A3) // seed
-                    else -> null
-                }
-                if (color != null) {
-                    drawRect(
-                        color = color,
-                        topLeft = Offset(x * pixelSize, y * pixelSize),
-                        size = Size(pixelSize + 0.5f, pixelSize + 0.5f)
-                    )
-                }
-            }
-        }
-    }
-}
 
 /**
  * Slim pastel pink heart-scrubber progress bar with a cute heart thumb knob.
@@ -221,9 +146,10 @@ fun TransportButton(
 ) {
     Box(
         modifier = modifier
+            .graphicsLayer { clip = false }
+            .glowingDoubleBorder(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .glowingDoubleBorder(isSelected = isFocused, cornerRadius = 14.dp)
             .background(if (isFocused) Color(0xFFFFF0F4) else Color.Transparent)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
@@ -234,40 +160,6 @@ fun TransportButton(
             fontWeight = FontWeight.Bold,
             color = Color(0xFF3E2452)
         )
-    }
-}
-
-/**
- * Crisp pixel-art bunny sprite with white fur, black pixel eyes, pink inner ears, and blush cheeks.
- * Rendered using direct Canvas pixel runs with 1:1 pixel silhouette (FilterQuality.None behavior)
- * to avoid GPU overdraw or blurs on the MT6761.
- */
-@Composable
-fun PixelBunnyAvatar(
-    modifier: Modifier = Modifier,
-    size: Dp = 22.dp
-) {
-    Canvas(modifier = modifier.size(size)) {
-        val pixelSize = this.size.width / 14f
-
-        BUNNY_AVATAR_ROWS.forEachIndexed { y, row ->
-            row.forEachIndexed { x, ch ->
-                val color = when (ch) {
-                    'O' -> Color(0xFF4A2E56) // deep plum outline
-                    'W' -> Color(0xFFFFFFFF) // white fur
-                    'P' -> Color(0xFFFFADC9) // pink inner ear & blush
-                    'D' -> Color(0xFF2D1B36) // dark eyes & mouth
-                    else -> null
-                }
-                if (color != null) {
-                    drawRect(
-                        color = color,
-                        topLeft = Offset(x * pixelSize, y * pixelSize),
-                        size = Size(pixelSize, pixelSize)
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -329,10 +221,12 @@ fun NowPlayingCard(
                             .clickable { onOpenMediaApp() },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (mediaState.artwork != null) {
+                        val artworkBitmap = remember(mediaState.artwork) { mediaState.artwork?.asImageBitmap() }
+                        if (artworkBitmap != null) {
                             Image(
-                                bitmap = mediaState.artwork.asImageBitmap(),
+                                bitmap = artworkBitmap,
                                 contentDescription = "Album Artwork",
+                                filterQuality = FilterQuality.None,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
                             )

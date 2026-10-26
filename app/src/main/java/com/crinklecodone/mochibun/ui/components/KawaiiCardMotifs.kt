@@ -216,6 +216,8 @@ fun headerFlankedCardMotifs(): List<CardMotifSpec> = listOf(
 // Direct Lightweight Canvas Drawing Functions
 // ============================================================================
 
+private val SharedMotifPath = Path()
+
 /**
  * Draws a four-pointed sparkle star (✦ / ✧).
  */
@@ -227,7 +229,8 @@ fun DrawScope.drawFourPointSparkle(
     strokeWidthPx: Float = 1.2f
 ) {
     val half = sizePx * 0.5f
-    val path = Path().apply {
+    val path = SharedMotifPath.apply {
+        reset()
         moveTo(center.x, center.y - half)
         quadraticTo(center.x, center.y, center.x + half, center.y)
         quadraticTo(center.x, center.y, center.x, center.y + half)
@@ -243,7 +246,7 @@ fun DrawScope.drawFourPointSparkle(
 }
 
 /**
- * Draws a delicate diamond sparkle with slender cross-glint rays (🞢).
+ * Draws a delicate diamond sparkle with slender cross-glint rays (✢).
  */
 fun DrawScope.drawDiamondGlint(
     center: Offset,
@@ -253,7 +256,8 @@ fun DrawScope.drawDiamondGlint(
 ) {
     val halfH = sizePx * 0.5f
     val halfW = sizePx * 0.32f
-    val diamondPath = Path().apply {
+    val diamondPath = SharedMotifPath.apply {
+        reset()
         moveTo(center.x, center.y - halfH)
         lineTo(center.x + halfW, center.y)
         lineTo(center.x, center.y + halfH)
@@ -289,7 +293,8 @@ fun DrawScope.drawMiniHeart(
 ) {
     val w = sizePx
     val h = sizePx
-    val path = Path().apply {
+    val path = SharedMotifPath.apply {
+        reset()
         moveTo(center.x, center.y + h * 0.38f)
         cubicTo(
             center.x - w * 0.52f, center.y - h * 0.12f,
@@ -322,7 +327,7 @@ fun DrawScope.drawStarlet(
 ) {
     val outerR = sizePx * 0.5f
     val innerR = outerR * 0.42f
-    val path = Path()
+    val path = SharedMotifPath.apply { reset() }
     val angleOffset = -PI.toFloat() / 2f
     val step = PI.toFloat() / 5f
 
@@ -573,7 +578,7 @@ fun MochibunSectionHeader(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
-    val textColor = color ?: palette.textColor
+    val textColor = color ?: ActiveTheme.accentDeep
 
     Row(
         modifier = modifier.padding(vertical = 4.dp),
@@ -583,33 +588,21 @@ fun MochibunSectionHeader(
         Box(
             modifier = Modifier
                 .width(26.dp)
-                .height(1.dp)
-                .background(palette.outline)
+                .height(1.5.dp)
+                .background(palette.outline, RoundedCornerShape(1.dp))
         )
         Text(
-            text = "♡",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = palette.primary
-        )
-        Text(
-            text = title,
-            fontSize = 12.5.sp,
+            text = "— ♡ $title ♡ —",
+            fontSize = 13.5.sp,
             fontWeight = FontWeight.Bold,
             color = textColor,
             letterSpacing = 0.5.sp
         )
-        Text(
-            text = "♡",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = palette.primary
-        )
         Box(
             modifier = Modifier
                 .width(26.dp)
-                .height(1.dp)
-                .background(palette.outline)
+                .height(1.5.dp)
+                .background(palette.outline, RoundedCornerShape(1.dp))
         )
     }
 }
@@ -717,60 +710,4 @@ fun BottomLavenderClouds(
     }
 }
 
-/**
- * Bottom Home navigation pill button with upward chevron:
- * ^
- * ♡ Back to Home (F4) ♡
- */
-@Composable
-fun DrawerHomeNavigation(
-    isFocused: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    text: String = "♡ Back to Home ♡"
-) {
-    val theme = LocalLauncherTheme.current
-    val pillShape = CircleShape
 
-    Column(
-        modifier = modifier
-            .graphicsLayer { clip = false }
-            .clickable { onClick() },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        Text(
-            text = "^",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = theme.palette.textColor
-        )
-        Box(
-            modifier = Modifier
-                .graphicsLayer { clip = false }
-                .softGlowFocus(
-                    isSelected = isFocused,
-                    cornerRadius = 20.dp
-                )
-                .clip(pillShape)
-                .background(if (isFocused) theme.focusedContainerColor else theme.unfocusedCardBgColor)
-                .then(
-                    if (!isFocused) {
-                        Modifier.border(1.2.dp, theme.unfocusedCardBorderColor, pillShape)
-                    } else {
-                        Modifier
-                    }
-                )
-                .padding(horizontal = 16.dp, vertical = 7.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                fontSize = 12.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = theme.palette.textColor,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}

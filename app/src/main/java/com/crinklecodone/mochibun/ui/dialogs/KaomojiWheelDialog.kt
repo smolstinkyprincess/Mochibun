@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.KaomojiRepository
 import com.crinklecodone.mochibun.ui.performBoundaryHaptic
 import com.crinklecodone.mochibun.ui.theme.*
@@ -88,7 +89,8 @@ fun KaomojiWheelDialog(
     var selectedCategoryIndex by remember { mutableIntStateOf(0) }
     var selectedItemIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
-    var sawPoundDown by remember { mutableStateOf(false) }
+    var sawTriggerDown by remember { mutableStateOf(false) }
+    val triggerBadge = remember { PreferencesManager.getKaomojiTriggerBadge(context) }
 
     val currentCategory = categories[selectedCategoryIndex]
     val currentKaomoji = currentCategory.items.getOrElse(selectedItemIndex) {
@@ -117,16 +119,7 @@ fun KaomojiWheelDialog(
     val strokeWidth = (rOuter - rInner)
     val rMid = (rInner + rOuter) / 2f
 
-    LaunchedEffect(Unit) {
-        repeat(6) {
-            try {
-                focusRequester.requestFocus()
-                return@LaunchedEffect
-            } catch (_: Exception) {
-                delay(35)
-            }
-        }
-    }
+    requestFocusSafely(focusRequester)
 
     fun selectCategory(index: Int) {
         if (index != selectedCategoryIndex && index in categories.indices) {
@@ -172,12 +165,12 @@ fun KaomojiWheelDialog(
                     return@onPreviewKeyEvent true
                 }
 
-                if (native.keyCode == KeyEvent.KEYCODE_POUND) {
+                if (PreferencesManager.matchesKaomojiTrigger(native.keyCode, native.scanCode, context)) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
-                        sawPoundDown = true
+                        sawTriggerDown = true
                     } else if (event.type == KeyEventType.KeyUp) {
-                        if (sawPoundDown) {
-                            sawPoundDown = false
+                        if (sawTriggerDown) {
+                            sawTriggerDown = false
                             SoundEffectManager.play(context, SoundEffect.BACK)
                             onDismiss()
                         }
@@ -264,7 +257,7 @@ fun KaomojiWheelDialog(
                         color = plumOutline
                     )
                     Text(
-                        text = "♡ [#]",
+                        text = "♡ [$triggerBadge]",
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
                         color = plumOutline.copy(alpha = 0.9f),

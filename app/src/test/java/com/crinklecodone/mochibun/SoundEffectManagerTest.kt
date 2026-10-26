@@ -1,7 +1,9 @@
 package com.crinklecodone.mochibun
 
+import com.crinklecodone.mochibun.core.sound.KeypadSoundManager
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -16,6 +18,17 @@ class SoundEffectManagerTest {
 
     @get:Rule
     val tempFolder = TemporaryFolder()
+
+    @Test
+    fun testAudioRoutingAndVolumeDefaults() {
+        assertEquals("STREAM_MEDIA", PreferencesManager.AUDIO_STREAM_MEDIA)
+        assertEquals("STREAM_NOTIFICATION", PreferencesManager.AUDIO_STREAM_NOTIFICATION)
+        assertEquals(PreferencesManager.AUDIO_STREAM_MEDIA, PreferencesManager.DEFAULT_LAUNCHER_AUDIO_STREAM)
+        assertEquals(80, PreferencesManager.DEFAULT_LAUNCHER_SOUND_VOLUME)
+        assertEquals(PreferencesManager.DEFAULT_LAUNCHER_AUDIO_STREAM, PreferencesManager.getLauncherAudioStream())
+        assertEquals(PreferencesManager.DEFAULT_LAUNCHER_SOUND_VOLUME, PreferencesManager.getLauncherSoundVolume())
+        assertEquals(SoundEffectManager, KeypadSoundManager)
+    }
 
     @Test
     fun testSoundThemesIntegrity() {

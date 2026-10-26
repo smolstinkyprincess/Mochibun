@@ -43,11 +43,11 @@ import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.ui.dialogs.KawaiiDialogPillButton
 import com.crinklecodone.mochibun.ui.dialogs.PixelRibbonBow
+import com.crinklecodone.mochibun.ui.dialogs.awaitFocusSafely
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.theme.*
 import com.crinklecodone.mochibun.ui.components.*
-import kotlinx.coroutines.delay
 
 val kawaiiSwatches = listOf(
     Color(0xFFF8BBD0), Color(0xFFFCE4EC), Color(0xFFA04064),
@@ -161,35 +161,14 @@ fun ThemeStudioDialog(
     LaunchedEffect(showSaveDialog, saveDialogZone, editingColorField) {
         if (showSaveDialog) {
             if (saveDialogZone == 0) {
-                repeat(6) {
-                    try {
-                        saveNameFocusRequester.requestFocus()
-                        return@LaunchedEffect
-                    } catch (_: Exception) {
-                        delay(35)
-                    }
-                }
+                saveNameFocusRequester.awaitFocusSafely(attempts = 6)
             } else {
                 keyboardController?.hide()
-                repeat(6) {
-                    try {
-                        saveDialogFocusRequester.requestFocus()
-                        return@LaunchedEffect
-                    } catch (_: Exception) {
-                        delay(35)
-                    }
-                }
+                saveDialogFocusRequester.awaitFocusSafely(attempts = 6)
             }
         } else {
             keyboardController?.hide()
-            repeat(6) {
-                try {
-                    studioFocusRequester.requestFocus()
-                    return@LaunchedEffect
-                } catch (_: Exception) {
-                    delay(35)
-                }
-            }
+            studioFocusRequester.awaitFocusSafely(attempts = 6)
         }
     }
 

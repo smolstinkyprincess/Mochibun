@@ -41,10 +41,9 @@ Lcom/crinklecodone/mochibun/ui/components/SystemMonitorCardKt;
 Lcom/crinklecodone/mochibun/ui/components/MochibunMascotKt;
 Lcom/crinklecodone/mochibun/ui/components/StickersKt;
 
-Lcom/crinklecodone/mochibun/ui/dialogs/QuickMemoDialogKt;
 Lcom/crinklecodone/mochibun/ui/dialogs/FolderDialogKt;
 Lcom/crinklecodone/mochibun/ui/dialogs/AppActionDialogKt;
-Lcom/crinklecodone/mochibun/ui/dialogs/SpeedDialDialogKt;
+Lcom/crinklecodone/mochibun/ui/dialogs/HardwareButtonsDialogKt;
 Lcom/crinklecodone/mochibun/ui/dialogs/DialogComponentsKt;
 
 Lcom/crinklecodone/mochibun/service/MochibunAccessibilityService;

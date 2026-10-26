@@ -7,12 +7,12 @@ package com.crinklecodone.mochibun.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
-import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Choreographer
 import android.view.KeyEvent
@@ -21,16 +21,19 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
-import com.crinklecodone.mochibun.ui.overlay.CursorOverlayView
 import com.crinklecodone.mochibun.core.system.RootTouchInjector
 import com.crinklecodone.mochibun.core.util.CursorPhysics
 import com.crinklecodone.mochibun.data.prefs.ClickMethod
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
+import com.crinklecodone.mochibun.ui.overlay.CursorOverlayView
+import kotlin.math.abs
 
 class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback {
 
     companion object {
         private const val TAG = "VirtualCursorService"
+        private const val SCROLL_SWIPE_DURATION_MS = 200L
+        private const val SCROLL_DEBOUNCE_MS = 220L
 
         @Volatile
         var isServiceRunning = false
@@ -58,14 +61,16 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     private var toggleKeyCode = CursorPreferences.DEFAULT_TOGGLE_KEYCODE
     private var baseSpeed = CursorPreferences.DEFAULT_MOVE_SPEED
     private var accelerationRate = CursorPreferences.DEFAULT_ACCELERATION
+    private var scrollStepPx = CursorPreferences.DEFAULT_SCROLL_STEP_PX
     private var clickMethod = ClickMethod.ACCESSIBILITY_GESTURE
 
     // Zero-allocation continuous physics engine
     private val physics = CursorPhysics()
     private var isMovementTickerActive = false
 
-    // Key event deduplication
+    // Key event deduplication & scroll cadence debounce
     private var isToggleKeyDown = false
+    private var lastScrollTimeMs = 0L
 
     private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         reloadConfig()
@@ -175,6 +180,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         toggleKeyCode = CursorPreferences.getToggleKeyCode(this)
         baseSpeed = CursorPreferences.getMoveSpeed(this)
         accelerationRate = CursorPreferences.getAcceleration(this)
+        scrollStepPx = CursorPreferences.getScrollStepPx(this)
         clickMethod = CursorPreferences.getClickMethod(this)
         overlayView?.reloadConfiguration()
     }
@@ -238,7 +244,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
             return false
         }
 
-        // When cursor is visible, hijack D-pad directional navigation and click keys
+        // When cursor is visible, hijack D-pad directional navigation, click keys, and 2/8 scroll keys
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 handleDirectionKey(action, up = true)
@@ -262,6 +268,28 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
                 if (action == KeyEvent.ACTION_DOWN) {
                     if (event.repeatCount == 0) {
                         performTapDispatch()
+                    }
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_2,
+            KeyEvent.KEYCODE_NUMPAD_2 -> {
+                if (action == KeyEvent.ACTION_DOWN) {
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastScrollTimeMs >= SCROLL_DEBOUNCE_MS) {
+                        lastScrollTimeMs = now
+                        performScrollDispatch(scrollUp = true)
+                    }
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_8,
+            KeyEvent.KEYCODE_NUMPAD_8 -> {
+                if (action == KeyEvent.ACTION_DOWN) {
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastScrollTimeMs >= SCROLL_DEBOUNCE_MS) {
+                        lastScrollTimeMs = now
+                        performScrollDispatch(scrollUp = false)
                     }
                 }
                 return true
@@ -379,6 +407,72 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         if (!dispatched) {
             Log.w(TAG, "dispatchGesture() returned false at ($tapX, $tapY), falling back to root tap")
             RootTouchInjector.tapAsync(tapX.toInt(), tapY.toInt())
+        }
+    }
+
+    /**
+     * Dispatches a vertical scroll swipe gesture originating at the current pointer coordinates.
+     *
+     * - Key 2 (scrollUp = true): Dispatches a downward drag (startY -> startY + scrollStepPx) to scroll UP.
+     * - Key 8 (scrollUp = false): Dispatches an upward drag (startY -> startY - scrollStepPx) to scroll DOWN.
+     *
+     * Clamps start and end coordinates to screen bounds (0f..480f, 0f..800f) so swipes remain on-screen.
+     */
+    private fun performScrollDispatch(scrollUp: Boolean) {
+        val view = overlayView ?: return
+
+        val maxX = (physics.screenWidth - 1f).coerceAtLeast(1f)
+        val maxY = (physics.screenHeight - 1f).coerceAtLeast(1f)
+
+        val startX = view.getHotspotX().coerceIn(0f, maxX)
+        var startY = view.getHotspotY().coerceIn(0f, maxY)
+        val distance = scrollStepPx.toFloat().coerceIn(
+            CursorPreferences.MIN_SCROLL_STEP_PX.toFloat(),
+            CursorPreferences.MAX_SCROLL_STEP_PX.toFloat()
+        )
+
+        val rawEndY = if (scrollUp) startY + distance else startY - distance
+        val endY = rawEndY.coerceIn(0f, maxY)
+
+        // If cursor is parked against the screen edge in the swipe direction,
+        // shift the stroke start inward so the swipe still has travel distance.
+        if (abs(endY - startY) < 16f) {
+            startY = if (scrollUp) {
+                (endY - distance).coerceIn(0f, maxY)
+            } else {
+                (endY + distance).coerceIn(0f, maxY)
+            }
+        }
+
+        if (abs(endY - startY) < 5f) return
+
+        val xInt = startX.toInt()
+        val y1Int = startY.toInt()
+        val y2Int = endY.toInt()
+
+        if (clickMethod == ClickMethod.ROOT_INPUT_TAP) {
+            RootTouchInjector.swipeAsync(xInt, y1Int, xInt, y2Int, SCROLL_SWIPE_DURATION_MS)
+            return
+        }
+
+        val path = Path().apply {
+            moveTo(startX, startY)
+            lineTo(startX, endY)
+        }
+        val stroke = GestureDescription.StrokeDescription(path, 0L, SCROLL_SWIPE_DURATION_MS)
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+
+        val dispatched = dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                super.onCancelled(gestureDescription)
+                Log.w(TAG, "Accessibility scroll gesture cancelled at ($startX, $startY)->($startX, $endY), falling back to root swipe")
+                RootTouchInjector.swipeAsync(xInt, y1Int, xInt, y2Int, SCROLL_SWIPE_DURATION_MS)
+            }
+        }, null)
+
+        if (!dispatched) {
+            Log.w(TAG, "dispatchGesture() scroll returned false at ($startX, $startY)->($startX, $endY), falling back to root swipe")
+            RootTouchInjector.swipeAsync(xInt, y1Int, xInt, y2Int, SCROLL_SWIPE_DURATION_MS)
         }
     }
 }

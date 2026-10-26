@@ -173,11 +173,11 @@ class RecentTasksManager(context: Context) {
             }
 
             val shellResult = RootShell.executeBlocking("dumpsys activity recents")
-            if (!shellResult.isSuccess || shellResult.out.isEmpty()) {
+            if (!shellResult.isSuccess || shellResult.stdout.isEmpty()) {
                 return emptyList()
             }
 
-            val lines = shellResult.out
+            val lines = shellResult.stdout
             var currentTaskId = -1
             var currentType: String
             var currentPkg = ""
@@ -515,7 +515,7 @@ class RecentTasksManager(context: Context) {
         if (RootShell.isSuBinaryPresent()) {
             try {
                 val result = RootShell.executeBlocking("am stack remove $taskId")
-                Log.d(TAG, "Root am stack remove $taskId result: isSuccess=${result.isSuccess}, code=${result.code}")
+                Log.d(TAG, "Root am stack remove $taskId result: isSuccess=${result.isSuccess}, code=${result.exitCode}")
                 removed = result.isSuccess || removed
             } catch (e: Exception) {
                 Log.e(TAG, "Root am stack remove failed for $taskId", e)

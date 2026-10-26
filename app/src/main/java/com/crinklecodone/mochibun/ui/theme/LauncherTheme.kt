@@ -496,7 +496,7 @@ fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
             base.cardRoundnessDp
         ),
         mascotTint = base.mascotTint,
-        fontFamilyId = prefs.getString("pref_theme_font_family", prefs.getString("theme_font_family", "default")) ?: "default"
+        fontFamilyId = prefs.getString("pref_theme_font_family", "default") ?: "default"
     )
 }
 
@@ -504,7 +504,6 @@ fun saveTheme(prefs: SharedPreferences, theme: LauncherTheme) {
     prefs.edit()
         .putString("theme_preset", theme.name)
         .putString("pref_theme_font_family", theme.fontFamilyId)
-        .putString("theme_font_family", theme.fontFamilyId)
         .putInt("theme_bg_color", theme.bgColor.toArgb())
         .putInt("theme_fg_text_color", theme.fgTextColor.toArgb())
         .putInt("theme_card_bg_color", theme.cardBgColor.toArgb())

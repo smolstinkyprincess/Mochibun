@@ -33,15 +33,21 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.crinklecodone.mochibun.core.sound.SoundEffect
+import com.crinklecodone.mochibun.core.sound.SoundEffectManager
+import com.crinklecodone.mochibun.data.repository.NotificationTracker
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -93,8 +99,6 @@ private val FavoriteSquircleShape = RoundedCornerShape(16.dp)
 @Composable
 fun HomeScreen(
     context: Context,
-    favoriteApps: List<LauncherApp> = emptyList(),
-    favoriteFolders: List<FavoriteFolder> = emptyList(),
     favoriteItems: List<FavoriteSlotItem> = emptyList(),
     modifier: Modifier = Modifier,
     userName: String = "",
@@ -109,9 +113,13 @@ fun HomeScreen(
     onAppLongClick: (LauncherApp) -> Unit = {},
     onFolderClick: (FavoriteFolder) -> Unit = {},
     onFolderLongClick: (FavoriteFolder) -> Unit = {},
-    onOpenDrawer: () -> Unit = {}
+    onOpenDrawer: () -> Unit = {},
+    onNavigateToStats: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {}
 ) {
     val theme = LocalLauncherTheme.current
+    val notifications by NotificationTracker.notifications.collectAsState()
+    val unreadNotifCount = notifications.size
 
     Box(
         modifier = modifier
@@ -121,9 +129,8 @@ fun HomeScreen(
         // PixelSpray sticker overlay above wallpaper (conditionally rendered)
         if (isPixelSprayEnabled) {
             PixelSpray(
-                count = 20,
-                modifier = Modifier.fillMaxSize(),
-                tintBehavior = PixelSprayTintBehavior.MIXED
+                count = 48,
+                modifier = Modifier.fillMaxSize()
             )
         }
 
@@ -149,17 +156,12 @@ fun HomeScreen(
             // 2. Digital Clock & Date Section
             ClockWidget()
 
-            Spacer(modifier = Modifier.height(18.dp))
-
-            val effectiveItems = remember(favoriteItems, favoriteApps, favoriteFolders) {
-                if (favoriteItems.isNotEmpty()) favoriteItems
-                else favoriteApps.map { FavoriteSlotItem.App(it) } + favoriteFolders.map { FavoriteSlotItem.Folder(it) }
-            }
+            Spacer(modifier = Modifier.height(4.dp))
 
             // 3. Favorites Card
             FavoritesCard(
                 context = context,
-                favoriteItems = effectiveItems,
+                favoriteItems = favoriteItems,
                 selectedIndex = selectedFavoriteIndex,
                 isCardFocused = isHomeScreenActive && homeFocusArea == 0,
                 folderIconRefreshKey = folderIconRefreshKey,
@@ -175,14 +177,33 @@ fun HomeScreen(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
-        // 4. Bottom Drawer Handle ("^ Swipe up for apps")
-        BottomDrawerHandle(
-            isFocused = isHomeScreenActive && homeFocusArea == 2,
-            onClick = onOpenDrawer,
+        // 4. Bottom Keitai Soft-Key Bar: [ stats ]  ♥⇣♡ ♡⇣♥  [ notifs ]
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 12.dp)
-        )
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SoftKeyPromptPill(
+                label = "stats",
+                icon = "📊",
+                onClick = onNavigateToStats
+            )
+
+            BottomDrawerHandle(
+                isFocused = isHomeScreenActive && homeFocusArea == 2,
+                onClick = onOpenDrawer
+            )
+
+            SoftKeyPromptPill(
+                label = "notifs",
+                icon = "🔔",
+                badgeCount = unreadNotifCount,
+                onClick = onNavigateToNotifications
+            )
+        }
     }
 }
 
@@ -219,7 +240,7 @@ fun WelcomeHomeBanner(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 12.dp)
+            .padding(top = 18.dp)
     ) {
         // Flanking sparkle accents on the far left and right
         SparkleAccent(
@@ -330,7 +351,7 @@ fun WelcomeHomeBanner(
             color = palette.primary,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .offset(x = (-44).dp, y = 6.dp)
+                .offset(x = (-36).dp, y = (-12).dp)
         )
         Text(
             text = "♡",
@@ -338,14 +359,14 @@ fun WelcomeHomeBanner(
             color = palette.primary,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .offset(x = 44.dp, y = 6.dp)
+                .offset(x = 36.dp, y = (-12).dp)
         )
 
         // Decorative ribbon bow badge anchored at top-center overlapping the border
         PixelRibbonBow(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .offset(y = (-25).dp)
+                .offset(y = (-22).dp)
         )
     }
 }
@@ -476,38 +497,6 @@ fun ClockWidget(
 @Composable
 fun FavoritesCard(
     context: Context,
-    favoriteApps: List<LauncherApp>,
-    favoriteFolders: List<FavoriteFolder>,
-    modifier: Modifier = Modifier,
-    selectedIndex: Int = 0,
-    isCardFocused: Boolean = true,
-    folderIconRefreshKey: Int = 0,
-    onAppClick: (LauncherApp) -> Unit = {},
-    onAppLongClick: (LauncherApp) -> Unit = {},
-    onFolderClick: (FavoriteFolder) -> Unit = {},
-    onFolderLongClick: (FavoriteFolder) -> Unit = {}
-) {
-    val items = remember(favoriteApps, favoriteFolders) {
-        favoriteApps.map { FavoriteSlotItem.App(it) } +
-            favoriteFolders.map { FavoriteSlotItem.Folder(it) }
-    }
-    FavoritesCard(
-        context = context,
-        favoriteItems = items,
-        modifier = modifier,
-        selectedIndex = selectedIndex,
-        isCardFocused = isCardFocused,
-        folderIconRefreshKey = folderIconRefreshKey,
-        onAppClick = onAppClick,
-        onAppLongClick = onAppLongClick,
-        onFolderClick = onFolderClick,
-        onFolderLongClick = onFolderLongClick
-    )
-}
-
-@Composable
-fun FavoritesCard(
-    context: Context,
     favoriteItems: List<FavoriteSlotItem>,
     modifier: Modifier = Modifier,
     selectedIndex: Int = 0,
@@ -546,6 +535,7 @@ fun FavoritesCard(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
+            .padding(top = 26.dp)
     ) {
         Box(
             modifier = Modifier
@@ -567,32 +557,11 @@ fun FavoritesCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header with decorative side divider lines: — ♡ Favorites ♡ —
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(1.5.dp)
-                        .background(theme.greetingOutlineColor, RoundedCornerShape(1.dp))
-                )
-                Text(
-                    text = "— ♡ Favorites ♡ —",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ActiveTheme.accentDeep,
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(1.5.dp)
-                        .background(theme.greetingOutlineColor, RoundedCornerShape(1.dp))
-                )
-            }
+            MochibunSectionHeader(
+                title = "Favorites",
+                color = ActiveTheme.accentDeep,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -687,14 +656,14 @@ fun FavoritesCard(
         }
     }
 
-    // Companion mascot loaf sitting on the top-right corner of the favorites card
-    MochibunMascot(
+    // Companion mascot loaf sitting on the top-right corner of the favorites card with dynamic speech bubble
+    MochibunnyWithSpeechBubble(
         mood = getDefaultTimeOfDayMood(),
-        size = 46.dp,
+        size = 56.dp,
         themeTintColor = theme.mascotTintColor,
         modifier = Modifier
             .align(Alignment.TopEnd)
-            .offset(x = (-16).dp, y = (-22).dp)
+            .offset(x = (-14).dp, y = (-26).dp)
     )
 }
 }
@@ -874,204 +843,6 @@ private fun FavoriteFolderSlot(
 }
 
 /**
- * Bottom cloud & kawaii illustration layer drawn using hardware-accelerated Canvas.
- * Renders back, mid, and front cloud silhouettes, peeking cat with paws resting on cloud,
- * and scattered background stars/hearts without runtime blurs or bitmap overhead.
- */
-@Composable
-fun BottomIllustrationLayer(
-    modifier: Modifier = Modifier
-) {
-    val theme = LocalLauncherTheme.current
-    val palette = theme.palette
-
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-
-        // 1. Scattered background sky accents
-        drawSparkle(Offset(w * 0.16f, h * 0.18f), 7.dp.toPx(), palette.outline)
-        drawSparkle(Offset(w * 0.08f, h * 0.42f), 8.dp.toPx(), palette.primary.copy(alpha = 0.7f))
-        drawCircle(palette.outline.copy(alpha = 0.8f), radius = 2.5.dp.toPx(), center = Offset(w * 0.07f, h * 0.30f))
-        drawMiniHeart(Offset(w * 0.17f, h * 0.62f), 6.5.dp.toPx(), palette.primary.copy(alpha = 0.5f))
-
-        drawMiniHeart(Offset(w * 0.90f, h * 0.38f), 7.5.dp.toPx(), palette.primary.copy(alpha = 0.6f))
-        drawSparkle(Offset(w * 0.85f, h * 0.18f), 7.dp.toPx(), palette.outline)
-        drawSparkle(Offset(w * 0.70f, h * 0.50f), 6.5.dp.toPx(), palette.primary.copy(alpha = 0.7f))
-        drawMiniHeart(Offset(w * 0.72f, h * 0.66f), 6.dp.toPx(), palette.primary.copy(alpha = 0.6f))
-
-        // 2. Back Cloud layer
-        val backCloudPath = Path().apply {
-            moveTo(0f, h * 0.46f)
-            cubicTo(w * 0.10f, h * 0.38f, w * 0.22f, h * 0.38f, w * 0.32f, h * 0.48f)
-            cubicTo(w * 0.42f, h * 0.36f, w * 0.58f, h * 0.36f, w * 0.68f, h * 0.46f)
-            cubicTo(w * 0.78f, h * 0.34f, w * 0.92f, h * 0.34f, w, h * 0.44f)
-            lineTo(w, h)
-            lineTo(0f, h)
-            close()
-        }
-        drawPath(backCloudPath, palette.cloudBack)
-
-        // 3. Middle Cloud layer
-        val midCloudPath = Path().apply {
-            moveTo(0f, h * 0.60f)
-            cubicTo(w * 0.08f, h * 0.52f, w * 0.24f, h * 0.52f, w * 0.36f, h * 0.62f)
-            cubicTo(w * 0.48f, h * 0.50f, w * 0.66f, h * 0.50f, w * 0.78f, h * 0.62f)
-            cubicTo(w * 0.88f, h * 0.54f, w * 0.96f, h * 0.54f, w, h * 0.60f)
-            lineTo(w, h)
-            lineTo(0f, h)
-            close()
-        }
-        drawPath(midCloudPath, palette.cloudMid)
-
-        // 4. Kawaii Peeking Cat (tucked behind front cloud layer on bottom right)
-        val catW = 96.dp.toPx()
-        val catH = 88.dp.toPx()
-        val catX = w - catW - 10.dp.toPx()
-        val catY = h - catH - 18.dp.toPx()
-
-        val outlineColor = palette.catOutline
-        val bodyColor = Color(0xFFFFF7FB)
-        val strokeWidth = 2.4.dp.toPx()
-
-        // Cat Left Ear
-        val leftEarPath = Path().apply {
-            moveTo(catX + catW * 0.16f, catY + catH * 0.32f)
-            quadraticTo(catX + catW * 0.18f, catY + catH * 0.04f, catX + catW * 0.28f, catY + catH * 0.05f)
-            lineTo(catX + catW * 0.44f, catY + catH * 0.24f)
-            close()
-        }
-        drawPath(leftEarPath, bodyColor)
-        drawPath(leftEarPath, outlineColor, style = Stroke(width = strokeWidth))
-
-        val leftInnerEarPath = Path().apply {
-            moveTo(catX + catW * 0.20f, catY + catH * 0.28f)
-            quadraticTo(catX + catW * 0.22f, catY + catH * 0.10f, catX + catW * 0.28f, catY + catH * 0.11f)
-            lineTo(catX + catW * 0.38f, catY + catH * 0.24f)
-            close()
-        }
-        drawPath(leftInnerEarPath, palette.primary)
-
-        // Cat Right Ear
-        val rightEarPath = Path().apply {
-            moveTo(catX + catW * 0.62f, catY + catH * 0.24f)
-            quadraticTo(catX + catW * 0.82f, catY + catH * 0.04f, catX + catW * 0.90f, catY + catH * 0.08f)
-            lineTo(catX + catW * 0.94f, catY + catH * 0.34f)
-            close()
-        }
-        drawPath(rightEarPath, bodyColor)
-        drawPath(rightEarPath, outlineColor, style = Stroke(width = strokeWidth))
-
-        val rightInnerEarPath = Path().apply {
-            moveTo(catX + catW * 0.68f, catY + catH * 0.24f)
-            quadraticTo(catX + catW * 0.82f, catY + catH * 0.10f, catX + catW * 0.88f, catY + catH * 0.13f)
-            lineTo(catX + catW * 0.90f, catY + catH * 0.30f)
-            close()
-        }
-        drawPath(rightInnerEarPath, palette.primary)
-
-        // Cat Head
-        val headPath = Path().apply {
-            addRoundRect(
-                RoundRect(
-                    left = catX + catW * 0.06f,
-                    top = catY + catH * 0.18f,
-                    right = catX + catW * 0.98f,
-                    bottom = catY + catH + 16.dp.toPx(),
-                    radiusX = 36.dp.toPx(),
-                    radiusY = 32.dp.toPx()
-                )
-            )
-        }
-        drawPath(headPath, bodyColor)
-        drawPath(headPath, outlineColor, style = Stroke(width = strokeWidth))
-
-        // Happy closed eyes: ⌒   ⌒
-        val eyeColor = theme.fgTextColor
-        val eyeStroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
-
-        val leftEyePath = Path().apply {
-            moveTo(catX + catW * 0.30f, catY + catH * 0.52f)
-            quadraticTo(catX + catW * 0.36f, catY + catH * 0.44f, catX + catW * 0.42f, catY + catH * 0.52f)
-        }
-        drawPath(leftEyePath, eyeColor, style = eyeStroke)
-
-        val rightEyePath = Path().apply {
-            moveTo(catX + catW * 0.62f, catY + catH * 0.54f)
-            quadraticTo(catX + catW * 0.68f, catY + catH * 0.46f, catX + catW * 0.74f, catY + catH * 0.54f)
-        }
-        drawPath(rightEyePath, eyeColor, style = eyeStroke)
-
-        // Soft blush cheeks
-        val blushColor = palette.catBlush.copy(alpha = 0.85f)
-        drawOval(
-            color = blushColor,
-            topLeft = Offset(catX + catW * 0.20f, catY + catH * 0.56f),
-            size = Size(10.dp.toPx(), 6.dp.toPx())
-        )
-        drawOval(
-            color = blushColor,
-            topLeft = Offset(catX + catW * 0.74f, catY + catH * 0.58f),
-            size = Size(10.dp.toPx(), 6.dp.toPx())
-        )
-
-        // Cute kitty mouth: :3 (w-shape)
-        val mouthPath = Path().apply {
-            val mx = catX + catW * 0.52f
-            val my = catY + catH * 0.56f
-            moveTo(mx - 7.dp.toPx(), my)
-            quadraticTo(mx - 3.5.dp.toPx(), my + 4.dp.toPx(), mx, my + 1.dp.toPx())
-            quadraticTo(mx + 3.5.dp.toPx(), my + 4.dp.toPx(), mx + 7.dp.toPx(), my)
-        }
-        drawPath(mouthPath, eyeColor, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
-
-        // 5. Front Cloud layer
-        val frontCloudPath = Path().apply {
-            moveTo(0f, h * 0.75f)
-            cubicTo(w * 0.15f, h * 0.68f, w * 0.30f, h * 0.68f, w * 0.42f, h * 0.76f)
-            cubicTo(w * 0.55f, h * 0.70f, w * 0.70f, h * 0.70f, w * 0.80f, h * 0.78f)
-            cubicTo(w * 0.90f, h * 0.72f, w * 0.96f, h * 0.72f, w, h * 0.75f)
-            lineTo(w, h)
-            lineTo(0f, h)
-            close()
-        }
-        drawPath(frontCloudPath, palette.cloudFront)
-
-        // 6. Cat Paw (rests over front cloud layer)
-        val pawW = 20.dp.toPx()
-        val pawH = 15.dp.toPx()
-        val pawX = catX + catW * 0.04f
-        val pawY = catY + catH * 0.68f
-        val pawPath = Path().apply {
-            addRoundRect(
-                RoundRect(
-                    left = pawX,
-                    top = pawY,
-                    right = pawX + pawW,
-                    bottom = pawY + pawH,
-                    radiusX = 7.dp.toPx(),
-                    radiusY = 7.dp.toPx()
-                )
-            )
-        }
-        drawPath(pawPath, bodyColor)
-        drawPath(pawPath, outlineColor, style = Stroke(width = strokeWidth))
-        drawLine(
-            outlineColor,
-            Offset(pawX + pawW * 0.35f, pawY + 3.dp.toPx()),
-            Offset(pawX + pawW * 0.35f, pawY + pawH * 0.65f),
-            strokeWidth = 1.6.dp.toPx()
-        )
-        drawLine(
-            outlineColor,
-            Offset(pawX + pawW * 0.65f, pawY + 3.dp.toPx()),
-            Offset(pawX + pawW * 0.65f, pawY + pawH * 0.65f),
-            strokeWidth = 1.6.dp.toPx()
-        )
-    }
-}
-
-/**
  * Bottom Drawer Handle.
  * Displays upward chevron and "♥ Swipe up for apps ♥".
  * Supports tap, swipe up gesture, and physical D-pad focus.
@@ -1085,7 +856,7 @@ fun BottomDrawerHandle(
     val theme = LocalLauncherTheme.current
     val handleShape = RoundedCornerShape(16.dp)
 
-    Column(
+    Row(
         modifier = modifier
             .graphicsLayer { clip = false }
             .then(
@@ -1098,22 +869,75 @@ fun BottomDrawerHandle(
                     Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
                 }
             )
-            .clickable { onClick() }
-            .pointerInput(Unit) {
-                detectVerticalDragGestures { _, dragAmount ->
-                    if (dragAmount < -18) {
-                        onClick()
-                    }
-                }
-            },
-        horizontalAlignment = Alignment.CenterHorizontally
+            .clickable { onClick() },
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "⇣✦ ♡ ♥ ♡ ⇣✦⇣ ♡ ♥ ♡ ✦⇣",
-            fontSize = 16.sp,
+            text = "♥⇣♡ ♡⇣♥",
+            fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = theme.appActionColor
         )
+    }
+}
+
+/**
+ * Tactile Keitai Soft-Key Prompt badge anchored in the bottom corners of the Home screen.
+ * Reflects physical F1 (Left / Stats / Page 0) and Camera/F2 (Right / Notifications / Page 2).
+ */
+@Composable
+fun SoftKeyPromptPill(
+    label: String,
+    icon: String,
+    modifier: Modifier = Modifier,
+    badgeCount: Int = 0,
+    onClick: () -> Unit = {}
+) {
+    val context = LocalContext.current
+    val theme = LocalLauncherTheme.current
+    val pillShape = RoundedCornerShape(12.dp)
+
+    Box(
+        modifier = modifier
+            .graphicsLayer { clip = false }
+            .background(theme.greetingBgColor.copy(alpha = 0.85f), pillShape)
+            .border(
+                width = 1.dp,
+                color = theme.greetingOutlineColor.copy(alpha = 0.7f),
+                shape = pillShape
+            )
+            .clip(pillShape)
+            .clickable {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                onClick()
+            }
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = icon,
+                fontSize = 11.sp
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = theme.appActionColor
+            )
+            if (badgeCount > 0) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(theme.palette.squirclePrimary, CircleShape)
+                )
+            }
+        }
     }
 }
 
@@ -1126,10 +950,12 @@ fun SparkleAccent(
     size: Dp = 14.dp,
     color: Color = Color(0xFFDEC3EC)
 ) {
+    val path = remember { Path() }
     Canvas(modifier = modifier.size(size)) {
         val w = this.size.width
         val h = this.size.height
-        val path = Path().apply {
+        path.reset()
+        path.apply {
             moveTo(w * 0.5f, 0f)
             quadraticTo(w * 0.5f, h * 0.5f, w, h * 0.5f)
             quadraticTo(w * 0.5f, h * 0.5f, w * 0.5f, h)
@@ -1190,29 +1016,4 @@ fun FolderWithHeartIcon(
         }
         drawPath(heartPath, palette.primary)
     }
-}
-
-private fun DrawScope.drawSparkle(center: Offset, sizePx: Float, color: Color) {
-    val half = sizePx * 0.5f
-    val path = Path().apply {
-        moveTo(center.x, center.y - half)
-        quadraticTo(center.x, center.y, center.x + half, center.y)
-        quadraticTo(center.x, center.y, center.x, center.y + half)
-        quadraticTo(center.x, center.y, center.x - half, center.y)
-        quadraticTo(center.x, center.y, center.x, center.y - half)
-        close()
-    }
-    drawPath(path, color)
-}
-
-private fun DrawScope.drawMiniHeart(center: Offset, sizePx: Float, color: Color) {
-    val w = sizePx
-    val h = sizePx
-    val path = Path().apply {
-        moveTo(center.x, center.y + h * 0.35f)
-        cubicTo(center.x - w * 0.5f, center.y - h * 0.15f, center.x - w * 0.5f, center.y - h * 0.5f, center.x, center.y - h * 0.15f)
-        cubicTo(center.x + w * 0.5f, center.y - h * 0.5f, center.x + w * 0.5f, center.y - h * 0.15f, center.x, center.y + h * 0.35f)
-        close()
-    }
-    drawPath(path, color)
 }

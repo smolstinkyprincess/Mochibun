@@ -25,8 +25,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -42,12 +44,14 @@ import com.crinklecodone.mochibun.data.repository.NotificationTracker
 import com.crinklecodone.mochibun.ui.components.MochibunMascot
 import com.crinklecodone.mochibun.ui.components.TopLavenderClouds
 import com.crinklecodone.mochibun.ui.components.getDefaultTimeOfDayMood
+import com.crinklecodone.mochibun.ui.components.softGlowFocus
+import com.crinklecodone.mochibun.ui.dialogs.awaitFocusSafely
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.performBoundaryHaptic
+import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.palette
-import kotlinx.coroutines.delay
 
 private const val TAG = "NotificationsScreen"
 
@@ -64,9 +68,6 @@ enum class NotifFocusTarget {
 @Composable
 fun NotificationsScreen(
     context: Context,
-    cardBgColor: Color,
-    cardTextColor: Color,
-    appActionColor: Color,
     cardRoundness: Dp,
     modifier: Modifier = Modifier,
     isActivePage: Boolean = true,
@@ -144,14 +145,7 @@ fun NotificationsScreen(
                 focusTarget = NotifFocusTarget.HOME_PILL
             }
 
-            repeat(6) {
-                try {
-                    pageFocusRequester.requestFocus()
-                    return@LaunchedEffect
-                } catch (_: Exception) {
-                    delay(35)
-                }
-            }
+            pageFocusRequester.awaitFocusSafely(attempts = 6)
         } else {
             sawCenterDown = false
         }
@@ -347,10 +341,10 @@ fun NotificationsScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "✧  —  ♡  Notifications  ♡  —  ✧",
+                            text = "— ♡ Notifications ♡ —",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = palette.textColor
+                            color = ActiveTheme.accentDeep
                         )
                     }
 
@@ -388,6 +382,8 @@ fun NotificationsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 10.dp)
+                            .graphicsLayer { clip = false }
+                            .softGlowFocus(isSelected = isFocused, cornerRadius = cardRoundness)
                             .clip(RoundedCornerShape(cardRoundness))
                             .background(
                                 if (isFocused) {
@@ -399,7 +395,7 @@ fun NotificationsScreen(
                                 }
                             )
                             .border(
-                                width = if (isFocused) 2.dp else 1.dp,
+                                width = 1.5.dp,
                                 color = if (isFocused) palette.focusedCardBorder else palette.unfocusedCardBorder,
                                 shape = RoundedCornerShape(cardRoundness)
                             )
@@ -450,12 +446,14 @@ fun NotificationsScreen(
                     ) {
                         Box(
                             modifier = Modifier
+                                .graphicsLayer { clip = false }
+                                .softGlowFocus(isSelected = isFocused, cornerRadius = 16.dp)
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(
                                     if (isFocused) palette.focusedCardContainer else palette.container
                                 )
                                 .border(
-                                    width = if (isFocused) 2.dp else 1.dp,
+                                    width = 1.5.dp,
                                     color = if (isFocused) palette.focusedCardBorder else palette.outline,
                                     shape = RoundedCornerShape(16.dp)
                                 )
@@ -542,6 +540,8 @@ fun NotificationsScreen(
                         .fillMaxWidth(0.8f)
                         .padding(top = 8.dp)
                         .height(38.dp)
+                        .graphicsLayer { clip = false }
+                        .softGlowFocus(isSelected = isPillFocused, cornerRadius = 20.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(
                             if (isPillFocused) {
@@ -553,7 +553,7 @@ fun NotificationsScreen(
                             }
                         )
                         .border(
-                            width = if (isPillFocused) 2.dp else 1.dp,
+                            width = 1.5.dp,
                             color = if (isPillFocused) palette.focusedCardBorder else palette.outline,
                             shape = RoundedCornerShape(20.dp)
                         )
@@ -590,6 +590,8 @@ private fun NotificationCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isBodyFocused, cornerRadius = cardRoundness)
             .clip(RoundedCornerShape(cardRoundness))
             .background(
                 if (isCardFocused) {
@@ -601,7 +603,7 @@ private fun NotificationCard(
                 }
             )
             .border(
-                width = if (isBodyFocused) 2.dp else if (isCardFocused) 1.5.dp else 1.dp,
+                width = 1.5.dp,
                 color = if (isBodyFocused) palette.focusedCardBorder else if (isCardFocused) palette.outline else palette.unfocusedCardBorder,
                 shape = RoundedCornerShape(cardRoundness)
             )
@@ -618,6 +620,7 @@ private fun NotificationCard(
                     Image(
                         bitmap = iconBitmap,
                         contentDescription = item.appName,
+                        filterQuality = FilterQuality.None,
                         modifier = Modifier
                             .size(20.dp)
                             .clip(RoundedCornerShape(5.dp))

@@ -47,7 +47,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -59,7 +58,6 @@ import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.destructiveColor
 import com.crinklecodone.mochibun.ui.theme.selectedContainerColor
 import com.crinklecodone.mochibun.ui.theme.softSurfaceColor
-import kotlinx.coroutines.delay
 
 private val SUGGESTED_FOLDER_NAMES = listOf(
     "Cute Apps",
@@ -76,10 +74,6 @@ fun CreateFavoriteFolderDialog(
     initialApp: LauncherApp?,
     availableApps: List<LauncherApp>,
     existingFolders: List<FavoriteFolder>,
-    cardBgColor: Color,
-    cardTextColor: Color,
-    appActionColor: Color,
-    cardRoundness: Dp,
     onDismiss: () -> Unit,
     onCreate: (String, List<String>) -> Unit
 ) {
@@ -139,24 +133,10 @@ fun CreateFavoriteFolderDialog(
 
     LaunchedEffect(focusZone) {
         if (focusZone == 0) {
-            repeat(6) {
-                try {
-                    nameFieldFocusRequester.requestFocus()
-                    return@LaunchedEffect
-                } catch (_: Exception) {
-                    delay(35)
-                }
-            }
+            nameFieldFocusRequester.awaitFocusSafely(attempts = 6)
         } else {
             keyboardController?.hide()
-            repeat(6) {
-                try {
-                    dialogFocusRequester.requestFocus()
-                    return@LaunchedEffect
-                } catch (_: Exception) {
-                    delay(35)
-                }
-            }
+            dialogFocusRequester.awaitFocusSafely(attempts = 6)
         }
     }
 
@@ -317,7 +297,7 @@ fun CreateFavoriteFolderDialog(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 500.dp)
-                .border(2.dp, ActiveTheme.cardBorder, shape),
+                .border(1.5.dp, ActiveTheme.cardBorder, shape),
             shape = shape,
             color = ActiveTheme.surface,
             tonalElevation = 6.dp,

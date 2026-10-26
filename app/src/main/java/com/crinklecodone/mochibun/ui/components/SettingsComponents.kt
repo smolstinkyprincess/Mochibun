@@ -193,6 +193,8 @@ fun SettingsNavigationRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
             .border(borderStroke, shape)
@@ -272,6 +274,8 @@ fun SettingsToggleRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
             .border(borderStroke, shape)
@@ -346,6 +350,8 @@ fun SettingsStepperRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
             .border(borderStroke, shape)
@@ -464,6 +470,8 @@ fun SettingsTextInputRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
             .border(borderStroke, shape)
@@ -572,6 +580,8 @@ fun SettingsActionRow(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 12.dp)
             .clip(shape)
             .background(bg, shape)
             .border(

@@ -82,6 +82,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog.checkAsync(this, force = false)
+    }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         ClamshellManager.onConfigurationChanged(newConfig)

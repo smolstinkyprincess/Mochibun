@@ -26,12 +26,17 @@ object CursorPreferences {
     private const val KEY_CUSTOM_URI = "cursor_custom_uri"
     private const val KEY_CURSOR_SIZE_DP = "cursor_size_dp"
     private const val KEY_GIF_PLAYBACK_SPEED = "cursor_gif_playback_speed"
+    private const val KEY_SCROLL_STEP_PX = "cursor_scroll_step_px"
 
     val DEFAULT_TOGGLE_KEYCODE = KeyEvent.KEYCODE_F4 // Chinoe AT-M120 physical side key
     const val DEFAULT_MOVE_SPEED = 10f // Base pixels per frame
     const val DEFAULT_ACCELERATION = 1.08f // Multiplier while holding D-pad
     const val DEFAULT_CURSOR_SIZE_DP = 32
     const val DEFAULT_GIF_PLAYBACK_SPEED = 0.5f // Calm, gentle low playback speed (~170-200ms frame delay)
+    const val DEFAULT_SCROLL_STEP_PX = 200 // Default vertical swipe distance for keys 2 & 8
+    const val MIN_SCROLL_STEP_PX = 100
+    const val MAX_SCROLL_STEP_PX = 500
+    const val SCROLL_STEP_INCREMENT_PX = 50
 
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -120,5 +125,18 @@ object CursorPreferences {
 
     fun setGifPlaybackSpeed(context: Context, speed: Float) {
         getPrefs(context).edit().putFloat(KEY_GIF_PLAYBACK_SPEED, speed).apply()
+    }
+
+    fun getScrollStepPx(context: Context): Int {
+        return getPrefs(context)
+            .getInt(KEY_SCROLL_STEP_PX, DEFAULT_SCROLL_STEP_PX)
+            .coerceIn(MIN_SCROLL_STEP_PX, MAX_SCROLL_STEP_PX)
+    }
+
+    fun setScrollStepPx(context: Context, stepPx: Int) {
+        getPrefs(context)
+            .edit()
+            .putInt(KEY_SCROLL_STEP_PX, stepPx.coerceIn(MIN_SCROLL_STEP_PX, MAX_SCROLL_STEP_PX))
+            .apply()
     }
 }

@@ -7,10 +7,8 @@ package com.crinklecodone.mochibun.ui.theme
 
 import android.app.Activity
 import android.content.ContextWrapper
-import android.os.Build
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -25,20 +23,7 @@ import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.TypographyManager
 
 // Baseline pastel pink palette used across launcher surfaces and interactive cards
-private val PinkLightColorScheme = lightColorScheme(
-    primary = PinkPrimary,
-    onPrimary = PinkOnPrimary,
-    secondary = LavenderSecondary,
-    onSecondary = LavenderOnSecondary,
-    tertiary = PinkTertiary,
-    background = ThemeBackground,
-    onBackground = ThemeOnBackground,
-    surface = ThemeSurface,
-    onSurface = ThemeOnSurface
-)
-
-// Cohesive pastel scheme for dark mode contexts (maintains pastel background instead of dark purple)
-private val PinkDarkColorScheme = darkColorScheme(
+private val PinkColorScheme = lightColorScheme(
     primary = PinkPrimary,
     onPrimary = PinkOnPrimary,
     secondary = LavenderSecondary,
@@ -56,18 +41,10 @@ private val PinkDarkColorScheme = darkColorScheme(
  */
 @Composable
 fun MochibunTheme(
-    darkTheme: Boolean = false,
-    dynamicColor: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") darkTheme: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (darkTheme) PinkDarkColorScheme else PinkLightColorScheme
-        }
-        darkTheme -> PinkDarkColorScheme
-        else -> PinkLightColorScheme
-    }
-
     val fontId by PreferencesManager.themeFontFamily.collectAsState()
     val resolvedFontFamily = remember(fontId) {
         TypographyManager.resolveFontFamily(fontId)
@@ -107,7 +84,7 @@ fun MochibunTheme(
         LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = resolvedFontFamily)
     ) {
         MaterialTheme(
-            colorScheme = colorScheme,
+            colorScheme = PinkColorScheme,
             typography = typography,
             content = content
         )

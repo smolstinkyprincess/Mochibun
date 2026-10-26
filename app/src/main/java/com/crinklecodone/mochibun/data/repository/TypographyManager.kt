@@ -7,6 +7,7 @@ import android.os.Environment
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.compose.ui.text.font.FontFamily
+import com.crinklecodone.mochibun.ui.theme.MaruMinyaMFontFamily
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +39,13 @@ object TypographyManager {
     val BuiltInTypographyOptions = listOf(
         TypographyOption(
             id = "default",
+            name = "MaruMinyaM (まるみにゃむ)",
+            subtitle = "Authentic 12px Keitai pixel font",
+            sampleText = "あA 12:00",
+            fontFamily = MaruMinyaMFontFamily
+        ),
+        TypographyOption(
+            id = "clean_sans",
             name = "Clean Sans",
             subtitle = "Modern crisp system font",
             sampleText = "あA 12:00",
@@ -202,10 +210,12 @@ object TypographyManager {
     fun resolveFontFamily(id: String): FontFamily {
         return _options.value.firstOrNull { it.id == id }?.fontFamily
             ?: when (id) {
+                "default", "maruminyam" -> MaruMinyaMFontFamily
+                "clean_sans" -> FontFamily.Default
                 "pixel" -> FontFamily.Monospace
                 "gothic" -> FontFamily.SansSerif
                 "serif" -> FontFamily.Serif
-                else -> FontFamily.Default
+                else -> MaruMinyaMFontFamily
             }
     }
 }

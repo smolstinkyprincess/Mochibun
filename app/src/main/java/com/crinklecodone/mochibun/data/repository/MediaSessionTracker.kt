@@ -14,7 +14,6 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.provider.Settings
 import android.util.Log
 import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
@@ -111,14 +110,8 @@ object MediaSessionTracker {
         }
     }
 
-    fun hasNotificationAccess(context: Context): Boolean {
-        val enabledListeners = Settings.Secure.getString(
-            context.contentResolver,
-            "enabled_notification_listeners"
-        ) ?: return false
-        val myComponent = ComponentName(context, MochibunNotificationListenerService::class.java).flattenToString()
-        return enabledListeners.contains(myComponent) || enabledListeners.contains(context.packageName)
-    }
+    fun hasNotificationAccess(context: Context): Boolean =
+        NotificationTracker.hasNotificationAccess(context)
 
     fun startTracking(context: Context) {
         appContext = context.applicationContext
@@ -338,9 +331,5 @@ object MediaSessionTracker {
                 tryRegisterSessions(service, mgr, listener, comp)
             }
         }
-    }
-
-    fun onNotificationListenerServiceDisconnected() {
-        // Handled cleanly
     }
 }

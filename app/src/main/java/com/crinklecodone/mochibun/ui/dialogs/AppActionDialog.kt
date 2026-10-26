@@ -55,9 +55,6 @@ import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 fun AppActionDialog(
     app: LauncherApp,
     favoritePackages: List<String>,
-    cardBgColor: Color,
-    cardTextColor: Color,
-    appActionColor: Color,
     cardRoundness: Dp,
     onDismiss: () -> Unit,
     onMoveFavoriteLeft: () -> Unit,
@@ -193,7 +190,7 @@ fun AppActionDialog(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
-                .border(2.dp, ActiveTheme.cardBorder, shape),
+                .border(1.5.dp, ActiveTheme.cardBorder, shape),
             shape = shape,
             color = ActiveTheme.surface,
             tonalElevation = 6.dp,

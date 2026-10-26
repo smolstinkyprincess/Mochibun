@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.provider.Settings
 import android.text.TextUtils
+import android.view.KeyEvent
 import com.crinklecodone.mochibun.service.MochibunAccessibilityService
 import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.data.model.ActionType
@@ -12,6 +13,7 @@ import com.crinklecodone.mochibun.data.model.BASELINE_MTK_KPD_MAPPINGS
 import com.crinklecodone.mochibun.data.model.ButtonActionConfig
 import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.model.StaticModuleStatus
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -74,23 +76,17 @@ object HardwareRemapManager {
     }
 
     /**
-     * Checks whether KeyMapper's accessibility service is currently enabled.
-     */
-    fun isKeyMapperActive(context: Context): Boolean {
-        val enabledServices = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
-        return enabledServices.contains("io.github.sds100.keymapper")
-    }
-
-    /**
      * Reads configured High-Level Action for a physical key.
      * PhysicalKey.APP_SWITCH defaults to ActionType.GlobalRecents.
      */
     fun getButtonActionConfig(context: Context, key: PhysicalKey): ButtonActionConfig {
         val prefs = getPrefs(context)
-        val defaultSingle = if (key == PhysicalKey.APP_SWITCH) ActionType.GlobalRecents else ActionType.None
+        val defaultSingle = when (key) {
+            PhysicalKey.F1 -> ActionType.OpenWidgetsPage
+            PhysicalKey.CAMERA -> ActionType.OpenNotificationsPage
+            PhysicalKey.APP_SWITCH -> ActionType.GlobalRecents
+            else -> ActionType.None
+        }
         val singleRaw = prefs.getString("action_single_${key.scancode}", null)
         val single = if (singleRaw == null) defaultSingle else ActionType.deserialize(singleRaw)
         val double = ActionType.deserialize(prefs.getString("action_double_${key.scancode}", null))
@@ -113,6 +109,233 @@ object HardwareRemapManager {
     }
 
     /**
+     * Normalizes raw Android keycodes (e.g. numpad digits or AT-M120 side key scanCode 62).
+     */
+    fun normalizeKeyCode(keyCode: Int, scanCode: Int): Int = when {
+        keyCode == KeyEvent.KEYCODE_UNKNOWN && scanCode == 62 -> KeyEvent.KEYCODE_F4
+        keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 ->
+            KeyEvent.KEYCODE_0 + (keyCode - KeyEvent.KEYCODE_NUMPAD_0)
+        else -> keyCode
+    }
+
+    /**
+     * Returns the Speed Dial digit (2..9) if the keyCode corresponds to numeric keys 2–9.
+     */
+    fun getSpeedDialDigit(keyCode: Int, scanCode: Int = 0): Int? {
+        val norm = normalizeKeyCode(keyCode, scanCode)
+        return if (norm in KeyEvent.KEYCODE_2..KeyEvent.KEYCODE_9) {
+            norm - KeyEvent.KEYCODE_0
+        } else {
+            null
+        }
+    }
+
+    /**
+     * Returns the default [ButtonActionConfig] for any physical key on the device.
+     */
+    fun getDefaultActionConfigForKey(keyCode: Int, scanCode: Int): ButtonActionConfig {
+        val norm = normalizeKeyCode(keyCode, scanCode)
+        val physicalKey = PhysicalKey.fromKeyCode(norm)
+            ?: if (scanCode > 0) PhysicalKey.fromScancode(scanCode) else null
+        return when {
+            physicalKey == PhysicalKey.F1 -> ButtonActionConfig(singlePressAction = ActionType.OpenWidgetsPage)
+            physicalKey == PhysicalKey.CAMERA -> ButtonActionConfig(singlePressAction = ActionType.OpenNotificationsPage)
+            physicalKey == PhysicalKey.APP_SWITCH -> ButtonActionConfig(singlePressAction = ActionType.GlobalRecents)
+            norm == KeyEvent.KEYCODE_0 -> ButtonActionConfig(longPressAction = ActionType.ToggleFlashlight)
+            else -> ButtonActionConfig()
+        }
+    }
+
+    private fun resolveAppLabel(context: Context, packageName: String): String {
+        return try {
+            val pm = context.packageManager
+            val appInfo = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(appInfo).toString().ifBlank { packageName }
+        } catch (_: Exception) {
+            packageName
+        }
+    }
+
+    /**
+     * Reads the configured [ButtonActionConfig] for ANY physical button (including [PhysicalKey]s,
+     * number pad keys 0–9 / Speed Dial, or arbitrary hardware keycodes/scancodes).
+     */
+    fun getButtonActionConfigForKey(context: Context, keyCode: Int, scanCode: Int): ButtonActionConfig {
+        val norm = normalizeKeyCode(keyCode, scanCode)
+        val physicalKey = PhysicalKey.fromKeyCode(norm)
+            ?: if (scanCode > 0) PhysicalKey.fromScancode(scanCode) else null
+        if (physicalKey != null) {
+            return getButtonActionConfig(context, physicalKey)
+        }
+
+        val prefs = getPrefs(context)
+        val suffix = if (norm > 0) "kc_$norm" else "sc_$scanCode"
+        val single = ActionType.deserialize(prefs.getString("action_single_$suffix", null))
+        val double = ActionType.deserialize(prefs.getString("action_double_$suffix", null))
+
+        val longRaw = prefs.getString("action_long_$suffix", null)
+        val long = if (longRaw != null) {
+            ActionType.deserialize(longRaw)
+        } else {
+            val digit = getSpeedDialDigit(norm, scanCode)
+            if (digit != null) {
+                val speedDialPkg = PreferencesManager.getSpeedDialPackage(context, digit)
+                if (!speedDialPkg.isNullOrBlank()) {
+                    ActionType.LaunchApp(speedDialPkg, resolveAppLabel(context, speedDialPkg))
+                } else {
+                    ActionType.None
+                }
+            } else if (norm == KeyEvent.KEYCODE_0) {
+                ActionType.ToggleFlashlight
+            } else {
+                ActionType.None
+            }
+        }
+        return ButtonActionConfig(single, double, long)
+    }
+
+    /**
+     * Saves the [ButtonActionConfig] for ANY physical button and syncs Speed Dial preferences
+     * when configuring numeric keys 2–9.
+     */
+    fun saveButtonActionConfigForKey(
+        context: Context,
+        keyCode: Int,
+        scanCode: Int,
+        config: ButtonActionConfig
+    ) {
+        val norm = normalizeKeyCode(keyCode, scanCode)
+        val physicalKey = PhysicalKey.fromKeyCode(norm)
+            ?: if (scanCode > 0) PhysicalKey.fromScancode(scanCode) else null
+        if (physicalKey != null) {
+            saveButtonActionConfig(context, physicalKey, config)
+            return
+        }
+
+        val suffix = if (norm > 0) "kc_$norm" else "sc_$scanCode"
+        getPrefs(context).edit()
+            .putString("action_single_$suffix", config.singlePressAction.serialize())
+            .putString("action_double_$suffix", config.doublePressAction.serialize())
+            .putString("action_long_$suffix", config.longPressAction.serialize())
+            .putInt("scan_$suffix", scanCode)
+            .apply()
+
+        val digit = getSpeedDialDigit(norm, scanCode)
+        if (digit != null) {
+            val launchPkg = (config.longPressAction as? ActionType.LaunchApp)?.packageName
+            PreferencesManager.setSpeedDialPackage(context, digit, launchPkg)
+        }
+
+        MochibunAccessibilityService.reloadActiveConfig(context)
+    }
+
+    /**
+     * Resets a specific physical button back to its default action configuration.
+     */
+    fun resetButtonActionConfigForKey(context: Context, keyCode: Int, scanCode: Int): ButtonActionConfig {
+        val norm = normalizeKeyCode(keyCode, scanCode)
+        val defaultConfig = getDefaultActionConfigForKey(norm, scanCode)
+        val physicalKey = PhysicalKey.fromKeyCode(norm)
+            ?: if (scanCode > 0) PhysicalKey.fromScancode(scanCode) else null
+
+        if (physicalKey != null) {
+            getPrefs(context).edit()
+                .remove("action_single_${physicalKey.scancode}")
+                .remove("action_double_${physicalKey.scancode}")
+                .remove("action_long_${physicalKey.scancode}")
+                .apply()
+        } else {
+            val suffix = if (norm > 0) "kc_$norm" else "sc_$scanCode"
+            getPrefs(context).edit()
+                .remove("action_single_$suffix")
+                .remove("action_double_$suffix")
+                .remove("action_long_$suffix")
+                .remove("scan_$suffix")
+                .apply()
+
+            val digit = getSpeedDialDigit(norm, scanCode)
+            if (digit != null) {
+                PreferencesManager.setSpeedDialPackage(context, digit, null)
+            }
+        }
+
+        MochibunAccessibilityService.reloadActiveConfig(context)
+        return defaultConfig
+    }
+
+    /**
+     * Resets all custom button actions and Speed Dial shortcuts back to system defaults.
+     */
+    fun resetAllButtonActionConfigs(context: Context) {
+        val prefs = getPrefs(context)
+        val editor = prefs.edit()
+        for (k in prefs.all.keys) {
+            if (k.startsWith("action_single_") || k.startsWith("action_double_") || k.startsWith("action_long_") || k.startsWith("scan_")) {
+                editor.remove(k)
+            }
+        }
+        editor.apply()
+        for (digit in 2..9) {
+            PreferencesManager.setSpeedDialPackage(context, digit, null)
+        }
+        MochibunAccessibilityService.reloadActiveConfig(context)
+    }
+
+    /**
+     * Returns all non-PhysicalKey custom action configurations keyed by Android keyCode.
+     */
+    fun getAllArbitraryKeyActionConfigs(context: Context): Map<Int, ButtonActionConfig> {
+        val result = mutableMapOf<Int, ButtonActionConfig>()
+        val prefs = getPrefs(context)
+        val seenKeyCodes = mutableSetOf<Int>()
+
+        for (prefKey in prefs.all.keys) {
+            if (prefKey.startsWith("action_single_kc_") ||
+                prefKey.startsWith("action_double_kc_") ||
+                prefKey.startsWith("action_long_kc_")
+            ) {
+                val kc = prefKey.substringAfter("_kc_").toIntOrNull()
+                if (kc != null) seenKeyCodes.add(kc)
+            }
+        }
+        for (digit in 2..9) {
+            if (!PreferencesManager.getSpeedDialPackage(context, digit).isNullOrBlank()) {
+                seenKeyCodes.add(KeyEvent.KEYCODE_0 + digit)
+            }
+        }
+        for (kc in seenKeyCodes) {
+            val scan = prefs.getInt("scan_kc_$kc", 0)
+            val cfg = getButtonActionConfigForKey(context, kc, scan)
+            if (cfg.hasAnyAction()) {
+                result[kc] = cfg
+            }
+        }
+        return result
+    }
+
+    /**
+     * Returns compact badge labels for all physical keys that currently have non-default actions.
+     */
+    fun getConfiguredKeyBadges(context: Context): List<String> {
+        val badges = mutableListOf<String>()
+        for (key in PhysicalKey.entries) {
+            val cfg = getButtonActionConfig(context, key)
+            val def = getDefaultActionConfigForKey(key.defaultKeyCode, key.scancode)
+            if (cfg != def && cfg.hasAnyAction()) {
+                badges.add(PreferencesManager.formatKaomojiKeyBadge(key.defaultKeyCode, key.scancode))
+            }
+        }
+        val arbitrary = getAllArbitraryKeyActionConfigs(context)
+        for ((kc, cfg) in arbitrary.entries.sortedBy { it.key }) {
+            val def = getDefaultActionConfigForKey(kc, 0)
+            if (cfg != def && cfg.hasAnyAction()) {
+                badges.add(PreferencesManager.formatKaomojiKeyBadge(kc, 0))
+            }
+        }
+        return badges
+    }
+
+    /**
      * Reads configured static remappings from preferences.
      * Returns a map of scancode -> target KeyCode name (e.g. 169 -> "VOLUME_MUTE").
      */
@@ -130,166 +353,6 @@ object HardwareRemapManager {
         return mappings
     }
 
-    /**
-     * Saves configured static remapping for a key in preferences.
-     */
-    fun saveConfiguredStaticMapping(context: Context, key: PhysicalKey, targetKeyCode: String?) {
-        val editor = getPrefs(context).edit()
-        if (targetKeyCode == null || targetKeyCode == BASELINE_MTK_KPD_MAPPINGS[key.scancode]) {
-            editor.remove("static_remap_${key.scancode}")
-        } else {
-            editor.putString("static_remap_${key.scancode}", targetKeyCode)
-        }
-        editor.apply()
-    }
-
-    /**
-     * Validates and generates key layout content.
-     * Enforces that ALL baseline keys exist and critical keys are never modified.
-     */
-    fun generateKeyLayoutContent(customMappings: Map<Int, String>): String {
-        val builder = StringBuilder()
-        builder.append("# Generated by Mochibun Hardware Remapper for AT-M120 (mtk-kpd)\n")
-        builder.append("# Vendor 2454 Product 6500 Version 0010\n\n")
-
-        val sortedScancodes = BASELINE_MTK_KPD_MAPPINGS.keys.sorted()
-        for (scancode in sortedScancodes) {
-            val defaultKey = BASELINE_MTK_KPD_MAPPINGS[scancode] ?: continue
-            val mappedKey = customMappings[scancode] ?: defaultKey
-            builder.append("key ").append(scancode).append("     ").append(mappedKey).append("\n")
-        }
-
-        val content = builder.toString()
-        if (!validateKeyLayoutContent(content)) {
-            throw IllegalStateException("Generated key layout failed validation checks")
-        }
-        return content
-    }
-
-    /**
-     * Validates syntax and safety of key layout content.
-     */
-    fun validateKeyLayoutContent(content: String): Boolean {
-        val lines = content.lines()
-        val criticalScancodes = setOf(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 28, 103, 105, 106, 108, 158, 172)
-        val foundScancodes = mutableSetOf<Int>()
-
-        for (rawLine in lines) {
-            val line = rawLine.trim()
-            if (line.isEmpty() || line.startsWith("#")) continue
-
-            val tokens = line.split("\\s+".toRegex())
-            if (tokens.size < 3 || tokens[0] != "key") return false
-
-            val scancode = tokens[1].toIntOrNull() ?: return false
-            val keyCodeName = tokens[2]
-
-            // Ensure valid identifier
-            if (!keyCodeName.matches("^[A-Z0-9_]+$".toRegex())) return false
-
-            // Ensure critical keys were not accidentally remapped
-            if (criticalScancodes.contains(scancode)) {
-                val expected = BASELINE_MTK_KPD_MAPPINGS[scancode]
-                if (keyCodeName != expected) return false
-            }
-
-            foundScancodes.add(scancode)
-        }
-
-        // Ensure all critical scancodes are present
-        return foundScancodes.containsAll(criticalScancodes)
-    }
-
-    /**
-     * Staging and deployment of Magisk module with complete validation and atomic execution.
-     * Runs off the main thread.
-     */
-    suspend fun stageAndApplyStaticMapping(
-        context: Context,
-        customMappings: Map<Int, String>
-    ): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            if (!RootShell.isSuBinaryPresent()) {
-                return@withContext Result.failure(Exception("Root (su) binary is not present on this device"))
-            }
-
-            val klContent = generateKeyLayoutContent(customMappings)
-
-            // Write to staging files in app cache first
-            val stageFile = File(context.cacheDir, "Vendor_2454_Product_6500.kl")
-            stageFile.writeText(klContent)
-            val stagePath = stageFile.absolutePath
-
-            val propFile = File(context.cacheDir, "module.prop")
-            propFile.writeText(
-                "id=$MODULE_ID\n" +
-                "name=Mochibun Hardware Key Remapper\n" +
-                "version=1.0\n" +
-                "versionCode=1\n" +
-                "author=Mochibun\n" +
-                "description=Device-specific key layout override for Chinoe AT-M120 (mtk-kpd)\n"
-            )
-            val stagePropPath = propFile.absolutePath
-
-            // Build atomic shell commands for root execution
-            val script = buildString {
-                append("mkdir -p $MODULE_KL_DIR && ")
-                append("cp $stagePropPath $MODULE_DIR/module.prop && ")
-                append("cp $stagePath $TARGET_KL_VENDOR && ")
-                append("cp $stagePath $TARGET_KL_NAME && ")
-                append("chmod 644 $MODULE_DIR/module.prop && ")
-                append("chmod 644 $TARGET_KL_VENDOR && ")
-                append("chmod 644 $TARGET_KL_NAME && ")
-                append("chown -R 0:0 $MODULE_DIR && ")
-                append("rm -f $MODULE_DISABLE_FILE")
-            }
-
-            val execResult = RootShell.execute(script)
-            if (!execResult.isSuccess) {
-                val err = execResult.stderr.joinToString(" ").ifBlank {
-                    execResult.stdout.joinToString(" ").ifBlank { "Exit code ${execResult.exitCode}" }
-                }
-                return@withContext Result.failure(Exception("Failed to install Magisk module: $err"))
-            }
-
-            Result.success("Key layout module successfully installed and staged. Reboot phone to activate.")
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Safely disables the Magisk module by creating the standard /disable file.
-     * Restores default Android keylayout on next reboot.
-     */
-    suspend fun disableModule(): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val res = RootShell.execute("touch $MODULE_DISABLE_FILE")
-            if (res.isSuccess) {
-                Result.success("Module disabled. Original key layout will be active upon reboot.")
-            } else {
-                Result.failure(Exception(res.stderr.joinToString(" ")))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Completely removes the Magisk module from /data/adb/modules/mochibun_keys.
-     */
-    suspend fun removeModule(): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val res = RootShell.execute("rm -rf $MODULE_DIR")
-            if (res.isSuccess) {
-                Result.success("Module removed. Original default key layout active.")
-            } else {
-                Result.failure(Exception(res.stderr.joinToString(" ")))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
 
     /**
      * Reconciles the actual state of the Magisk module by inspecting filesystem evidence.

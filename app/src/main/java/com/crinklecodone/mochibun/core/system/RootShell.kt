@@ -10,11 +10,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
-// Backward-compatible typealiases for callers targeting core.system
-typealias RootStatus = com.crinklecodone.mochibun.core.shell.RootStatus
-typealias RootResult = com.crinklecodone.mochibun.core.shell.RootResult
-typealias RootOperations = com.crinklecodone.mochibun.core.shell.RootOperations
-
 /**
  * Privileged root execution bridge for the Chinoe AT-M120 (MediaTek MT6761 / Android 12).
  * Backed by libsu's persistent daemon to avoid process-fork latency, GC churn,
@@ -47,21 +42,6 @@ object RootShell : RootOperations {
             if (file.exists() && file.canExecute()) return true
         }
         return false
-    }
-
-    /**
-     * Checks if root access is granted without displaying an interactive prompt.
-     */
-    override suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
-        if (!isSuBinaryPresent()) return@withContext false
-        val cachedStatus = Shell.isAppGrantedRoot()
-        if (cachedStatus != null) return@withContext cachedStatus
-
-        try {
-            Shell.getShell().isRoot
-        } catch (_: Throwable) {
-            false
-        }
     }
 
     /**
@@ -141,27 +121,6 @@ object RootShell : RootOperations {
             )
         } catch (e: Throwable) {
             RootResult.failure(e.message ?: "Execution error")
-        }
-    }
-
-    /**
-     * Executes a command returning a typed [Result] for callers preferring standard Kotlin error handling.
-     */
-    override suspend fun executeSafe(command: String, timeoutMs: Long): Result<RootResult> = runCatching {
-        execute(command, timeoutMs)
-    }
-
-    /**
-     * Executes a command and returns stdout lines, returning emptyList on error or timeout.
-     */
-    override suspend fun executeWithOutput(command: String, timeoutMs: Long): List<String> = withContext(Dispatchers.IO) {
-        if (!isSuBinaryPresent()) return@withContext emptyList()
-        try {
-            withTimeoutOrNull(timeoutMs) {
-                Shell.cmd(command).exec().out
-            } ?: emptyList()
-        } catch (_: Throwable) {
-            emptyList()
         }
     }
 

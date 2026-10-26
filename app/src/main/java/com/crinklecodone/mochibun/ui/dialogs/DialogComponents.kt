@@ -1,26 +1,38 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import android.graphics.BitmapFactory
 import android.view.KeyEvent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.crinklecodone.mochibun.R
+import com.crinklecodone.mochibun.ui.components.softGlowFocus
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.destructiveBgColor
 import com.crinklecodone.mochibun.ui.theme.destructiveColor
@@ -29,8 +41,6 @@ import com.crinklecodone.mochibun.ui.theme.softSurfaceColor
 import kotlinx.coroutines.delay
 
 val dialogWidth = 268.dp
-
-
 
 fun isCenterActivateKey(keyCode: Int): Boolean =
     keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
@@ -52,17 +62,25 @@ fun isDpadOrActionKey(keyCode: Int): Boolean =
         keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
         keyCode == KeyEvent.KEYCODE_BUTTON_A
 
+/**
+ * Retries requesting focus on a [FocusRequester] across composition frames
+ * until the target node is attached.
+ */
+suspend fun FocusRequester.awaitFocusSafely(attempts: Int = 8, delayMs: Long = 35L) {
+    repeat(attempts) {
+        try {
+            requestFocus()
+            return
+        } catch (_: Exception) {
+            delay(delayMs)
+        }
+    }
+}
+
 @Composable
 fun requestFocusSafely(focusRequester: FocusRequester, key: Any? = Unit) {
     LaunchedEffect(key) {
-        repeat(8) {
-            try {
-                focusRequester.requestFocus()
-                return@LaunchedEffect
-            } catch (_: Exception) {
-                delay(35)
-            }
-        }
+        focusRequester.awaitFocusSafely()
     }
 }
 
@@ -99,10 +117,12 @@ fun KawaiiDialogItem(
 
     Box(
         modifier = modifier
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused && enabled, cornerRadius = 12.dp)
             .clip(shape)
             .background(bg, shape)
             .border(
-                width = if (isFocused && enabled) 2.dp else 0.dp,
+                width = if (isFocused && enabled) 1.5.dp else 0.dp,
                 color = borderColor,
                 shape = shape
             )
@@ -171,10 +191,12 @@ fun KawaiiDialogPillButton(
 
     Box(
         modifier = modifier
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused && enabled, cornerRadius = 20.dp)
             .clip(shape)
             .background(bg, shape)
             .border(
-                width = if (isFocused) 2.5.dp else 1.dp,
+                width = if (isFocused) 1.5.dp else 1.dp,
                 color = borderColor,
                 shape = shape
             )
@@ -198,9 +220,44 @@ fun KawaiiDialogPillButton(
     }
 }
 
+/**
+ * Crisp pixel-art ribbon bow badge for dialog headers and decorative accents.
+ * Uses the pixel-art ribbon bow asset ([com.crinklecodone.mochibun.R.drawable.bow]).
+ *
+ * FilterQuality.None is strictly required here: on the AT-M120's 480x800 display, default bilinear
+ * filtering causes muddy interpolation artifacts along 1-bit pixel art edges.
+ */
+private var cachedBowBitmap: ImageBitmap? = null
 
+@Composable
+fun rememberBowBitmap(): ImageBitmap {
+    val context = LocalContext.current
+    return remember {
+        cachedBowBitmap ?: run {
+            val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeResource(context.resources, R.drawable.bow, boundsOpts)
+            val sampleOpts = BitmapFactory.Options().apply {
+                inSampleSize = (boundsOpts.outWidth / 128).coerceAtLeast(1)
+            }
+            BitmapFactory.decodeResource(context.resources, R.drawable.bow, sampleOpts)
+                .asImageBitmap()
+                .also { cachedBowBitmap = it }
+        }
+    }
+}
 
-
-
-
+@Composable
+fun PixelRibbonBow(
+    modifier: Modifier = Modifier,
+    width: Dp = 56.dp,
+    height: Dp = 46.dp
+) {
+    val bowBitmap = rememberBowBitmap()
+    Image(
+        bitmap = bowBitmap,
+        contentDescription = "Ribbon Bow",
+        filterQuality = FilterQuality.None,
+        modifier = modifier.size(width = width, height = height)
+    )
+}
 

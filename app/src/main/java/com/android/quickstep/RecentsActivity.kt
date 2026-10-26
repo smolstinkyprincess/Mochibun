@@ -78,8 +78,7 @@ import kotlin.math.roundToInt
 
 enum class RecentsFocusZone {
     TASK_CAROUSEL,
-    CLEAR_ALL,
-    BACK_TO_HOME
+    CLEAR_ALL
 }
 
 private data class TaskCardTint(
@@ -186,7 +185,6 @@ fun RecentsScreen(
 ) {
     var tasks by remember { mutableStateOf<List<RecentTaskInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
 
@@ -202,19 +200,15 @@ fun RecentsScreen(
         }
         tasks = fetchedTasks
         isLoading = false
-        if (fetchedTasks.isEmpty()) {
-            focusZone = RecentsFocusZone.BACK_TO_HOME
-        } else {
-            focusZone = RecentsFocusZone.TASK_CAROUSEL
-            selectedTaskIndex = 0
-            isDismissFocused = false
-        }
+        focusZone = RecentsFocusZone.TASK_CAROUSEL
+        selectedTaskIndex = 0
+        isDismissFocused = false
     }
 
     LaunchedEffect(tasks.size) {
         selectedTaskIndex = selectedTaskIndex.coerceIn(0, (tasks.size - 1).coerceAtLeast(0))
         if (!isLoading && tasks.isEmpty()) {
-            focusZone = RecentsFocusZone.BACK_TO_HOME
+            focusZone = RecentsFocusZone.TASK_CAROUSEL
         }
     }
 
@@ -251,7 +245,7 @@ fun RecentsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFCECEF)) // Flat pastel blush/peach-pink matching mockup
+            .background(Color.Transparent) // Recents background color
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
@@ -297,9 +291,6 @@ fun RecentsScreen(
                             RecentsFocusZone.CLEAR_ALL -> {
                                 clearAllTasks()
                             }
-                            RecentsFocusZone.BACK_TO_HOME -> {
-                                onDismissActivity()
-                            }
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -343,9 +334,6 @@ fun RecentsScreen(
                                     isDismissFocused = false
                                 }
                             }
-                            RecentsFocusZone.BACK_TO_HOME -> {
-                                focusZone = if (tasks.isNotEmpty()) RecentsFocusZone.CLEAR_ALL else RecentsFocusZone.TASK_CAROUSEL
-                            }
                         }
                         true
                     }
@@ -360,9 +348,6 @@ fun RecentsScreen(
                             }
                             RecentsFocusZone.CLEAR_ALL -> {
                                 // Already at bottom button
-                            }
-                            RecentsFocusZone.BACK_TO_HOME -> {
-                                // Already at bottom
                             }
                         }
                         true
@@ -506,17 +491,6 @@ fun RecentsScreen(
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
         )
-
-        // 4. Centered "Back to Home (F4)" Navigation Pill
-        /*
-        DrawerHomeNavigation(
-            isFocused = focusZone == RecentsFocusZone.BACK_TO_HOME,
-            onClick = { onDismissActivity() },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 12.dp),
-            text = "♥ Back to Home (F4) ♥"
-        )*/
     }
 }
 

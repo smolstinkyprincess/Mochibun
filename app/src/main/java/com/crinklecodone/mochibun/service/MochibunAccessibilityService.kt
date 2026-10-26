@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.media.AudioManager
-import android.hardware.camera2.CameraManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -17,6 +16,7 @@ import com.android.quickstep.RecentsActivity
 import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.core.system.RootShell
+import com.crinklecodone.mochibun.core.system.TorchManager
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.ButtonActionConfig
 import com.crinklecodone.mochibun.data.model.PhysicalKey
@@ -33,16 +33,27 @@ class MochibunAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "MochibunAccessibility"
-        const val ACTION_RELOAD_CONFIG="com.crinklecodone.mochibun.RELOAD_CONFIG"
         const val PREFS_NAME = "hardware_remap_preferences"
 
         @Volatile
         var isServiceRunning = false
             private set
 
+
+
+        /**
+         * Real-time hardware key capture callback.
+         * When active (e.g. inside Keypad Remapper dialog or Kaomoji Trigger key picker),
+         * this listener intercepts raw KeyEvent before window dispatch.
+         * Returning `true` consumes the event, completely preventing stock ROM policy
+         * (such as PhoneWindowManager launching stock apps or crashing on F3 hold).
+         */
+        @Volatile
+        var keyCaptureListener: ((KeyEvent) -> Boolean)? = null
+
         private var instance: MochibunAccessibilityService? = null
 
-        fun reloadActiveConfig(context: Context) {
+        fun reloadActiveConfig(@Suppress("UNUSEDPARAMETER") context: Context? = null) {
             instance?.loadConfiguration()
         }
     }
@@ -60,8 +71,6 @@ class MochibunAccessibilityService : AccessibilityService() {
     private var pendingSinglePressRunnable: Runnable? = null
     private var pendingLongPressRunnable: Runnable? = null
     private var longPressFired = false
-
-    private var isTorchOn = false
 
     private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         loadConfiguration()
@@ -134,6 +143,13 @@ class MochibunAccessibilityService : AccessibilityService() {
                 }
             }
         }
+        for ((kc, config) in HardwareRemapManager.getAllArbitraryKeyActionConfigs(this)) {
+            val isNumericDigit = kc in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9
+            val hasTapOverride = config.singlePressAction !is ActionType.None || config.doublePressAction !is ActionType.None
+            if (!isNumericDigit || hasTapOverride) {
+                activeMappings[kc] = config
+            }
+        }
         // Always ensure APP_SWITCH has a valid default mapping if not present
         if (!activeMappings.containsKey(KeyEvent.KEYCODE_APP_SWITCH)) {
             val appSwitchConfig = HardwareRemapManager.getButtonActionConfig(this, PhysicalKey.APP_SWITCH)
@@ -143,6 +159,18 @@ class MochibunAccessibilityService : AccessibilityService() {
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
+        Log.d("MochibunA11y", "onKeyEvent: code=${event.keyCode}, scan=${event.scanCode}, action=${event.action}")
+
+        // 1. Direct hardware key capture callback (e.g. inside Keypad Remapper dialog or Kaomoji Trigger key picker).
+        // If the listener handles and consumes the key, we return true so PhoneWindowManager
+        // never sees it (completely preventing stock actions or unhandled crash loops).
+        val captureListener = keyCaptureListener
+        if (captureListener != null) {
+            if (captureListener(event)) {
+                return true
+            }
+        }
+
         // Suppress hardware button shortcuts while closed in pocket to prevent accidental triggering
         if (ClamshellManager.isLidClosed(this)) {
             clearPendingHandlers()
@@ -179,16 +207,35 @@ class MochibunAccessibilityService : AccessibilityService() {
         }
 
         // Fast lookup from in-memory cache without blocking UI-thread disk I/O
-        var config = activeMappings[event.keyCode]
+        val normalizedCode = HardwareRemapManager.normalizeKeyCode(event.keyCode, event.scanCode)
+        var config = activeMappings[normalizedCode] ?: activeMappings[event.keyCode]
         if (config == null && event.scanCode > 0) {
             val key = PhysicalKey.fromScancode(event.scanCode)
             if (key != null) {
                 config = activeMappings[key.defaultKeyCode]
             }
         }
-        if (config == null || !config.hasAnyAction()) return false
 
-        Log.d("MochibunA11y", "Intercepted keycode ${event.keyCode}, action: ${event.action}")
+        // Dedicated hardware function keys on AT-M120:
+        // F1 (59), F2 (60), F3 (61), CAMERA (212)
+        // (Note: F4 / scanCode 62 is reserved for VirtualCursorService or back dismiss when unmapped).
+        // If unmapped, consume the key event so stock ROM cannot launch deleted/disabled apps
+        // (especially prevents F3 long press from crashing system_server via ShortcutEditActivity!)
+        val isHardwareFunctionKey = normalizedCode == KeyEvent.KEYCODE_F1 ||
+                normalizedCode == KeyEvent.KEYCODE_F2 ||
+                normalizedCode == KeyEvent.KEYCODE_F3 ||
+                normalizedCode == KeyEvent.KEYCODE_CAMERA ||
+                event.scanCode in listOf(59, 60, 61, 212)
+
+        if (config == null || !config.hasAnyAction()) {
+            if (isHardwareFunctionKey) {
+                // Consume the key event so stock ROM cannot launch deleted/disabled apps
+                return true
+            }
+            return false
+        }
+
+        Log.d("MochibunA11y", "Intercepted keycode ${event.keyCode} (norm=$normalizedCode), action: ${event.action}")
 
         when (event.action) {
             KeyEvent.ACTION_DOWN -> {
@@ -274,6 +321,28 @@ class MochibunAccessibilityService : AccessibilityService() {
                     Log.e(TAG, "Failed to launch app ${action.packageName}", e)
                 }
             }
+            is ActionType.OpenWidgetsPage -> {
+                try {
+                    val intent = Intent(this, com.crinklecodone.mochibun.ui.MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("OPEN_PAGE", 0)
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to open widgets page", e)
+                }
+            }
+            is ActionType.OpenNotificationsPage -> {
+                try {
+                    val intent = Intent(this, com.crinklecodone.mochibun.ui.MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("OPEN_PAGE", 2)
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to open notifications page", e)
+                }
+            }
             is ActionType.GlobalBack -> {
                 performGlobalAction(GLOBAL_ACTION_BACK)
             }
@@ -287,20 +356,8 @@ class MochibunAccessibilityService : AccessibilityService() {
                 performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
             }
             is ActionType.ToggleFlashlight -> {
-                toggleTorch()
+                TorchManager.toggleTorch(this)
             }
-        }
-    }
-
-    /** Toggles the device flashlight for hardware remap shortcut actions. */
-    private fun toggleTorch() {
-        try {
-            val cameraManager = getSystemService(CAMERA_SERVICE) as? CameraManager ?: return
-            val cameraId = cameraManager.cameraIdList.firstOrNull() ?: return
-            isTorchOn = !isTorchOn
-            cameraManager.setTorchMode(cameraId, isTorchOn)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed toggling torch", e)
         }
     }
 

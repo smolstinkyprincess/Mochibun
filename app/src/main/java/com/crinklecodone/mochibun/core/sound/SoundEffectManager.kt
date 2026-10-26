@@ -60,15 +60,41 @@ object SoundEffectManager {
     private val soundMap = mutableMapOf<Pair<String, SoundEffect>, Int>()
     @Volatile
     private var isInitialized = false
+    @Volatile
+    private var currentStreamSetting: String? = null
 
     @Synchronized
     fun init(context: Context) {
-        if (isInitialized) return
+        val streamPref = PreferencesManager.getLauncherAudioStream(context)
+        if (isInitialized && soundPool != null && currentStreamSetting == streamPref) return
+
+        if (soundPool != null) {
+            try {
+                soundPool?.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed releasing SoundPool", e)
+            }
+            soundPool = null
+            soundMap.clear()
+            isInitialized = false
+        }
+
         try {
-            val audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
+            currentStreamSetting = streamPref
+            val audioAttributes = when (streamPref) {
+                PreferencesManager.AUDIO_STREAM_NOTIFICATION -> {
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                }
+                else -> {
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                }
+            }
 
             val pool = SoundPool.Builder()
                 .setMaxStreams(4)
@@ -86,6 +112,32 @@ object SoundEffectManager {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize SoundEffectManager", e)
         }
+    }
+
+    /**
+     * Re-initializes SoundPool with updated audio attributes when audio stream preference changes.
+     * Safely releases previous native audio resources to prevent leaks.
+     */
+    @Synchronized
+    fun updateAudioStream(context: Context) {
+        val streamPref = PreferencesManager.getLauncherAudioStream(context)
+        if (currentStreamSetting == streamPref && soundPool != null) {
+            return
+        }
+        init(context)
+    }
+
+    @Synchronized
+    fun release() {
+        try {
+            soundPool?.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing SoundPool", e)
+        }
+        soundPool = null
+        soundMap.clear()
+        isInitialized = false
+        currentStreamSetting = null
     }
 
     private fun loadTheme(soundDir: File, theme: String) {
@@ -108,12 +160,16 @@ object SoundEffectManager {
     /**
      * Plays a physical keypad or navigation sound with immediate, sub-5ms low latency.
      * Safely non-blocking when called from the main thread.
+     *
+     * @param volume optional specific volume multiplier. If negative (-1f default),
+     * uses the user-configured launcher sound volume preference directly.
      */
-    fun play(context: Context, effect: SoundEffect, volume: Float = 0.8f) {
+    fun play(context: Context, effect: SoundEffect, volume: Float = -1f) {
         val mode = PreferencesManager.getKeypadSoundMode(context)
         if (mode == "off") return
 
-        if (!isInitialized) {
+        val streamPref = PreferencesManager.getLauncherAudioStream(context)
+        if (!isInitialized || soundPool == null || currentStreamSetting != streamPref) {
             init(context.applicationContext)
         }
 
@@ -122,7 +178,19 @@ object SoundEffectManager {
             ?: soundMap["kawaii" to effect]
             ?: return
 
-        pool.play(soundId, volume, volume, 1, 0, 1.0f)
+        val volumePercent = PreferencesManager.getLauncherSoundVolume(context)
+        if (volumePercent <= 0) return
+
+        val masterVolume = (volumePercent / 100f).coerceIn(0f, 1f)
+        val finalVolume = if (volume >= 0f) {
+            (masterVolume * (volume / 0.8f)).coerceIn(0f, 1f)
+        } else {
+            masterVolume
+        }
+
+        if (finalVolume > 0f) {
+            pool.play(soundId, finalVolume, finalVolume, 1, 0, 1.0f)
+        }
     }
 
     /**
@@ -605,3 +673,5 @@ object SoundEffectManager {
         }
     }
 }
+
+typealias KeypadSoundManager = SoundEffectManager

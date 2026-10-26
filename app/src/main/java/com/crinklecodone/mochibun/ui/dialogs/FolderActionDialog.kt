@@ -231,12 +231,12 @@ fun FolderActionDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
+        val shape = RoundedCornerShape(theme.cardRoundnessDp.coerceIn(22f, 24f).dp)
         Surface(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
-                .border(2.5.dp, theme.greetingOutlineColor, shape),
+                .border(1.5.dp, theme.greetingOutlineColor, shape),
             shape = shape,
             color = theme.cardBgColor,
             tonalElevation = 6.dp,

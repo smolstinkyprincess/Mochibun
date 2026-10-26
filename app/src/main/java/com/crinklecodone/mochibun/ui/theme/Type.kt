@@ -3,14 +3,30 @@ package com.crinklecodone.mochibun.ui.theme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.crinklecodone.mochibun.R
+
+/**
+ * Authentic Japanese 12x12 retro keitai pixel font (MaruMinyaM / まるみにゃむ).
+ */
+val MaruMinyaMFontFamily = FontFamily(
+    Font(R.font.maruminyam)
+)
 
 /**
  * CompositionLocal providing the currently active launcher font family.
  */
-val LocalLauncherFontFamily = staticCompositionLocalOf<FontFamily> { FontFamily.Default }
+val LocalLauncherFontFamily = staticCompositionLocalOf<FontFamily> { MaruMinyaMFontFamily }
+
+/**
+ * Authentic micro-pixel font (Daniel Linssen's m3x6) for retro keitai speech bubbles and pixel UI.
+ */
+val M3x6FontFamily = FontFamily(
+    Font(R.font.m3x6)
+)
 
 /**
  * Generates an optimized Material Design 3 Typography configuration tuned for
@@ -18,8 +34,8 @@ val LocalLauncherFontFamily = staticCompositionLocalOf<FontFamily> { FontFamily.
  * Gothic, and Mincho typefaces.
  */
 fun getLauncherTypography(fontFamily: FontFamily): Typography {
-    val isPixel = fontFamily == FontFamily.Monospace
-    val tracking = if (isPixel) (-0.3).sp else 0.2.sp
+    val isPixel = fontFamily == FontFamily.Monospace || fontFamily == MaruMinyaMFontFamily
+    val tracking = if (isPixel) 0.sp else 0.2.sp
 
     return Typography(
         titleLarge = TextStyle(
@@ -88,4 +104,4 @@ fun getLauncherTypography(fontFamily: FontFamily): Typography {
     )
 }
 
-val Typography = getLauncherTypography(FontFamily.Default)
+val Typography = getLauncherTypography(MaruMinyaMFontFamily)

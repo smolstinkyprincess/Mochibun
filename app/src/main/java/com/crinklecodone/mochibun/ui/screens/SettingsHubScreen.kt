@@ -10,6 +10,8 @@ import android.view.KeyEvent
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +32,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -39,6 +42,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -46,18 +50,26 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.crinklecodone.mochibun.BuildConfig
+import com.crinklecodone.mochibun.core.shell.RootStatus
+import com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog
 import com.crinklecodone.mochibun.core.system.RootShell
+import com.crinklecodone.mochibun.core.system.WatchdogResult
+import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.prefs.ClickMethod
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import com.crinklecodone.mochibun.service.MochibunAccessibilityService
 import com.crinklecodone.mochibun.service.VirtualCursorService
 import com.crinklecodone.mochibun.ui.components.*
+import com.crinklecodone.mochibun.ui.dialogs.PixelRibbonBow
+import com.crinklecodone.mochibun.ui.dialogs.RetroKeyBadge
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import com.crinklecodone.mochibun.ui.theme.destructiveColor
 import android.widget.Toast
 import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
 import com.crinklecodone.mochibun.data.repository.BackupRestoreManager
@@ -65,6 +77,7 @@ import com.crinklecodone.mochibun.data.repository.TypographyManager
 import com.crinklecodone.mochibun.core.system.LidLedManager
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -76,6 +89,7 @@ sealed class SettingsDestination {
     object Appearance : SettingsDestination()
     object CursorHardware : SettingsDestination()
     object Behavior : SettingsDestination()
+    object PermissionsRoot : SettingsDestination()
     object BackupRestore : SettingsDestination()
     object About : SettingsDestination()
 }
@@ -94,13 +108,11 @@ fun SettingsHubScreen(
     onOpenHardwareButtons: (() -> Unit)? = null,
     onOpenHiddenApps: (() -> Unit)? = null,
     onCreateFolderClick: (() -> Unit)? = null,
-    onOpenSpeedDial: (() -> Unit)? = null,
     onPickWallpaperClick: (() -> Unit)? = null,
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false,
     onSettingsRestored: (() -> Unit)? = null
 ) {
-    val context = LocalContext.current
     var currentDestination by remember { mutableStateOf<SettingsDestination>(SettingsDestination.Hub) }
 
     when (currentDestination) {
@@ -125,7 +137,6 @@ fun SettingsHubScreen(
         SettingsDestination.CursorHardware -> {
             CursorHardwareSettingsSubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
-                onOpenHardwareButtons = onOpenHardwareButtons,
                 modifier = modifier
             )
         }
@@ -134,7 +145,13 @@ fun SettingsHubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onOpenHiddenApps = onOpenHiddenApps,
                 onCreateFolderClick = onCreateFolderClick,
-                onOpenSpeedDial = onOpenSpeedDial,
+                onOpenHardwareButtons = onOpenHardwareButtons,
+                modifier = modifier
+            )
+        }
+        SettingsDestination.PermissionsRoot -> {
+            PermissionsRootSettingsSubScreen(
+                onBack = { currentDestination = SettingsDestination.Hub },
                 modifier = modifier
             )
         }
@@ -155,7 +172,7 @@ fun SettingsHubScreen(
 }
 
 /**
- * Root Hub Screen showing the 4 primary category cards.
+ * Root Hub Screen showing the primary category cards.
  */
 @Composable
 private fun SettingsHubRootScreen(
@@ -169,7 +186,7 @@ private fun SettingsHubRootScreen(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val totalItems = 5 // 5 primary navigation cards
+    val totalItems = 6 // 6 primary navigation cards
 
     LaunchedEffect(focusedIndex) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
@@ -211,8 +228,9 @@ private fun SettingsHubRootScreen(
                             0 -> onNavigate(SettingsDestination.Appearance)
                             1 -> onNavigate(SettingsDestination.CursorHardware)
                             2 -> onNavigate(SettingsDestination.Behavior)
-                            3 -> onNavigate(SettingsDestination.BackupRestore)
-                            4 -> onNavigate(SettingsDestination.About)
+                            3 -> onNavigate(SettingsDestination.PermissionsRoot)
+                            4 -> onNavigate(SettingsDestination.BackupRestore)
+                            5 -> onNavigate(SettingsDestination.About)
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -252,8 +270,8 @@ private fun SettingsHubRootScreen(
             item {
                 SettingsCard(categoryTitle = "Pointer & Controls") {
                     SettingsNavigationRow(
-                        title = "Cursor & Hardware",
-                        subtitle = "Virtual mouse, speed, sprite & key remap",
+                        title = "Virtual Cursor",
+                        subtitle = "Virtual mouse speed, acceleration, scroll step & sprite",
                         icon = "🖱️",
                         isFocused = focusedIndex == 1,
                         onClick = { onNavigate(SettingsDestination.CursorHardware) }
@@ -265,10 +283,22 @@ private fun SettingsHubRootScreen(
                 SettingsCard(categoryTitle = "Layout & Features") {
                     SettingsNavigationRow(
                         title = "Behavior",
-                        subtitle = "Folders, app drawer, search & system monitor",
+                        subtitle = "Folders, app drawer, keypad remapper & system monitor",
                         icon = "📁",
                         isFocused = focusedIndex == 2,
                         onClick = { onNavigate(SettingsDestination.Behavior) }
+                    )
+                }
+            }
+
+            item {
+                SettingsCard(categoryTitle = "Permissions & Superuser") {
+                    SettingsNavigationRow(
+                        title = "Permissions & Root",
+                        subtitle = "Accessibility services, Magisk root status & root features",
+                        icon = "🛡️",
+                        isFocused = focusedIndex == 3,
+                        onClick = { onNavigate(SettingsDestination.PermissionsRoot) }
                     )
                 }
             }
@@ -279,7 +309,7 @@ private fun SettingsHubRootScreen(
                         title = "Backup & Restore",
                         subtitle = "Export or restore layout, themes, folders & key remaps",
                         icon = "💾",
-                        isFocused = focusedIndex == 3,
+                        isFocused = focusedIndex == 4,
                         onClick = { onNavigate(SettingsDestination.BackupRestore) }
                     )
                 }
@@ -291,7 +321,7 @@ private fun SettingsHubRootScreen(
                         title = "About Mochibun",
                         subtitle = "Version, hardware specs & credits",
                         icon = "♡",
-                        isFocused = focusedIndex == 4,
+                        isFocused = focusedIndex == 5,
                         onClick = { onNavigate(SettingsDestination.About) }
                     )
                 }
@@ -354,6 +384,10 @@ private fun AppearanceSettingsSubScreen(
             "pixelspray" -> 4
             else -> 0
         }
+    }
+
+    LaunchedEffect(Unit) {
+        TypographyManager.scanFonts(context)
     }
 
     LaunchedEffect(targetCardIndex) {
@@ -639,12 +673,11 @@ private fun AppearanceSettingsSubScreen(
 }
 
 /**
- * Tier 2: Pointer & Hardware Sub-Screen
+ * Tier 2: Virtual Cursor Sub-Screen
  */
 @Composable
 private fun CursorHardwareSettingsSubScreen(
     onBack: () -> Unit,
-    onOpenHardwareButtons: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -656,31 +689,8 @@ private fun CursorHardwareSettingsSubScreen(
     var moveSpeed by remember { mutableFloatStateOf(CursorPreferences.getMoveSpeed(context)) }
     var acceleration by remember { mutableFloatStateOf(CursorPreferences.getAcceleration(context)) }
     var cursorSizeDp by remember { mutableIntStateOf(CursorPreferences.getCursorSizeDp(context)) }
-    var clickMethod by remember { mutableStateOf(CursorPreferences.getClickMethod(context)) }
+    var scrollStepPx by remember { mutableIntStateOf(CursorPreferences.getScrollStepPx(context)) }
     var customUri by remember { mutableStateOf(CursorPreferences.getCustomCursorUri(context)) }
-
-    var isServiceActive by remember { mutableStateOf(false) }
-
-    fun checkServiceStatus() {
-        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
-        val enabledServices = am?.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-        val isEnabledInSettings = enabledServices?.any {
-            it.resolveInfo.serviceInfo.packageName == context.packageName &&
-                    it.resolveInfo.serviceInfo.name.contains("VirtualCursorService")
-        } == true
-        isServiceActive = isEnabledInSettings || VirtualCursorService.isServiceRunning
-    }
-
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) checkServiceStatus()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    LaunchedEffect(Unit) { checkServiceStatus() }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
@@ -695,14 +705,12 @@ private fun CursorHardwareSettingsSubScreen(
         }
     }
 
-    val totalItems = 7 // Service, Speed, Accel, Size, ClickMethod, SpritePicker, HardwareKeys
+    val totalItems = if (customUri != null) 6 else 5 // Speed, Accel, Size, ScrollStep, SpritePicker, (ResetSprite)
 
     val targetCardIndex = remember(focusedIndex) {
         when (focusedIndex) {
-            0 -> 0
-            1, 2, 3 -> 1
-            4, 5 -> 2
-            6 -> 3
+            0, 1, 2, 3 -> 0
+            4, 5 -> 1
             else -> 0
         }
     }
@@ -721,7 +729,7 @@ private fun CursorHardwareSettingsSubScreen(
     requestFocusSafely(focusRequester)
 
     SettingsScaffold(
-        title = "Cursor & Hardware",
+        title = "Virtual Cursor",
         showBack = true,
         onBack = onBack,
         modifier = modifier
@@ -744,26 +752,16 @@ private fun CursorHardwareSettingsSubScreen(
                         sawCenterDown = false
                         SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (focusedIndex) {
-                            0 -> {
-                                try {
-                                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                                } catch (_: Exception) {}
-                            }
                             4 -> {
-                                val nextMethod = if (clickMethod == ClickMethod.ACCESSIBILITY_GESTURE) {
-                                    ClickMethod.ROOT_INPUT_TAP
-                                } else {
-                                    ClickMethod.ACCESSIBILITY_GESTURE
-                                }
-                                CursorPreferences.setClickMethod(context, nextMethod)
-                                clickMethod = nextMethod
-                            }
-                            5 -> {
                                 try {
                                     filePicker.launch(arrayOf("image/gif", "image/png"))
                                 } catch (_: Exception) {}
                             }
-                            6 -> onOpenHardwareButtons?.invoke()
+                            5 -> {
+                                CursorPreferences.setCustomCursorUri(context, null)
+                                customUri = null
+                                focusedIndex = 4
+                            }
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -784,22 +782,29 @@ private fun CursorHardwareSettingsSubScreen(
                         val handled = when (native.keyCode) {
                             KeyEvent.KEYCODE_DPAD_LEFT -> {
                                 when (focusedIndex) {
-                                    1 -> {
+                                    0 -> {
                                         val newSpeed = (moveSpeed - 2f).coerceIn(4f, 26f)
                                         CursorPreferences.setMoveSpeed(context, newSpeed)
                                         moveSpeed = newSpeed
                                         true
                                     }
-                                    2 -> {
+                                    1 -> {
                                         val newAccel = (acceleration - 0.02f).coerceIn(1.00f, 1.25f)
                                         CursorPreferences.setAcceleration(context, newAccel)
                                         acceleration = newAccel
                                         true
                                     }
-                                    3 -> {
+                                    2 -> {
                                         val newSize = (cursorSizeDp - 4).coerceIn(20, 52)
                                         CursorPreferences.setCursorSizeDp(context, newSize)
                                         cursorSizeDp = newSize
+                                        true
+                                    }
+                                    3 -> {
+                                        val newStep = (scrollStepPx - CursorPreferences.SCROLL_STEP_INCREMENT_PX)
+                                            .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
+                                        CursorPreferences.setScrollStepPx(context, newStep)
+                                        scrollStepPx = newStep
                                         true
                                     }
                                     else -> false
@@ -807,22 +812,29 @@ private fun CursorHardwareSettingsSubScreen(
                             }
                             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                                 when (focusedIndex) {
-                                    1 -> {
+                                    0 -> {
                                         val newSpeed = (moveSpeed + 2f).coerceIn(4f, 26f)
                                         CursorPreferences.setMoveSpeed(context, newSpeed)
                                         moveSpeed = newSpeed
                                         true
                                     }
-                                    2 -> {
+                                    1 -> {
                                         val newAccel = (acceleration + 0.02f).coerceIn(1.00f, 1.25f)
                                         CursorPreferences.setAcceleration(context, newAccel)
                                         acceleration = newAccel
                                         true
                                     }
-                                    3 -> {
+                                    2 -> {
                                         val newSize = (cursorSizeDp + 4).coerceIn(20, 52)
                                         CursorPreferences.setCursorSizeDp(context, newSize)
                                         cursorSizeDp = newSize
+                                        true
+                                    }
+                                    3 -> {
+                                        val newStep = (scrollStepPx + CursorPreferences.SCROLL_STEP_INCREMENT_PX)
+                                            .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
+                                        CursorPreferences.setScrollStepPx(context, newStep)
+                                        scrollStepPx = newStep
                                         true
                                     }
                                     else -> false
@@ -846,28 +858,12 @@ private fun CursorHardwareSettingsSubScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item {
-                SettingsCard(categoryTitle = "Accessibility Service") {
-                    SettingsNavigationRow(
-                        title = "Virtual Cursor Status",
-                        subtitle = if (isServiceActive) "Active (Press Side Key/F4 to toggle)" else "Inactive (Click to open Android Settings)",
-                        icon = if (isServiceActive) "✓" else "!",
-                        isFocused = focusedIndex == 0,
-                        onClick = {
-                            try {
-                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                            } catch (_: Exception) {}
-                        }
-                    )
-                }
-            }
-
-            item {
                 SettingsCard(categoryTitle = "Movement & Physics") {
                     SettingsStepperRow(
                         title = "Base Speed",
                         subtitle = "Pointer movement velocity",
                         valueDisplay = "${moveSpeed.roundToInt()} px",
-                        isFocused = focusedIndex == 1,
+                        isFocused = focusedIndex == 0,
                         onDecrement = {
                             val newSpeed = (moveSpeed - 2f).coerceIn(4f, 26f)
                             CursorPreferences.setMoveSpeed(context, newSpeed)
@@ -884,7 +880,7 @@ private fun CursorHardwareSettingsSubScreen(
                         title = "Acceleration",
                         subtitle = "Velocity ramp multiplier",
                         valueDisplay = String.format(Locale.US, "%.2fx", acceleration),
-                        isFocused = focusedIndex == 2,
+                        isFocused = focusedIndex == 1,
                         onDecrement = {
                             val newAccel = (acceleration - 0.02f).coerceIn(1.00f, 1.25f)
                             CursorPreferences.setAcceleration(context, newAccel)
@@ -901,7 +897,7 @@ private fun CursorHardwareSettingsSubScreen(
                         title = "Cursor Size",
                         subtitle = "On-screen pointer dimensions",
                         valueDisplay = "$cursorSizeDp dp",
-                        isFocused = focusedIndex == 3,
+                        isFocused = focusedIndex == 2,
                         onDecrement = {
                             val newSize = (cursorSizeDp - 4).coerceIn(20, 52)
                             CursorPreferences.setCursorSizeDp(context, newSize)
@@ -913,28 +909,23 @@ private fun CursorHardwareSettingsSubScreen(
                             cursorSizeDp = newSize
                         }
                     )
-                }
-            }
-
-            item {
-                SettingsCard(categoryTitle = "Click Dispatch Mechanism") {
-                    SettingsNavigationRow(
-                        title = "Click Mode",
-                        subtitle = if (clickMethod == ClickMethod.ACCESSIBILITY_GESTURE) {
-                            "Accessibility Gesture (Non-root)"
-                        } else {
-                            "Root Shell Injection (libsu daemon)"
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Scroll Step",
+                        subtitle = "Keys 2 (Up) & 8 (Down) swipe distance",
+                        valueDisplay = "$scrollStepPx px",
+                        isFocused = focusedIndex == 3,
+                        onDecrement = {
+                            val newStep = (scrollStepPx - CursorPreferences.SCROLL_STEP_INCREMENT_PX)
+                                .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
+                            CursorPreferences.setScrollStepPx(context, newStep)
+                            scrollStepPx = newStep
                         },
-                        icon = if (clickMethod == ClickMethod.ROOT_INPUT_TAP) "⚡" else "👆",
-                        isFocused = focusedIndex == 4,
-                        onClick = {
-                            val nextMethod = if (clickMethod == ClickMethod.ACCESSIBILITY_GESTURE) {
-                                ClickMethod.ROOT_INPUT_TAP
-                            } else {
-                                ClickMethod.ACCESSIBILITY_GESTURE
-                            }
-                            CursorPreferences.setClickMethod(context, nextMethod)
-                            clickMethod = nextMethod
+                        onIncrement = {
+                            val newStep = (scrollStepPx + CursorPreferences.SCROLL_STEP_INCREMENT_PX)
+                                .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
+                            CursorPreferences.setScrollStepPx(context, newStep)
+                            scrollStepPx = newStep
                         }
                     )
                 }
@@ -946,7 +937,7 @@ private fun CursorHardwareSettingsSubScreen(
                         title = "Cursor Graphic",
                         subtitle = if (customUri != null) "Custom sprite active" else "Default kawaii paw sprite",
                         icon = "🐾",
-                        isFocused = focusedIndex == 5,
+                        isFocused = focusedIndex == 4,
                         onClick = {
                             try {
                                 filePicker.launch(arrayOf("image/gif", "image/png"))
@@ -957,26 +948,15 @@ private fun CursorHardwareSettingsSubScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         SettingsActionRow(
                             title = "Reset to Default Sprite",
-                            isFocused = false,
+                            isFocused = focusedIndex == 5,
                             isDestructive = true,
                             onClick = {
                                 CursorPreferences.setCustomCursorUri(context, null)
                                 customUri = null
+                                focusedIndex = 4
                             }
                         )
                     }
-                }
-            }
-
-            item {
-                SettingsCard(categoryTitle = "Hardware Buttons") {
-                    SettingsNavigationRow(
-                        title = "Key Remapping",
-                        subtitle = "Physical key behavior (Side key, F1-F4, Recents)",
-                        icon = "🎮",
-                        isFocused = focusedIndex == 6,
-                        onClick = { onOpenHardwareButtons?.invoke() }
-                    )
                 }
             }
         }
@@ -984,69 +964,74 @@ private fun CursorHardwareSettingsSubScreen(
 }
 
 /**
- * Tier 3: Layout & Behavior Sub-Screen
+ * Tier 3.5: Permissions & Root Sub-Screen
+ * Centralizes Accessibility Services, Magisk Root Status, Root-Shell Recents Fallback,
+ * and Root Cursor Click Dispatch.
  */
 @Composable
-private fun BehaviorSettingsSubScreen(
+private fun PermissionsRootSettingsSubScreen(
     onBack: () -> Unit,
-    onOpenHiddenApps: (() -> Unit)?,
-    onCreateFolderClick: (() -> Unit)?,
-    onOpenSpeedDial: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val isFolderGridMode by PreferencesManager.isFolderGridMode.collectAsState()
-    val isT9SearchEnabled by PreferencesManager.isT9SearchEnabled.collectAsState()
-    val isDpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
-    val isDpadBoundaryHaptics by PreferencesManager.isDpadBoundaryHaptics.collectAsState()
-    val keypadSoundMode by PreferencesManager.keypadSoundMode.collectAsState()
-    val isLidLedEnabled by PreferencesManager.isLidLedEnabled.collectAsState()
-    val isLidLedChargingEnabled by PreferencesManager.isLidLedChargingEnabled.collectAsState()
-    val lidLedColor by PreferencesManager.lidLedColor.collectAsState()
-    val isMediaVolumeLockEnabled by PreferencesManager.isMediaVolumeLockEnabled.collectAsState()
-    val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
-    val systemMonitorInterval by PreferencesManager.systemMonitorInterval.collectAsState()
+    var isRemapA11yActive by remember {
+        mutableStateOf(HardwareRemapManager.isAccessibilityServiceEnabled(context))
+    }
+    var isCursorA11yActive by remember { mutableStateOf(false) }
+    var rootStatus by remember {
+        mutableStateOf<RootStatus>(
+            if (!RootShell.isSuBinaryPresent()) RootStatus.NotAvailable else RootStatus.Unknown
+        )
+    }
+    var useRootRecentsFallback by remember {
+        mutableStateOf(HardwareRemapManager.isRootRecentsFallbackEnabled(context))
+    }
+    var clickMethod by remember { mutableStateOf(CursorPreferences.getClickMethod(context)) }
+    var isWatchdogEnabled by remember {
+        mutableStateOf(PreferencesManager.isRootA11yWatchdogEnabled(context))
+    }
+    var isHealingServices by remember { mutableStateOf(false) }
 
-    // Dynamic item list matching LazyColumn visual card order
-    val items = remember(onCreateFolderClick, isSystemMonitorEnabled, isLidLedEnabled) {
-        buildList {
-            if (onCreateFolderClick != null) {
-                add("create_folder")
-            }
-            add("folder_grid")
-            add("t9_search")
-            add("hidden_apps")
-            add("speed_dial")
-            add("dpad_wrap")
-            add("boundary_haptics")
-            add("keypad_sound")
-            add("media_volume_lock")
-            add("lid_led_notification")
-            if (isLidLedEnabled) {
-                add("lid_led_color")
-                add("lid_led_charging")
-            }
-            add("system_monitor")
-            if (isSystemMonitorEnabled) {
-                add("monitor_interval")
-            }
+    fun refreshPermissionsState() {
+        isRemapA11yActive = HardwareRemapManager.isAccessibilityServiceEnabled(context)
+        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+        val enabledServices = am?.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        val cursorEnabled = enabledServices?.any {
+            it.resolveInfo.serviceInfo.packageName == context.packageName &&
+                it.resolveInfo.serviceInfo.name.contains("VirtualCursorService")
+        } == true
+        isCursorA11yActive = cursorEnabled || VirtualCursorService.isServiceRunning
+        useRootRecentsFallback = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
+        clickMethod = CursorPreferences.getClickMethod(context)
+        isWatchdogEnabled = PreferencesManager.isRootA11yWatchdogEnabled(context)
+        if (!RootShell.isSuBinaryPresent()) {
+            rootStatus = RootStatus.NotAvailable
         }
     }
 
-    val totalItems = items.size
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshPermissionsState()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
-    val targetCardIndex = remember(focusedIndex, items) {
-        when (items.getOrNull(focusedIndex)) {
-            "create_folder", "folder_grid" -> 0
-            "t9_search", "hidden_apps" -> 1
-            "speed_dial", "dpad_wrap", "boundary_haptics", "keypad_sound", "media_volume_lock" -> 2
-            "lid_led_notification", "lid_led_color", "lid_led_charging" -> 3
-            "system_monitor", "monitor_interval" -> 4
+    LaunchedEffect(Unit) { refreshPermissionsState() }
+
+    val totalItems = 7 // 0: Remap A11y, 1: Cursor A11y, 2: Magisk Root, 3: Root Recents, 4: Root Click Dispatch, 5: Watchdog, 6: Self-Heal
+
+    val targetCardIndex = remember(focusedIndex) {
+        when (focusedIndex) {
+            0, 1 -> 0
+            2, 3, 4, 5, 6 -> 1
             else -> 0
         }
     }
@@ -1062,10 +1047,47 @@ private fun BehaviorSettingsSubScreen(
         }
     }
 
+    fun toggleRootRecents() {
+        val newTarget = !useRootRecentsFallback
+        if (newTarget) {
+            if (!RootShell.isSuBinaryPresent()) {
+                Toast.makeText(context, "su binary not found. Device is not rooted.", Toast.LENGTH_SHORT).show()
+            } else if (rootStatus !is RootStatus.Granted) {
+                scope.launch {
+                    rootStatus = RootStatus.Requesting
+                    val res = RootShell.requestRoot()
+                    rootStatus = res
+                    if (res is RootStatus.Granted) {
+                        useRootRecentsFallback = true
+                        HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+                    } else {
+                        Toast.makeText(context, "Root access denied in Magisk.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else {
+                useRootRecentsFallback = true
+                HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+            }
+        } else {
+            useRootRecentsFallback = false
+            HardwareRemapManager.setRootRecentsFallbackEnabled(context, false)
+        }
+    }
+
+    fun toggleClickDispatchMethod() {
+        val nextMethod = if (clickMethod == ClickMethod.ACCESSIBILITY_GESTURE) {
+            ClickMethod.ROOT_INPUT_TAP
+        } else {
+            ClickMethod.ACCESSIBILITY_GESTURE
+        }
+        CursorPreferences.setClickMethod(context, nextMethod)
+        clickMethod = nextMethod
+    }
+
     requestFocusSafely(focusRequester)
 
     SettingsScaffold(
-        title = "Behavior",
+        title = "Permissions & Root",
         showBack = true,
         onBack = onBack,
         modifier = modifier
@@ -1086,11 +1108,433 @@ private fun BehaviorSettingsSubScreen(
                         SoundEffectManager.play(context, SoundEffect.CLICK)
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        when (focusedIndex) {
+                            0, 1 -> {
+                                try {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                } catch (_: Exception) {}
+                            }
+                            2 -> {
+                                if (!RootShell.isSuBinaryPresent()) {
+                                    rootStatus = RootStatus.NotAvailable
+                                    Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    scope.launch {
+                                        rootStatus = RootStatus.Requesting
+                                        rootStatus = RootShell.requestRoot()
+                                    }
+                                }
+                            }
+                            3 -> toggleRootRecents()
+                            4 -> toggleClickDispatchMethod()
+                            5 -> {
+                                val next = !isWatchdogEnabled
+                                PreferencesManager.setRootA11yWatchdogEnabled(context, next)
+                                isWatchdogEnabled = next
+                                if (next) {
+                                    RootAccessibilityWatchdog.checkAsync(context, force = true) {
+                                        refreshPermissionsState()
+                                    }
+                                }
+                            }
+                            6 -> {
+                                if (!RootShell.isSuBinaryPresent()) {
+                                    Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    isHealingServices = true
+                                    RootAccessibilityWatchdog.checkAsync(context, force = true) { res ->
+                                        isHealingServices = false
+                                        refreshPermissionsState()
+                                        when (res) {
+                                            is WatchdogResult.Healthy -> Toast.makeText(context, "Services are healthy and running ♡", Toast.LENGTH_SHORT).show()
+                                            is WatchdogResult.Healed -> Toast.makeText(context, "Services successfully repaired! ♡", Toast.LENGTH_SHORT).show()
+                                            is WatchdogResult.Failed -> Toast.makeText(context, "Repair failed: ${res.reason}", Toast.LENGTH_LONG).show()
+                                            is WatchdogResult.NoRoot -> Toast.makeText(context, "Root access required to self-heal", Toast.LENGTH_SHORT).show()
+                                            is WatchdogResult.Disabled -> Toast.makeText(context, "Watchdog is disabled", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                            if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
+                        } else {
+                            if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
+                        }
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        if (focusedIndex == 4) {
+                            toggleClickDispatchMethod()
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        } else if (focusedIndex == 5) {
+                            val next = !isWatchdogEnabled
+                            PreferencesManager.setRootA11yWatchdogEnabled(context, next)
+                            isWatchdogEnabled = next
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                            if (next) {
+                                RootAccessibilityWatchdog.checkAsync(context, force = true) {
+                                    refreshPermissionsState()
+                                }
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                false
+            }
+    ) {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            item {
+                SettingsCard(categoryTitle = "Accessibility Services") {
+                    SettingsNavigationRow(
+                        title = "Key Remapper & Actions",
+                        subtitle = if (isRemapA11yActive) {
+                            "✔ Active • Listening for remapped hardware keys"
+                        } else {
+                            "✖ Inactive • Press OK to enable in Android Settings"
+                        },
+                        icon = if (isRemapA11yActive) "✓" else "!",
+                        isFocused = focusedIndex == 0,
+                        onClick = {
+                            try {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            } catch (_: Exception) {}
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "Virtual Cursor Service",
+                        subtitle = if (isCursorA11yActive) {
+                            "✔ Active • Press Side Key/F4 to toggle pointer"
+                        } else {
+                            "✖ Inactive • Press OK to enable in Android Settings"
+                        },
+                        icon = if (isCursorA11yActive) "✓" else "!",
+                        isFocused = focusedIndex == 1,
+                        onClick = {
+                            try {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            } catch (_: Exception) {}
+                        }
+                    )
+                }
+            }
+
+            item {
+                SettingsCard(categoryTitle = "Magisk Root & Superuser") {
+                    val rootStatusLabel = when (rootStatus) {
+                        is RootStatus.Granted -> "✔ Granted • libsu root shell authorized"
+                        is RootStatus.Denied -> "✖ Denied • Authorize Mochibun in Magisk"
+                        is RootStatus.Requesting -> "⏳ Requesting Magisk root permission..."
+                        is RootStatus.NotAvailable -> "✖ Not Available • su binary not found"
+                        else -> "Press OK to request or verify Magisk root access"
+                    }
+                    SettingsNavigationRow(
+                        title = "Magisk Root Access",
+                        subtitle = rootStatusLabel,
+                        icon = if (rootStatus is RootStatus.Granted) "✓" else "⚡",
+                        isFocused = focusedIndex == 2,
+                        onClick = {
+                            if (!RootShell.isSuBinaryPresent()) {
+                                rootStatus = RootStatus.NotAvailable
+                            } else {
+                                scope.launch {
+                                    rootStatus = RootStatus.Requesting
+                                    rootStatus = RootShell.requestRoot()
+                                }
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Root-Shell Recents Fallback",
+                        subtitle = if (useRootRecentsFallback) {
+                            "Launches Recents directly via root shell if stock fails"
+                        } else {
+                            "Using standard Android Recents intent"
+                        },
+                        checked = useRootRecentsFallback,
+                        isFocused = focusedIndex == 3,
+                        onCheckedChange = { toggleRootRecents() }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Cursor Click Dispatch",
+                        subtitle = if (clickMethod == ClickMethod.ACCESSIBILITY_GESTURE) {
+                            "Accessibility Gesture (Non-root)"
+                        } else {
+                            "Root Shell Injection (libsu daemon)"
+                        },
+                        valueDisplay = if (clickMethod == ClickMethod.ROOT_INPUT_TAP) "Root Tap" else "Gesture",
+                        isFocused = focusedIndex == 4,
+                        onDecrement = {
+                            toggleClickDispatchMethod()
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        },
+                        onIncrement = {
+                            toggleClickDispatchMethod()
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "A11y Root Watchdog",
+                        subtitle = if (isWatchdogEnabled) {
+                            "Auto-rebinds services on sleep & wake if dropped"
+                        } else {
+                            "Watchdog disabled • manual service restart"
+                        },
+                        checked = isWatchdogEnabled,
+                        isFocused = focusedIndex == 5,
+                        onCheckedChange = { enabled ->
+                            PreferencesManager.setRootA11yWatchdogEnabled(context, enabled)
+                            isWatchdogEnabled = enabled
+                            if (enabled) {
+                                RootAccessibilityWatchdog.checkAsync(context, force = true) {
+                                    refreshPermissionsState()
+                                }
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "Self-Heal Services Now",
+                        subtitle = if (isHealingServices) {
+                            "⏳ Verifying & restoring services via Root..."
+                        } else {
+                            "Force-restores A11y permissions & re-binds daemons"
+                        },
+                        icon = if (isHealingServices) "⏳" else "♡",
+                        isFocused = focusedIndex == 6,
+                        onClick = {
+                            if (!RootShell.isSuBinaryPresent()) {
+                                Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
+                            } else {
+                                isHealingServices = true
+                                RootAccessibilityWatchdog.checkAsync(context, force = true) { res ->
+                                    isHealingServices = false
+                                    refreshPermissionsState()
+                                    when (res) {
+                                        is WatchdogResult.Healthy -> Toast.makeText(context, "Services are healthy and running ♡", Toast.LENGTH_SHORT).show()
+                                        is WatchdogResult.Healed -> Toast.makeText(context, "Services successfully repaired! ♡", Toast.LENGTH_SHORT).show()
+                                        is WatchdogResult.Failed -> Toast.makeText(context, "Repair failed: ${res.reason}", Toast.LENGTH_LONG).show()
+                                        is WatchdogResult.NoRoot -> Toast.makeText(context, "Root access required to self-heal", Toast.LENGTH_SHORT).show()
+                                        is WatchdogResult.Disabled -> Toast.makeText(context, "Watchdog is disabled", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Tier 3: Layout & Behavior Sub-Screen
+ */
+@Composable
+private fun BehaviorSettingsSubScreen(
+    onBack: () -> Unit,
+    onOpenHiddenApps: (() -> Unit)?,
+    onCreateFolderClick: (() -> Unit)?,
+    onOpenHardwareButtons: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val listState = rememberLazyListState()
+    val focusRequester = remember { FocusRequester() }
+    var focusedIndex by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    val isFolderGridMode by PreferencesManager.isFolderGridMode.collectAsState()
+    val isT9SearchEnabled by PreferencesManager.isT9SearchEnabled.collectAsState()
+    val kaomojiKeyCode by PreferencesManager.kaomojiTriggerKeyCode.collectAsState()
+    val kaomojiScanCode by PreferencesManager.kaomojiTriggerScanCode.collectAsState()
+    val kaomojiLongPress by PreferencesManager.kaomojiTriggerLongPress.collectAsState()
+    var isCapturingKaomojiKey by remember { mutableStateOf(false) }
+
+    val kaomojiKeyName = remember(kaomojiKeyCode, kaomojiScanCode) {
+        PreferencesManager.formatKaomojiKeyName(kaomojiKeyCode, kaomojiScanCode)
+    }
+    val kaomojiKeyBadge = remember(kaomojiKeyCode, kaomojiScanCode) {
+        PreferencesManager.formatKaomojiKeyBadge(kaomojiKeyCode, kaomojiScanCode)
+    }
+    var configuredRemapBadges by remember {
+        mutableStateOf(HardwareRemapManager.getConfiguredKeyBadges(context))
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, context) {
+        val remapPrefs = HardwareRemapManager.getPrefs(context)
+        val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            configuredRemapBadges = HardwareRemapManager.getConfiguredKeyBadges(context)
+        }
+        remapPrefs.registerOnSharedPreferenceChangeListener(prefListener)
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                configuredRemapBadges = HardwareRemapManager.getConfiguredKeyBadges(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            remapPrefs.unregisterOnSharedPreferenceChangeListener(prefListener)
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val isDpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
+    val isDpadBoundaryHaptics by PreferencesManager.isDpadBoundaryHaptics.collectAsState()
+    val keypadSoundMode by PreferencesManager.keypadSoundMode.collectAsState()
+    val launcherAudioStream by PreferencesManager.launcherAudioStream.collectAsState()
+    val launcherSoundVolume by PreferencesManager.launcherSoundVolume.collectAsState()
+    val isLidLedEnabled by PreferencesManager.isLidLedEnabled.collectAsState()
+    val isLidLedChargingEnabled by PreferencesManager.isLidLedChargingEnabled.collectAsState()
+    val lidLedColor by PreferencesManager.lidLedColor.collectAsState()
+    val isMediaVolumeLockEnabled by PreferencesManager.isMediaVolumeLockEnabled.collectAsState()
+    val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
+    val systemMonitorInterval by PreferencesManager.systemMonitorInterval.collectAsState()
+
+    // Dynamic item list matching LazyColumn visual card order
+    val items = remember(onCreateFolderClick, isSystemMonitorEnabled, isLidLedEnabled) {
+        buildList {
+            if (onCreateFolderClick != null) {
+                add("create_folder")
+            }
+            add("folder_grid")
+            add("t9_search")
+            add("hidden_apps")
+            add("keypad_remapper")
+            add("kaomoji_trigger")
+            add("kaomoji_press_mode")
+            add("dpad_wrap")
+            add("boundary_haptics")
+            add("keypad_sound")
+            add("audio_stream")
+            add("sound_volume")
+            add("media_volume_lock")
+            add("lid_led_notification")
+            if (isLidLedEnabled) {
+                add("lid_led_color")
+                add("lid_led_charging")
+            }
+            add("system_monitor")
+            if (isSystemMonitorEnabled) {
+                add("monitor_interval")
+            }
+        }
+    }
+
+    val totalItems = items.size
+
+    val targetCardIndex = remember(focusedIndex, items) {
+        when (items.getOrNull(focusedIndex)) {
+            "create_folder", "folder_grid" -> 0
+            "t9_search", "hidden_apps" -> 1
+            "keypad_remapper", "kaomoji_trigger", "kaomoji_press_mode", "dpad_wrap", "boundary_haptics", "keypad_sound", "audio_stream", "sound_volume", "media_volume_lock" -> 2
+            "lid_led_notification", "lid_led_color", "lid_led_charging" -> 3
+            "system_monitor", "monitor_interval" -> 4
+            else -> 0
+        }
+    }
+
+    LaunchedEffect(targetCardIndex) {
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+        if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
+        if (targetCardIndex > visible.last()) {
+            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
+            listState.animateScrollToItem(scrollTarget)
+        } else if (targetCardIndex < visible.first()) {
+            listState.animateScrollToItem(targetCardIndex)
+        }
+    }
+
+    LaunchedEffect(isCapturingKaomojiKey) {
+        if (!isCapturingKaomojiKey) {
+            focusRequester.requestFocus()
+        }
+    }
+
+    requestFocusSafely(focusRequester)
+
+    if (isCapturingKaomojiKey) {
+        KaomojiKeyCaptureDialog(
+            currentKeyCode = kaomojiKeyCode,
+            currentScanCode = kaomojiScanCode,
+            isLongPress = kaomojiLongPress,
+            onDismiss = { isCapturingKaomojiKey = false },
+            onAssignButton = { newKeyCode, newScanCode ->
+                PreferencesManager.setKaomojiTriggerButton(context, newKeyCode, newScanCode)
+            },
+            onToggleLongPress = { newLongPress ->
+                PreferencesManager.setKaomojiTriggerLongPress(context, newLongPress)
+            },
+            onResetDefault = {
+                PreferencesManager.resetKaomojiTrigger(context)
+            }
+        )
+    }
+
+    SettingsScaffold(
+        title = "Behavior",
+        showBack = true,
+        onBack = onBack,
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (isCapturingKaomojiKey) return@onPreviewKeyEvent false
+                val native = event.nativeKeyEvent
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onBack()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
                         when (items.getOrNull(focusedIndex)) {
                             "create_folder" -> onCreateFolderClick?.invoke()
                             "folder_grid" -> PreferencesManager.setFolderGridMode(context, !isFolderGridMode)
                             "t9_search" -> PreferencesManager.setT9SearchEnabled(context, !isT9SearchEnabled)
-                            "speed_dial" -> onOpenSpeedDial?.invoke()
+                            "keypad_remapper" -> {
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                                onOpenHardwareButtons?.invoke()
+                            }
+                            "kaomoji_trigger" -> {
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                                isCapturingKaomojiKey = true
+                            }
+                            "kaomoji_press_mode" -> {
+                                PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                            }
                             "dpad_wrap" -> PreferencesManager.setDpadWrapAround(context, !isDpadWrapAround)
                             "boundary_haptics" -> PreferencesManager.setDpadBoundaryHaptics(context, !isDpadBoundaryHaptics)
                             "keypad_sound" -> {
@@ -1101,6 +1545,20 @@ private fun BehaviorSettingsSubScreen(
                                 }
                                 PreferencesManager.setKeypadSoundMode(context, nextMode)
                                 SoundEffectManager.play(context, SoundEffect.SELECT)
+                            }
+                            "audio_stream" -> {
+                                val next = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
+                                    PreferencesManager.AUDIO_STREAM_NOTIFICATION
+                                } else {
+                                    PreferencesManager.AUDIO_STREAM_MEDIA
+                                }
+                                PreferencesManager.setLauncherAudioStream(context, next)
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                            }
+                            "sound_volume" -> {
+                                val next = if (launcherSoundVolume >= 100) 0 else launcherSoundVolume + 10
+                                PreferencesManager.setLauncherSoundVolume(context, next)
+                                SoundEffectManager.play(context, SoundEffect.CLICK)
                             }
                             "media_volume_lock" -> {
                                 val next = !isMediaVolumeLockEnabled
@@ -1175,6 +1633,10 @@ private fun BehaviorSettingsSubScreen(
                         when (native.keyCode) {
                             KeyEvent.KEYCODE_DPAD_LEFT -> {
                                 when (items.getOrNull(focusedIndex)) {
+                                    "kaomoji_press_mode" -> {
+                                        PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
                                     "keypad_sound" -> {
                                         val nextMode = when (keypadSoundMode) {
                                             "kawaii" -> "off"
@@ -1182,6 +1644,20 @@ private fun BehaviorSettingsSubScreen(
                                             else -> "retro"
                                         }
                                         PreferencesManager.setKeypadSoundMode(context, nextMode)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                    "audio_stream" -> {
+                                        val next = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
+                                            PreferencesManager.AUDIO_STREAM_NOTIFICATION
+                                        } else {
+                                            PreferencesManager.AUDIO_STREAM_MEDIA
+                                        }
+                                        PreferencesManager.setLauncherAudioStream(context, next)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                    "sound_volume" -> {
+                                        val next = (launcherSoundVolume - 10).coerceIn(0, 100)
+                                        PreferencesManager.setLauncherSoundVolume(context, next)
                                         SoundEffectManager.play(context, SoundEffect.NAV)
                                     }
                                     "lid_led_color" -> {
@@ -1208,6 +1684,10 @@ private fun BehaviorSettingsSubScreen(
                             }
                             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                                 when (items.getOrNull(focusedIndex)) {
+                                    "kaomoji_press_mode" -> {
+                                        PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
                                     "keypad_sound" -> {
                                         val nextMode = when (keypadSoundMode) {
                                             "kawaii" -> "retro"
@@ -1215,6 +1695,20 @@ private fun BehaviorSettingsSubScreen(
                                             else -> "kawaii"
                                         }
                                         PreferencesManager.setKeypadSoundMode(context, nextMode)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                    "audio_stream" -> {
+                                        val next = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
+                                            PreferencesManager.AUDIO_STREAM_NOTIFICATION
+                                        } else {
+                                            PreferencesManager.AUDIO_STREAM_MEDIA
+                                        }
+                                        PreferencesManager.setLauncherAudioStream(context, next)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                    "sound_volume" -> {
+                                        val next = (launcherSoundVolume + 10).coerceIn(0, 100)
+                                        PreferencesManager.setLauncherSoundVolume(context, next)
                                         SoundEffectManager.play(context, SoundEffect.NAV)
                                     }
                                     "lid_led_color" -> {
@@ -1296,12 +1790,45 @@ private fun BehaviorSettingsSubScreen(
 
             item {
                 SettingsCard(categoryTitle = "Keypad & D-Pad") {
+                    val remapTitle = if (configuredRemapBadges.isEmpty()) {
+                        "Keypad Remapper"
+                    } else {
+                        "Keypad Remapper [${configuredRemapBadges.size} Mapped]"
+                    }
+                    val remapSubtitle = if (configuredRemapBadges.isEmpty()) {
+                        "Press any physical button to assign actions or app shortcuts"
+                    } else {
+                        "Active: ${configuredRemapBadges.joinToString(", ")} • Tap to press & remap any key"
+                    }
                     SettingsNavigationRow(
-                        title = "Speed Dial (Keys 2-9)",
-                        subtitle = "Assign numeric shortcuts for home screen long-press",
-                        icon = "⚡",
-                        isFocused = items.getOrNull(focusedIndex) == "speed_dial",
-                        onClick = { onOpenSpeedDial?.invoke() }
+                        title = remapTitle,
+                        subtitle = remapSubtitle,
+                        icon = "🎮",
+                        isFocused = items.getOrNull(focusedIndex) == "keypad_remapper",
+                        onClick = { onOpenHardwareButtons?.invoke() }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "Kaomoji Trigger Key [$kaomojiKeyBadge]",
+                        subtitle = "Assigned: $kaomojiKeyName • Tap to press & assign any button",
+                        icon = "✨",
+                        isFocused = items.getOrNull(focusedIndex) == "kaomoji_trigger",
+                        onClick = { isCapturingKaomojiKey = true }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Kaomoji Trigger Mode",
+                        subtitle = if (kaomojiLongPress) "Hold $kaomojiKeyName to open Kaomoji Wheel" else "Single press $kaomojiKeyName opens Kaomoji Wheel",
+                        valueDisplay = if (kaomojiLongPress) "Hold" else "Single Tap",
+                        isFocused = items.getOrNull(focusedIndex) == "kaomoji_press_mode",
+                        onDecrement = {
+                            PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        },
+                        onIncrement = {
+                            PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
@@ -1356,6 +1883,58 @@ private fun BehaviorSettingsSubScreen(
                             if (nextMode != "off") {
                                 SoundEffectManager.play(context, SoundEffect.NAV)
                             }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val audioStreamLabel = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
+                        "Media"
+                    } else {
+                        "Notification"
+                    }
+                    val audioStreamSubtitle = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
+                        "Media channel (plays in silent / vibrate mode)"
+                    } else {
+                        "Notification channel (muted by silent mode)"
+                    }
+                    SettingsStepperRow(
+                        title = "Audio Routing Stream",
+                        subtitle = audioStreamSubtitle,
+                        valueDisplay = audioStreamLabel,
+                        isFocused = items.getOrNull(focusedIndex) == "audio_stream",
+                        onDecrement = {
+                            val next = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
+                                PreferencesManager.AUDIO_STREAM_NOTIFICATION
+                            } else {
+                                PreferencesManager.AUDIO_STREAM_MEDIA
+                            }
+                            PreferencesManager.setLauncherAudioStream(context, next)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        },
+                        onIncrement = {
+                            val next = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
+                                PreferencesManager.AUDIO_STREAM_NOTIFICATION
+                            } else {
+                                PreferencesManager.AUDIO_STREAM_MEDIA
+                            }
+                            PreferencesManager.setLauncherAudioStream(context, next)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Keypad Audio Volume",
+                        subtitle = "Master volume for keypad & mascot sounds",
+                        valueDisplay = "$launcherSoundVolume%",
+                        isFocused = items.getOrNull(focusedIndex) == "sound_volume",
+                        onDecrement = {
+                            val next = (launcherSoundVolume - 10).coerceIn(0, 100)
+                            PreferencesManager.setLauncherSoundVolume(context, next)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        },
+                        onIncrement = {
+                            val next = if (launcherSoundVolume >= 100) 0 else launcherSoundVolume + 10
+                            PreferencesManager.setLauncherSoundVolume(context, next)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
                         }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1485,6 +2064,518 @@ private fun BehaviorSettingsSubScreen(
                                 PreferencesManager.setSystemMonitorInterval(context, nextInterval)
                             }
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Interactive Hardware Key Capture Dialog for assigning any physical button
+ * to open the Kaomoji Wheel (modeled after the Hardware Button Remapper's Key Capture dialog).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KaomojiKeyCaptureDialog(
+    currentKeyCode: Int,
+    currentScanCode: Int,
+    isLongPress: Boolean,
+    onDismiss: () -> Unit,
+    onAssignButton: (Int, Int) -> Unit,
+    onToggleLongPress: (Boolean) -> Unit,
+    onResetDefault: () -> Unit
+) {
+    val context = LocalContext.current
+    val theme = LocalLauncherTheme.current
+    val focusRequester = remember { FocusRequester() }
+
+    var isListening by remember { mutableStateOf(true) }
+    var capturedKeyCode by remember { mutableIntStateOf(currentKeyCode) }
+    var capturedScanCode by remember { mutableIntStateOf(currentScanCode) }
+    var statusHint by remember { mutableStateOf<String?>(null) }
+    var selectedActionIndex by remember { mutableIntStateOf(0) } // 0: Done, 1: Mode, 2: Listen Again, 3: Reset
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "kaomoji_key_pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "kaomoji_pulse_scale"
+    )
+
+    requestFocusSafely(focusRequester)
+
+    val displayKeyCode = if (isListening) currentKeyCode else capturedKeyCode
+    val displayScanCode = if (isListening) currentScanCode else capturedScanCode
+    val physicalKey = remember(displayKeyCode, displayScanCode) {
+        PhysicalKey.fromKeyCode(displayKeyCode)
+            ?: if (displayScanCode > 0) PhysicalKey.fromScancode(displayScanCode) else null
+    }
+    val keyName = remember(displayKeyCode, displayScanCode) {
+        PreferencesManager.formatKaomojiKeyName(displayKeyCode, displayScanCode)
+    }
+    val keyBadge = remember(displayKeyCode, displayScanCode) {
+        PreferencesManager.formatKaomojiKeyBadge(displayKeyCode, displayScanCode)
+    }
+
+    DisposableEffect(isListening) {
+        if (isListening) {
+            MochibunAccessibilityService.keyCaptureListener = { event ->
+                val native = event
+                val isNav = native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                    isCenterActivateKey(native.keyCode)
+
+                if (isNav) {
+                    if (native.action == KeyEvent.ACTION_DOWN) {
+                        statusHint = "D-Pad & OK are reserved for launcher navigation ♡"
+                        SoundEffectManager.play(context, SoundEffect.BOUNDARY)
+                    }
+                    false
+                } else if (isBackDismissKey(native.keyCode)) {
+                    if (native.action == KeyEvent.ACTION_UP) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onDismiss()
+                    }
+                    false
+                } else {
+                    if (native.action == KeyEvent.ACTION_DOWN && native.repeatCount == 0) {
+                        val resolvedKeyCode = if (native.keyCode == KeyEvent.KEYCODE_UNKNOWN && native.scanCode == 62) {
+                            KeyEvent.KEYCODE_F4
+                        } else {
+                            native.keyCode
+                        }
+                        capturedKeyCode = resolvedKeyCode
+                        capturedScanCode = native.scanCode
+                        statusHint = null
+                        isListening = false
+                        selectedActionIndex = 0
+                        onAssignButton(resolvedKeyCode, native.scanCode)
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                    }
+                    true
+                }
+            }
+        } else {
+            MochibunAccessibilityService.keyCaptureListener = null
+        }
+        onDispose {
+            MochibunAccessibilityService.keyCaptureListener = null
+        }
+    }
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
+        modifier = Modifier
+            .fillMaxWidth(0.92f)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+
+                if (native.keyCode == KeyEvent.KEYCODE_BACK || native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onDismiss()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (isListening) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        val isNavigationDpad = native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                            native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                            native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                            native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                            isCenterActivateKey(native.keyCode)
+
+                        if (isNavigationDpad) {
+                            statusHint = "D-Pad & OK are reserved for launcher navigation ♡"
+                            SoundEffectManager.play(context, SoundEffect.BOUNDARY)
+                            return@onPreviewKeyEvent true
+                        }
+
+                        val resolvedKeyCode = if (native.keyCode == KeyEvent.KEYCODE_UNKNOWN && native.scanCode == 62) {
+                            KeyEvent.KEYCODE_F4
+                        } else {
+                            native.keyCode
+                        }
+                        capturedKeyCode = resolvedKeyCode
+                        capturedScanCode = native.scanCode
+                        statusHint = null
+                        isListening = false
+                        selectedActionIndex = 0
+                        onAssignButton(resolvedKeyCode, native.scanCode)
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                // Post-capture navigation inside the confirmation view
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        when (selectedActionIndex) {
+                            0 -> onDismiss()
+                            1 -> onToggleLongPress(!isLongPress)
+                            2 -> {
+                                statusHint = null
+                                isListening = true
+                            }
+                            3 -> {
+                                onResetDefault()
+                                capturedKeyCode = PreferencesManager.DEFAULT_KAOMOJI_TRIGGER_KEYCODE
+                                capturedScanCode = PreferencesManager.DEFAULT_KAOMOJI_TRIGGER_SCANCODE
+                                onDismiss()
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type == KeyEventType.KeyDown) {
+                    when (native.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_UP -> {
+                            selectedActionIndex = if (selectedActionIndex > 0) selectedActionIndex - 1 else 3
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                            return@onPreviewKeyEvent true
+                        }
+                        KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            selectedActionIndex = if (selectedActionIndex < 3) selectedActionIndex + 1 else 0
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                            return@onPreviewKeyEvent true
+                        }
+                        KeyEvent.KEYCODE_DPAD_LEFT,
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            onToggleLongPress(!isLongPress)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                }
+                true
+            }
+    ) {
+        val shape = RoundedCornerShape(22.dp)
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.5.dp, ActiveTheme.cardBorder, shape),
+            shape = shape,
+            color = ActiveTheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    PixelRibbonBow(width = 22.dp, height = 18.dp)
+                    Text(
+                        text = "— ♡ Kaomoji Key Capture ♡ —",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PixelRibbonBow(width = 22.dp, height = 18.dp)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .graphicsLayer {
+                            scaleX = if (isListening) pulseScale else 1f
+                            scaleY = if (isListening) pulseScale else 1f
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    MochibunMascot(
+                        mood = if (!isListening) MascotMood.CHEER else MascotMood.WORRIED,
+                        themeTintColor = theme.mascotTintColor,
+                        size = 48.dp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (isListening) {
+                    Text(
+                        text = "Listening for physical key...",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Press any button on your keypad to assign it\n(Side Key, Call, Camera, F1–F4, *, #, 0–9, etc.)",
+                        color = ActiveTheme.textPrimary.copy(alpha = 0.65f),
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 13.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(ActiveTheme.surfaceTint.copy(alpha = 0.3f))
+                            .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = "Current:",
+                            color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        if (physicalKey != null) {
+                            RetroKeyBadge(key = physicalKey, isFocused = true)
+                        } else {
+                            RetroKeyBadge(label = keyBadge, isFocused = true)
+                        }
+                        Text(
+                            text = "${if (isLongPress) "Hold" else "Tap"} $keyName",
+                            color = ActiveTheme.accentDeep,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    statusHint?.let { hint ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = hint,
+                            color = destructiveColor,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(ActiveTheme.container)
+                                .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
+                                .clickable {
+                                    onResetDefault()
+                                    SoundEffectManager.play(context, SoundEffect.SELECT)
+                                    onDismiss()
+                                }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "↺ Default (#)",
+                                color = ActiveTheme.accentDeep,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(ActiveTheme.surfaceTint.copy(alpha = 0.25f))
+                                .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                .clickable { onDismiss() }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Cancel (Back)",
+                                color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Button Assigned! ♡",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(ActiveTheme.surfaceTint.copy(alpha = 0.4f))
+                            .border(1.dp, ActiveTheme.selectionGlow, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        if (physicalKey != null) {
+                            RetroKeyBadge(key = physicalKey, isFocused = true)
+                        } else {
+                            RetroKeyBadge(label = keyBadge, isFocused = true)
+                        }
+                        Column {
+                            Text(
+                                text = keyName,
+                                color = ActiveTheme.accentDeep,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            val scanHex = "0x" + displayScanCode.toString(16).uppercase().padStart(4, '0')
+                            Text(
+                                text = "Scan $scanHex ($displayScanCode) • KeyCode #$displayKeyCode",
+                                color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Action 0: Done / Confirm
+                    val isDoneFocused = selectedActionIndex == 0
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isDoneFocused) ActiveTheme.accentDeep else ActiveTheme.container)
+                            .border(
+                                width = if (isDoneFocused) 1.5.dp else 1.dp,
+                                color = if (isDoneFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable { onDismiss() }
+                            .padding(vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "✓ Done (OK)",
+                            color = if (isDoneFocused) Color.White else ActiveTheme.accentDeep,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(5.dp))
+
+                    // Action 1: Trigger Mode toggle (Hold vs Single Press)
+                    val isModeFocused = selectedActionIndex == 1
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isModeFocused) ActiveTheme.surfaceTint.copy(alpha = 0.45f) else ActiveTheme.container)
+                            .border(
+                                width = if (isModeFocused) 1.5.dp else 1.dp,
+                                color = if (isModeFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable { onToggleLongPress(!isLongPress) }
+                            .padding(vertical = 6.dp, horizontal = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "◄ Mode: ${if (isLongPress) "Hold (Long-Press)" else "Single Tap"} ►",
+                            color = ActiveTheme.accentDeep,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(5.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val isListenAgainFocused = selectedActionIndex == 2
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isListenAgainFocused) ActiveTheme.surfaceTint.copy(alpha = 0.45f) else ActiveTheme.container)
+                                .border(
+                                    width = if (isListenAgainFocused) 1.5.dp else 1.dp,
+                                    color = if (isListenAgainFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable {
+                                    statusHint = null
+                                    isListening = true
+                                }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🔄 Re-Capture",
+                                color = ActiveTheme.accentDeep,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        val isResetFocused = selectedActionIndex == 3
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isResetFocused) ActiveTheme.surfaceTint.copy(alpha = 0.45f) else ActiveTheme.container)
+                                .border(
+                                    width = if (isResetFocused) 1.5.dp else 1.dp,
+                                    color = if (isResetFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable {
+                                    onResetDefault()
+                                    onDismiss()
+                                }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "↺ Default (#)",
+                                color = ActiveTheme.accentDeep,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -1985,7 +3076,6 @@ fun SettingsHubDialog(
     onOpenHardwareButtons: (() -> Unit)? = null,
     onOpenHiddenApps: (() -> Unit)? = null,
     onCreateFolderClick: (() -> Unit)? = null,
-    onOpenSpeedDial: (() -> Unit)? = null,
     onPickWallpaperClick: (() -> Unit)? = null,
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false,
@@ -2007,7 +3097,6 @@ fun SettingsHubDialog(
             onOpenHardwareButtons = onOpenHardwareButtons,
             onOpenHiddenApps = onOpenHiddenApps,
             onCreateFolderClick = onCreateFolderClick,
-            onOpenSpeedDial = onOpenSpeedDial,
             onPickWallpaperClick = onPickWallpaperClick,
             onResetWallpaperClick = onResetWallpaperClick,
             hasCustomWallpaper = hasCustomWallpaper,

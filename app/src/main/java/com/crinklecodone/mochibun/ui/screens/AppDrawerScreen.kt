@@ -92,48 +92,6 @@ fun firstLetterOf(label: String): Char {
 }
 
 /**
- * Standardized close pill button for dialogs and modals:
- * ♥ Close (◄) ♥
- */
-@Composable
-fun KawaiiClosePillButton(
-    isFocused: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    text: String = "♥ Close ♥"
-) {
-    val theme = LocalLauncherTheme.current
-    val pillShape = CircleShape
-
-    Box(
-        modifier = modifier
-            .graphicsLayer { clip = false }
-            .softGlowFocus(
-                isSelected = isFocused,
-                cornerRadius = 20.dp
-            )
-            .clip(pillShape)
-            .background(if (isFocused) theme.focusedContainerColor else theme.unfocusedCardBgColor)
-            .border(
-                1.2.dp,
-                if (isFocused) theme.cardBorderColor else theme.unfocusedCardBorderColor,
-                pillShape
-            )
-            .clickable { onClick() }
-            .padding(horizontal = 18.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = theme.palette.deepAccent,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-/**
  * Soft pill-curved app card in the drawer.
  * Renders an unclipped soft glow on D-pad selection and uses FilterQuality.None on icon images
  * to preserve crisp 1:1 pixel rendering on the 480x800 screen.
@@ -163,65 +121,62 @@ fun AppDrawerCard(
         }
     }
 
-    Card(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .height(60.dp)
             .graphicsLayer { clip = false }
             .softGlowFocus(isSelected = isSelected, cornerRadius = 22.dp)
+            .clip(DrawerCardShape)
+            .background(cardBrush, DrawerCardShape)
+            .then(
+                if (!isSelected) {
+                    Modifier.border(1.5.dp, theme.unfocusedCardBorderColor, DrawerCardShape)
+                } else {
+                    Modifier
+                }
+            )
             .combinedClickable(
                 onClick = { onAppClick(app) },
                 onLongClick = { onAppLongClick(app) }
-            ),
-        shape = DrawerCardShape,
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent
-        ),
-        border = if (isSelected) null else BorderStroke(1.dp, theme.unfocusedCardBorderColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 3.dp else 1.dp)
+            )
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(cardBrush)
+                .padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
+            // Squircle badge with alternating pastel tint
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .size(44.dp)
+                    .clip(DrawerSquircleShape)
+                    .background(squircleTint.container)
+                    .border(1.dp, squircleTint.border, DrawerSquircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                // Squircle badge with alternating pastel tint
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(DrawerSquircleShape)
-                        .background(squircleTint.container)
-                        .border(1.dp, squircleTint.border, DrawerSquircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // FilterQuality.None avoids bilinear blurring on low-resolution / pixel icons at 480x800
-                    Image(
-                        bitmap = app.imageBitmap,
-                        contentDescription = app.name,
-                        filterQuality = FilterQuality.None,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(14.dp))
-
-                // App Title in deep mauve/violet typography
-                Text(
-                    text = app.name,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = theme.palette.textColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                // FilterQuality.None avoids bilinear blurring on low-resolution / pixel icons at 480x800
+                Image(
+                    bitmap = app.imageBitmap,
+                    contentDescription = app.name,
+                    filterQuality = FilterQuality.None,
+                    modifier = Modifier.size(28.dp)
                 )
             }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            // App Title in deep mauve/violet typography
+            Text(
+                text = app.name,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = theme.palette.textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -313,7 +268,6 @@ fun DrawerAlphabetRail(
  */
 @Composable
 fun AppDrawerScreen(
-    context: Context,
     visibleApps: List<LauncherApp>,
     selectedDrawerIndex: Int,
     currentDrawerLetter: Char?,

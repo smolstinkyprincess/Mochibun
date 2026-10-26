@@ -1,12 +1,9 @@
 package com.crinklecodone.mochibun.ui
 
-import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
 import android.provider.Settings
-import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,7 +23,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,52 +38,44 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
-import com.crinklecodone.mochibun.data.repository.IconPackManager
-import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
+import com.crinklecodone.mochibun.core.keypad.HomeTransitionTracker
+import com.crinklecodone.mochibun.core.keypad.LauncherKeypadActions
+import com.crinklecodone.mochibun.core.keypad.LauncherKeypadState
+import com.crinklecodone.mochibun.core.keypad.T9InputState
+import com.crinklecodone.mochibun.core.sound.SoundEffect
+import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.data.model.AppInfo
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
 import com.crinklecodone.mochibun.data.model.FavoriteSlotItem
 import com.crinklecodone.mochibun.data.model.LauncherApp
-import com.crinklecodone.mochibun.core.util.loadWallpaperBitmap
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import com.crinklecodone.mochibun.data.repository.BundlePreviewData
+import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
+import com.crinklecodone.mochibun.data.repository.ThemeBundleManager
 import com.crinklecodone.mochibun.ui.components.WidgetPage
 import com.crinklecodone.mochibun.ui.dialogs.AppActionDialog
 import com.crinklecodone.mochibun.ui.dialogs.CreateFavoriteFolderDialog
-import com.crinklecodone.mochibun.ui.dialogs.EditUserNameDialog
 import com.crinklecodone.mochibun.ui.dialogs.FavoriteFolderDialog
 import com.crinklecodone.mochibun.ui.dialogs.FolderActionDialog
 import com.crinklecodone.mochibun.ui.dialogs.HardwareButtonsDialog
 import com.crinklecodone.mochibun.ui.dialogs.HiddenAppsDialog
-import com.crinklecodone.mochibun.core.sound.SoundEffect
-import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.ui.dialogs.IconPackSelectionDialog
 import com.crinklecodone.mochibun.ui.dialogs.KaomojiWheelDialog
 import com.crinklecodone.mochibun.ui.dialogs.KawaiiIconPicker
-import com.crinklecodone.mochibun.ui.dialogs.QuickMemoDialog
-import com.crinklecodone.mochibun.ui.dialogs.SpeedDialDialog
-import com.crinklecodone.mochibun.ui.dialogs.dialogWidth
-import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
-import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
-import com.crinklecodone.mochibun.ui.screens.AppDrawerScreen
-import com.crinklecodone.mochibun.ui.screens.SettingsHubDialog
-import com.crinklecodone.mochibun.data.repository.ThemeBundleManager
-import com.crinklecodone.mochibun.data.repository.BundlePreviewData
 import com.crinklecodone.mochibun.ui.dialogs.PresetPreviewDialog
+import com.crinklecodone.mochibun.ui.dialogs.awaitFocusSafely
+import com.crinklecodone.mochibun.ui.dialogs.dialogWidth
+import com.crinklecodone.mochibun.ui.screens.AppDrawerScreen
 import com.crinklecodone.mochibun.ui.screens.HomeScreen
 import com.crinklecodone.mochibun.ui.screens.NotificationsScreen
-import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import com.crinklecodone.mochibun.ui.screens.SettingsHubDialog
 import com.crinklecodone.mochibun.ui.screens.ThemeStudioDialog
 import com.crinklecodone.mochibun.ui.screens.firstLetterOf
+import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.loadSavedTheme
 import com.crinklecodone.mochibun.ui.theme.saveTheme
-import com.crinklecodone.mochibun.ui.theme.LauncherTheme
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.util.UUID
-import kotlin.collections.get
-import kotlin.text.get
 
 // main launcher composable managing focus, gestures, state, and page navigation
 @Composable
@@ -161,7 +149,6 @@ fun MainLauncher(
     val cardBgColor = theme.cardBgColor
     val cardTextColor = theme.cardTextColor
     val appActionColor = theme.appActionColor
-    val greetingOutlineColor = theme.greetingOutlineColor
     var iconEditingFolder by remember { mutableStateOf<FavoriteFolder?>(null) }
     var folderIconMenuOpen by remember { mutableStateOf(false) }
 
@@ -195,10 +182,10 @@ fun MainLauncher(
         ExternalThemeManager.init(context)
     }
     val isPixelSprayEnabled by PreferencesManager.isPixelSprayEnabled.collectAsState()
-    var editUserNameDialogOpen by remember { mutableStateOf(false) }
     var launcherMenuOpen by remember { mutableStateOf(false) }
     var hiddenManagerOpen by remember { mutableStateOf(false) }
     var hardwareButtonsDialogOpen by remember { mutableStateOf(false) }
+    var initialRemapKeyCode by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(requestedPage) {
         requestedPage?.let { target ->
@@ -264,8 +251,6 @@ fun MainLauncher(
     var poundKeyState by remember { mutableIntStateOf(0) }
     val t9State = remember { T9InputState() }
     val focusRequester = remember { FocusRequester() }
-    var speedDialDialogOpen by remember { mutableStateOf(false) }
-    var quickMemoDialogOpen by remember { mutableStateOf(false) }
     var kaomojiWheelDialogOpen by remember { mutableStateOf(false) }
 
     val anyModalOpen = selectedApp != null ||
@@ -275,13 +260,10 @@ fun MainLauncher(
         hiddenManagerOpen ||
         themeStudioOpen ||
         hardwareButtonsDialogOpen ||
-        editUserNameDialogOpen ||
         openedFolderId != null ||
         createFolderDialogOpen ||
         folderToCreateFrom != null ||
         folderIconMenuOpen ||
-        speedDialDialogOpen ||
-        quickMemoDialogOpen ||
         kaomojiWheelDialogOpen ||
         activeIncomingPreview != null
 
@@ -309,13 +291,10 @@ fun MainLauncher(
             hiddenManagerOpen = false
             themeStudioOpen = false
             hardwareButtonsDialogOpen = false
-            editUserNameDialogOpen = false
             openedFolderId = null
             createFolderDialogOpen = false
             folderToCreateFrom = null
             folderIconMenuOpen = false
-            speedDialDialogOpen = false
-            quickMemoDialogOpen = false
             kaomojiWheelDialogOpen = false
             drawerOpen = false
             centerKeyState = 0
@@ -382,7 +361,7 @@ fun MainLauncher(
                 (selectedItem.offset + selectedItem.size) <= viewportEnd
 
             if (!isFullyVisible) {
-                listState.animateScrollToItem(selectedDrawerIndex)
+                listState.scrollToItem(selectedDrawerIndex)
             }
         }
     }
@@ -424,9 +403,12 @@ fun MainLauncher(
         }
     }
 
-    // Timed long-press detection for Pound (#) key to open Kaomoji radial wheel
-    LaunchedEffect(poundKeyState, drawerOpen, isHomeScreenActive, anyModalOpen) {
-        if (poundKeyState == 1 && !anyModalOpen && (drawerOpen || isHomeScreenActive)) {
+    // Timed long-press detection for configured Kaomoji trigger key to open Kaomoji radial wheel
+    val kaomojiTriggerKeyCode by PreferencesManager.kaomojiTriggerKeyCode.collectAsState()
+    val kaomojiTriggerScanCode by PreferencesManager.kaomojiTriggerScanCode.collectAsState()
+    val kaomojiTriggerLongPress by PreferencesManager.kaomojiTriggerLongPress.collectAsState()
+    LaunchedEffect(poundKeyState, drawerOpen, isHomeScreenActive, anyModalOpen, kaomojiTriggerKeyCode, kaomojiTriggerScanCode, kaomojiTriggerLongPress) {
+        if (kaomojiTriggerLongPress && poundKeyState == 1 && !anyModalOpen && (drawerOpen || isHomeScreenActive)) {
             delay(400L)
             if (poundKeyState == 1 && !anyModalOpen) {
                 poundKeyState = 2
@@ -450,14 +432,7 @@ fun MainLauncher(
         }
 
         if (drawerOpen || isHomeScreenActive) {
-            repeat(6) {
-                try {
-                    focusRequester.requestFocus()
-                    return@LaunchedEffect
-                } catch (_: Exception) {
-                    delay(35)
-                }
-            }
+            focusRequester.awaitFocusSafely(attempts = 6)
         }
     }
 
@@ -471,7 +446,6 @@ fun MainLauncher(
             iconPickerOpen = false
             iconPackDialogOpen = false
             hiddenManagerOpen = false
-            editUserNameDialogOpen = false
             openedFolderId = null
             folderToCreateFrom = null
             createFolderDialogOpen = false
@@ -511,8 +485,10 @@ fun MainLauncher(
                 openedFolderId = folderId
             }
             override fun openLauncherMenu() { launcherMenuOpen = true }
-            override fun openSpeedDial(digit: Int) { speedDialDialogOpen = true }
-            override fun openQuickMemo() { quickMemoDialogOpen = true }
+            override fun openSpeedDial(digit: Int) {
+                initialRemapKeyCode = android.view.KeyEvent.KEYCODE_0 + digit
+                hardwareButtonsDialogOpen = true
+            }
             override fun setPoundKeyState(state: Int) { poundKeyState = state }
             override fun openKaomojiWheel() { kaomojiWheelDialogOpen = true }
         }
@@ -750,7 +726,17 @@ fun MainLauncher(
                                 onAppLongClick = onHomeAppLongClick,
                                 onFolderClick = onHomeFolderClick,
                                 onFolderLongClick = onHomeFolderLongClick,
-                                onOpenDrawer = onHomeOpenDrawer
+                                onOpenDrawer = onHomeOpenDrawer,
+                                onNavigateToStats = {
+                                    savedFavoriteIndexOnHome = selectedFavoriteIndex
+                                    pendingTargetPage = 0
+                                    scope.launch { pagerState.animateScrollToPage(0) }
+                                },
+                                onNavigateToNotifications = {
+                                    savedFavoriteIndexOnHome = selectedFavoriteIndex
+                                    pendingTargetPage = 2
+                                    scope.launch { pagerState.animateScrollToPage(2) }
+                                }
                             )
                         }
                     }
@@ -767,9 +753,6 @@ fun MainLauncher(
                         if (!drawerOpen && (pagerState.currentPage == 2 || pagerState.targetPage == 2 || pendingTargetPage == 2)) {
                             NotificationsScreen(
                                 context = context,
-                                cardBgColor = cardBgColor,
-                                cardTextColor = cardTextColor,
-                                appActionColor = appActionColor,
                                 cardRoundness = cardRoundness,
                                 isActivePage = isNotificationPageActive,
                                 onNavigateHome = {
@@ -800,7 +783,7 @@ fun MainLauncher(
                         iconPackDialogOpen = true
                     },
                     onOpenHardwareButtons = {
-                        launcherMenuOpen = false
+                        initialRemapKeyCode = null
                         hardwareButtonsDialogOpen = true
                     },
                     onOpenHiddenApps = {
@@ -824,10 +807,6 @@ fun MainLauncher(
                         launcherMenuOpen = false
                         launcherVm.resetWallpaper()
                     },
-                    onOpenSpeedDial = {
-                        launcherMenuOpen = false
-                        speedDialDialogOpen = true
-                    },
                     hasCustomWallpaper = launcherVm.wallpaperUri != null,
                     onSettingsRestored = {
                         currentTheme = loadSavedTheme(preferences)
@@ -846,19 +825,6 @@ fun MainLauncher(
                     onIconPackSelected = { _ ->
                         iconPackDialogOpen = false
                         launcherVm.onIconPackChanged()
-                    }
-                )
-            }
-
-            if (editUserNameDialogOpen) {
-                EditUserNameDialog(
-                    currentName = userName,
-                    onDismiss = {
-                        editUserNameDialogOpen = false
-                    },
-                    onSave = { newName ->
-                        PreferencesManager.setCustomUserName(context, newName)
-                        editUserNameDialogOpen = false
                     }
                 )
             }
@@ -882,25 +848,10 @@ fun MainLauncher(
             if (hardwareButtonsDialogOpen) {
                 HardwareButtonsDialog(
                     installedApps = apps.map { AppInfo(it.packageName, it.name) },
+                    initialCapturedKeyCode = initialRemapKeyCode,
                     onDismiss = {
                         hardwareButtonsDialogOpen = false
-                    }
-                )
-            }
-
-            if (speedDialDialogOpen) {
-                SpeedDialDialog(
-                    apps = visibleApps,
-                    onDismiss = {
-                        speedDialDialogOpen = false
-                    }
-                )
-            }
-
-            if (quickMemoDialogOpen) {
-                QuickMemoDialog(
-                    onDismiss = {
-                        quickMemoDialogOpen = false
+                        initialRemapKeyCode = null
                     }
                 )
             }
@@ -920,9 +871,6 @@ fun MainLauncher(
                 AppActionDialog(
                     app = targetApp,
                     favoritePackages = favoritePackages,
-                    cardBgColor = cardBgColor,
-                    cardTextColor = cardTextColor,
-                    appActionColor = appActionColor,
                     cardRoundness = cardRoundness,
                     onDismiss = {
                         selectedApp = null
@@ -1128,9 +1076,6 @@ fun MainLauncher(
                     existingFolders = favoriteFolders,
                     initialEditingName = folderOpenStartRename,
                     initialPickingApps = folderOpenStartPicker,
-                    cardBgColor = cardBgColor,
-                    cardTextColor = cardTextColor,
-                    appActionColor = appActionColor,
                     cardRoundness = cardRoundness,
                     onLaunchApp = { app ->
                         context.packageManager.getLaunchIntentForPackage(
@@ -1162,13 +1107,6 @@ fun MainLauncher(
                         folderOpenStartRename = false
                         folderOpenStartPicker = false
                     },
-                    onOpenFolderOptions = {
-                        iconEditingFolder = openedFolder
-                        folderIconMenuOpen = true
-                        openedFolderId = null
-                        folderOpenStartRename = false
-                        folderOpenStartPicker = false
-                    },
                     onDismiss = {
                         lastOpenedFolderId?.let { id ->
                             val itemIdx = favoriteItems.indexOfFirst {
@@ -1192,10 +1130,6 @@ fun MainLauncher(
                     initialApp = folderToCreateFrom,
                     availableApps = visibleApps,
                     existingFolders = favoriteFolders,
-                    cardBgColor = cardBgColor,
-                    cardTextColor = cardTextColor,
-                    appActionColor = appActionColor,
-                    cardRoundness = cardRoundness,
                     onDismiss = {
                         folderToCreateFrom = null
                         createFolderDialogOpen = false
@@ -1251,7 +1185,6 @@ fun MainLauncher(
             // app drawer view overlay
             if (drawerOpen) {
                 AppDrawerScreen(
-                    context = context,
                     visibleApps = visibleApps,
                     selectedDrawerIndex = selectedDrawerIndex,
                     currentDrawerLetter = currentDrawerLetter,

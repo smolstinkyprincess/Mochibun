@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Mochibun</string>
     <string name="accessibility_service_label">Mochibun Button Remapper</string>
-    <string name="accessibility_service_description">Enables system-wide physical button actions (launching apps, AI chat, shortcuts, double-tap, long-press) for Mochibun on AT-M120.</string>
+    <string name="accessibility_service_description">Enables system-wide physical button actions (launching apps, shortcuts, double-tap, long-press) for Mochibun on AT-M120.</string>
     <string name="virtual_cursor_service_label">Mochibun Virtual Mouse</string>
     <string name="virtual_cursor_service_description">Provides physical D-pad virtual mouse cursor navigation and touch dispatch for Mochibun on AT-M120.</string>
 </resources>

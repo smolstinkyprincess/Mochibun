@@ -2,8 +2,6 @@ package com.crinklecodone.mochibun.core.system
 
 import android.util.Log
 import com.topjohnwu.superuser.Shell
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * High-performance, non-blocking touch injector for the Chinoe AT-M120 virtual mouse cursor.
@@ -37,17 +35,20 @@ object RootTouchInjector {
     }
 
     /**
-     * Executes tap as a suspending call on Dispatchers.IO and returns whether it succeeded.
+     * Queues a swipe gesture asynchronously via libsu's persistent daemon queue without
+     * blocking the caller or the main UI thread.
      */
-    suspend fun injectTap(x: Int, y: Int): Boolean = withContext(Dispatchers.IO) {
-        if (!RootShell.isSuBinaryPresent()) return@withContext false
+    fun swipeAsync(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long = 200L) {
+        if (!RootShell.isSuBinaryPresent()) return
 
         try {
-            val result = Shell.cmd("input tap $x $y").exec()
-            result.isSuccess
+            Shell.cmd("input swipe $x1 $y1 $x2 $y2 $durationMs").submit { result ->
+                if (!result.isSuccess) {
+                    Log.w(TAG, "Root swipe ($x1, $y1)->($x2, $y2) exited with code ${result.code}")
+                }
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "Root tap execution failed at ($x, $y): ${e.message}")
-            false
+            Log.w(TAG, "Failed to submit root swipe ($x1, $y1)->($x2, $y2): ${e.message}")
         }
     }
 

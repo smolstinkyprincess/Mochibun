@@ -4,13 +4,11 @@ import android.content.Context
 import android.media.AudioManager
 import android.widget.Toast
 import android.os.SystemClock
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.view.KeyEvent
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
+import com.crinklecodone.mochibun.core.haptic.HapticManager
 import com.crinklecodone.mochibun.core.keypad.HomeTransitionTracker
 import com.crinklecodone.mochibun.core.keypad.LauncherKeypadActions
 import com.crinklecodone.mochibun.core.keypad.LauncherKeypadState
@@ -18,33 +16,21 @@ import com.crinklecodone.mochibun.core.keypad.T9InputState
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.core.system.TorchManager
-import com.crinklecodone.mochibun.data.model.FavoriteFolder
+import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.FavoriteSlotItem
-import com.crinklecodone.mochibun.data.model.LauncherApp
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-// Backward-compatible typealiases for callers targeting com.crinklecodone.mochibun.ui
-typealias HomeTransitionTracker = com.crinklecodone.mochibun.core.keypad.HomeTransitionTracker
-typealias T9InputState = com.crinklecodone.mochibun.core.keypad.T9InputState
-typealias LauncherKeypadState = com.crinklecodone.mochibun.core.keypad.LauncherKeypadState
-typealias LauncherKeypadActions = com.crinklecodone.mochibun.core.keypad.LauncherKeypadActions
-
 /**
  * Triggers a subtle tactile boundary haptic buzz (14ms) when hitting edge limits of lists/carousels.
  */
 internal fun performBoundaryHaptic(context: Context) {
-    SoundEffectManager.play(context, SoundEffect.BOUNDARY)
-    if (!PreferencesManager.isDpadBoundaryHaptics(context)) return
-    try {
-        val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-        val vibrator = vm?.defaultVibrator ?: (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
-        vibrator?.vibrate(VibrationEffect.createOneShot(14, VibrationEffect.DEFAULT_AMPLITUDE))
-    } catch (_: Exception) {}
+    HapticManager.performBoundaryHaptic(context)
 }
 
 /**
@@ -108,22 +94,54 @@ internal class LauncherKeyHandler(
         }
 
         if (nativeEvent.action == KeyEvent.ACTION_UP) {
-            if (nativeEvent.keyCode == KeyEvent.KEYCODE_POUND) {
+            if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode, nativeEvent.scanCode, context)) {
                 val wasShortPress = state.poundKeyState == 1
                 actions.setPoundKeyState(0)
-                if (wasShortPress) {
-                    SoundEffectManager.play(context, SoundEffect.SELECT)
-                    actions.openLauncherMenu()
+                if (wasShortPress && PreferencesManager.isKaomojiTriggerLongPress(context)) {
+                    when (nativeEvent.keyCode) {
+                        KeyEvent.KEYCODE_POUND -> {
+                            SoundEffectManager.play(context, SoundEffect.SELECT)
+                            actions.openLauncherMenu()
+                        }
+                        KeyEvent.KEYCODE_STAR,
+                        KeyEvent.KEYCODE_MENU -> {
+                            SoundEffectManager.play(context, SoundEffect.SELECT)
+                            actions.openContextActionForCurrentFocus()
+                        }
+                        KeyEvent.KEYCODE_F4 -> {
+                            if (state.drawerOpen) {
+                                SoundEffectManager.play(context, SoundEffect.BACK)
+                                actions.setDrawerOpen(false)
+                            }
+                        }
+                        in KeyEvent.KEYCODE_1..KeyEvent.KEYCODE_9,
+                        in KeyEvent.KEYCODE_NUMPAD_1..KeyEvent.KEYCODE_NUMPAD_9 -> {
+                            handleNumericKey(
+                                KeyEvent(KeyEvent.ACTION_DOWN, nativeEvent.keyCode),
+                                state
+                            )
+                        }
+                    }
                 }
+                return true
+            }
+
+            if (nativeEvent.keyCode == KeyEvent.KEYCODE_POUND) {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                actions.openLauncherMenu()
                 return true
             }
 
             if (isDpadOrActionKey(nativeEvent.keyCode) ||
                 nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
                 (nativeEvent.keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) ||
+                (nativeEvent.keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9) ||
                 nativeEvent.keyCode == KeyEvent.KEYCODE_STAR ||
+                nativeEvent.keyCode == KeyEvent.KEYCODE_CALL ||
                 isBackDismissKey(nativeEvent.keyCode) ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_F4
+                nativeEvent.keyCode == KeyEvent.KEYCODE_F4 ||
+                nativeEvent.keyCode == KeyEvent.KEYCODE_F1 ||
+                nativeEvent.keyCode == KeyEvent.KEYCODE_CAMERA
             ) {
                 return true
             }
@@ -203,7 +221,65 @@ internal class LauncherKeyHandler(
     }
 
     private fun handleActionDown(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
+        if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode, nativeEvent.scanCode, context)) {
+            if (!PreferencesManager.isKaomojiTriggerLongPress(context)) {
+                if (nativeEvent.repeatCount == 0) {
+                    actions.setPoundKeyState(2)
+                    performBoundaryHaptic(context)
+                    SoundEffectManager.play(context, SoundEffect.CLICK)
+                    actions.openKaomojiWheel()
+                }
+                return true
+            } else {
+                if (nativeEvent.repeatCount == 0) {
+                    SoundEffectManager.play(context, SoundEffect.CLICK)
+                    actions.setPoundKeyState(1)
+                } else if (state.poundKeyState == 1 || nativeEvent.isLongPress) {
+                    actions.setPoundKeyState(2)
+                    performBoundaryHaptic(context)
+                    SoundEffectManager.play(context, SoundEffect.CLICK)
+                    actions.openKaomojiWheel()
+                }
+                return true
+            }
+        }
+
+        if (nativeEvent.scanCode == 59) {
+            if (nativeEvent.repeatCount == 0) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                actions.setPendingTargetPage(0)
+                scope.launch { pagerState.animateScrollToPage(0) }
+            }
+            return true
+        }
+        if (nativeEvent.scanCode == 212) {
+            if (nativeEvent.repeatCount == 0) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                actions.setPendingTargetPage(2)
+                scope.launch { pagerState.animateScrollToPage(2) }
+            }
+            return true
+        }
+
         when (nativeEvent.keyCode) {
+            KeyEvent.KEYCODE_F1 -> {
+                if (nativeEvent.repeatCount == 0) {
+                    SoundEffectManager.play(context, SoundEffect.NAV)
+                    actions.setPendingTargetPage(0)
+                    scope.launch { pagerState.animateScrollToPage(0) }
+                }
+                return true
+            }
+
+            KeyEvent.KEYCODE_CAMERA -> {
+                if (nativeEvent.repeatCount == 0) {
+                    SoundEffectManager.play(context, SoundEffect.NAV)
+                    actions.setPendingTargetPage(2)
+                    scope.launch { pagerState.animateScrollToPage(2) }
+                }
+                return true
+            }
+
             KeyEvent.KEYCODE_MENU -> {
                 if (nativeEvent.repeatCount == 0) {
                     SoundEffectManager.play(context, SoundEffect.CLICK)
@@ -225,12 +301,6 @@ internal class LauncherKeyHandler(
             KeyEvent.KEYCODE_POUND -> {
                 if (nativeEvent.repeatCount == 0) {
                     SoundEffectManager.play(context, SoundEffect.CLICK)
-                    actions.setPoundKeyState(1)
-                } else if (state.poundKeyState == 1 || nativeEvent.isLongPress) {
-                    actions.setPoundKeyState(2)
-                    performBoundaryHaptic(context)
-                    SoundEffectManager.play(context, SoundEffect.CLICK)
-                    actions.openKaomojiWheel()
                 }
                 return true
             }
@@ -280,6 +350,91 @@ internal class LauncherKeyHandler(
             SoundEffectManager.play(context, SoundEffect.CLICK)
         }
 
+        val speedDialDigit = when (nativeEvent.keyCode) {
+            KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_NUMPAD_2 -> 2
+            KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_NUMPAD_3 -> 3
+            KeyEvent.KEYCODE_4, KeyEvent.KEYCODE_NUMPAD_4 -> 4
+            KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_NUMPAD_5 -> 5
+            KeyEvent.KEYCODE_6, KeyEvent.KEYCODE_NUMPAD_6 -> 6
+            KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_NUMPAD_7 -> 7
+            KeyEvent.KEYCODE_8, KeyEvent.KEYCODE_NUMPAD_8 -> 8
+            KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_NUMPAD_9 -> 9
+            else -> null
+        }
+
+        if (!state.drawerOpen && nativeEvent.repeatCount == 1) {
+            val config = HardwareRemapManager.getButtonActionConfigForKey(
+                context,
+                nativeEvent.keyCode,
+                nativeEvent.scanCode
+            )
+            when (val holdAction = config.longPressAction) {
+                is ActionType.LaunchApp -> {
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(holdAction.packageName)
+                    if (launchIntent != null) {
+                        performBoundaryHaptic(context)
+                        context.startActivity(launchIntent)
+                        return true
+                    }
+                }
+                is ActionType.ToggleFlashlight -> {
+                    val isTorchOn = TorchManager.toggleTorch(context)
+                    performBoundaryHaptic(context)
+                    if (isTorchOn == true) {
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        Toast.makeText(context, "🔦 Flashlight On", Toast.LENGTH_SHORT).show()
+                    } else if (isTorchOn == false) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        Toast.makeText(context, "🔦 Flashlight Off", Toast.LENGTH_SHORT).show()
+                    }
+                    return true
+                }
+                is ActionType.GlobalRecents,
+                is ActionType.OpenRecentsSystem -> {
+                    performBoundaryHaptic(context)
+                    try {
+                        val intent = android.content.Intent(context, com.android.quickstep.RecentsActivity::class.java)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    } catch (_: Exception) {}
+                    return true
+                }
+                is ActionType.GlobalNotifications -> {
+                    performBoundaryHaptic(context)
+                    try {
+                        @Suppress("WrongConstant")
+                        val statusBarService = context.getSystemService("statusbar")
+                        val statusBarManager = Class.forName("android.app.StatusBarManager")
+                        statusBarManager.getMethod("expandNotificationsPanel").invoke(statusBarService)
+                    } catch (_: Exception) {}
+                    return true
+                }
+                is ActionType.GlobalBack -> {
+                    performBoundaryHaptic(context)
+                    return true
+                }
+                is ActionType.OpenWidgetsPage -> {
+                    performBoundaryHaptic(context)
+                    actions.setPendingTargetPage(0)
+                    scope.launch { pagerState.animateScrollToPage(0) }
+                    return true
+                }
+                is ActionType.OpenNotificationsPage -> {
+                    performBoundaryHaptic(context)
+                    actions.setPendingTargetPage(2)
+                    scope.launch { pagerState.animateScrollToPage(2) }
+                    return true
+                }
+                is ActionType.None -> {
+                    if (speedDialDigit != null) {
+                        performBoundaryHaptic(context)
+                        actions.openSpeedDial(speedDialDigit)
+                        return true
+                    }
+                }
+            }
+        }
+
         if (nativeEvent.keyCode == KeyEvent.KEYCODE_0 || nativeEvent.keyCode == KeyEvent.KEYCODE_NUMPAD_0) {
             if (nativeEvent.repeatCount == 1) {
                 val isTorchOn = TorchManager.toggleTorch(context)
@@ -295,54 +450,10 @@ internal class LauncherKeyHandler(
             return true
         }
 
-        val speedDialDigit = when (nativeEvent.keyCode) {
-            KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_NUMPAD_2 -> 2
-            KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_NUMPAD_3 -> 3
-            KeyEvent.KEYCODE_4, KeyEvent.KEYCODE_NUMPAD_4 -> 4
-            KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_NUMPAD_5 -> 5
-            KeyEvent.KEYCODE_6, KeyEvent.KEYCODE_NUMPAD_6 -> 6
-            KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_NUMPAD_7 -> 7
-            KeyEvent.KEYCODE_8, KeyEvent.KEYCODE_NUMPAD_8 -> 8
-            KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_NUMPAD_9 -> 9
-            else -> null
-        }
-
-        if (!state.drawerOpen && speedDialDigit != null && nativeEvent.repeatCount == 1) {
-            val assignedPkg = PreferencesManager.getSpeedDialPackage(context, speedDialDigit)
-            if (!assignedPkg.isNullOrBlank()) {
-                val launchIntent = context.packageManager.getLaunchIntentForPackage(assignedPkg)
-                if (launchIntent != null) {
-                    performBoundaryHaptic(context)
-                    context.startActivity(launchIntent)
-                    return true
-                }
-            }
-            performBoundaryHaptic(context)
-            actions.openSpeedDial(speedDialDigit)
-            return true
-        }
-
         if (nativeEvent.repeatCount > 0) return true
 
         if (!state.drawerOpen) {
-            when (nativeEvent.keyCode) {
-                KeyEvent.KEYCODE_1, KeyEvent.KEYCODE_NUMPAD_1 -> {
-                    actions.setPendingTargetPage(0)
-                    scope.launch { pagerState.animateScrollToPage(0) }
-                    return true
-                }
-                KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_NUMPAD_2 -> {
-                    actions.setPendingTargetPage(1)
-                    scope.launch { pagerState.animateScrollToPage(1) }
-                    return true
-                }
-                KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_NUMPAD_3 -> {
-                    actions.setPendingTargetPage(2)
-                    scope.launch { pagerState.animateScrollToPage(2) }
-                    return true
-                }
-                else -> return true
-            }
+            return true
         }
 
         val t9Letters = when (nativeEvent.keyCode) {
@@ -573,88 +684,4 @@ internal class LauncherKeyHandler(
             Toast.makeText(context, label, Toast.LENGTH_SHORT).show()
         }
     }
-}
-
-/**
- * Backward-compatible entry point delegating to [LauncherKeyHandler].
- */
-internal fun handleMainLauncherKeyEvent(
-    event: ComposeKeyEvent,
-    context: Context,
-    scope: CoroutineScope,
-    pagerState: PagerState,
-    listState: LazyListState,
-    homeTracker: HomeTransitionTracker,
-    t9State: T9InputState,
-    anyModalOpen: Boolean,
-    drawerOpen: Boolean,
-    isHomeScreenActive: Boolean,
-    pendingTargetPage: Int?,
-    favoriteItemCount: Int,
-    selectedFavoriteIndex: Int,
-    savedFavoriteIndexOnHome: Int,
-    homeFocusArea: Int,
-    centerKeyState: Int,
-    selectedDrawerIndex: Int,
-    visibleApps: List<LauncherApp>,
-    favoriteApps: List<LauncherApp> = emptyList(),
-    favoriteFolders: List<FavoriteFolder> = emptyList(),
-    favoriteItems: List<FavoriteSlotItem> = emptyList(),
-    letterStarts: Map<Char, Int>,
-    onSetDrawerOpen: (Boolean) -> Unit,
-    onSetSelectedDrawerIndex: (Int) -> Unit,
-    onSetHomeFocusArea: (Int) -> Unit,
-    onSetSelectedFavoriteIndex: (Int) -> Unit,
-    onSetSavedFavoriteIndexOnHome: (Int) -> Unit,
-    onSetPendingTargetPage: (Int?) -> Unit,
-    onSetCenterKeyState: (Int) -> Unit,
-    onOpenContextActionForCurrentFocus: () -> Unit,
-    onOpenFolder: (id: String) -> Unit,
-    onOpenLauncherMenu: () -> Unit,
-    onOpenSpeedDial: (digit: Int) -> Unit = {}
-): Boolean {
-    val state = LauncherKeypadState(
-        anyModalOpen = anyModalOpen,
-        drawerOpen = drawerOpen,
-        isHomeScreenActive = isHomeScreenActive,
-        isPageTransitioning = !drawerOpen && (pagerState.isScrollInProgress || (pendingTargetPage != null && pendingTargetPage != pagerState.settledPage)),
-        pendingTargetPage = pendingTargetPage,
-        favoriteItemCount = favoriteItemCount,
-        selectedFavoriteIndex = selectedFavoriteIndex,
-        savedFavoriteIndexOnHome = savedFavoriteIndexOnHome,
-        homeFocusArea = homeFocusArea,
-        centerKeyState = centerKeyState,
-        selectedDrawerIndex = selectedDrawerIndex,
-        visibleApps = visibleApps,
-        favoriteApps = favoriteApps,
-        favoriteFolders = favoriteFolders,
-        favoriteItems = favoriteItems,
-        letterStarts = letterStarts
-    )
-
-    val actions = object : LauncherKeypadActions {
-        override fun setDrawerOpen(open: Boolean) = onSetDrawerOpen(open)
-        override fun setSelectedDrawerIndex(index: Int) = onSetSelectedDrawerIndex(index)
-        override fun setHomeFocusArea(area: Int) = onSetHomeFocusArea(area)
-        override fun setSelectedFavoriteIndex(index: Int) = onSetSelectedFavoriteIndex(index)
-        override fun setSavedFavoriteIndexOnHome(index: Int) = onSetSavedFavoriteIndexOnHome(index)
-        override fun setPendingTargetPage(page: Int?) = onSetPendingTargetPage(page)
-        override fun setCenterKeyState(state: Int) = onSetCenterKeyState(state)
-        override fun openContextActionForCurrentFocus() = onOpenContextActionForCurrentFocus()
-        override fun openFolder(folderId: String) = onOpenFolder(folderId)
-        override fun openLauncherMenu() = onOpenLauncherMenu()
-        override fun openSpeedDial(digit: Int) = onOpenSpeedDial(digit)
-    }
-
-    val handler = LauncherKeyHandler(
-        context = context,
-        scope = scope,
-        pagerState = pagerState,
-        listState = listState,
-        homeTracker = homeTracker,
-        t9State = t9State,
-        actions = actions
-    )
-
-    return handler.handleKeyEvent(event, state)
 }

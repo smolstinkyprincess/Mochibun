@@ -13,6 +13,7 @@ data class KaomojiCategory(
 
 /**
  * In-memory repository providing organized Japanese kaomoji for the physical keypad radial wheel.
+ * Curated specifically for the AT-M120 (Android 12) font fallback stack to prevent 'tofu' (□) boxes.
  */
 object KaomojiRepository {
     val categories: List<KaomojiCategory> = listOf(
@@ -26,7 +27,14 @@ object KaomojiRepository {
                 "(๑ > ᴗ < ๑)",
                 "٩(ˊᗜˋ*)و",
                 "(*ˊᗜˋ*)",
-                "(✿◠‿◠)"
+                "(✿◠‿◠)",
+                "( ˙꒳​˙ )",
+                "⸜(｡˃ ᵕ ˂ )⸝",
+                "( ´ ▽ ` )ﾉ",
+                "＼(＾▽＾)／",
+                "(o^▽^o)",
+                "(*˘︶˘*)",
+                "( ´ ▿ ` )"
             )
         ),
         KaomojiCategory(
@@ -39,7 +47,14 @@ object KaomojiRepository {
                 "(づ๑•ᴗ•๑)づ",
                 "(っ´∀｀)っ",
                 "(♡´͈ ᵕ `͈ )",
-                "(⁄ ⁄>⁄ ▽ ⁄<⁄ ⁄)"
+                "(⁄ ⁄>⁄ ▽ ⁄<⁄ ⁄)",
+                "૮꒰ ˶• ༝ •˶꒱ა ♡",
+                "( ˘ ³˘)♡",
+                "(人´3`)⌒♡",
+                "(´｡• ᵕ •｡`) ♡",
+                "(♡ˊ͈ ꒳ ˋ͈)",
+                "(*♡∀♡)",
+                "╰(⸝⸝⸝´꒳`⸝⸝⸝)╯"
             )
         ),
         KaomojiCategory(
@@ -52,7 +67,14 @@ object KaomojiRepository {
                 "( ˵ •̀ ᴗ - ˵ ) ✧",
                 "૮₍ ˶•⤙•˶ ₎ა",
                 "(ง •̀_•́)ง",
-                "( ꩜ ᯅ ꩜ )"
+                "( ꩜ ᯅ ꩜ )",
+                "(๑・ω・๑)",
+                "₍ᐢ. ̫.ᐢ₎",
+                "(=^･ω･^=)",
+                "(๑>ᴗ<๑)",
+                "( ๑•̀ㅂ•́)و",
+                "(=`ω´=)",
+                "(｡•́‿•̀｡)"
             )
         ),
         KaomojiCategory(
@@ -65,7 +87,14 @@ object KaomojiRepository {
                 "( -_・)ヾ",
                 "(つω`*)",
                 "( ´･ω･)",
-                "(,,>﹏<,,)"
+                "(,,>﹏<,,)",
+                "( ु⁎ᴗ_ᴗ⁎)ु.zZ",
+                "(。-ω-)zzz",
+                "(∪｡∪)｡｡zzZ",
+                "( -ω-) zzZ",
+                "(－_－) zzz",
+                "(つд⊂)",
+                "(´-ω-`)"
             )
         ),
         KaomojiCategory(
@@ -78,7 +107,14 @@ object KaomojiRepository {
                 "(⊙_⊙)",
                 "(•ิ_•ิ)?",
                 "( ⚆ _ ⚆ )",
-                "(°ロ°) !"
+                "(°ロ°) !",
+                "( ; ﾟДﾟ)",
+                "(・・?)",
+                "(゜Д゜;)",
+                "(・o・)",
+                "(O_O;)",
+                "Σ(ﾟДﾟ)",
+                "(・∀・;)?"
             )
         ),
         KaomojiCategory(
@@ -90,7 +126,15 @@ object KaomojiRepository {
                 "(⁄ ⁄•⁄ω⁄•⁄ ⁄)",
                 "( ๑॔˃̶◡ ˂̶๑॓)",
                 "(¬‿¬)",
-                "ദ്ദി(˵ •̀ ᴗ - ˵ )"
+                "ദ്ദി(˵ •̀ ᴗ - ˵ )",
+                "ԅ(≖‿≖ԅ)",
+                "( ੭˙꒳​˙)੭",
+                "٩(｡•ω•｡)و",
+                "( ˘꒳​˘ )",
+                "( ﾟヮﾟ)",
+                "(｡◝‿◜｡)",
+                "ヽ(>∀<☆)ノ",
+                "(ﾉ´ヮ`)ﾉ*: ･ﾟ"
             )
         )
     )

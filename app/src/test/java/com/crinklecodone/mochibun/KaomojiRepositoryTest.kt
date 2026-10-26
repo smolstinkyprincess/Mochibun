@@ -1,11 +1,33 @@
 package com.crinklecodone.mochibun
 
+import android.view.KeyEvent
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.KaomojiRepository
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KaomojiRepositoryTest {
+
+    @Test
+    fun testKaomojiTriggerDefaultsAndArbitraryKeyMatching() {
+        assertEquals("pref_kaomoji_trigger_keycode", PreferencesManager.KEY_KAOMOJI_TRIGGER_KEYCODE)
+        assertEquals(KeyEvent.KEYCODE_POUND, PreferencesManager.DEFAULT_KAOMOJI_TRIGGER_KEYCODE)
+        assertTrue(PreferencesManager.DEFAULT_KAOMOJI_TRIGGER_LONG_PRESS)
+
+        // Default matches pound key
+        assertTrue(PreferencesManager.matchesKaomojiTrigger(KeyEvent.KEYCODE_POUND, 0))
+        assertFalse(PreferencesManager.matchesKaomojiTrigger(KeyEvent.KEYCODE_STAR, 0))
+
+        // Verify badge and label formatting for physical and arbitrary keys
+        assertEquals("#", PreferencesManager.formatKaomojiKeyBadge(KeyEvent.KEYCODE_POUND))
+        assertEquals("F1", PreferencesManager.formatKaomojiKeyBadge(KeyEvent.KEYCODE_F1))
+        assertEquals("F4", PreferencesManager.formatKaomojiKeyBadge(KeyEvent.KEYCODE_F4, 62))
+        assertEquals("5", PreferencesManager.formatKaomojiKeyBadge(KeyEvent.KEYCODE_5))
+        assertEquals("Key 5", PreferencesManager.formatKaomojiKeyName(KeyEvent.KEYCODE_5))
+        assertEquals("Upper-left (F1)", PreferencesManager.formatKaomojiKeyName(KeyEvent.KEYCODE_F1))
+    }
 
     @Test
     fun testKaomojiCategoriesIntegrity() {

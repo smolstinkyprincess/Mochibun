@@ -1,15 +1,34 @@
 package com.crinklecodone.mochibun.ui.components
 
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,12 +37,19 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -31,9 +57,16 @@ import com.crinklecodone.mochibun.R
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
+import com.crinklecodone.mochibun.data.repository.MediaSessionTracker
 import com.crinklecodone.mochibun.ui.theme.LauncherTheme
+import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import com.crinklecodone.mochibun.ui.theme.M3x6FontFamily
+import com.crinklecodone.mochibun.ui.theme.palette
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Calendar
+import kotlin.random.Random
 
 /**
  * Mascot moods mapped to static PNG fallbacks and animated GIF loops.
@@ -247,26 +280,277 @@ fun MochibunMascot(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Keitai-Inspired Dynamic Speech Bubble System
+// ---------------------------------------------------------------------------
+
+val DEFAULT_BOOP_LINES = listOf(
+    "boop! ( ˶ˆᗜˆ˵ )",
+    "yay! ♡",
+    "paws up! ₍ᐢ. ̫.ᐢ₎",
+    "mochi squish! ♡",
+    "hi friend! 🌸",
+    "cheer! ٩(ˊᗜˋ*)و"
+)
+
+val LATE_NIGHT_LINES = listOf(
+    "eepy... zzZ",
+    "bedtime soon? ( ᴗ͈ˬᴗ͈ )",
+    "yawn~ ♡",
+    "sweet dreams ✨"
+)
+
+val LOW_BATTERY_LINES = listOf(
+    "need juice... ( ´･ω･)",
+    "getting tired... 🔋",
+    "hungry for charge ♡"
+)
+
+val MUSIC_LINES = listOf(
+    "jammin! ♫",
+    "good beats ♡",
+    "bobbing along ₍ᐢ. ̫.ᐢ₎"
+)
+
 /**
- * Backward-compatible alias for [MochibunMascot].
+ * Checks if device battery is below 20% using sticky broadcast or BatteryManager.
+ */
+fun isDeviceBatteryLow(context: Context): Boolean {
+    return try {
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+        val capacity = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+        if (capacity in 0..19) {
+            true
+        } else {
+            val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            if (level >= 0 && scale > 0) {
+                (level * 100 / scale) < 20
+            } else {
+                false
+            }
+        }
+    } catch (_: Exception) {
+        false
+    }
+}
+
+/**
+ * Selects a context-aware dialogue line for Mochibunny:
+ * - Low battery (< 20%)
+ * - Music playing (MediaSessionTracker)
+ * - Late night (10:00 PM – 5:00 AM)
+ * - Default boops
+ * Guarantees that the chosen line avoids the immediate predecessor [previousLine].
+ */
+fun selectSpeechBubbleDialogue(
+    context: Context? = null,
+    previousLine: String? = null,
+    hour: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
+    isLowBattery: Boolean? = null,
+    isMusicPlaying: Boolean? = null
+): String {
+    val isLateNight = hour >= 22 || hour < 5
+    val isLowBatt = isLowBattery ?: (context?.let { isDeviceBatteryLow(it) } ?: false)
+    val isMusic = isMusicPlaying ?: MediaSessionTracker.mediaState.value.isPlaying
+
+    val contextualPool = mutableListOf<String>()
+    if (isLowBatt) contextualPool.addAll(LOW_BATTERY_LINES)
+    if (isMusic) contextualPool.addAll(MUSIC_LINES)
+    if (isLateNight) contextualPool.addAll(LATE_NIGHT_LINES)
+
+    val candidatePool = if (contextualPool.isNotEmpty()) {
+        if (Random.nextFloat() < 0.70f) contextualPool else DEFAULT_BOOP_LINES
+    } else {
+        DEFAULT_BOOP_LINES
+    }
+
+    val filtered = candidatePool.filter { it != previousLine }
+    return if (filtered.isNotEmpty()) {
+        filtered.random()
+    } else {
+        candidatePool.random()
+    }
+}
+
+/**
+ * Kawaii keitai-inspired speech bubble with ultra-rounded pill and subtle downward pointer tail.
  */
 @Composable
-fun KawaiiMascot(
-    modifier: Modifier = Modifier,
-    emote: MascotMood = MascotMood.DEFAULT,
-    size: Dp = 48.dp,
-    themeTintColor: Color? = null,
+fun SpeechBubble(
+    text: String,
+    bgColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.graphicsLayer { clip = false },
+        horizontalAlignment = Alignment.End
+    ) {
+        Box(
+            modifier = Modifier
+                .background(bgColor, RoundedCornerShape(12.dp))
+                .border(1.5.dp, borderColor, RoundedCornerShape(12.dp))
+                .padding(horizontal = 9.dp, vertical = 3.5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                fontFamily = M3x6FontFamily,
+                fontSize = 18.sp,
+                lineHeight = 19.sp,
+                fontWeight = FontWeight.Normal,
+                color = textColor,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
+            )
+        }
+
+        Canvas(
+            modifier = Modifier
+                .padding(end = 20.dp)
+                .offset(y = (-1.5).dp)
+                .size(width = 9.dp, height = 5.5.dp)
+        ) {
+            val width = size.width
+            val height = size.height
+            val strokePx = 1.5.dp.toPx()
+
+            // Fill triangle with background color overlapping the pill bottom stroke
+            val fillPath = Path().apply {
+                moveTo(0f, 0f)
+                lineTo(width, 0f)
+                lineTo(width * 0.55f, height)
+                close()
+            }
+            drawPath(path = fillPath, color = bgColor)
+
+            // Outline the two downward slanted sides
+            val strokePath = Path().apply {
+                moveTo(0f, 0f)
+                lineTo(width * 0.55f, height)
+                lineTo(width, 0f)
+            }
+            drawPath(
+                path = strokePath,
+                color = borderColor,
+                style = Stroke(width = strokePx, cap = StrokeCap.Round)
+            )
+        }
+    }
+}
+
+/**
+ * Mochibunny Mascot coupled with a dynamic, keitai-inspired speech bubble reaction system.
+ *
+ * When booped (tapped / DPAD_CENTER clicked):
+ * - Cancels any ongoing dismiss timer.
+ * - Picks a new context-aware dialogue line avoiding the immediate predecessor.
+ * - Triggers cheer bounce on the mascot and a subtle pop bounce on the bubble.
+ * - Holds the speech bubble for 2.2 seconds before fading/scaling out.
+ * - Fixed layout size guarantees zero layout shifting of adjacent widgets (clock, favorites card).
+ * - Renders speech bubble on top of mascot sprite with explicit zIndex and draw order.
+ */
+@Composable
+fun MochibunnyWithSpeechBubble(
+    mood: MascotMood = getDefaultTimeOfDayMood(),
     useAnimation: Boolean = true,
-    isBooped: Boolean = false,
+    themeTintColor: Color? = null,
+    modifier: Modifier = Modifier,
+    size: Dp = 56.dp,
     onClick: (() -> Unit)? = null
 ) {
-    MochibunMascot(
-        mood = emote,
-        useAnimation = useAnimation,
-        themeTintColor = themeTintColor,
-        modifier = modifier,
-        size = size,
-        isBooped = isBooped,
-        onClick = onClick
-    )
+    val context = LocalContext.current
+    val theme = LocalLauncherTheme.current
+    val coroutineScope = rememberCoroutineScope()
+
+    var currentDialogue by remember { mutableStateOf<String?>(null) }
+    var lastSpokenLine by remember { mutableStateOf<String?>(null) }
+    var dismissJob by remember { mutableStateOf<Job?>(null) }
+    var popAnimKey by remember { mutableIntStateOf(0) }
+    val popScale = remember { Animatable(1f) }
+
+    val bubbleBgColor = if (theme.name == "midnight_mochi") theme.cardBgColor else Color(0xFFFFFDFE)
+    val bubbleBorderColor = theme.greetingOutlineColor
+    val bubbleTextColor = if (theme.name == "midnight_mochi") theme.cardTextColor else theme.palette.deepAccent
+
+    LaunchedEffect(popAnimKey) {
+        if (popAnimKey > 0) {
+            popScale.snapTo(0.82f)
+            popScale.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = 0.55f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        }
+    }
+
+    val onBoop = {
+        dismissJob?.cancel()
+        val newLine = selectSpeechBubbleDialogue(context, lastSpokenLine ?: currentDialogue)
+        currentDialogue = newLine
+        lastSpokenLine = newLine
+        popAnimKey++
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+        onClick?.invoke()
+        dismissJob = coroutineScope.launch {
+            delay(1250L)
+            currentDialogue = null
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .graphicsLayer { clip = false }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                onBoop()
+            }
+    ) {
+        // 1. Mascot sprite rendered underneath
+        MochibunMascot(
+            mood = mood,
+            useAnimation = useAnimation,
+            themeTintColor = themeTintColor,
+            size = size,
+            isBooped = currentDialogue != null,
+            onClick = onBoop
+        )
+
+        // 2. Floating speech bubble rendered on top with higher z-index
+        AnimatedVisibility(
+            visible = currentDialogue != null,
+            enter = fadeIn(tween(140)) + scaleIn(
+                initialScale = 0.75f,
+                animationSpec = spring(dampingRatio = 0.6f)
+            ),
+            exit = fadeOut(tween(180)) + scaleOut(targetScale = 0.75f),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 10.dp, y = (-32).dp)
+                .zIndex(1f)
+                .graphicsLayer {
+                    scaleX = popScale.value
+                    scaleY = popScale.value
+                    clip = false
+                }
+        ) {
+            currentDialogue?.let { text ->
+                SpeechBubble(
+                    text = text,
+                    bgColor = bubbleBgColor,
+                    borderColor = bubbleBorderColor,
+                    textColor = bubbleTextColor
+                )
+            }
+        }
+    }
 }

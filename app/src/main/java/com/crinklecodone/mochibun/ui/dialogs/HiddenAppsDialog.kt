@@ -135,7 +135,7 @@ fun HiddenAppsDialog(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 420.dp)
-                .border(2.dp, ActiveTheme.cardBorder, shape),
+                .border(1.5.dp, ActiveTheme.cardBorder, shape),
             shape = shape,
             color = ActiveTheme.surface,
             tonalElevation = 6.dp,
@@ -200,6 +200,7 @@ fun HiddenAppsDialog(
                                 Image(
                                     bitmap = app.imageBitmap,
                                     contentDescription = app.name,
+                                    filterQuality = androidx.compose.ui.graphics.FilterQuality.None,
                                     modifier = Modifier.size(32.dp)
                                 )
 

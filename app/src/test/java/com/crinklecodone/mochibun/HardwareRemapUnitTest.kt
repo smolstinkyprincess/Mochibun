@@ -3,7 +3,6 @@ package com.crinklecodone.mochibun
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.BASELINE_MTK_KPD_MAPPINGS
 import com.crinklecodone.mochibun.data.model.PhysicalKey
-import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -35,6 +34,16 @@ class HardwareRemapUnitTest {
         assertEquals("OPEN_RECENTS_SYSTEM", recentsSystem.serialize())
         assertEquals(ActionType.OpenRecentsSystem, ActionType.deserialize(recentsSystem.serialize()))
         assertEquals("Open Recents (System)", recentsSystem.displayName())
+
+        val widgets = ActionType.OpenWidgetsPage
+        assertEquals("OPEN_WIDGETS_PAGE", widgets.serialize())
+        assertEquals(ActionType.OpenWidgetsPage, ActionType.deserialize(widgets.serialize()))
+        assertEquals("Widgets / Stats Page", widgets.displayName())
+
+        val notifs = ActionType.OpenNotificationsPage
+        assertEquals("OPEN_NOTIFICATIONS_PAGE", notifs.serialize())
+        assertEquals(ActionType.OpenNotificationsPage, ActionType.deserialize(notifs.serialize()))
+        assertEquals("Notifications Page", notifs.displayName())
     }
 
     @Test
@@ -136,46 +145,5 @@ class HardwareRemapUnitTest {
         assertEquals("DPAD_RIGHT", BASELINE_MTK_KPD_MAPPINGS[106])
         assertEquals("DPAD_DOWN", BASELINE_MTK_KPD_MAPPINGS[108])
         assertEquals("ENTER", BASELINE_MTK_KPD_MAPPINGS[28])
-
-        val content = HardwareRemapManager.generateKeyLayoutContent(emptyMap())
-        assertTrue(content.contains("key 103     DPAD_UP"))
-        assertTrue(content.contains("key 105     DPAD_LEFT"))
-        assertTrue(content.contains("key 106     DPAD_RIGHT"))
-        assertTrue(content.contains("key 108     DPAD_DOWN"))
-        assertTrue(content.contains("key 28     ENTER"))
-
-        // Validation rejects corrupting DPAD_UP
-        val overwrittenDpad = content.replace("key 103     DPAD_UP", "key 103     CAMERA")
-        assertFalse(HardwareRemapManager.validateKeyLayoutContent(overwrittenDpad))
-
-        // Validation rejects corrupting ENTER (scancode 28)
-        val overwrittenEnter = content.replace("key 28     ENTER", "key 28     CAMERA")
-        assertFalse(HardwareRemapManager.validateKeyLayoutContent(overwrittenEnter))
-    }
-
-    @Test
-    fun testGenerateAndValidateKeyLayoutContent() {
-        val customMappings = mapOf(169 to "VOLUME_MUTE", 59 to "TAB")
-        val content = HardwareRemapManager.generateKeyLayoutContent(customMappings)
-
-        assertTrue(HardwareRemapManager.validateKeyLayoutContent(content))
-        assertTrue(content.contains("key 169     VOLUME_MUTE"))
-        assertTrue(content.contains("key 59     TAB"))
-        assertTrue(content.contains("key 28     ENTER"))
-        assertTrue(content.contains("key 172     HOME"))
-        assertTrue(content.contains("key 158     BACK"))
-        assertTrue(content.contains("key 103     DPAD_UP"))
-    }
-
-    @Test
-    fun testValidationRejectsCorruptedKeyLayout() {
-        // Missing critical keys (e.g. HOME key 172 missing)
-        val corruptedContent = "key 169 CALL\nkey 28 ENTER"
-        assertFalse(HardwareRemapManager.validateKeyLayoutContent(corruptedContent))
-
-        // Attempting to overwrite HOME with custom key
-        val overwrittenHome = HardwareRemapManager.generateKeyLayoutContent(emptyMap())
-            .replace("key 172     HOME", "key 172     CAMERA")
-        assertFalse(HardwareRemapManager.validateKeyLayoutContent(overwrittenHome))
     }
 }

@@ -34,6 +34,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
         TypographyManager.scanFonts(this)
         LidLedManager.init(this)
         SoundEffectManager.init(this)
+        com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog.init(this)
     }
 
     override fun newImageLoader(): ImageLoader {
