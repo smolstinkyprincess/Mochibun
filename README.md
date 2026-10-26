@@ -1,8 +1,6 @@
-# <img src="mochibun.png" width="64" height="64" valign="middle" alt="Mochibun Icon" /> Mochibun (もちぶん) ♡
+![Mochibun Header](assets/mochibunheader.png)
 
-A lightweight, pastel Android launcher built with Jetpack Compose and Material 3, tailored specifically for the **ALT Mive Style Folder (AT-M120)** (Android 12, MediaTek MT6761, 480 × 800 display).
-
-Mochibun pairs a **dreamy pastel aesthetic** with comfy D-pad navigation, physical T9 app filtering, and a built-in virtual mouse cursor for apps that demand touch input.
+A lightweight, pastel Android launcher built with Jetpack Compose and Material 3, tailored specifically for the **ALT Mive Style Folder (AT-M120)**.
 
 ---
 
