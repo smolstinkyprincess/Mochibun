@@ -1,0 +1,6 @@
+Mochibun v1.0.3 ♡
+- Full system typography switched to the rounded dot-matrix pixel font MaruMinya (マルミーニャ).
+- Replaced legacy clipart with 11 custom 12x12 micro-pixel deco stickers.
+- Enforced strict integer scaling (2x-4x) and stepped retro angles (0°, ±12°, ±24°) for razor-sharp pixel art.
+- Restored dynamic pastel tinting (BlendMode.SrcAtop) across pink, lavender, mint, baby blue, and butter yellow palettes.
+- Updated README header banner and visual assets.
