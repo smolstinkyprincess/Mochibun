@@ -6,6 +6,14 @@ Composites layered pastel clouds, floating logo bobbing with delayed alpha fade,
 
 ---
 
+## 🎬 Animation Preview
+
+<div align="center">
+  <img src="preview.gif" alt="Mochibun Boot Animation Preview" width="240" />
+</div>
+
+---
+
 ## 🛠️ Prerequisites
 
 Requires Python 3 and Pillow:
