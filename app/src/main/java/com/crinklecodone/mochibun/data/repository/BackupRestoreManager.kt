@@ -60,7 +60,7 @@ object BackupRestoreManager {
         val themeObj = JSONObject()
         themeObj.put("preset", PreferencesManager.getThemePreset(context))
         themeObj.put("custom_user_name", PreferencesManager.getCustomUserName(context))
-        themeObj.put("pixelspray_enabled", PreferencesManager.isPixelSprayWallpaperEnabled(context))
+        themeObj.put("wallpaper_overlay_enabled", PreferencesManager.isWallpaperOverlayEnabled(context))
 
         val colorsObj = JSONObject()
         PreferencesManager.THEME_COLOR_KEYS.forEach { key ->
@@ -228,10 +228,10 @@ object BackupRestoreManager {
             if (themeObj?.has("custom_user_name") == true) {
                 PreferencesManager.setCustomUserName(context, themeObj.optString("custom_user_name", ""))
             }
-            if (themeObj?.has("pixelspray_enabled") == true) {
-                PreferencesManager.setPixelSprayWallpaperEnabled(
+            if (themeObj?.has("wallpaper_overlay_enabled") == true) {
+                PreferencesManager.setWallpaperOverlayEnabled(
                     context,
-                    themeObj.optBoolean("pixelspray_enabled", true)
+                    themeObj.optBoolean("wallpaper_overlay_enabled", true)
                 )
             }
 

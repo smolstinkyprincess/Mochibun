@@ -354,7 +354,7 @@ private fun AppearanceSettingsSubScreen(
     var isEditingName by remember { mutableStateOf(false) }
     var tempNameInput by remember { mutableStateOf(customName) }
 
-    val isPixelSprayEnabled by PreferencesManager.isPixelSprayEnabled.collectAsState()
+    val isWallpaperOverlayEnabled by PreferencesManager.isWallpaperOverlayEnabled.collectAsState()
     val fontId by PreferencesManager.themeFontFamily.collectAsState()
     val fontOptions by TypographyManager.options.collectAsState()
 
@@ -369,7 +369,7 @@ private fun AppearanceSettingsSubScreen(
             if (hasCustomWallpaper) {
                 add("reset_wallpaper")
             }
-            add("pixelspray")
+            add("wallpaper_stickers")
         }
     }
 
@@ -381,7 +381,7 @@ private fun AppearanceSettingsSubScreen(
             "name" -> 1
             "icon_pack" -> 2
             "pick_wallpaper", "reset_wallpaper" -> 3
-            "pixelspray" -> 4
+            "wallpaper_stickers" -> 4
             else -> 0
         }
     }
@@ -456,8 +456,8 @@ private fun AppearanceSettingsSubScreen(
                                 SoundEffectManager.play(context, SoundEffect.SELECT)
                                 onResetWallpaperClick?.invoke()
                             }
-                            "pixelspray" -> {
-                                PreferencesManager.setPixelSprayWallpaperEnabled(context, !isPixelSprayEnabled)
+                            "wallpaper_stickers" -> {
+                                PreferencesManager.setWallpaperOverlayEnabled(context, !isWallpaperOverlayEnabled)
                                 SoundEffectManager.play(context, SoundEffect.SELECT)
                             }
                         }
@@ -584,11 +584,11 @@ private fun AppearanceSettingsSubScreen(
             item {
                 SettingsCard(categoryTitle = "Visual Effects") {
                     SettingsToggleRow(
-                        title = "PixelSpray Overlay",
-                        subtitle = "Particle effects on home wallpaper",
-                        checked = isPixelSprayEnabled,
-                        isFocused = items.getOrNull(focusedIndex) == "pixelspray",
-                        onCheckedChange = { PreferencesManager.setPixelSprayWallpaperEnabled(context, it) }
+                        title = "♡ Wallpaper Stickers ♡",
+                        subtitle = "Show rotating pastel pixel overlays above wallpaper",
+                        checked = isWallpaperOverlayEnabled,
+                        isFocused = items.getOrNull(focusedIndex) == "wallpaper_stickers",
+                        onCheckedChange = { PreferencesManager.setWallpaperOverlayEnabled(context, it) }
                     )
                 }
             }

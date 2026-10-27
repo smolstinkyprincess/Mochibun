@@ -32,7 +32,7 @@ Lcom/crinklecodone/mochibun/ui/theme/ThemeKt;
 Lcom/crinklecodone/mochibun/ui/theme/ColorKt;
 Lcom/crinklecodone/mochibun/ui/theme/TypeKt;
 
-Lcom/crinklecodone/mochibun/ui/components/PixelSprayKt;
+Lcom/crinklecodone/mochibun/ui/components/WallpaperOverlayKt;
 Lcom/crinklecodone/mochibun/ui/components/KawaiiCardMotifsKt;
 Lcom/crinklecodone/mochibun/ui/components/WidgetComponentsKt;
 Lcom/crinklecodone/mochibun/ui/components/SettingsComponentsKt;

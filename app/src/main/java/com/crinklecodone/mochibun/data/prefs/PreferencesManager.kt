@@ -19,8 +19,13 @@ import kotlin.collections.emptyList
  */
 object PreferencesManager {
     const val PREFS_NAME = "launcher_preferences"
-    const val KEY_PIXELSPRAY_WALLPAPER_ENABLED = "pref_pixelspray_wallpaper_enabled"
-    const val DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED = true
+    const val KEY_WALLPAPER_OVERLAY_ENABLED = "pref_wallpaper_overlay_enabled"
+    const val DEFAULT_WALLPAPER_OVERLAY_ENABLED = true
+    const val KEY_WALLPAPER_OVERLAY_ROTATION_MODE = "pref_wallpaper_overlay_rotation_mode"
+    const val ROTATION_MODE_DAILY = "daily"
+    const val DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE = ROTATION_MODE_DAILY
+
+
     const val KEY_SYSTEM_MONITOR_ENABLED = "pref_system_monitor_enabled"
     const val DEFAULT_SYSTEM_MONITOR_ENABLED = true
     const val KEY_FAVORITE_FOLDERS = "favorite_folders_v1"
@@ -113,8 +118,12 @@ object PreferencesManager {
     const val KEY_CUSTOM_ICON_PREFIX = "custom_icon_"
     const val KEY_CUSTOM_FOLDER_ICON_PREFIX = "custom_folder_icon_"
 
-    private val _isPixelSprayEnabled = MutableStateFlow(DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED)
-    val isPixelSprayEnabled: StateFlow<Boolean> = _isPixelSprayEnabled.asStateFlow()
+    private val _isWallpaperOverlayEnabled = MutableStateFlow(DEFAULT_WALLPAPER_OVERLAY_ENABLED)
+    val isWallpaperOverlayEnabled: StateFlow<Boolean> = _isWallpaperOverlayEnabled.asStateFlow()
+
+    private val _wallpaperOverlayRotationMode = MutableStateFlow(DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE)
+    val wallpaperOverlayRotationMode: StateFlow<String> = _wallpaperOverlayRotationMode.asStateFlow()
+
 
     private val _isSystemMonitorEnabled = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_ENABLED)
     val isSystemMonitorEnabled: StateFlow<Boolean> = _isSystemMonitorEnabled.asStateFlow()
@@ -179,10 +188,14 @@ object PreferencesManager {
         if (!initialized) {
             try {
                 val prefs = getPrefs(context)
-                _isPixelSprayEnabled.value = prefs.getBoolean(
-                    KEY_PIXELSPRAY_WALLPAPER_ENABLED,
-                    DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED
+                _isWallpaperOverlayEnabled.value = prefs.getBoolean(
+                    KEY_WALLPAPER_OVERLAY_ENABLED,
+                    DEFAULT_WALLPAPER_OVERLAY_ENABLED
                 )
+                _wallpaperOverlayRotationMode.value = prefs.getString(
+                    KEY_WALLPAPER_OVERLAY_ROTATION_MODE,
+                    DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE
+                ) ?: DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE
                 _isSystemMonitorEnabled.value = prefs.getBoolean(
                     KEY_SYSTEM_MONITOR_ENABLED,
                     DEFAULT_SYSTEM_MONITOR_ENABLED
@@ -439,20 +452,22 @@ object PreferencesManager {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    fun isPixelSprayWallpaperEnabled(context: Context): Boolean {
+    fun isWallpaperOverlayEnabled(context: Context): Boolean {
         return try {
             getPrefs(context).getBoolean(
-                KEY_PIXELSPRAY_WALLPAPER_ENABLED,
-                DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED
+                KEY_WALLPAPER_OVERLAY_ENABLED,
+                DEFAULT_WALLPAPER_OVERLAY_ENABLED
             )
         } catch (_: Exception) {
-            DEFAULT_PIXELSPRAY_WALLPAPER_ENABLED
+            DEFAULT_WALLPAPER_OVERLAY_ENABLED
         }
     }
 
-    fun setPixelSprayWallpaperEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_PIXELSPRAY_WALLPAPER_ENABLED, enabled).apply()
-        _isPixelSprayEnabled.value = enabled
+    fun setWallpaperOverlayEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit()
+            .putBoolean(KEY_WALLPAPER_OVERLAY_ENABLED, enabled)
+            .apply()
+        _isWallpaperOverlayEnabled.value = enabled
     }
 
     fun isSystemMonitorEnabled(context: Context): Boolean {

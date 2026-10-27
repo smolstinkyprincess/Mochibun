@@ -131,3 +131,5 @@ m120-release
 mochibun-release
 *.jks
 *.keystore
+tools/docomo_overlay/output/
+tools/docomo_overlay/assets/

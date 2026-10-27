@@ -6,6 +6,10 @@
 package com.crinklecodone.mochibun.ui.screens
 
 import android.content.Context
+import android.content.Intent
+import android.provider.AlarmClock
+import android.view.KeyEvent
+import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -15,6 +19,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,6 +69,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -78,8 +87,6 @@ import com.crinklecodone.mochibun.data.model.FavoriteFolder
 import com.crinklecodone.mochibun.data.model.FavoriteSlotItem
 import com.crinklecodone.mochibun.data.model.LauncherApp
 import com.crinklecodone.mochibun.data.repository.IconPackManager
-import com.crinklecodone.mochibun.ui.components.PixelSpray
-import com.crinklecodone.mochibun.ui.components.PixelSprayTintBehavior
 import com.crinklecodone.mochibun.ui.components.kawaiiCardMotifs
 import com.crinklecodone.mochibun.ui.dialogs.PixelRibbonBow
 import com.crinklecodone.mochibun.ui.theme.*
@@ -104,9 +111,8 @@ fun HomeScreen(
     userName: String = "",
     selectedFavoriteIndex: Int = 0,
     folderIconRefreshKey: Int = 0,
-    homeFocusArea: Int = 0, // 0 = favorites, 1 = header banner, 2 = drawer handle
+    homeFocusArea: Int = 0, // 0 = favorites, 1 = header banner, 2 = drawer handle, 3 = clock
     isHomeScreenActive: Boolean = true,
-    isPixelSprayEnabled: Boolean = true,
     onHeaderClick: () -> Unit = {},
     onHeaderLongClick: () -> Unit = {},
     onAppClick: (LauncherApp) -> Unit = {},
@@ -126,13 +132,6 @@ fun HomeScreen(
             .fillMaxSize()
             .background(Color.Transparent)
     ) {
-        // PixelSpray sticker overlay above wallpaper (conditionally rendered)
-        if (isPixelSprayEnabled) {
-            PixelSpray(
-                count = 48,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
 
         // Main content column anchored to top within the 800px vertical envelope
         Column(
@@ -154,7 +153,10 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             // 2. Digital Clock & Date Section
-            ClockWidget()
+            ClockWidget(
+                isFocused = isHomeScreenActive && homeFocusArea == 3,
+                onClick = { launchClockApp(context) }
+            )
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -372,16 +374,95 @@ fun WelcomeHomeBanner(
 }
 
 /**
+ * Resilient helper that resolves and opens the user's installed clock or alarm application
+ * across common device configurations with robust fallback mechanisms.
+ *
+ * Fallback cascade:
+ * 1. Standard Alarm intent (AlarmClock.ACTION_SHOW_ALARMS)
+ * 2. Category fallback (Intent.ACTION_MAIN with CATEGORY_APP_CALENDAR)
+ * 3. Common DeskClock vendor package fallbacks (Google, AOSP, Samsung, CSK)
+ * 4. Safety fallback with gentle Mochibun feedback toast ("No clock app found ♡")
+ */
+fun launchClockApp(context: Context) {
+    val pm = context.packageManager
+
+    // 1. Standard Alarm Intent
+    try {
+        val alarmIntent = Intent(AlarmClock.ACTION_SHOW_ALARMS).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        if (alarmIntent.resolveActivity(pm) != null) {
+            context.startActivity(alarmIntent)
+            return
+        }
+    } catch (_: Exception) {
+        // Fall through to next option
+    }
+
+    // 2. Category Fallback
+    try {
+        val categoryIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_APP_CALENDAR)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        if (categoryIntent.resolveActivity(pm) != null) {
+            context.startActivity(categoryIntent)
+            return
+        }
+    } catch (_: Exception) {
+        // Fall through to next option
+    }
+
+    // 3. Common DeskClock Package Fallbacks
+    val vendorClockPackages = listOf(
+        "com.google.android.deskclock",
+        "com.android.deskclock",
+        "com.sec.android.app.clockpackage",
+        "com.csk.deskclock"
+    )
+    for (pkg in vendorClockPackages) {
+        try {
+            val launchIntent = pm.getLaunchIntentForPackage(pkg)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            if (launchIntent != null) {
+                context.startActivity(launchIntent)
+                return
+            }
+        } catch (_: Exception) {
+            // Try next package
+        }
+    }
+
+    // 4. Graceful Safety Fallback
+    try {
+        Toast.makeText(context, "No clock app found ♡", Toast.LENGTH_SHORT).show()
+    } catch (_: Exception) {}
+}
+
+/**
  * Clock & Date Section.
  * Recomposition scope is strictly isolated so minute-ticks only recompose this composable.
+ * Supports D-pad navigation and touch activation to launch the device clock/alarm app.
+ *
+ * Selection Halo Aesthetic:
+ * When focused, renders only Mochibun's unclipped, theme-aware soft pastel focus halo
+ * with containerTint = Color.Transparent (no opaque background card, tinted box, or solid fill).
+ * When unfocused, remains 100% transparent.
  */
 @Composable
 fun ClockWidget(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isFocused: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    var hasComposeFocus by remember { mutableStateOf(false) }
+    val effectiveFocused = isFocused || hasComposeFocus
 
     val timeFormat = remember { SimpleDateFormat("h:mm", Locale.getDefault()) }
     val amPmFormat = remember { SimpleDateFormat("a", Locale.getDefault()) }
@@ -412,8 +493,46 @@ fun ClockWidget(
         }
     }
 
+    val handleActivate = {
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+        if (onClick != null) {
+            onClick()
+        } else {
+            launchClockApp(context)
+        }
+    }
+
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 2.dp)
+            .graphicsLayer { clip = false }
+            .softGlowFocus(
+                isSelected = effectiveFocused,
+                cornerRadius = 18.dp,
+                containerTint = Color.Transparent // Strictly transparent: no card fill
+            )
+            .onFocusChanged { focusState ->
+                hasComposeFocus = focusState.isFocused
+            }
+            .focusable()
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown &&
+                    (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                     keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    handleActivate()
+                    true
+                } else {
+                    false
+                }
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                handleActivate()
+            }
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(

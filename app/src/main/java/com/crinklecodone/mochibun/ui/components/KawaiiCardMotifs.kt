@@ -516,12 +516,14 @@ fun Modifier.softGlowFocus(
             }
 
             // 2. Subtle frosted pastel fill over the focused surface
-            drawRoundRect(
-                color = effectiveTint.copy(alpha = 0.35f),
-                topLeft = Offset.Zero,
-                size = size,
-                cornerRadius = CornerRadius(cornerPx, cornerPx)
-            )
+            if (effectiveTint != Color.Transparent && effectiveTint.alpha > 0f) {
+                drawRoundRect(
+                    color = effectiveTint.copy(alpha = 0.35f),
+                    topLeft = Offset.Zero,
+                    size = size,
+                    cornerRadius = CornerRadius(cornerPx, cornerPx)
+                )
+            }
 
             // 3. Draw card container content
             drawContent()

@@ -23,6 +23,7 @@ import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
+import com.crinklecodone.mochibun.ui.screens.launchClockApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -73,7 +74,7 @@ internal class LauncherKeyHandler(
                         (state.favoriteItemCount - 1).coerceAtLeast(0)
                     )
                 )
-                if (state.favoriteItemCount > 0 && state.homeFocusArea != 1) {
+                if (state.favoriteItemCount > 0 && state.homeFocusArea != 1 && state.homeFocusArea != 3) {
                     actions.setHomeFocusArea(0)
                 }
             }
@@ -208,6 +209,9 @@ internal class LauncherKeyHandler(
                         } else if (state.homeFocusArea == 2) {
                             actions.setSelectedDrawerIndex(0)
                             actions.setDrawerOpen(true)
+                        } else if (state.homeFocusArea == 3) {
+                            SoundEffectManager.play(context, SoundEffect.SELECT)
+                            launchClockApp(context)
                         } else {
                             actions.openLauncherMenu()
                         }
@@ -330,7 +334,7 @@ internal class LauncherKeyHandler(
                     SoundEffectManager.play(context, SoundEffect.BACK)
                     actions.setDrawerOpen(false)
                     return true
-                } else if (state.isHomeScreenActive && (state.homeFocusArea == 1 || state.homeFocusArea == 2) && state.favoriteItemCount > 0) {
+                } else if (state.isHomeScreenActive && (state.homeFocusArea == 1 || state.homeFocusArea == 2 || state.homeFocusArea == 3) && state.favoriteItemCount > 0) {
                     SoundEffectManager.play(context, SoundEffect.BACK)
                     actions.setHomeFocusArea(0)
                     return true
@@ -521,8 +525,11 @@ internal class LauncherKeyHandler(
 
             if (state.homeFocusArea == 2) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(if (state.favoriteItemCount > 0) 0 else 1)
+                actions.setHomeFocusArea(if (state.favoriteItemCount > 0) 0 else 3)
             } else if (state.homeFocusArea == 0) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                actions.setHomeFocusArea(3)
+            } else if (state.homeFocusArea == 3) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(1)
             } else if (nativeEvent.repeatCount == 0) {
@@ -559,6 +566,9 @@ internal class LauncherKeyHandler(
             if (isCooldown) return true
 
             if (state.homeFocusArea == 1) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                actions.setHomeFocusArea(3)
+            } else if (state.homeFocusArea == 3) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(if (state.favoriteItemCount > 0) 0 else 2)
             } else if (state.homeFocusArea == 0) {
