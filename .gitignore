@@ -133,3 +133,4 @@ mochibun-release
 *.keystore
 tools/docomo_overlay/output/
 tools/docomo_overlay/assets/
+tools/mochibun_bootanim/output/
