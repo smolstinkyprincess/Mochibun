@@ -1,6 +1,6 @@
 # 🐰 Mochibun Boot Animation Builder (`build_bootanimation.py`)
 
-A standalone Python utility that generates a custom, lightweight, 1:1 pixel-art boot animation tailored for the **ALT Mive Style Folder (AT-M120)** (480 × 800 portrait).
+A standalone Python utility that generates a custom boot animation tailored for **Mochibun** on the **ALT Mive Style Folder (AT-M120)** (480 × 800 portrait).
 
 ---
 
