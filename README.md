@@ -47,7 +47,6 @@ A lightweight, pastel Android launcher built with Jetpack Compose and Material 3
 | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_widgets.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Widgets & Media Deck" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_notifications.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Notifications Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_wheel.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Kaomoji Radial Wheel" /> |
 
 </div>
----
 
 ## 🎨 Themes, Backups & Setup Sharing
 
