@@ -1,8 +1,6 @@
 # 🛠️ Mochibun Companion Tools
 
-Standalone desktop Python utilities used to generate, compose, and package custom visual assets for the **Mochibun** launcher on the **ALT Mive Style Folder (AT-M120)** (480 × 800 portrait)[cite: 3].
-
-These tools operate independently from the Android Gradle build pipeline, ensuring F-Droid and local `./gradlew assembleRelease` tasks remain clean, fast, and unbloated[cite: 3].
+Standalone desktop Python utilities used to generate, compose, and package custom visual assets for the **Mochibun** launcher on the **ALT Mive Style Folder (AT-M120)** (480 × 800 portrait).
 
 ---
 
@@ -20,7 +18,7 @@ tools/
     ├── README.md              # Detailed animation & Magisk installation guide
     ├── preview.gif            # Local desktop GIF preview
     ├── assets/                # Source mascot GIFs & logo PNGs
-    └── output/                # Android-compliant uncompressed bootanimation.zip
+    └── output/                # Uncompressed bootanimation.zip
 ```
 
 ---
@@ -28,8 +26,8 @@ tools/
 ## 🧰 Available Utilities
 
 ### 1. 🍡 Wallpaper Overlay Generator (`docomo_overlay/`)
-* **Script**: `docomo_overlay/make_overlays.py`[cite: 3]
-* **Purpose**: Generates staggered, retro keitai-style wallpaper overlay grids from raw 12×12 silhouette sprites[cite: 3]. It applies Mochibun's signature pastel palette tints and sharp nearest-neighbor integer scaling to output transparent 480 × 800 PNGs ready for `drawable-nodpi/`[cite: 3].
+* **Script**: `docomo_overlay/make_overlays.py`
+* **Purpose**: Generates staggered, retro keitai-style wallpaper overlay grids from raw 12×12 silhouette sprites. It applies Mochibun's signature pastel palette tints and sharp nearest-neighbor integer scaling to output transparent 480 × 800 PNGs ready for `drawable-nodpi/`.
 * **Quick Run**:
   ```bash
   cd tools/docomo_overlay
@@ -41,7 +39,7 @@ tools/
 ### 2. 🐰 Sleepy Boot Animation Builder (`mochibun_bootanim/`)
 * **Script**: `mochibun_bootanim/build_bootanimation.py`
 * **Purpose**: Generates a custom OEM-style boot sequence featuring layered cloud-puff shelves, a floating logo with delayed alpha fade, retro chunky $z$'s, and a snoozing Mochibunny loaf.
-* **Output**: Packages a zero-compression (STORE mode) `bootanimation.zip` along with `desc.txt` headers formatted specifically for Android's native boot display service[cite: 3].
+* **Output**: Packages a zero-compression (STORE mode) `bootanimation.zip` along with `desc.txt` headers formatted specifically for Android's native boot display service.
 * **Quick Run**:
   ```bash
   cd tools/mochibun_bootanim
@@ -63,7 +61,7 @@ pip install pillow
 
 ## 🧹 Repository Hygiene (`.gitignore`)
 
-Generated frame scratchpads, unpacked bitmaps, and compiled binary zip archives should remain untracked by Git[cite: 3]. Ensure your root `.gitignore` includes[cite: 3]:
+Generated frame scratchpads, unpacked bitmaps, and compiled binary zip archives should remain untracked by Git. Ensure your root `.gitignore` includes:
 
 ```gitignore
 # Tools output & scratchpads
