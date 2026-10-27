@@ -489,7 +489,7 @@ fun CreateFavoriteFolderDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     KawaiiDialogPillButton(
-                        text = "Cancel",
+                        text = "♥ Cancel (◄) ♥",
                         isFocused = focusZone == 3 && buttonCol == 0,
                         onClick = onDismiss
                     )

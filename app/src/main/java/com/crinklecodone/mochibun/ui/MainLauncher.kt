@@ -32,7 +32,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -40,8 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.crinklecodone.mochibun.ui.components.Image
-import com.crinklecodone.mochibun.ui.components.rememberWallpaperOverlayRes
+import com.crinklecodone.mochibun.ui.components.WallpaperOverlay
 import com.crinklecodone.mochibun.core.keypad.HomeTransitionTracker
 import com.crinklecodone.mochibun.core.keypad.LauncherKeypadActions
 import com.crinklecodone.mochibun.core.keypad.LauncherKeypadState
@@ -591,14 +589,7 @@ fun MainLauncher(
             }
 
             if (isWallpaperOverlayEnabled) {
-                val overlayRes = rememberWallpaperOverlayRes() // Cycles between overlay 1..4
-                Image(
-                    painter = painterResource(id = overlayRes),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    filterQuality = FilterQuality.None
-                )
+                WallpaperOverlay()
             }
 
             val keyboardController = LocalSoftwareKeyboardController.current

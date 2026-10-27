@@ -1056,7 +1056,7 @@ fun ThemeStudioDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
                     KawaiiDialogPillButton(
-                        text = "Cancel",
+                        text = "♥ Cancel (◄) ♥",
                         isFocused = editingColorField == null && focusRow == 13 && focusCol == 0,
                         onClick = onDismiss
                     )

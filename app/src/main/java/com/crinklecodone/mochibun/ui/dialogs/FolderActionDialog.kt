@@ -98,7 +98,7 @@ fun FolderActionDialog(
             if (onOpenLauncherOptions != null) {
                 add(FolderMenuAction("⚙ Launcher options", onClick = onOpenLauncherOptions))
             }
-            add(FolderMenuAction("Close", onClick = onDismiss))
+            add(FolderMenuAction("♥ Close ♥", onClick = onDismiss))
         }
     }
 
@@ -269,7 +269,7 @@ fun FolderActionDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                     ) {
                         KawaiiDialogPillButton(
-                            text = "Cancel",
+                            text = "♥ Cancel (◄) ♥",
                             isFocused = confirmDeleteIndex == 0,
                             onClick = { confirmingDelete = false }
                         )

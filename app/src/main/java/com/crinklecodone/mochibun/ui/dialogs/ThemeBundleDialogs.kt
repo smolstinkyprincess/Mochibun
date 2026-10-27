@@ -144,7 +144,7 @@ fun ExportBundleDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Export Theme Bundle",
+                    text = "— ♡ Export Theme Bundle ♡ —",
                     color = theme.greetingColor,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
@@ -230,7 +230,7 @@ fun ExportBundleDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Cancel",
+                            text = "♥ Cancel (◄) ♥",
                             color = theme.cardTextColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
@@ -340,7 +340,7 @@ fun PresetPreviewDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Apply Theme Setup?",
+                    text = "— ♡ Theme Bundle Preview ♡ —",
                     color = theme.greetingColor,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
@@ -458,7 +458,7 @@ fun PresetPreviewDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Cancel",
+                            text = "♥ Cancel (◄) ♥",
                             color = theme.cardTextColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold

@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.data.repository.MochibunMediaState
+import com.crinklecodone.mochibun.ui.theme.*
 
 /**
  * Slim pastel pink heart-scrubber progress bar with a cute heart thumb knob.
@@ -142,7 +143,8 @@ fun TransportButton(
     text: String,
     isFocused: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    theme: LauncherTheme = LocalLauncherTheme.current
 ) {
     Box(
         modifier = modifier
@@ -150,7 +152,7 @@ fun TransportButton(
             .glowingDoubleBorder(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .background(if (isFocused) Color(0xFFFFF0F4) else Color.Transparent)
+            .background(if (isFocused) theme.focusedContainerColor else Color.Transparent)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -158,7 +160,7 @@ fun TransportButton(
             text = text,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF3E2452)
+            color = theme.cardTextColor
         )
     }
 }
@@ -177,7 +179,7 @@ fun NowPlayingCard(
     onOpenMediaApp: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val theme = com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme.current
+    val theme = LocalLauncherTheme.current
     val cardShape = RoundedCornerShape(22.dp)
 
     val mascotMood = when {
@@ -200,8 +202,12 @@ fun NowPlayingCard(
                     cornerRadius = 22.dp
                 )
                 .clip(cardShape)
-                .background(Color(0xFFF6F0FD)) // Frosted lavender-cream
-                .nowPlayingCardConcentricBorder(cornerRadius = 22.dp)
+                .background(theme.cardBgColor)
+                .nowPlayingCardConcentricBorder(
+                    cornerRadius = 22.dp,
+                    outerColor = theme.cardBorderColor,
+                    innerColor = theme.cardBorderColor.copy(alpha = 0.5f)
+                )
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Column(
@@ -217,7 +223,7 @@ fun NowPlayingCard(
                         modifier = Modifier
                             .size(64.dp)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFFBFE8D6))
+                            .background(theme.greetingBgColor)
                             .clickable { onOpenMediaApp() },
                         contentAlignment = Alignment.Center
                     ) {
@@ -251,7 +257,7 @@ fun NowPlayingCard(
                             text = mediaState.title,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF3E2452),
+                            color = theme.cardTextColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -260,7 +266,7 @@ fun NowPlayingCard(
                             text = mediaState.artist,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Normal,
-                            color = Color(0xFF8D7B9D),
+                            color = theme.cardTextColor.copy(alpha = 0.7f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -304,8 +310,8 @@ fun NowPlayingCard(
                 .align(Alignment.TopStart)
                 .offset(x = 12.dp, y = (-16).dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFFFFDFE))
-                .border(1.5.dp, Color(0xFFE5A4B4), RoundedCornerShape(12.dp))
+                .background(theme.cardBgColor)
+                .border(1.5.dp, theme.cardBorderColor, RoundedCornerShape(12.dp))
                 .padding(horizontal = 6.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {

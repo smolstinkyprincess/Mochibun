@@ -7,9 +7,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.imageResource
 import com.crinklecodone.mochibun.R
 
 /**
@@ -21,7 +21,7 @@ val WALLPAPER_OVERLAY_DRAWABLES = intArrayOf(
     R.drawable.wallpaper_overlay_1,
     R.drawable.wallpaper_overlay_2,
     R.drawable.wallpaper_overlay_3,
-    R.drawable.wallpaper_overlay_4
+    R.drawable.wallpaper_overlay_4,
 )
 
 /**
@@ -42,36 +42,19 @@ fun rememberWallpaperOverlayRes(): Int {
  * Static, non-interactive wallpaper overlay layer.
  * Attached without click, pointerInput, or focus modifiers so gestures and
  * D-pad physical navigation pass directly through to foreground cards and drawer.
+ * FilterQuality.None nearest-neighbor rendering is strictly applied to preserve pixel art fidelity.
  */
 @Composable
 fun WallpaperOverlay(
     modifier: Modifier = Modifier,
     @DrawableRes overlayRes: Int = rememberWallpaperOverlayRes()
 ) {
+    val bitmap = ImageBitmap.imageResource(id = overlayRes)
     Image(
-        painter = painterResource(id = overlayRes),
+        bitmap = bitmap,
         contentDescription = null,
         modifier = modifier.fillMaxSize(),
         contentScale = ContentScale.Crop,
         filterQuality = FilterQuality.None
-    )
-}
-
-/**
- * Convenience Image wrapper supporting FilterQuality parameter when paired with a Painter.
- */
-@Composable
-fun Image(
-    painter: Painter,
-    contentDescription: String?,
-    modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Fit,
-    filterQuality: FilterQuality = FilterQuality.None
-) {
-    androidx.compose.foundation.Image(
-        painter = painter,
-        contentDescription = contentDescription,
-        modifier = modifier,
-        contentScale = contentScale
     )
 }

@@ -244,7 +244,7 @@ fun KawaiiIconPicker(
                     .padding(14.dp)
             ) {
                 Text(
-                    text = "♡ select kawaii icon ♡",
+                    text = "— ♡ Select Kawaii Icon ♡ —",
                     fontWeight = FontWeight.Bold,
                     color = theme.fgTextColor,
                     fontSize = 18.sp
@@ -353,7 +353,7 @@ fun KawaiiIconPicker(
                     horizontalArrangement = Arrangement.End
                 ) {
                     KawaiiDialogPillButton(
-                        text = "Cancel",
+                        text = "♥ Cancel (◄) ♥",
                         isFocused = focusZone == 2,
                         onClick = onDismiss
                     )

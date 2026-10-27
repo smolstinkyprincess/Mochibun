@@ -89,6 +89,11 @@ PROJECT_MEMORY.md
 *.so
 
 # ==============================
+# Internal tool build outputs
+# ==============================
+tools/**/output/
+
+# ==============================
 
 # Local editor / backup files
 
