@@ -1,8 +1,6 @@
 # 🐰 Mochibun Boot Animation Builder (`build_bootanimation.py`)
 
-A standalone Python utility that generates a custom, lightweight, 1:1 pixel-art boot animation tailored for the **ALT Mive Style Folder (AT-M120)** (480 × 800 portrait)[cite: 9].
-
-Composites layered pastel clouds, floating logo bobbing with delayed alpha fade, chunky retro $z$'s, and a snoozing Mochibun loaf into an Android-compliant, zero-compression `bootanimation.zip`.
+A standalone Python utility that generates a custom, lightweight, 1:1 pixel-art boot animation tailored for the **ALT Mive Style Folder (AT-M120)** (480 × 800 portrait).
 
 ---
 
@@ -47,7 +45,7 @@ tools/bootanim/
 
 ## 🚀 Building the Animation
 
-From within the `tools/bootanim/` folder:
+From within the `tools/mochibun_bootanim/` folder:
 
 ```bash
 python3 build_bootanimation.py
@@ -60,7 +58,7 @@ python3 build_bootanimation.py
 
 ## 📱 Device Installation (Magisk Systemless)
 
-The AT-M120 uses a read-only system partition. Installing via a lightweight local Magisk module provides clean systemless overlay persistence without modifying `/system` directly[cite: 10].
+The AT-M120 uses a read-only system partition. Installing via a lightweight local Magisk module provides clean systemless overlay persistence without modifying `/system` directly.
 
 ### 1. Stage the Zip on Device
 ```bash
