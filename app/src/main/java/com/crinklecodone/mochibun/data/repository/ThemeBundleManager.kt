@@ -130,7 +130,10 @@ object ThemeBundleManager {
                     accelerationMulti = CursorPreferences.getAcceleration(context),
                     pointerSizeDp = CursorPreferences.getCursorSizeDp(context).toFloat(),
                     clickMethod = CursorPreferences.getClickMethod(context).name,
-                    hotspot = CursorPreferences.getHotspotAlignment(context).name
+                    hotspot = CursorPreferences.getHotspotAlignment(context).name,
+                    tapStepPx = CursorPreferences.getTapStepPx(context),
+                    maxSpeedPxPerSec = CursorPreferences.getMaxSpeed(context),
+                    accelRampMs = CursorPreferences.getAccelRampMs(context)
                 ),
                 hasWallpaper = activeWallpaperUri != null,
                 hasCustomCursor = activeCursorUri != null
@@ -341,6 +344,9 @@ object ThemeBundleManager {
             val c = targetManifest.cursor
             CursorPreferences.setMoveSpeed(context, c.baseVelocity)
             CursorPreferences.setAcceleration(context, c.accelerationMulti)
+            c.tapStepPx?.let { CursorPreferences.setTapStepPx(context, it) }
+            c.maxSpeedPxPerSec?.let { CursorPreferences.setMaxSpeed(context, it) }
+            c.accelRampMs?.let { CursorPreferences.setAccelRampMs(context, it) }
             CursorPreferences.setCursorSizeDp(context, c.pointerSizeDp.toInt())
             try {
                 CursorPreferences.setClickMethod(context, ClickMethod.valueOf(c.clickMethod))

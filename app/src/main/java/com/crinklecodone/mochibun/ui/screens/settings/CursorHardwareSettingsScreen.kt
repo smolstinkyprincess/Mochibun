@@ -26,7 +26,6 @@ import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
 import java.util.Locale
-import kotlin.math.roundToInt
 
 /**
  * Tier 2: Virtual Cursor Sub-Screen
@@ -42,8 +41,9 @@ internal fun CursorHardwareSettingsSubScreen(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    var moveSpeed by remember { mutableFloatStateOf(CursorPreferences.getMoveSpeed(context)) }
-    var acceleration by remember { mutableFloatStateOf(CursorPreferences.getAcceleration(context)) }
+    var tapStepPx by remember { mutableIntStateOf(CursorPreferences.getTapStepPx(context)) }
+    var maxSpeed by remember { mutableIntStateOf(CursorPreferences.getMaxSpeed(context)) }
+    var accelRampMs by remember { mutableIntStateOf(CursorPreferences.getAccelRampMs(context)) }
     var cursorSizeDp by remember { mutableIntStateOf(CursorPreferences.getCursorSizeDp(context)) }
     var scrollStepPx by remember { mutableIntStateOf(CursorPreferences.getScrollStepPx(context)) }
     var customUri by remember { mutableStateOf(CursorPreferences.getCustomCursorUri(context)) }
@@ -61,14 +61,48 @@ internal fun CursorHardwareSettingsSubScreen(
         }
     }
 
-    val totalItems = if (customUri != null) 6 else 5 // Speed, Accel, Size, ScrollStep, SpritePicker, (ResetSprite)
+    // Step, MaxSpeed, Accel, Size, ScrollStep, SpritePicker, (ResetSprite)
+    val totalItems = if (customUri != null) 7 else 6
 
     val targetCardIndex = remember(focusedIndex) {
         when (focusedIndex) {
-            0, 1, 2, 3 -> 0
-            4, 5 -> 1
+            0, 1, 2, 3, 4 -> 0
+            5, 6 -> 1
             else -> 0
         }
+    }
+
+    // Moves the stepper at [index] one notch; [direction] is -1 (left) or +1 (right).
+    // Returns false when [index] is not a stepper row.
+    fun adjustSetting(index: Int, direction: Int): Boolean {
+        when (index) {
+            0 -> {
+                tapStepPx = (tapStepPx + direction)
+                    .coerceIn(CursorPreferences.MIN_TAP_STEP_PX, CursorPreferences.MAX_TAP_STEP_PX)
+                CursorPreferences.setTapStepPx(context, tapStepPx)
+            }
+            1 -> {
+                maxSpeed = (maxSpeed + direction * CursorPreferences.MAX_SPEED_INCREMENT)
+                    .coerceIn(CursorPreferences.MIN_MAX_SPEED, CursorPreferences.MAX_MAX_SPEED)
+                CursorPreferences.setMaxSpeed(context, maxSpeed)
+            }
+            2 -> {
+                accelRampMs = (accelRampMs + direction * CursorPreferences.ACCEL_RAMP_INCREMENT_MS)
+                    .coerceIn(CursorPreferences.MIN_ACCEL_RAMP_MS, CursorPreferences.MAX_ACCEL_RAMP_MS)
+                CursorPreferences.setAccelRampMs(context, accelRampMs)
+            }
+            3 -> {
+                cursorSizeDp = (cursorSizeDp + direction * 4).coerceIn(20, 52)
+                CursorPreferences.setCursorSizeDp(context, cursorSizeDp)
+            }
+            4 -> {
+                scrollStepPx = (scrollStepPx + direction * CursorPreferences.SCROLL_STEP_INCREMENT_PX)
+                    .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
+                CursorPreferences.setScrollStepPx(context, scrollStepPx)
+            }
+            else -> return false
+        }
+        return true
     }
 
     LaunchedEffect(targetCardIndex) {
@@ -103,15 +137,15 @@ internal fun CursorHardwareSettingsSubScreen(
                         sawCenterDown = false
                         SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (focusedIndex) {
-                            4 -> {
+                            5 -> {
                                 try {
                                     filePicker.launch(arrayOf("image/gif", "image/png"))
                                 } catch (_: Exception) {}
                             }
-                            5 -> {
+                            6 -> {
                                 CursorPreferences.setCustomCursorUri(context, null)
                                 customUri = null
-                                focusedIndex = 4
+                                focusedIndex = 5
                             }
                         }
                     }
@@ -124,15 +158,15 @@ internal fun CursorHardwareSettingsSubScreen(
                         focusedIndex = targetIndex
                         SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (targetIndex) {
-                            4 -> {
+                            5 -> {
                                 try {
                                     filePicker.launch(arrayOf("image/gif", "image/png"))
                                 } catch (_: Exception) {}
                             }
-                            5 -> {
+                            6 -> {
                                 CursorPreferences.setCustomCursorUri(context, null)
                                 customUri = null
-                                focusedIndex = 4
+                                focusedIndex = 5
                             }
                         }
                     }
@@ -151,69 +185,8 @@ internal fun CursorHardwareSettingsSubScreen(
                 }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     if (event.type == KeyEventType.KeyDown) {
-                        val handled = when (native.keyCode) {
-                            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                                when (focusedIndex) {
-                                    0 -> {
-                                        val newSpeed = (moveSpeed - 2f).coerceIn(4f, 26f)
-                                        CursorPreferences.setMoveSpeed(context, newSpeed)
-                                        moveSpeed = newSpeed
-                                        true
-                                    }
-                                    1 -> {
-                                        val newAccel = (acceleration - 0.02f).coerceIn(1.00f, 1.25f)
-                                        CursorPreferences.setAcceleration(context, newAccel)
-                                        acceleration = newAccel
-                                        true
-                                    }
-                                    2 -> {
-                                        val newSize = (cursorSizeDp - 4).coerceIn(20, 52)
-                                        CursorPreferences.setCursorSizeDp(context, newSize)
-                                        cursorSizeDp = newSize
-                                        true
-                                    }
-                                    3 -> {
-                                        val newStep = (scrollStepPx - CursorPreferences.SCROLL_STEP_INCREMENT_PX)
-                                            .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
-                                        CursorPreferences.setScrollStepPx(context, newStep)
-                                        scrollStepPx = newStep
-                                        true
-                                    }
-                                    else -> false
-                                }
-                            }
-                            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                                when (focusedIndex) {
-                                    0 -> {
-                                        val newSpeed = (moveSpeed + 2f).coerceIn(4f, 26f)
-                                        CursorPreferences.setMoveSpeed(context, newSpeed)
-                                        moveSpeed = newSpeed
-                                        true
-                                    }
-                                    1 -> {
-                                        val newAccel = (acceleration + 0.02f).coerceIn(1.00f, 1.25f)
-                                        CursorPreferences.setAcceleration(context, newAccel)
-                                        acceleration = newAccel
-                                        true
-                                    }
-                                    2 -> {
-                                        val newSize = (cursorSizeDp + 4).coerceIn(20, 52)
-                                        CursorPreferences.setCursorSizeDp(context, newSize)
-                                        cursorSizeDp = newSize
-                                        true
-                                    }
-                                    3 -> {
-                                        val newStep = (scrollStepPx + CursorPreferences.SCROLL_STEP_INCREMENT_PX)
-                                            .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
-                                        CursorPreferences.setScrollStepPx(context, newStep)
-                                        scrollStepPx = newStep
-                                        true
-                                    }
-                                    else -> false
-                                }
-                            }
-                            else -> false
-                        }
+                        val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                        val handled = adjustSetting(focusedIndex, direction)
                         if (handled) {
                             SoundEffectManager.play(context, SoundEffect.NAV)
                         }
@@ -233,76 +206,52 @@ internal fun CursorHardwareSettingsSubScreen(
                 SettingsCard(categoryTitle = "Movement & Physics") {
                     SettingsStepperRow(
                         title = "Base Speed",
-                        subtitle = "Pointer movement velocity",
-                        valueDisplay = "${moveSpeed.roundToInt()} px",
+                        subtitle = "Precision step per tap",
+                        valueDisplay = "$tapStepPx px",
                         isFocused = focusedIndex == 0,
                         jumpNumber = 1,
-                        onDecrement = {
-                            val newSpeed = (moveSpeed - 2f).coerceIn(4f, 26f)
-                            CursorPreferences.setMoveSpeed(context, newSpeed)
-                            moveSpeed = newSpeed
-                        },
-                        onIncrement = {
-                            val newSpeed = (moveSpeed + 2f).coerceIn(4f, 26f)
-                            CursorPreferences.setMoveSpeed(context, newSpeed)
-                            moveSpeed = newSpeed
-                        }
+                        onDecrement = { adjustSetting(0, -1) },
+                        onIncrement = { adjustSetting(0, 1) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Max Speed",
+                        subtitle = "Top speed while holding",
+                        valueDisplay = "$maxSpeed px/s",
+                        isFocused = focusedIndex == 1,
+                        jumpNumber = 2,
+                        onDecrement = { adjustSetting(1, -1) },
+                        onIncrement = { adjustSetting(1, 1) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
                         title = "Acceleration",
-                        subtitle = "Velocity ramp multiplier",
-                        valueDisplay = String.format(Locale.US, "%.2fx", acceleration),
-                        isFocused = focusedIndex == 1,
-                        jumpNumber = 2,
-                        onDecrement = {
-                            val newAccel = (acceleration - 0.02f).coerceIn(1.00f, 1.25f)
-                            CursorPreferences.setAcceleration(context, newAccel)
-                            acceleration = newAccel
-                        },
-                        onIncrement = {
-                            val newAccel = (acceleration + 0.02f).coerceIn(1.00f, 1.25f)
-                            CursorPreferences.setAcceleration(context, newAccel)
-                            acceleration = newAccel
-                        }
+                        subtitle = "Time to max speed (short = snappy)",
+                        valueDisplay = String.format(Locale.US, "%.2f s", accelRampMs / 1000f),
+                        isFocused = focusedIndex == 2,
+                        jumpNumber = 3,
+                        onDecrement = { adjustSetting(2, -1) },
+                        onIncrement = { adjustSetting(2, 1) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
                         title = "Cursor Size",
                         subtitle = "On-screen pointer dimensions",
                         valueDisplay = "$cursorSizeDp dp",
-                        isFocused = focusedIndex == 2,
-                        jumpNumber = 3,
-                        onDecrement = {
-                            val newSize = (cursorSizeDp - 4).coerceIn(20, 52)
-                            CursorPreferences.setCursorSizeDp(context, newSize)
-                            cursorSizeDp = newSize
-                        },
-                        onIncrement = {
-                            val newSize = (cursorSizeDp + 4).coerceIn(20, 52)
-                            CursorPreferences.setCursorSizeDp(context, newSize)
-                            cursorSizeDp = newSize
-                        }
+                        isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
+                        onDecrement = { adjustSetting(3, -1) },
+                        onIncrement = { adjustSetting(3, 1) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
                         title = "Scroll Step",
                         subtitle = "Keys 2 (Up) & 8 (Down) swipe distance",
                         valueDisplay = "$scrollStepPx px",
-                        isFocused = focusedIndex == 3,
-                        jumpNumber = 4,
-                        onDecrement = {
-                            val newStep = (scrollStepPx - CursorPreferences.SCROLL_STEP_INCREMENT_PX)
-                                .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
-                            CursorPreferences.setScrollStepPx(context, newStep)
-                            scrollStepPx = newStep
-                        },
-                        onIncrement = {
-                            val newStep = (scrollStepPx + CursorPreferences.SCROLL_STEP_INCREMENT_PX)
-                                .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
-                            CursorPreferences.setScrollStepPx(context, newStep)
-                            scrollStepPx = newStep
-                        }
+                        isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
+                        onDecrement = { adjustSetting(4, -1) },
+                        onIncrement = { adjustSetting(4, 1) }
                     )
                 }
             }
@@ -313,8 +262,8 @@ internal fun CursorHardwareSettingsSubScreen(
                         title = "Cursor Graphic",
                         subtitle = if (customUri != null) "Custom sprite active" else "Default kawaii paw sprite",
                         icon = "🐾",
-                        isFocused = focusedIndex == 4,
-                        jumpNumber = 5,
+                        isFocused = focusedIndex == 5,
+                        jumpNumber = 6,
                         onClick = {
                             try {
                                 filePicker.launch(arrayOf("image/gif", "image/png"))
@@ -325,13 +274,13 @@ internal fun CursorHardwareSettingsSubScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         SettingsActionRow(
                             title = "Reset to Default Sprite",
-                            isFocused = focusedIndex == 5,
+                            isFocused = focusedIndex == 6,
                             isDestructive = true,
-                            jumpNumber = 6,
+                            jumpNumber = 7,
                             onClick = {
                                 CursorPreferences.setCustomCursorUri(context, null)
                                 customUri = null
-                                focusedIndex = 4
+                                focusedIndex = 5
                             }
                         )
                     }

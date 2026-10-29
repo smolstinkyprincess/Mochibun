@@ -134,4 +134,23 @@ class ThemeBundleTest {
         assertTrue("Filename should start with sanitized slug", fileName.startsWith("pastel_dreams__"))
         assertTrue("Filename must end with .mochibun", fileName.endsWith(".mochibun"))
     }
+
+    @Test
+    fun testCursorKineticFieldsAreOptional() {
+        // Cursor block as written by versions before the kinetic cursor settings
+        val legacyJson = """
+            {"baseVelocity": 10.0, "accelerationMulti": 1.08, "pointerSizeDp": 32.0,
+             "clickMethod": "ACCESSIBILITY_GESTURE", "hotspot": "TOP_LEFT"}
+        """.trimIndent()
+        val legacy = bundleJsonFormat.decodeFromString<BundleCursorConfig>(legacyJson)
+        assertEquals(null, legacy.tapStepPx)
+        assertEquals(null, legacy.maxSpeedPxPerSec)
+        assertEquals(null, legacy.accelRampMs)
+
+        val current = legacy.copy(tapStepPx = 2, maxSpeedPxPerSec = 800, accelRampMs = 500)
+        val decoded = bundleJsonFormat.decodeFromString<BundleCursorConfig>(
+            bundleJsonFormat.encodeToString(current)
+        )
+        assertEquals(current, decoded)
+    }
 }

@@ -27,16 +27,34 @@ object CursorPreferences {
     private const val KEY_CURSOR_SIZE_DP = "cursor_size_dp"
     private const val KEY_GIF_PLAYBACK_SPEED = "cursor_gif_playback_speed"
     private const val KEY_SCROLL_STEP_PX = "cursor_scroll_step_px"
+    private const val KEY_TAP_STEP_PX = "cursor_tap_step_px"
+    private const val KEY_MAX_SPEED = "cursor_max_speed"
+    private const val KEY_ACCEL_RAMP_MS = "cursor_accel_ramp_ms"
 
     val DEFAULT_TOGGLE_KEYCODE = KeyEvent.KEYCODE_F4 // Chinoe AT-M120 physical side key
-    const val DEFAULT_MOVE_SPEED = 10f // Base pixels per frame
-    const val DEFAULT_ACCELERATION = 1.08f // Multiplier while holding D-pad
+    // Legacy physics values. The cursor no longer uses them, but backups and .mochibun bundles
+    // still carry them so older app versions can read files made by this one.
+    const val DEFAULT_MOVE_SPEED = 10f
+    const val DEFAULT_ACCELERATION = 1.08f
     const val DEFAULT_CURSOR_SIZE_DP = 32
     const val DEFAULT_GIF_PLAYBACK_SPEED = 0.5f // Calm, gentle low playback speed (~170-200ms frame delay)
     const val DEFAULT_SCROLL_STEP_PX = 200 // Default vertical swipe distance for keys 2 & 8
     const val MIN_SCROLL_STEP_PX = 100
     const val MAX_SCROLL_STEP_PX = 500
     const val SCROLL_STEP_INCREMENT_PX = 50
+
+    // Kinetic cursor physics (see CursorPhysics)
+    const val DEFAULT_TAP_STEP_PX = 3 // Micro-step per tap; hold starts at this many px per frame
+    const val MIN_TAP_STEP_PX = 1
+    const val MAX_TAP_STEP_PX = 5
+    const val DEFAULT_MAX_SPEED = 650 // Terminal velocity in px/s
+    const val MIN_MAX_SPEED = 300
+    const val MAX_MAX_SPEED = 1000
+    const val MAX_SPEED_INCREMENT = 50
+    const val DEFAULT_ACCEL_RAMP_MS = 750 // Time to reach max speed while holding
+    const val MIN_ACCEL_RAMP_MS = 250
+    const val MAX_ACCEL_RAMP_MS = 1500
+    const val ACCEL_RAMP_INCREMENT_MS = 250
 
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -129,6 +147,45 @@ object CursorPreferences {
         getPrefs(context)
             .edit()
             .putInt(KEY_SCROLL_STEP_PX, stepPx.coerceIn(MIN_SCROLL_STEP_PX, MAX_SCROLL_STEP_PX))
+            .apply()
+    }
+
+    fun getTapStepPx(context: Context): Int {
+        return getPrefs(context)
+            .getInt(KEY_TAP_STEP_PX, DEFAULT_TAP_STEP_PX)
+            .coerceIn(MIN_TAP_STEP_PX, MAX_TAP_STEP_PX)
+    }
+
+    fun setTapStepPx(context: Context, stepPx: Int) {
+        getPrefs(context)
+            .edit()
+            .putInt(KEY_TAP_STEP_PX, stepPx.coerceIn(MIN_TAP_STEP_PX, MAX_TAP_STEP_PX))
+            .apply()
+    }
+
+    fun getMaxSpeed(context: Context): Int {
+        return getPrefs(context)
+            .getInt(KEY_MAX_SPEED, DEFAULT_MAX_SPEED)
+            .coerceIn(MIN_MAX_SPEED, MAX_MAX_SPEED)
+    }
+
+    fun setMaxSpeed(context: Context, pxPerSec: Int) {
+        getPrefs(context)
+            .edit()
+            .putInt(KEY_MAX_SPEED, pxPerSec.coerceIn(MIN_MAX_SPEED, MAX_MAX_SPEED))
+            .apply()
+    }
+
+    fun getAccelRampMs(context: Context): Int {
+        return getPrefs(context)
+            .getInt(KEY_ACCEL_RAMP_MS, DEFAULT_ACCEL_RAMP_MS)
+            .coerceIn(MIN_ACCEL_RAMP_MS, MAX_ACCEL_RAMP_MS)
+    }
+
+    fun setAccelRampMs(context: Context, rampMs: Int) {
+        getPrefs(context)
+            .edit()
+            .putInt(KEY_ACCEL_RAMP_MS, rampMs.coerceIn(MIN_ACCEL_RAMP_MS, MAX_ACCEL_RAMP_MS))
             .apply()
     }
 }

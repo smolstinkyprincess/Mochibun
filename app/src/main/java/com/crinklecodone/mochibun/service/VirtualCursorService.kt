@@ -59,8 +59,6 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
 
     // Configurable settings cache
     private var toggleKeyCode = CursorPreferences.DEFAULT_TOGGLE_KEYCODE
-    private var baseSpeed = CursorPreferences.DEFAULT_MOVE_SPEED
-    private var accelerationRate = CursorPreferences.DEFAULT_ACCELERATION
     private var scrollStepPx = CursorPreferences.DEFAULT_SCROLL_STEP_PX
     private var clickMethod = ClickMethod.ACCESSIBILITY_GESTURE
 
@@ -185,8 +183,9 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
 
     private fun reloadConfig() {
         toggleKeyCode = CursorPreferences.getToggleKeyCode(this)
-        baseSpeed = CursorPreferences.getMoveSpeed(this)
-        accelerationRate = CursorPreferences.getAcceleration(this)
+        physics.stepPx = CursorPreferences.getTapStepPx(this).toFloat()
+        physics.maxSpeed = CursorPreferences.getMaxSpeed(this).toFloat()
+        physics.accelRate = CursorPhysics.accelRateForRampMs(CursorPreferences.getAccelRampMs(this))
         scrollStepPx = CursorPreferences.getScrollStepPx(this)
         clickMethod = CursorPreferences.getClickMethod(this)
         InputArbiter.cursorToggleKeyCode = toggleKeyCode
@@ -270,10 +269,10 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         if (!isCursorVisible) return
 
         when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> handleDirectionKey(action, up = true)
-            KeyEvent.KEYCODE_DPAD_DOWN -> handleDirectionKey(action, down = true)
-            KeyEvent.KEYCODE_DPAD_LEFT -> handleDirectionKey(action, left = true)
-            KeyEvent.KEYCODE_DPAD_RIGHT -> handleDirectionKey(action, right = true)
+            KeyEvent.KEYCODE_DPAD_UP -> handleDirectionKey(event, dx = 0, dy = -1)
+            KeyEvent.KEYCODE_DPAD_DOWN -> handleDirectionKey(event, dx = 0, dy = 1)
+            KeyEvent.KEYCODE_DPAD_LEFT -> handleDirectionKey(event, dx = -1, dy = 0)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> handleDirectionKey(event, dx = 1, dy = 0)
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER -> {
@@ -300,26 +299,19 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         }
     }
 
-    private fun handleDirectionKey(
-        action: Int,
-        up: Boolean = false,
-        down: Boolean = false,
-        left: Boolean = false,
-        right: Boolean = false
-    ) {
-        when (action) {
+    private fun handleDirectionKey(event: KeyEvent, dx: Int, dy: Int) {
+        when (event.action) {
             KeyEvent.ACTION_DOWN -> {
-                if (up) physics.moveUp = true
-                if (down) physics.moveDown = true
-                if (left) physics.moveLeft = true
-                if (right) physics.moveRight = true
+                // Auto-repeats are still consumed (the press is ours) but add no motion:
+                // the frame loop already drives a held key.
+                if (event.repeatCount != 0) return
+                physics.pressDirection(dx, dy)
+                // Show the tap micro-step right away instead of waiting for the next frame
+                overlayView?.updatePosition(physics.posX, physics.posY)
                 startMovementTickerIfNeeded()
             }
             KeyEvent.ACTION_UP -> {
-                if (up) physics.moveUp = false
-                if (down) physics.moveDown = false
-                if (left) physics.moveLeft = false
-                if (right) physics.moveRight = false
+                physics.releaseDirection(dx, dy)
 
                 // Dead-stop immediately when all directional keys are released
                 if (!physics.hasActiveInput) {
@@ -332,18 +324,13 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     private fun startMovementTickerIfNeeded() {
         if (!isMovementTickerActive && isCursorVisible) {
             isMovementTickerActive = true
-            physics.resetVelocity(baseSpeed)
             // Lock directly to display VSYNC frames
             Choreographer.getInstance().postFrameCallback(this)
         }
     }
 
     private fun stopMovementTicker() {
-        physics.moveUp = false
-        physics.moveDown = false
-        physics.moveLeft = false
-        physics.moveRight = false
-        physics.resetVelocity(baseSpeed)
+        physics.releaseAll()
         if (isMovementTickerActive) {
             isMovementTickerActive = false
             Choreographer.getInstance().removeFrameCallback(this)
@@ -351,8 +338,8 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     }
 
     /**
-     * VSYNC-driven frame callback. Continuous physics velocity integration
-     * with delta time, zero-allocation calculations, and GPU canvas translation.
+     * VSYNC-driven frame callback, posted only while a direction key is held, so the cursor
+     * costs no CPU when idle. Zero allocations: physics math plus a translation update.
      */
     override fun doFrame(frameTimeNanos: Long) {
         if (!isMovementTickerActive || !isCursorVisible) {
@@ -361,8 +348,9 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         }
 
         if (physics.hasActiveInput) {
-            physics.tick(frameTimeNanos, baseSpeed, accelerationRate)
-            overlayView?.updatePosition(physics.posX, physics.posY)
+            if (physics.tick(frameTimeNanos)) {
+                overlayView?.updatePosition(physics.posX, physics.posY)
+            }
             Choreographer.getInstance().postFrameCallback(this)
         } else {
             stopMovementTicker()

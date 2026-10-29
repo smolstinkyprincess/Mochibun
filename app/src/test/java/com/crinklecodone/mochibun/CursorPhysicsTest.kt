@@ -10,129 +10,174 @@ import kotlin.math.hypot
 
 class CursorPhysicsTest {
 
+    private companion object {
+        const val FRAME_60HZ = 16_666_667L
+        const val FRAME_30HZ = 33_333_333L
+    }
+
     private lateinit var physics: CursorPhysics
+    private var nowNanos = 0L
 
     @Before
     fun setUp() {
         physics = CursorPhysics(screenWidth = 480f, screenHeight = 800f)
+        physics.stepPx = 3f
+        physics.maxSpeed = 650f
+        physics.accelRate = CursorPhysics.accelRateForRampMs(750)
         physics.setPosition(240f, 400f)
+        nowNanos = 1_000_000_000L
+    }
+
+    /** Runs [count] VSYNC frames [frameNanos] apart. */
+    private fun runFrames(count: Int, frameNanos: Long = FRAME_60HZ) {
+        repeat(count) {
+            nowNanos += frameNanos
+            physics.tick(nowNanos)
+        }
     }
 
     @Test
-    fun `initial tap moves small distance for pixel-art alignment`() {
-        val baseSpeed = 10f // Default setting
-        physics.resetVelocity(baseSpeed)
-        physics.moveRight = true
+    fun `tap yields a single crisp micro-step`() {
+        physics.pressDirection(1, 0)
+        assertEquals("Press should nudge by stepPx at once", 243f, physics.posX, 0.001f)
 
-        val nanosPerFrame = 16_666_666L // 1/60th second
-        val updated = physics.tick(nanosPerFrame, baseSpeed, 1.08f)
+        // A 100 ms tap stays inside the 120 ms tap window: no further motion
+        runFrames(6)
+        assertEquals(243f, physics.posX, 0.001f)
+        assertEquals(0f, physics.velocity, 0.001f)
 
-        assertTrue(updated)
-        // At 10 baseSpeed, baseVelocity is 120 px/s -> ~2.0 px per frame
-        val deltaX = physics.posX - 240f
-        assertTrue("Expected small initial step of ~2px, got $deltaX", deltaX in 1.8f..2.2f)
+        physics.releaseDirection(1, 0)
+        assertEquals(243f, physics.posX, 0.001f)
         assertEquals(400f, physics.posY, 0.001f)
     }
 
     @Test
-    fun `holding directional key ramps velocity smoothly towards maxSpeed`() {
-        val baseSpeed = 10f
-        val accelerationRate = 1.08f
-        physics.resetVelocity(baseSpeed)
-        physics.moveDown = true
+    fun `repeated press of an already held key does not step again`() {
+        physics.pressDirection(0, -1)
+        physics.pressDirection(0, -1)
+        assertEquals(397f, physics.posY, 0.001f)
+    }
 
-        var currentNanos = 16_666_666L
-        val initialSpeed = physics.currentSpeed
+    @Test
+    fun `sustained hold ramps smoothly from base speed up to max speed`() {
+        physics.setPosition(240f, 0f)
+        physics.pressDirection(0, 1)
 
-        // Simulate holding key for 30 consecutive frames (~0.5s)
-        for (i in 1..30) {
-            currentNanos += 16_666_666L
-            physics.tick(currentNanos, baseSpeed, accelerationRate)
+        // Just past the tap window the cursor moves near base speed (stepPx per 60 Hz frame)
+        runFrames(8)
+        assertTrue(
+            "Speed just after the tap window should be near base, got ${physics.velocity}",
+            physics.velocity >= physics.baseSpeed && physics.velocity < physics.baseSpeed + 40f
+        )
+
+        var previous = physics.velocity
+        repeat(180) { // ~3 s
+            nowNanos += FRAME_60HZ
+            physics.tick(nowNanos)
+            assertTrue("Velocity must never drop while holding", physics.velocity >= previous)
+            assertTrue("Velocity must never exceed maxSpeed", physics.velocity <= physics.maxSpeed)
+            previous = physics.velocity
         }
-
-        assertTrue(
-            "Current speed (${physics.currentSpeed}) should be significantly higher than initial speed ($initialSpeed)",
-            physics.currentSpeed > initialSpeed * 3f
-        )
-        val maxSpeed = physics.calculateMaxSpeed(baseSpeed)
-        assertTrue(
-            "Speed should not exceed maxSpeed ($maxSpeed), got ${physics.currentSpeed}",
-            physics.currentSpeed <= maxSpeed
-        )
+        assertEquals(physics.maxSpeed, physics.velocity, 0.5f)
     }
 
     @Test
-    fun `releasing keys halts movement instantly with dead stop`() {
-        val baseSpeed = 10f
-        physics.resetVelocity(baseSpeed)
-        physics.moveUp = true
+    fun `movement is independent of frame rate`() {
+        physics.setPosition(100f, 0f)
+        physics.pressDirection(0, 1)
+        runFrames(1 + 60, FRAME_60HZ)
+        val at60Hz = physics.posY
 
-        physics.tick(16_666_666L, baseSpeed, 1.08f)
-        assertTrue(physics.hasActiveInput)
+        physics.releaseAll()
+        physics.setPosition(100f, 0f)
+        physics.pressDirection(0, 1)
+        runFrames(1, FRAME_60HZ)
+        runFrames(30, FRAME_30HZ)
+        val at30Hz = physics.posY
 
-        // User releases D-pad
-        physics.moveUp = false
-        assertFalse(physics.hasActiveInput)
-
-        val posXBefore = physics.posX
-        val posYBefore = physics.posY
-
-        // Subsequent tick should return false and not displace the cursor
-        val updated = physics.tick(33_333_333L, baseSpeed, 1.08f)
-        assertFalse(updated)
-        assertEquals(posXBefore, physics.posX, 0.001f)
-        assertEquals(posYBefore, physics.posY, 0.001f)
-    }
-
-    @Test
-    fun `diagonal movement vector is normalized to cardinal magnitude`() {
-        val baseSpeed = 10f
-        physics.resetVelocity(baseSpeed)
-        physics.moveRight = true
-        physics.moveDown = true
-
-        val nanosPerFrame = 16_666_666L
-        physics.tick(nanosPerFrame, baseSpeed, 1.00f) // acceleration 1.0 to isolate magnitude
-
-        val dx = physics.posX - 240f
-        val dy = physics.posY - 400f
-        val totalDistance = hypot(dx, dy)
-
-        // At 120 px/s for 1/60s, total distance traveled diagonally should be ~2.0 px
-        assertEquals(2.0f, totalDistance, 0.05f)
-        // dx and dy should be equal
-        assertEquals(dx, dy, 0.001f)
+        assertTrue("Hold should have travelled far, got $at60Hz", at60Hz > 300f)
+        assertEquals(at60Hz, at30Hz, 0.05f)
     }
 
     @Test
     fun `cursor coordinates are strictly clamped within display viewport`() {
-        val baseSpeed = 50f
-        physics.setPosition(475f, 795f)
-        physics.moveRight = true
-        physics.moveDown = true
-
-        var currentNanos = 16_666_666L
-        for (i in 1..20) {
-            currentNanos += 16_666_666L
-            physics.tick(currentNanos, baseSpeed, 1.2f)
-        }
-
+        physics.setPosition(478f, 798f)
+        physics.pressDirection(1, 0)
+        physics.pressDirection(0, 1)
         assertEquals(480f, physics.posX, 0.001f)
         assertEquals(800f, physics.posY, 0.001f)
 
-        // Test upper-left clamping
-        physics.setPosition(5f, 5f)
-        physics.moveRight = false
-        physics.moveDown = false
-        physics.moveLeft = true
-        physics.moveUp = true
-
-        for (i in 1..20) {
-            currentNanos += 16_666_666L
-            physics.tick(currentNanos, baseSpeed, 1.2f)
+        repeat(120) {
+            nowNanos += FRAME_60HZ
+            physics.tick(nowNanos)
+            assertTrue(physics.posX in 0f..480f)
+            assertTrue(physics.posY in 0f..800f)
         }
+        assertEquals(480f, physics.posX, 0.001f)
+        assertEquals(800f, physics.posY, 0.001f)
 
+        physics.releaseAll()
+        physics.setPosition(2f, 2f)
+        physics.pressDirection(-1, 0)
+        physics.pressDirection(0, -1)
+        repeat(120) {
+            nowNanos += FRAME_60HZ
+            physics.tick(nowNanos)
+            assertTrue(physics.posX in 0f..480f)
+            assertTrue(physics.posY in 0f..800f)
+        }
         assertEquals(0f, physics.posX, 0.001f)
         assertEquals(0f, physics.posY, 0.001f)
+    }
+
+    @Test
+    fun `releasing keys settles velocity to zero with a dead stop`() {
+        physics.setPosition(240f, 0f)
+        physics.pressDirection(0, 1)
+        runFrames(60)
+        assertTrue(physics.velocity > physics.baseSpeed)
+
+        physics.releaseDirection(0, 1)
+        assertFalse(physics.hasActiveInput)
+        assertEquals(0f, physics.velocity, 0.0f)
+
+        val xBefore = physics.posX
+        val yBefore = physics.posY
+        nowNanos += FRAME_60HZ
+        assertFalse(physics.tick(nowNanos))
+        assertEquals(xBefore, physics.posX, 0.0f)
+        assertEquals(yBefore, physics.posY, 0.0f)
+
+        // The next press starts a fresh gesture: tap step again, no leftover speed
+        physics.pressDirection(0, 1)
+        assertEquals(yBefore + 3f, physics.posY, 0.001f)
+        assertEquals(0f, physics.velocity, 0.0f)
+    }
+
+    @Test
+    fun `diagonal movement vector is normalized to cardinal magnitude`() {
+        physics.pressDirection(1, 0)
+        runFrames(30)
+        val cardinal = physics.posX - 243f
+
+        physics.releaseAll()
+        physics.setPosition(240f, 400f)
+        physics.pressDirection(1, 0)
+        physics.pressDirection(0, 1)
+        runFrames(30)
+        val dx = physics.posX - 243f
+        val dy = physics.posY - 403f
+
+        assertEquals(dx, dy, 0.001f)
+        assertEquals(cardinal, hypot(dx, dy), 0.01f)
+    }
+
+    @Test
+    fun `opposite keys cancel out`() {
+        physics.pressDirection(-1, 0)
+        physics.pressDirection(1, 0)
+        runFrames(60)
+        assertEquals(240f, physics.posX, 0.001f)
+        assertEquals(400f, physics.posY, 0.001f)
     }
 }

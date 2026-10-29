@@ -25,6 +25,7 @@ import coil.request.ImageRequest
 import com.crinklecodone.mochibun.R
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
 import com.crinklecodone.mochibun.data.prefs.HotspotAlignment
+import kotlin.math.round
 
 /**
  * High-performance, pixel-crisp overlay view for the system-wide virtual mouse pointer.
@@ -308,6 +309,11 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     /**
      * Updates cursor position on screen via hardware layer translation
      * without triggering heavy WindowManager layout recalculations.
+     *
+     * The hotspot keeps the sub-pixel position, but the sprite is drawn on whole pixels:
+     * with nearest-neighbor sampling a fractional offset makes pixel-art columns shimmer.
+     * It also skips redraws while slow movement is still within the same pixel, because
+     * View ignores a translation that hasn't changed.
      */
     fun updatePosition(newX: Float, newY: Float) {
         currentX = newX
@@ -320,8 +326,8 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
             HotspotAlignment.TOP_LEFT -> currentY
             HotspotAlignment.CENTER -> currentY - cursorSizePx / 2f
         }
-        imageView.translationX = renderX
-        imageView.translationY = renderY
+        imageView.translationX = round(renderX)
+        imageView.translationY = round(renderY)
     }
 
     /**

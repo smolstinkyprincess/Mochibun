@@ -170,6 +170,9 @@ object BackupRestoreManager {
         cursorObj.put("toggle_keycode", CursorPreferences.getToggleKeyCode(context))
         cursorObj.put("move_speed", CursorPreferences.getMoveSpeed(context).toDouble())
         cursorObj.put("acceleration", CursorPreferences.getAcceleration(context).toDouble())
+        cursorObj.put("tap_step_px", CursorPreferences.getTapStepPx(context))
+        cursorObj.put("max_speed_px_per_sec", CursorPreferences.getMaxSpeed(context))
+        cursorObj.put("accel_ramp_ms", CursorPreferences.getAccelRampMs(context))
         cursorObj.put("click_method", CursorPreferences.getClickMethod(context).name)
         cursorObj.put("hotspot_alignment", CursorPreferences.getHotspotAlignment(context).name)
         cursorObj.put("cursor_size_dp", CursorPreferences.getCursorSizeDp(context))
@@ -429,6 +432,15 @@ object BackupRestoreManager {
                 }
                 if (cursorObj.has("acceleration")) {
                     CursorPreferences.setAcceleration(context, cursorObj.optDouble("acceleration", 1.08).toFloat())
+                }
+                if (cursorObj.has("tap_step_px")) {
+                    CursorPreferences.setTapStepPx(context, cursorObj.optInt("tap_step_px", CursorPreferences.DEFAULT_TAP_STEP_PX))
+                }
+                if (cursorObj.has("max_speed_px_per_sec")) {
+                    CursorPreferences.setMaxSpeed(context, cursorObj.optInt("max_speed_px_per_sec", CursorPreferences.DEFAULT_MAX_SPEED))
+                }
+                if (cursorObj.has("accel_ramp_ms")) {
+                    CursorPreferences.setAccelRampMs(context, cursorObj.optInt("accel_ramp_ms", CursorPreferences.DEFAULT_ACCEL_RAMP_MS))
                 }
                 if (cursorObj.has("click_method")) {
                     try {

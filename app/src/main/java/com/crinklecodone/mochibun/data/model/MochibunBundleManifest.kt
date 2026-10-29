@@ -41,9 +41,15 @@ data class BundlePaletteConfig(
 
 @Serializable
 data class BundleCursorConfig(
+    // baseVelocity / accelerationMulti are legacy physics values the cursor no longer uses;
+    // they stay required so older app versions can still read new bundles
     val baseVelocity: Float,
     val accelerationMulti: Float,
     val pointerSizeDp: Float,
     val clickMethod: String,
-    val hotspot: String
+    val hotspot: String,
+    // Kinetic physics; null in bundles made before these settings existed
+    val tapStepPx: Int? = null,
+    val maxSpeedPxPerSec: Int? = null,
+    val accelRampMs: Int? = null
 )
