@@ -30,13 +30,13 @@ A cozy, pastel Android launcher made with love for physical keypads and flip pho
 
 <div align="center">
 
-| 🌸 Home Screen | 🎀 Folders | 🗂️ Recents |
-| :---: | :---: | :---: |
-| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_home.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Home Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_folder.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Folder Dialog" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_recents.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Recents Tasks" /> |
+| 🌸 Home Screen | 🍡 App Drawer | 🗂️ Recents | 🎀 Folders |
+| :---: | :---: | :---: | :---: |
+| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_home.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Home Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_appdrawer.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="App Drawer & T9 Filter" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_recents.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Recents Tasks" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_folder.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Folder Dialog" /> |
 
-| 🎵 Widgets & Music | 💌 Notifications | 🌸 Kaomoji Wheel |
-| :---: | :---: | :---: |
-| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_widgets.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Widgets & Media Deck" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_notifications.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Notifications Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_wheel.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Kaomoji Radial Wheel" /> |
+| 📊 System Stats | 💌 Notifications | 🌸 Kaomoji Wheel | ⚙️ Settings Hub |
+| :---: | :---: | :---: | :---: |
+| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_stats.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Widgets & System Stats" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_notifs.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Notifications Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7_wheel.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Kaomoji Radial Wheel" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/8_settings.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Settings Hub" /> |
 
 </div>
 
