@@ -6,23 +6,19 @@ A lightweight, pastel Android launcher built with Jetpack Compose and Material 3
 
 ## ✨ Features
 
-- **Keypad First**: Built from the ground up for physical buttons. Use your directional pad to move through every card, drawer, and menu. Selection rings have a soft pastel glow that won't get cut off by card edges.
+- **Keypad First**: Built from the ground up for physical buttons. Use your directional pad to move through every card, drawer, and menu.
 
 - **Made for Small Screens**: Designed specifically for 480 × 800 flip phone displays—no awkward overlapping cards or text running off the screen.
 
-- **Virtual Mouse Cursor**: A built-in mouse pointer you can turn on and off anytime using your side button. Great for apps that demand touchscreen taps. Supports animated `.gif` or `.png` cursors and adjustable speeds.
+- **Virtual Mouse Cursor**: A built-in mouse pointer you can turn on and off anytime using your side button. Great for apps that demand touchscreen taps. Supports animated `.gif` or `.png` cursors, adjustable speeds, and vertical scrolling(using 2 and 8 on the keypad).
 
-- **T9 App Search**: Start typing on your number pad to filter and launch apps right away—no tapping a tiny search bar.
+- **T9 App Search**: Start typing on your number pad to filter and launch apps right inside the app drawer.
 
-- **Keypad Kaomoji Radial Wheel**: Long-press the physical **`#` (Pound)** key anywhere on the Home Screen or App Drawer to pop up an authentic radial selection wheel! Browse 6 categorized moods (*Happy*, *Love*, *Cute*, *Sleepy*, *Surprised*, and *Silly*) using your D-Pad or numeric keys `1`–`6`, then press **Center/Enter** to copy your chosen kaomoji straight to your clipboard with sweet haptic feedback `( ˶ˆᗜˆ˵ ) ♡`.
+- **Kaomoji Radial Wheel**: Long-press the physical **`#` (Pound)** key(remappable) anywhere on the Home Screen or App Drawer to pop up an authentic radial selection wheel! Browse 6 categorized moods (*Happy*, *Love*, *Cute*, *Sleepy*, *Surprised*, and *Silly*) using your D-Pad or numeric keys `1`–`6`, then press **Center/Enter** to copy your chosen kaomoji straight to your clipboard with sweet haptic feedback `( ˶ˆᗜˆ˵ ) ♡`.
 
 - **Procedural Keitai Sound Themes**: Authentic tactile audio feedback synthesized procedurally in memory on first boot—zero heavy audio assets inflating the APK! Choose your favorite sound profile in settings: *Kawaii Pop*, *Retro Keitai* (classic 2000s flip phone click!), *8-Bit Chiptune*, *Cyber Pager*, *Tactile Thock*, *Water Drop*, or silent mode.
 
-- **Keypad Power Shortcuts & Speed Dials**:
-   - **Hold `0`**: Instant flashlight toggle on/off with tactile confirmation 🔦.
-   - **Hold `2`–`9`**: Configurable one-touch speed dial to launch your favorite apps directly.
-   - **Tap / Hold `*` (Star)**: Contextual actions and quick silent/ringer toggle.
-   - **Tap / Hold `#` (Pound)**: Tap to open the launcher menu; hold for the Kaomoji Wheel!
+- **Hardware Key Remapping(root required)**: Remap function buttons and other hardware keys to simple actions or launch an app.
 
 - **Widgets Page**: A dedicated widget screen featuring a dynamic Now Playing media card that automatically appears during active playback and tucks away when audio stops, alongside support for your own Android widgets.
 
@@ -47,6 +43,34 @@ A lightweight, pastel Android launcher built with Jetpack Compose and Material 3
 | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_widgets.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Widgets & Media Deck" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_notifications.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Notifications Screen" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_wheel.png" width="180" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Kaomoji Radial Wheel" /> |
 
 </div>
+
+## ⌨️ Physical Key Map
+
+| Button | Short Press | Long Press (Hold ~400ms) |
+| :--- | :--- | :--- |
+| **D-Pad (Arrows)** | Navigate cards, app drawer & wheel sectors | Continuous fast scroll |
+| **Center / Enter** | Launch app, select item, or activate | Open context menu (pin, edit icon, info) |
+| **`#` (Pound Key)** | Open launcher menu & theme switcher | **Open Kaomoji Radial Wheel 🌸** |
+| **`*` (Star Key)** | Open context actions | Toggle ringer mode (Normal / Vibrate) |
+| **`0` Key** | Jump to page / input | **Toggle Flashlight On / Off 🔦** |
+| **`2`–`9` Keys** | T9 app search (drawer) / Page switch | **One-Touch Speed Dial Launch** |
+| **Side Button (F4)** | Toggle virtual mouse pointer on / off | Dismiss active modal or overlay |
+| **Call Key** | Open phone dialer | — |
+| **Back Button** | Close dialogs, folders, or drawer & return Home | — |
+
+---
+## 🌸 Kaomoji Radial Wheel (`#` Long-Press)
+
+Need to drop a cute face in your chat without wrestling with an awkward software keyboard? Mochibun includes an on-device Kaomoji radial menu tailored specifically for physical keypad navigation:
+
+1. **Invoke**: Hold the **`#`** key on your keypad for ~400ms from anywhere on the home screen or app drawer.
+2. **Browse Moods**: Tap **D-Pad Left / Right** (or press keys **`1`–`6`**) to rotate through the mood segments (*Happy*, *Love*, *Cute*, *Sleepy*, *Surprised*, and *Silly*).
+3. **Pick Expression**: Tap **D-Pad Up / Down** to cycle through the expressions in the center hub.
+4. **Copy & Share**: Hit **Center / Enter** to copy the kaomoji to your clipboard and close the wheel with a bubbly sound effect.
+5. **Dismiss**: Press **Back**, **F4**, or tap **`#`** again to close without copying.
+
+---
+
 
 ## 🎨 Themes, Backups & Setup Sharing
 
@@ -98,7 +122,7 @@ Mochibun is tuned to run smoothly on modest flip phone hardware:
 | **Display** | 480 × 800 portrait |
 | **Memory** | ~1.8 GB RAM |
 
-> **Performance Note**: To keep animations smooth and scrolling responsive, Mochibun avoids expensive real-time blur shaders (`Modifier.blur()`) and heavy image buffers. Decorative cloud trims and accents are drawn using lightweight vector paths.
+> **Performance Note**: To keep animations smooth and scrolling responsive, Mochibun avoids expensive real-time blur shaders and heavy image buffers. Decorative cloud trims and accents are drawn using lightweight vector paths.
 
 ---
 
@@ -122,33 +146,6 @@ Mochibun is tuned to run smoothly on modest flip phone hardware:
 
 ---
 
-## ⌨️ Physical Key Map
-
-| Button | Short Press | Long Press (Hold ~400ms) |
-| :--- | :--- | :--- |
-| **D-Pad (Arrows)** | Navigate cards, app drawer & wheel sectors | Continuous fast scroll |
-| **Center / Enter** | Launch app, select item, or activate | Open context menu (pin, edit icon, info) |
-| **`#` (Pound Key)** | Open launcher menu & theme switcher | **Open Kaomoji Radial Wheel 🌸** |
-| **`*` (Star Key)** | Open context actions | Toggle ringer mode (Normal / Vibrate) |
-| **`0` Key** | Jump to page / input | **Toggle Flashlight On / Off 🔦** |
-| **`2`–`9` Keys** | T9 app search (drawer) / Page switch | **One-Touch Speed Dial Launch** |
-| **Side Button (F4)** | Toggle virtual mouse pointer on / off | Dismiss active modal or overlay |
-| **Call Key** | Open phone dialer | — |
-| **Back Button** | Close dialogs, folders, or drawer & return Home | — |
-
----
-## 🌸 Kaomoji Radial Wheel (`#` Long-Press)
-
-Need to drop a cute face in your chat without wrestling with an awkward software keyboard? Mochibun includes an on-device Kaomoji radial menu tailored specifically for physical keypad navigation:
-
-1. **Invoke**: Hold the **`#`** key on your keypad for ~400ms from anywhere on the home screen or app drawer.
-2. **Browse Moods**: Tap **D-Pad Left / Right** (or press keys **`1`–`6`**) to rotate through the mood segments (*Happy*, *Love*, *Cute*, *Sleepy*, *Surprised*, and *Silly*).
-3. **Pick Expression**: Tap **D-Pad Up / Down** to cycle through the expressions in the center hub.
-4. **Copy & Share**: Hit **Center / Enter** to copy the kaomoji to your clipboard and close the wheel with a bubbly sound effect.
-5. **Dismiss**: Press **Back**, **F4**, or tap **`#`** again to close without copying.
-
----
-
 ## 🛠️ Building from Source
 
 Mochibun builds with standard Gradle tooling:
@@ -168,7 +165,7 @@ The compiled APK will be located at `app/build/outputs/apk/release/app-release.a
 
 ## 🌸 Sweet Credits & Special Thanks ♡
 
-Mochibun stays tiny, breezy, and cute thanks to these wonderful open-source libraries:
+Mochibun stays tiny, breezy, and cute thanks to these wonderful open-source libraries and/or assets:
 
 - **[Coil](https://github.com/coil-kt/coil)** — Keeps our cute animated `.gif` and `.png` cursors(and our adorable mochibunny mascot!!!) dancing smoothly with an ultra-lightweight memory footprint so our flip phone RAM never gets sad! (˶ᵔ ᵕ ᵔ˶)
 - **[libsu](https://github.com/topjohnwu/libsu)** by [@topjohnwu](https://github.com/topjohnwu) — A rock-solid, persistent root bridge daemon that powers super-fast privileged clicks and smooth recents task management without dropping a single frame! (•̀ᴗ•́)و
