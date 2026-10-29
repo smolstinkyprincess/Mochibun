@@ -106,11 +106,11 @@ object MediaSessionTracker {
     }
 
     private val clamshellListener = object : ClamshellListener {
-        override fun onLidClosed() {
+        override fun onDisplaySleep() {
             cancelArtworkDecode()
         }
 
-        override fun onLidOpened() {
+        override fun onDisplayWake() {
             val context = appContext ?: return
             val mgr = sessionManager ?: return
             val listener = activeSessionsListener ?: return

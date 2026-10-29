@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
@@ -21,6 +20,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
+import com.crinklecodone.mochibun.core.system.ClamshellState
+import com.crinklecodone.mochibun.core.system.MemoryTrimTier
+import com.crinklecodone.mochibun.core.system.memoryTrimTier
 import com.crinklecodone.mochibun.core.widget.MochibunWidgetHost
 import com.crinklecodone.mochibun.ui.theme.MochibunTheme
 import com.crinklecodone.mochibun.ui.theme.ThemeBackground
@@ -72,13 +74,12 @@ class MainActivity : ComponentActivity() {
     var lidClosedCount by mutableIntStateOf(0)
         private set
 
+    // Entering CLOSED resets the UI; entering OPEN_AWAKE restores D-pad focus. A display timeout with
+    // the flip open only moves between OPEN_AWAKE and OPEN_DOZING, so it never resets anything.
     private val clamshellListener = object : ClamshellListener {
-        override fun onLidClosed() {
-            lidClosedCount++
-        }
-
-        override fun onLidOpened() {
-            lidOpenCount++
+        override fun onStateChanged(previous: ClamshellState, current: ClamshellState) {
+            if (current.isClosed && !previous.isClosed) lidClosedCount++
+            if (current == ClamshellState.OPEN_AWAKE) lidOpenCount++
         }
     }
 
@@ -98,6 +99,15 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         widgetHost.startListeningFor(this)
+        launcherViewModel.restoreAfterMemoryRelease()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val launcherVisible = MochibunAccessibilityService.isLauncherForeground
+        if (memoryTrimTier(level, launcherVisible) == MemoryTrimTier.RELEASE_DRAWER) {
+            launcherViewModel.releaseDrawerForMemory()
+        }
     }
 
     override fun onStop() {
@@ -114,11 +124,6 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         MochibunAccessibilityService.isLauncherForeground = false
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        ClamshellManager.onConfigurationChanged(newConfig)
     }
 
     companion object {

@@ -52,12 +52,8 @@ object RootAccessibilityWatchdog : ClamshellListener {
         checkAsync(context, force = false)
     }
 
-    override fun onLidOpened() {
+    override fun onDisplayWake() {
         appContext?.let { checkAsync(it, force = false) }
-    }
-
-    override fun onLidClosed() {
-        // No-op on lid close: screen is asleep
     }
 
     /**

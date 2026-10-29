@@ -5,8 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import com.crinklecodone.mochibun.data.model.MochibunNotificationItem
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.NotificationTracker
 import com.topjohnwu.superuser.Shell
@@ -14,16 +16,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+
+/** What the closed lid is showing, highest priority first. */
+enum class LidLedMode { CALL, NOTIFICATION, CHARGING, OFF }
 
 /**
  * Exterior Clamshell Notification & Charging LED Manager for the Chinoe AT-M120 (Awinic AW22xxx driver).
  *
  * Coordinates external lid LED illumination, alternating shimmer animations, and custom 24-bit RGB colors:
- * - Direct zero-overhead hardware register execution via `/sys/class/leds/aw22xxx_led/reg`.
- * - Bypasses buggy vendor kernel workqueues (`brightness`, `effect`, `case_turnonoff`) that force the stock rainbow.
+ * - Direct register programming via `/sys/class/leds/aw22xxx_led/reg`.
+ * - Bypasses the vendor `effect` / `task0` path: on this unit `task0` loads the `cfg[effect]` firmware
+ *   blob with its colors baked in and ignores the `rgb` buffer (verified on device).
  * - Controls the 5 physical lid windows mapped to AW22127 channels:
  *     Window 1: Channel 0
  *     Window 2: Channel 1
@@ -31,8 +36,16 @@ import kotlinx.coroutines.launch
  *     Window 4: Channel 4
  *     Window 5: Channel 6
  * - Alternating Keitai Shimmer pattern: `1 0 1 0 1` (Windows 1, 3, 5) <-> `0 1 0 1 0` (Windows 2, 4).
- * - Solid illumination for clamshell closed charging.
  * - Clean hardware shutoff without triggering vendor workqueue rainbow loops.
+ *
+ * Priority ladder while the flip is physically closed: incoming call > unread notification >
+ * charging > off. The chip has no usable autonomous animation here (the breath program stays steady
+ * when written through `reg`), so a shimmer is a bounded loop that runs inside the root shell (no
+ * per-frame work in this process) and always ends on a static frame. The chip holds a static frame
+ * through SoC suspend with zero CPU:
+ *  - Call: fast shimmer for up to [CALL_SHIMMER_CYCLES], then all windows solid.
+ *  - Notification: shimmer on each new post, then a steady `1 0 1 0 1` glyph.
+ *  - Charging: all windows solid.
  */
 object LidLedManager : ClamshellListener {
 
@@ -81,18 +94,24 @@ object LidLedManager : ClamshellListener {
         LedPaletteColor("white", "Pure White", "0xffffff", 0xFFFFFFFF)
     )
 
+    // Shimmer timing. One cycle shows both frames.
+    private const val NOTIFICATION_FRAME_SECONDS = "0.8"
+    private const val NOTIFICATION_SHIMMER_CYCLES = 6 // ~10 s, matching the old pulse timeout
+    private const val CALL_FRAME_SECONDS = "0.4"
+    private const val CALL_SHIMMER_CYCLES = 56 // ~45 s, longer than a typical ring
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var notificationJob: Job? = null
     private var preferencesJob: Job? = null
-    private var autoStopJob: Job? = null
-    private var animationJob: Job? = null
 
     private var appContext: Context? = null
     private var isInitialized = false
+    private var shimmerWakeLock: PowerManager.WakeLock? = null
 
-    @Volatile
-    var isTestRunning: Boolean = false
-        private set
+    // Last program written by the ladder; manual writes (picker preview, tests) clear it
+    private var appliedMode = LidLedMode.OFF
+    private var appliedColorHex: String? = null
+    private var lastShimmeredPostTime = 0L
 
     @Volatile
     var isChargingState: Boolean = false
@@ -247,45 +266,72 @@ object LidLedManager : ClamshellListener {
     }
 
     /**
-     * Sets all 5 exterior lid windows to steady solid illumination in the chosen color.
+     * Builds a bounded shimmer that runs as a background job of the root shell: [cycles] rounds of
+     * [frameA] / [frameB], then [settleScript]. The script is sent once, so a running shimmer costs
+     * this process no per-frame allocations or root round trips. The job's PID goes to [pidFile] so
+     * the next program can stop it.
      */
-    fun setSolidColor(colorHex: String) {
-        animationJob?.cancel()
-        animationJob = null
-        val (r, g, b) = parseRgb(colorHex)
-        val script = buildSolidScript(r, g, b)
-        Shell.cmd(script).submit()
-        Log.d(TAG, "Activated solid lid color ($colorHex)")
+    @VisibleForTesting
+    internal fun buildShimmerLoopScript(
+        frameA: String,
+        frameB: String,
+        frameSeconds: String,
+        cycles: Int,
+        settleScript: String,
+        pidFile: String
+    ): String = buildString {
+        append(buildStopLoopScript(pidFile))
+        append("(\n")
+        append("i=0\n")
+        append("while [ \$i -lt $cycles ]; do\n")
+        append(frameA)
+        append("sleep $frameSeconds\n")
+        append(frameB)
+        append("sleep $frameSeconds\n")
+        append("i=\$((i+1))\n")
+        append("done\n")
+        append(settleScript)
+        append("rm -f '$pidFile'\n")
+        append(") </dev/null >/dev/null 2>&1 &\n")
+        append("echo \$! > '$pidFile'\n")
+    }
+
+    /** Stops a running root-side shimmer. Prefixed to every program so the newest write wins. */
+    @VisibleForTesting
+    internal fun buildStopLoopScript(pidFile: String): String =
+        "p=\$(cat '$pidFile' 2>/dev/null); [ -n \"\$p\" ] && kill \$p 2>/dev/null; rm -f '$pidFile'\n"
+
+    @VisibleForTesting
+    internal fun shimmerDurationMs(frameSeconds: String, cycles: Int): Long =
+        (frameSeconds.toDouble() * 2 * cycles * 1000).toLong()
+
+    /** The priority ladder. Pure so the rules are unit-tested. */
+    @VisibleForTesting
+    internal fun resolveMode(
+        lidClosed: Boolean,
+        enabled: Boolean,
+        hasIncomingCall: Boolean,
+        hasNotifications: Boolean,
+        chargingLight: Boolean
+    ): LidLedMode = when {
+        !lidClosed || !enabled -> LidLedMode.OFF
+        hasIncomingCall -> LidLedMode.CALL
+        hasNotifications -> LidLedMode.NOTIFICATION
+        chargingLight -> LidLedMode.CHARGING
+        else -> LidLedMode.OFF
     }
 
     /**
-     * Starts the alternating Keitai shimmer animation (10101 <-> 01010) in the chosen color.
+     * Sets all 5 exterior lid windows to steady solid illumination in the chosen color.
+     * Used for live preview by the color picker; the ladder re-applies on its next update.
      */
-    fun startNotificationShimmer(colorHex: String, timeoutMs: Long? = 10_000L) {
-        animationJob?.cancel()
-        animationJob = null
-        notificationLedActive = true
+    @Synchronized
+    fun setSolidColor(colorHex: String) {
+        invalidateApplied()
         val (r, g, b) = parseRgb(colorHex)
-        val pat10101 = buildWindowPatternScript(CHANNELS_10101, r, g, b)
-        val pat01010 = buildWindowPatternScript(CHANNELS_01010, r, g, b)
-
-        animationJob = scope.launch(Dispatchers.IO) {
-            val startTime = System.currentTimeMillis()
-            var step = 0
-            while (notificationLedActive) {
-                if (timeoutMs != null && timeoutMs > 0 && System.currentTimeMillis() - startTime >= timeoutMs) {
-                    break
-                }
-                val cmd = if (step % 2 == 0) pat10101 else pat01010
-                Shell.cmd(cmd).exec()
-                delay(800L)
-                step++
-            }
-            if (!isChargingState && !isTestRunning) {
-                stopLeds()
-            }
-        }
-        Log.d(TAG, "Started notification shimmer ($colorHex, timeoutMs=$timeoutMs)")
+        releaseShimmerWakeLock()
+        runProgram(buildStopLoopScript(pidFilePath()) + buildSolidScript(r, g, b))
+        Log.d(TAG, "Activated solid lid color ($colorHex)")
     }
 
     /**
@@ -293,15 +339,11 @@ object LidLedManager : ClamshellListener {
      */
     @Synchronized
     fun stopLeds() {
-        autoStopJob?.cancel()
-        autoStopJob = null
-        animationJob?.cancel()
-        animationJob = null
-        isTestRunning = false
+        invalidateApplied()
         notificationLedActive = false
         chargingLedActive = false
-        val offScript = buildOffScript()
-        Shell.cmd(offScript).submit()
+        releaseShimmerWakeLock()
+        runProgram(buildStopLoopScript(pidFilePath()) + buildOffScript())
         Log.d(TAG, "Stopped all exterior LEDs cleanly via reg")
     }
 
@@ -311,130 +353,6 @@ object LidLedManager : ClamshellListener {
     @Synchronized
     fun clearAllLeds() {
         stopLeds()
-    }
-
-    /**
-     * Generic setLidColor method supporting solid and pulse modes.
-     */
-    fun setLidColor(
-        colorHex: String,
-        effectMode: Int = 2,
-        durationMs: Long? = 4000L,
-        isTest: Boolean = false
-    ) {
-        if (effectMode == 0) {
-            stopLeds()
-            return
-        }
-        if (isTest) {
-            startPreviewTest(colorHex, delayMs = 0L, durationMs = durationMs ?: 8000L)
-            return
-        }
-        if (effectMode == 1) {
-            setSolidColor(colorHex)
-        } else {
-            startNotificationShimmer(colorHex, timeoutMs = durationMs)
-        }
-    }
-
-    /**
-     * Programs the lid LED shimmer with a countdown delay so the user can close the flip.
-     */
-    fun setLidColorWithDelay(
-        colorHex: String = "0xff1493",
-        effectMode: Int = 2,
-        delayMs: Long = 2000L,
-        durationMs: Long? = 8000L,
-        isTest: Boolean = true
-    ) {
-        startPreviewTest(colorHex, delayMs = delayMs, durationMs = durationMs ?: 8000L)
-    }
-
-    /**
-     * Interactive preview test for settings screen: countdown delay followed by alternating shimmer.
-     */
-    fun startPreviewTest(
-        colorHex: String = "0xff1493",
-        delayMs: Long = 2000L,
-        durationMs: Long = 8000L
-    ) {
-        autoStopJob?.cancel()
-        animationJob?.cancel()
-        isTestRunning = true
-
-        autoStopJob = scope.launch(Dispatchers.IO) {
-            if (delayMs > 0) {
-                delay(delayMs)
-            }
-            val (r, g, b) = parseRgb(colorHex)
-            val pat10101 = buildWindowPatternScript(CHANNELS_10101, r, g, b)
-            val pat01010 = buildWindowPatternScript(CHANNELS_01010, r, g, b)
-            val endTime = System.currentTimeMillis() + durationMs
-            var step = 0
-            while (System.currentTimeMillis() < endTime && isTestRunning) {
-                val cmd = if (step % 2 == 0) pat10101 else pat01010
-                Shell.cmd(cmd).exec()
-                delay(800L)
-                step++
-            }
-            isTestRunning = false
-            stopLeds()
-        }
-        Log.d(TAG, "Started preview test ($colorHex, delayMs=$delayMs, durationMs=$durationMs)")
-    }
-
-    /**
-     * Applies user-selected palette color to exterior channels.
-     */
-    fun applyLidColor(colorKey: String) {
-        val hex = getHexColor(colorKey)
-        setSolidColor(hex)
-    }
-
-    /**
-     * Triggers notification shimmer across exterior lid LEDs.
-     */
-    fun triggerNotificationPulse(autoStopTimeoutMs: Long = 10_000L) {
-        val colorKey = appContext?.let { PreferencesManager.getLidLedColor(it) } ?: "pink"
-        val hex = getHexColor(colorKey)
-        startNotificationShimmer(hex, timeoutMs = autoStopTimeoutMs)
-    }
-
-    /**
-     * Triggers notification shimmer after delay.
-     */
-    fun triggerNotificationWithDelay(delaySeconds: Int = 2, autoStopTimeoutMs: Long = 10_000L) {
-        val colorKey = appContext?.let { PreferencesManager.getLidLedColor(it) } ?: "pink"
-        val hex = getHexColor(colorKey)
-        startPreviewTest(
-            colorHex = hex,
-            delayMs = delaySeconds * 1000L,
-            durationMs = autoStopTimeoutMs
-        )
-    }
-
-    /**
-     * Factory sweep test routine (OEM hardware diagnostic).
-     */
-    fun triggerFactorySweep(autoStopTimeoutMs: Long = 5_000L) {
-        Shell.cmd("echo 1 > $LED_PATH_FACTORY_TEST").submit()
-        if (autoStopTimeoutMs > 0) {
-            scope.launch {
-                delay(autoStopTimeoutMs)
-                stopLeds()
-            }
-        }
-    }
-
-    /**
-     * Executes test patterns.
-     */
-    fun fireTestPattern(pattern: String = "notification", autoStopTimeoutMs: Long = 5_000L) {
-        if (pattern == "factory_test") {
-            triggerFactorySweep(autoStopTimeoutMs)
-        } else {
-            triggerNotificationPulse(autoStopTimeoutMs)
-        }
     }
 
     /**
@@ -493,61 +411,128 @@ object LidLedManager : ClamshellListener {
         Log.d(TAG, "LidLedManager initialized (initial charging=$isChargingState)")
     }
 
+    // Physical flip only: a display timeout with the flip open never reaches these
     override fun onLidClosed() {
-        if (isTestRunning) {
-            Log.d(TAG, "Clamshell closed during active preview test; preserving test")
-            return
-        }
         Log.d(TAG, "Clamshell closed: updating lid LED states")
         updateLedState()
     }
 
     override fun onLidOpened() {
-        if (isTestRunning) {
-            Log.d(TAG, "Clamshell opened during active preview test; preserving test until timeout")
-            return
-        }
+        // The windows lose power when the flip opens; still clear the chip so it doesn't resume
+        // a stale frame on the next close
         Log.d(TAG, "Clamshell opened: turning off exterior LEDs")
-        stopLeds()
+        updateLedState()
     }
 
     /**
-     * Evaluates current state (lid closed/open, notifications present, charging)
-     * and sets the hardware LED driver state via privileged root shell daemon.
+     * Evaluates the priority ladder (lid closed, incoming call, notifications, charging) and writes
+     * the matching program through the root shell. Does nothing when the outcome is unchanged,
+     * except that a newly posted notification restarts the shimmer.
      */
     @Synchronized
     fun updateLedState() {
-        if (isTestRunning) {
-            Log.d(TAG, "updateLedState skipped: preview test is active")
-            return
-        }
         val context = appContext ?: return
-        val isLidClosed = ClamshellManager.isLidClosed(context)
-        val isEnabled = PreferencesManager.isLidLedEnabled(context)
+        val items = NotificationTracker.notifications.value
+        val mode = resolveMode(
+            lidClosed = ClamshellManager.isLidClosed.value,
+            enabled = PreferencesManager.isLidLedEnabled(context),
+            hasIncomingCall = items.any(MochibunNotificationItem::isIncomingCall),
+            hasNotifications = items.isNotEmpty(),
+            chargingLight = isChargingState && PreferencesManager.isLidLedChargingEnabled(context)
+        )
+        val hex = getHexColor(PreferencesManager.getLidLedColor(context))
+        val newestPostTime = items.maxOfOrNull { it.postTime } ?: 0L
+        val isNewPost = mode == LidLedMode.NOTIFICATION && newestPostTime > lastShimmeredPostTime
 
-        if (!isLidClosed || !isEnabled) {
-            stopLeds()
-            return
+        if (mode == appliedMode && hex == appliedColorHex && !isNewPost) return
+        applyMode(mode, hex)
+        if (mode == LidLedMode.NOTIFICATION) lastShimmeredPostTime = newestPostTime
+    }
+
+    private fun applyMode(mode: LidLedMode, hex: String) {
+        appliedMode = mode
+        appliedColorHex = hex
+        notificationLedActive = mode == LidLedMode.CALL || mode == LidLedMode.NOTIFICATION
+        chargingLedActive = mode == LidLedMode.CHARGING
+        val (r, g, b) = parseRgb(hex)
+        val stop = buildStopLoopScript(pidFilePath())
+        when (mode) {
+            LidLedMode.OFF -> {
+                releaseShimmerWakeLock()
+                runProgram(stop + buildOffScript())
+            }
+            LidLedMode.CHARGING -> {
+                releaseShimmerWakeLock()
+                runProgram(stop + buildSolidScript(r, g, b))
+            }
+            LidLedMode.NOTIFICATION -> startShimmer(
+                r, g, b,
+                frameSeconds = NOTIFICATION_FRAME_SECONDS,
+                cycles = NOTIFICATION_SHIMMER_CYCLES,
+                settleScript = buildWindowPatternScript(CHANNELS_10101, r, g, b)
+            )
+            LidLedMode.CALL -> startShimmer(
+                r, g, b,
+                frameSeconds = CALL_FRAME_SECONDS,
+                cycles = CALL_SHIMMER_CYCLES,
+                settleScript = buildSolidScript(r, g, b)
+            )
         }
+        Log.d(TAG, "Lid LED mode -> $mode ($hex)")
+    }
 
-        val hasNotifications = NotificationTracker.notifications.value.isNotEmpty()
-        val shouldLightCharging = isChargingState && PreferencesManager.isLidLedChargingEnabled(context)
+    private fun startShimmer(r: Int, g: Int, b: Int, frameSeconds: String, cycles: Int, settleScript: String) {
+        val script = buildShimmerLoopScript(
+            frameA = buildWindowPatternScript(CHANNELS_10101, r, g, b),
+            frameB = buildWindowPatternScript(CHANNELS_01010, r, g, b),
+            frameSeconds = frameSeconds,
+            cycles = cycles,
+            settleScript = settleScript,
+            pidFile = pidFilePath()
+        )
+        // Keep the SoC up just long enough for the loop to reach its static frame; with the flip
+        // closed the display is off and the loop's `sleep` would otherwise stall mid-pattern
+        holdShimmerWakeLock(shimmerDurationMs(frameSeconds, cycles) + 1_000L)
+        runProgram(script)
+    }
 
-        val colorKey = PreferencesManager.getLidLedColor(context)
-        val hex = getHexColor(colorKey)
+    private fun invalidateApplied() {
+        appliedMode = LidLedMode.OFF
+        appliedColorHex = null
+    }
 
-        if (hasNotifications) {
-            if (!notificationLedActive) {
-                startNotificationShimmer(hex, timeoutMs = null)
-            }
-        } else if (shouldLightCharging) {
-            notificationLedActive = false
-            if (!chargingLedActive) {
-                chargingLedActive = true
-                setSolidColor(hex)
-            }
-        } else {
-            stopLeds()
+    private fun pidFilePath(): String =
+        appContext?.cacheDir?.let { "${it.absolutePath}/lid_led.pid" } ?: "/data/local/tmp/mochibun_lid_led.pid"
+
+    private fun runProgram(script: String) {
+        // Unit tests have no context; never run LED programs in the host shell
+        if (appContext == null) return
+        try {
+            Shell.cmd(script).submit()
+        } catch (e: Throwable) {
+            Log.w(TAG, "Lid LED write failed", e)
+        }
+    }
+
+    private fun holdShimmerWakeLock(timeoutMs: Long) {
+        val context = appContext ?: return
+        try {
+            val lock = shimmerWakeLock ?: (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)
+                ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Mochibun:LidShimmer")
+                ?.also {
+                    it.setReferenceCounted(false)
+                    shimmerWakeLock = it
+                }
+            lock?.acquire(timeoutMs)
+        } catch (e: Exception) {
+            Log.w(TAG, "Shimmer wake lock unavailable", e)
+        }
+    }
+
+    private fun releaseShimmerWakeLock() {
+        try {
+            shimmerWakeLock?.takeIf { it.isHeld }?.release()
+        } catch (_: Exception) {
         }
     }
 

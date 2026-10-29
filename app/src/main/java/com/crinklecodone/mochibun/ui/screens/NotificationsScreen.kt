@@ -134,7 +134,6 @@ fun NotificationsScreen(
     // Acquire focus when page becomes active
     LaunchedEffect(isActivePage) {
         if (isActivePage) {
-            NotificationTracker.refresh(context)
             if (!NotificationTracker.hasNotificationAccess(context)) {
                 focusTarget = NotifFocusTarget.TOP_ACTION
             } else if (notifications.isNotEmpty()) {

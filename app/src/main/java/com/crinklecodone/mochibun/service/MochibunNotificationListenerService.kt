@@ -3,14 +3,15 @@ package com.crinklecodone.mochibun.service
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import com.crinklecodone.mochibun.core.system.LidLedManager
-import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.MediaSessionTracker
 import com.crinklecodone.mochibun.data.repository.NotificationTracker
 
 /**
  * Lightweight NotificationListenerService enabling Mochibun to track active MediaSessions
  * and active user notifications across Android 12 (API 31) without overhead or battery drain.
+ *
+ * Lid LEDs follow [NotificationTracker.notifications] through LidLedManager's priority ladder, so
+ * nothing here drives them directly.
  */
 class MochibunNotificationListenerService : NotificationListenerService() {
 
@@ -25,32 +26,20 @@ class MochibunNotificationListenerService : NotificationListenerService() {
         super.onListenerDisconnected()
         Log.d(TAG, "NotificationListenerService disconnected")
         NotificationTracker.onNotificationListenerDisconnected()
-        LidLedManager.stopLeds()
     }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        super.onNotificationPosted(sbn)
-        sbn?.let {
-            NotificationTracker.onNotificationPosted(it)
-            if (it.packageName != packageName && PreferencesManager.isLidLedEnabled(this)) {
-                LidLedManager.triggerNotificationPulse()
-            }
-        }
+    override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
+        sbn ?: return
+        NotificationTracker.onNotificationPosted(this, sbn, rankingMap)
     }
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        super.onNotificationRemoved(sbn)
-        sbn?.let {
-            NotificationTracker.onNotificationRemoved(it)
-            val remaining = try {
-                activeNotifications?.filter { n -> n.packageName != packageName && !n.isOngoing }
-            } catch (_: Exception) {
-                null
-            }
-            if (remaining.isNullOrEmpty()) {
-                LidLedManager.stopLeds()
-            }
-        }
+    override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
+        sbn ?: return
+        NotificationTracker.onNotificationRemoved(sbn, rankingMap)
+    }
+
+    override fun onNotificationRankingUpdate(rankingMap: RankingMap?) {
+        NotificationTracker.onNotificationRankingUpdate(rankingMap)
     }
 
     companion object {

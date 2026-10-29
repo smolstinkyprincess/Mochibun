@@ -78,11 +78,11 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     }
 
     private val clamshellListener = object : ClamshellListener {
-        override fun onLidClosed() {
+        override fun onDisplaySleep() {
             handleLidClosed()
         }
 
-        override fun onLidOpened() {
+        override fun onDisplayWake() {
             handleLidOpened()
         }
     }
@@ -120,11 +120,10 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         val width = metrics.widthPixels.toFloat().coerceAtLeast(480f)
         val height = metrics.heightPixels.toFloat().coerceAtLeast(800f)
         physics.setBounds(width, height)
-        ClamshellManager.onConfigurationChanged(newConfig)
     }
 
     private fun handleLidClosed() {
-        Log.d(TAG, "Clamshell lid closed: suspending cursor ticker and auto-dismissing overlay")
+        Log.d(TAG, "Display asleep: suspending cursor ticker and auto-dismissing overlay")
         stopMovementTicker()
         overlayView?.pauseAnimation()
         if (isCursorVisible) {
@@ -134,7 +133,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     }
 
     private fun handleLidOpened() {
-        Log.d(TAG, "Clamshell lid opened: refreshing display bounds")
+        Log.d(TAG, "Display awake: refreshing display bounds")
         val metrics = resources.displayMetrics
         val width = metrics.widthPixels.toFloat().coerceAtLeast(480f)
         val height = metrics.heightPixels.toFloat().coerceAtLeast(800f)

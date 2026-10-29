@@ -13,5 +13,7 @@ data class MochibunNotificationItem(
     val text: String,
     val postTime: Long,
     val contentIntent: PendingIntent?,
-    val appIcon: Drawable?
+    val appIcon: Drawable?,
+    /** A ringing call (CATEGORY_CALL that is incoming), which outranks everything on the lid LEDs. */
+    val isIncomingCall: Boolean = false
 )

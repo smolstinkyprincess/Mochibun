@@ -6,14 +6,17 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.provider.Settings
+import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import android.util.LruCache
+import androidx.annotation.VisibleForTesting
 import com.crinklecodone.mochibun.data.model.MochibunNotificationItem
 import com.crinklecodone.mochibun.service.MochibunNotificationListenerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +27,12 @@ import java.lang.ref.WeakReference
  * Lightweight reactive notification tracker and state holder for Mochibun.
  * Hooks into [MochibunNotificationListenerService] and exposes filtered notifications
  * to Compose while respecting low-RAM device constraints.
+ *
+ * Updates are incremental: each callback carries the one [StatusBarNotification] that changed plus
+ * the listener's [RankingMap], so after the initial sync no event pulls the full active list over
+ * Binder (with every large icon and RemoteViews parceled along). All updates go through one ordered
+ * channel with a single consumer, so a late update can never overwrite a newer list, and a burst is
+ * folded into one published list.
  */
 object NotificationTracker {
     private const val TAG = "NotificationTracker"
@@ -40,11 +49,64 @@ object NotificationTracker {
     // Low-overhead memory cache for app metadata to avoid repeated IPC lookups
     private val appMetadataCache = LruCache<String, Pair<String, Drawable?>>(40)
 
+    private sealed interface Update {
+        class Posted(val context: Context, val sbn: StatusBarNotification, val rankedKeys: Array<String>?) : Update
+        class Removed(val key: String, val rankedKeys: Array<String>?) : Update
+        class Ranked(val rankedKeys: Array<String>) : Update
+        class Resync(val service: MochibunNotificationListenerService) : Update
+        data object Clear : Update
+    }
+
+    private val updates = Channel<Update>(Channel.UNLIMITED)
+
+    init {
+        scope.launch {
+            val state = NotificationListState()
+            for (first in updates) {
+                var update: Update? = first
+                while (update != null) {
+                    try {
+                        apply(state, update)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to apply notification update", e)
+                    }
+                    update = updates.tryReceive().getOrNull()
+                }
+                _notifications.value = state.snapshot()
+            }
+        }
+    }
+
+    private fun apply(state: NotificationListState, update: Update) {
+        when (update) {
+            is Update.Posted -> {
+                val item = parseNotification(update.context, update.sbn)
+                // A repost can turn a shown notification into filtered noise (e.g. it went ongoing)
+                if (item != null) state.upsert(item) else state.remove(update.sbn.key)
+                update.rankedKeys?.let(state::setRanking)
+            }
+            is Update.Removed -> {
+                state.remove(update.key)
+                update.rankedKeys?.let(state::setRanking)
+            }
+            is Update.Ranked -> state.setRanking(update.rankedKeys)
+            is Update.Resync -> {
+                val service = update.service
+                val items = (service.activeNotifications ?: emptyArray())
+                    .mapNotNull { parseNotification(service, it) }
+                state.replaceAll(items)
+                service.currentRanking?.orderedKeys?.let(state::setRanking)
+            }
+            Update.Clear -> state.clear()
+        }
+    }
+
     fun onNotificationListenerConnected(service: MochibunNotificationListenerService) {
         Log.d(TAG, "NotificationListener connected")
         activeServiceRef = WeakReference(service)
         _isServiceConnected.value = true
-        syncActiveNotifications(service)
+        // The only full sweep: on (re)connection, when the posted/removed stream may have gaps
+        updates.trySend(Update.Resync(service))
     }
 
     fun onNotificationListenerDisconnected() {
@@ -53,40 +115,17 @@ object NotificationTracker {
         _isServiceConnected.value = false
     }
 
-    fun onNotificationPosted(sbn: StatusBarNotification) {
-        val service = activeServiceRef?.get() ?: return
-        syncActiveNotifications(service)
+    fun onNotificationPosted(context: Context, sbn: StatusBarNotification, rankingMap: RankingMap?) {
+        updates.trySend(Update.Posted(context.applicationContext, sbn, rankingMap?.orderedKeys))
     }
 
-    fun onNotificationRemoved(sbn: StatusBarNotification) {
-        val service = activeServiceRef?.get()
-        if (service != null) {
-            syncActiveNotifications(service)
-        } else {
-            _notifications.value = _notifications.value.filter { it.key != sbn.key }
-        }
+    fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap?) {
+        updates.trySend(Update.Removed(sbn.key, rankingMap?.orderedKeys))
     }
 
-    fun syncActiveNotifications(service: MochibunNotificationListenerService) {
-        scope.launch {
-            try {
-                val activeSbns = service.activeNotifications ?: emptyArray()
-                val items = activeSbns.mapNotNull { sbn ->
-                    parseNotification(service, sbn)
-                }.sortedByDescending { it.postTime }
-
-                _notifications.value = items
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to query active notifications", e)
-            }
-        }
-    }
-
-    fun refresh(context: Context) {
-        val service = activeServiceRef?.get()
-        if (service != null) {
-            syncActiveNotifications(service)
-        }
+    fun onNotificationRankingUpdate(rankingMap: RankingMap?) {
+        val keys = rankingMap?.orderedKeys ?: return
+        updates.trySend(Update.Ranked(keys))
     }
 
     private fun parseNotification(
@@ -145,8 +184,19 @@ object NotificationTracker {
             text = text,
             postTime = sbn.postTime,
             contentIntent = sbn.notification.contentIntent,
-            appIcon = appIcon
+            appIcon = appIcon,
+            isIncomingCall = isIncomingCall(sbn.notification)
         )
+    }
+
+    /**
+     * Ringing calls use CallStyle's incoming type on newer dialers, or carry a full-screen intent
+     * (the in-call notification for an answered call doesn't).
+     */
+    private fun isIncomingCall(notification: Notification): Boolean {
+        if (notification.category != Notification.CATEGORY_CALL) return false
+        val callType = notification.extras?.getInt(Notification.EXTRA_CALL_TYPE, 0) ?: 0
+        return callType == Notification.CallStyle.CALL_TYPE_INCOMING || notification.fullScreenIntent != null
     }
 
     private fun getAppMetadata(pm: PackageManager, packageName: String): Pair<String, Drawable?> {
@@ -173,7 +223,7 @@ object NotificationTracker {
                 Log.e(TAG, "Failed to cancel notification: $key", e)
             }
         }
-        _notifications.value = _notifications.value.filter { it.key != key }
+        updates.trySend(Update.Removed(key, rankedKeys = null))
     }
 
     fun cancelAllNotifications() {
@@ -185,7 +235,7 @@ object NotificationTracker {
                 Log.e(TAG, "Failed to cancel all notifications", e)
             }
         }
-        _notifications.value = emptyList()
+        updates.trySend(Update.Clear)
     }
 
     fun hasNotificationAccess(context: Context): Boolean {
@@ -200,4 +250,44 @@ object NotificationTracker {
     fun clearCache() {
         appMetadataCache.evictAll()
     }
+}
+
+/**
+ * The tracker's list, keyed by [StatusBarNotification.key] and ordered by the listener's ranking
+ * (the system's importance-then-recency order). Keys the ranking doesn't know yet sort after ranked
+ * ones, newest first. Confined to the tracker's single consumer coroutine.
+ */
+@VisibleForTesting
+internal class NotificationListState {
+    private val items = HashMap<String, MochibunNotificationItem>()
+    private var rankByKey: Map<String, Int> = emptyMap()
+
+    fun upsert(item: MochibunNotificationItem) {
+        items[item.key] = item
+    }
+
+    fun remove(key: String) {
+        items.remove(key)
+    }
+
+    fun replaceAll(newItems: List<MochibunNotificationItem>) {
+        items.clear()
+        for (item in newItems) items[item.key] = item
+    }
+
+    fun clear() {
+        items.clear()
+    }
+
+    fun setRanking(orderedKeys: Array<String>) {
+        val ranks = HashMap<String, Int>(orderedKeys.size * 2)
+        orderedKeys.forEachIndexed { index, key -> ranks[key] = index }
+        rankByKey = ranks
+    }
+
+    fun snapshot(): List<MochibunNotificationItem> =
+        items.values.sortedWith(
+            compareBy<MochibunNotificationItem> { rankByKey[it.key] ?: Int.MAX_VALUE }
+                .thenByDescending { it.postTime }
+        )
 }

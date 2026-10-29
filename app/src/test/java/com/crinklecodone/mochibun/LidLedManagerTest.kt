@@ -1,6 +1,7 @@
 package com.crinklecodone.mochibun
 
 import com.crinklecodone.mochibun.core.system.LidLedManager
+import com.crinklecodone.mochibun.core.system.LidLedMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -102,10 +103,58 @@ class LidLedManagerTest {
     }
 
     @Test
-    fun testOnLidOpenedClearsLeds() {
-        LidLedManager.onLidOpened()
-        assertFalse(LidLedManager.notificationLedActive)
-        assertFalse(LidLedManager.chargingLedActive)
+    fun testLadderIsOffWhenFlipOpenOrDisabled() {
+        // An open flip (including a display timeout with the flip open) never lights the lid
+        assertEquals(LidLedMode.OFF, LidLedManager.resolveMode(
+            lidClosed = false, enabled = true, hasIncomingCall = true, hasNotifications = true, chargingLight = true))
+        assertEquals(LidLedMode.OFF, LidLedManager.resolveMode(
+            lidClosed = true, enabled = false, hasIncomingCall = true, hasNotifications = true, chargingLight = true))
+    }
+
+    @Test
+    fun testLadderPriorityCallThenNotificationThenCharging() {
+        assertEquals(LidLedMode.CALL, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = true, hasNotifications = true, chargingLight = true))
+        assertEquals(LidLedMode.NOTIFICATION, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = true, chargingLight = true))
+        assertEquals(LidLedMode.CHARGING, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = false, chargingLight = true))
+        assertEquals(LidLedMode.OFF, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = false, chargingLight = false))
+    }
+
+    @Test
+    fun testShimmerLoopRunsBoundedInRootShellAndSettles() {
+        val pid = "/cache/lid_led.pid"
+        val script = LidLedManager.buildShimmerLoopScript(
+            frameA = "FRAME_A\n",
+            frameB = "FRAME_B\n",
+            frameSeconds = "0.8",
+            cycles = 6,
+            settleScript = "SETTLE\n",
+            pidFile = pid
+        )
+        // Stops any earlier loop first, so the newest program wins
+        assertTrue(script.startsWith(LidLedManager.buildStopLoopScript(pid)))
+        assertTrue(script.contains("while [ \$i -lt 6 ]; do\nFRAME_A\nsleep 0.8\nFRAME_B\nsleep 0.8\n"))
+        // Settles on a static frame after the loop, then runs detached and records its PID
+        assertTrue(script.indexOf("SETTLE") > script.indexOf("done"))
+        assertTrue(script.contains(") </dev/null >/dev/null 2>&1 &\n"))
+        assertTrue(script.endsWith("echo \$! > '$pid'\n"))
+    }
+
+    @Test
+    fun testStopLoopScriptKillsRecordedPid() {
+        val script = LidLedManager.buildStopLoopScript("/cache/lid_led.pid")
+        assertTrue(script.contains("cat '/cache/lid_led.pid'"))
+        assertTrue(script.contains("kill \$p"))
+        assertTrue(script.contains("rm -f '/cache/lid_led.pid'"))
+    }
+
+    @Test
+    fun testShimmerDuration() {
+        assertEquals(9_600L, LidLedManager.shimmerDurationMs("0.8", 6))
+        assertEquals(44_800L, LidLedManager.shimmerDurationMs("0.4", 56))
     }
 
     @Test

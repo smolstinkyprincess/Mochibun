@@ -10,8 +10,13 @@ import coil.memory.MemoryCache
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.core.system.LidLedManager
+import com.crinklecodone.mochibun.core.system.MemoryTrimTier
+import com.crinklecodone.mochibun.core.system.memoryTrimTier
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
+import com.crinklecodone.mochibun.data.repository.IconPackManager
+import com.crinklecodone.mochibun.data.repository.NotificationTracker
+import com.crinklecodone.mochibun.service.MochibunAccessibilityService
 import com.crinklecodone.mochibun.data.repository.TypographyManager
 import com.crinklecodone.mochibun.data.repository.WidgetRepository
 import com.topjohnwu.superuser.Shell
@@ -37,6 +42,14 @@ class MochibunApp : Application(), ImageLoaderFactory {
         SoundEffectManager.init(this)
         WidgetRepository.init(this)
         com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog.init(this)
+    }
+
+    // Process-wide caches. The drawer list itself is released by MainActivity, which owns the ViewModel.
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val tier = memoryTrimTier(level, launcherVisible = MochibunAccessibilityService.isLauncherForeground)
+        if (tier >= MemoryTrimTier.PICKER) IconPackManager.trimPickerCache()
+        if (tier >= MemoryTrimTier.BACKGROUND) NotificationTracker.clearCache()
     }
 
     override fun newImageLoader(): ImageLoader {

@@ -13,11 +13,13 @@ import android.content.pm.ResolveInfo
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.util.Log
-import android.util.LruCache
+import androidx.collection.LruCache
 import android.util.Xml
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.crinklecodone.mochibun.data.model.LauncherApp
+import com.crinklecodone.mochibun.core.util.compactIfOpaque
 import com.crinklecodone.mochibun.core.util.drawableToBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -61,12 +63,22 @@ object IconPackManager {
     @Volatile
     private var lastLoadedPackageName: String? = null
 
-    // Bounded in-memory icon cache capped at 128 entries (~4-6 MB graphics RAM).
-    // The Chinoe AT-M120 operates in a strict ~1.8 GB total RAM envelope. Unbounded bitmap
-    // allocations trigger aggressive Low Memory Killer (LMK) trashing during fast drawer scrolls.
-    private val imageBitmapCache = object : LruCache<String, ImageBitmap>(128) {}
+    // Byte-weighted caches. The Chinoe AT-M120 operates in a strict ~1.8 GB total RAM envelope;
+    // weighing entries by pixel bytes (rather than counting them) keeps the bound honest when icon
+    // sizes differ. The app cache holds ~220 drawer icons at 96 px ARGB, so a normal install (~85
+    // launcher activities) never evicts and reloads stay free.
+    private const val APP_ICON_CACHE_BYTES = 8 * 1024 * 1024
+    private const val PICKER_ICON_CACHE_BYTES = 4 * 1024 * 1024
+
+    // Icon picker / icon search thumbnails
+    private val imageBitmapCache = object : LruCache<String, ImageBitmap>(PICKER_ICON_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int =
+            value.asAndroidBitmap().allocationByteCount
+    }
     private val drawableResIdCache = ConcurrentHashMap<String, Int>()
-    private val appEntryCache = ConcurrentHashMap<String, LauncherApp>()
+    private val appEntryCache = object : LruCache<String, LauncherApp>(APP_ICON_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: LauncherApp): Int = value.iconBitmap.allocationByteCount
+    }
 
     fun getSelectedIconPack(context: Context): String {
         val prefs = context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
@@ -95,15 +107,35 @@ object IconPackManager {
             lastLoadedPackageName = null
             imageBitmapCache.evictAll()
             drawableResIdCache.clear()
-            appEntryCache.clear()
+            appEntryCache.evictAll()
         }
     }
 
     fun invalidateAppIcon(packageName: String) {
         val prefix = "$packageName/"
-        val keysToRemove = appEntryCache.keys.filter { it.startsWith(prefix) }
-        for (key in keysToRemove) {
-            appEntryCache.remove(key)
+        for (key in appEntryCache.snapshot().keys) {
+            if (key.startsWith(prefix)) appEntryCache.remove(key)
+        }
+    }
+
+    /** Drops the icon picker's thumbnails; the picker reloads what it shows. */
+    fun trimPickerCache() {
+        imageBitmapCache.evictAll()
+    }
+
+    /**
+     * Memory-critical release: keeps only the launcher entries for [componentKeys] (the home
+     * favorites) and drops picker thumbnails and the parsed icon pack, which reload on demand.
+     */
+    fun retainOnly(componentKeys: Set<String>) {
+        synchronized(lock) {
+            for (key in appEntryCache.snapshot().keys) {
+                if (key.substringBefore('#') !in componentKeys) appEntryCache.remove(key)
+            }
+            imageBitmapCache.evictAll()
+            drawableResIdCache.clear()
+            activeParsedPack = null
+            lastLoadedPackageName = null
         }
     }
 
@@ -445,11 +477,11 @@ object IconPackManager {
         val selectedPack = getSelectedIconPack(context)
         val cacheKey = "$pkgName/$activityName#${customIconName.orEmpty()}#$selectedPack"
 
-        appEntryCache[cacheKey]?.let { return it }
+        appEntryCache.get(cacheKey)?.let { return it }
 
         // Remove any stale entry for the same component with an older custom icon or pack
         val componentPrefix = "$pkgName/$activityName#"
-        for (existingKey in appEntryCache.keys) {
+        for (existingKey in appEntryCache.snapshot().keys) {
             if (existingKey.startsWith(componentPrefix) && existingKey != cacheKey) {
                 appEntryCache.remove(existingKey)
             }
@@ -465,10 +497,10 @@ object IconPackManager {
         val app = LauncherApp(
             resolveInfo = resolveInfo,
             name = resolveInfo.loadLabel(pm).toString(),
-            iconBitmap = drawableToBitmap(drawable, 96),
+            iconBitmap = drawableToBitmap(drawable, 96).compactIfOpaque(),
             installTime = installTime
         )
-        appEntryCache[cacheKey] = app
+        appEntryCache.put(cacheKey, app)
         return app
     }
 

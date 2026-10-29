@@ -4,7 +4,6 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.res.Configuration
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
@@ -121,7 +120,7 @@ class MochibunAccessibilityService : AccessibilityService() {
     private var isMediaVolumeLockActive: Boolean = false
 
     private val clamshellListener = object : ClamshellListener {
-        override fun onLidClosed() {
+        override fun onDisplaySleep() {
             clearPendingHandlers()
             cancelPoundHold()
             kaomojiOverlay?.dismiss()
@@ -148,11 +147,6 @@ class MochibunAccessibilityService : AccessibilityService() {
         }
 
         loadConfiguration()
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        ClamshellManager.onConfigurationChanged(newConfig)
     }
 
     override fun onDestroy() {
@@ -254,7 +248,7 @@ class MochibunAccessibilityService : AccessibilityService() {
                 true
             }
             InputLayer.SERVICE_REMAP -> {
-                if (ClamshellManager.isLidClosed(this)) clearPendingHandlers() else handleRemappedKey(event)
+                if (ClamshellManager.isClosedOrAsleep(this)) clearPendingHandlers() else handleRemappedKey(event)
                 true
             }
             InputLayer.NONE -> dispatchToStages(event, isNewPress = false) != InputLayer.NONE
@@ -275,7 +269,7 @@ class MochibunAccessibilityService : AccessibilityService() {
         // before it opened, only the summoning key's repeats and release still belong to it.
         val overlay = kaomojiOverlay
         if (overlay != null && overlay.isShowing) {
-            if (ClamshellManager.isLidClosed(this)) {
+            if (ClamshellManager.isClosedOrAsleep(this)) {
                 overlay.dismiss()
             } else if (isNewPress || overlay.isSummonKey(event.keyCode)) {
                 return if (overlay.handleKey(event)) InputLayer.KAOMOJI_OVERLAY else InputLayer.NONE
@@ -289,7 +283,7 @@ class MochibunAccessibilityService : AccessibilityService() {
         }
 
         // Suppress hardware button shortcuts while closed in pocket to prevent accidental triggering
-        if (ClamshellManager.isLidClosed(this)) {
+        if (ClamshellManager.isClosedOrAsleep(this)) {
             clearPendingHandlers()
             cancelPoundHold()
             kaomojiOverlay?.dismiss()

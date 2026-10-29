@@ -48,6 +48,28 @@ fun drawableToBitmap(
 }
 
 /**
+ * Re-encodes a fully opaque icon as RGB_565, halving its pixel memory. Icons with any transparency
+ * (adaptive-icon corners, most icon pack art) keep ARGB_8888, so nothing gains a black background.
+ */
+fun Bitmap.compactIfOpaque(): Bitmap {
+    if (config != Bitmap.Config.ARGB_8888) return this
+    val pixels = IntArray(width * height)
+    getPixels(pixels, 0, width, 0, 0, width, height)
+    if (!isFullyOpaque(pixels)) return this
+    val compact = copy(Bitmap.Config.RGB_565, false) ?: return this
+    recycle()
+    return compact
+}
+
+internal fun isFullyOpaque(pixels: IntArray): Boolean {
+    if (pixels.isEmpty()) return false
+    for (pixel in pixels) {
+        if (pixel ushr 24 != 0xFF) return false
+    }
+    return true
+}
+
+/**
  * Calculates a power-of-two sample size so that decoded dimensions fit within [reqWidth] x [reqHeight].
  */
 fun calculateInSampleSize(

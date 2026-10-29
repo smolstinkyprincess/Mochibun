@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -25,6 +26,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+
+private const val TAG = "LauncherViewModel"
 
 /**
  * ViewModel managing launcher state, data loading, preferences synchronization,
@@ -263,6 +266,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                     .sortedBy { it.lowercaseName }
             }
             apps = loadedApps
+            val compacted = loadedApps.count { it.iconBitmap.config == Bitmap.Config.RGB_565 }
+            Log.d(TAG, "Drawer loaded: ${loadedApps.size} icons, $compacted compacted to RGB_565")
         }
     }
 
@@ -282,6 +287,28 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         apps = emptyList()
         earlyFavoriteApps = emptyList()
         iconRefreshKey++
+        loadApps()
+    }
+
+    private var drawerReleasedForMemory = false
+
+    /**
+     * TRIM_MEMORY_COMPLETE: the launcher is in the background and next in line for the low-memory
+     * killer. Keeps the home favorites (served from [earlyFavoriteApps], the same path a cold start
+     * uses) and drops the rest of the drawer. [restoreAfterMemoryRelease] reloads it on return.
+     */
+    fun releaseDrawerForMemory() {
+        if (apps.isEmpty()) return
+        val keep = favoriteApps
+        earlyFavoriteApps = keep
+        apps = emptyList()
+        IconPackManager.retainOnly(keep.mapTo(HashSet()) { it.componentKey })
+        drawerReleasedForMemory = true
+    }
+
+    fun restoreAfterMemoryRelease() {
+        if (!drawerReleasedForMemory) return
+        drawerReleasedForMemory = false
         loadApps()
     }
 

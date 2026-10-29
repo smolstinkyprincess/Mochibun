@@ -304,7 +304,7 @@ fun MainLauncher(
 
     val isModalActive = anyModalOpen
 
-    // Clamshell lid closed: cleanly dismiss transient modals, collapse folder/drawer, reset T9 state, and position on Home
+    // Flip physically closed (never a display timeout): dismiss transient modals, collapse folder/drawer, reset T9 state, and position on Home
     LaunchedEffect(lidClosedCount) {
         if (lidClosedCount > 0) {
             activeModal = null
@@ -319,9 +319,10 @@ fun MainLauncher(
         }
     }
 
-    // Clamshell lid opened: wake focus recovery for physical D-pad contracts
+    // Entered OPEN_AWAKE (flip opened, or display woke with the flip open): wake focus recovery for
+    // physical D-pad contracts. A modal kept open across a display timeout keeps its own focus.
     LaunchedEffect(lidOpenCount) {
-        if (lidOpenCount > 0) {
+        if (lidOpenCount > 0 && !anyModalOpen) {
             homeTracker.wasActive = true
             homeTracker.settledTimestamp = SystemClock.uptimeMillis()
             focusRequester.requestFocus()
