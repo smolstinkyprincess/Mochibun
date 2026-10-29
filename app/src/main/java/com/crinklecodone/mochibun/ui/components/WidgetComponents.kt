@@ -1,19 +1,15 @@
 package com.crinklecodone.mochibun.ui.components
 
 import android.app.Activity
-import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
-import android.content.ComponentName
-import android.content.ContentValues.TAG
+import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
-import android.os.Build
-import android.os.Handler
-import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,7 +24,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,23 +35,32 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import com.crinklecodone.mochibun.core.haptic.HapticManager
+import com.crinklecodone.mochibun.core.widget.MochibunWidgetHost
+import com.crinklecodone.mochibun.core.widget.NavDirection
+import com.crinklecodone.mochibun.core.widget.WidgetFrame
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import com.crinklecodone.mochibun.data.repository.WidgetRepository
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.data.repository.MediaSessionTracker
+import com.crinklecodone.mochibun.ui.dialogs.WidgetOptionsDialog
+import com.crinklecodone.mochibun.ui.dialogs.WidgetPickerDialog
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
-import com.crinklecodone.mochibun.ui.theme.destructiveBgColor
-import com.crinklecodone.mochibun.ui.theme.destructiveColor
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-const val APP_WIDGET_HOST_ID = 1024
+private const val TAG = "WidgetPage"
+
+/** Holding OK this long on a widget opens its options instead of using it. */
+private const val WIDGET_LONG_PRESS_MS = 400L
 
 enum class WidgetFocusSection {
     NOW_PLAYING,
@@ -66,9 +70,19 @@ enum class WidgetFocusSection {
     HOME_PILL
 }
 
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 /**
  * Widget Screen hosting the native "Now Playing" media widget, System Monitor card, and Android AppWidgets.
  * Faithfully matches the visual styling, component hierarchy, and kawaii aesthetic of Mochibun.
+ *
+ * Hosted app widgets: OK uses the widget (walks its buttons with the D-pad when it has several),
+ * holding OK opens Move / Configure / Remove. Listening for widget updates is tied to
+ * MainActivity's onStart/onStop through [MochibunWidgetHost], not to this composable.
  */
 @Composable
 fun WidgetPage(
@@ -82,23 +96,35 @@ fun WidgetPage(
     onNavigateHome: () -> Unit = {}
 ) {
     val theme = LocalLauncherTheme.current
-    val preferences = remember {
-        context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
-    }
+    val scope = rememberCoroutineScope()
 
     val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
 
     val appWidgetManager = remember { AppWidgetManager.getInstance(context) }
-    val appWidgetHost = remember { AppWidgetHost(context, APP_WIDGET_HOST_ID) }
+    val widgetHost = remember { MochibunWidgetHost.get(context) }
+    val widgetSlots by WidgetRepository.slots.collectAsState()
+    val providersVersion by widgetHost.providersVersion.collectAsState()
 
-    DisposableEffect(appWidgetHost) {
-        appWidgetHost.startListening()
-        onDispose {
-            try {
-                appWidgetHost.stopListening()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error stopping appWidgetHost", e)
+    // Provider info per widget; null means the provider is unavailable (uninstalled, updating, disabled)
+    val widgetInfos = remember(widgetSlots, providersVersion) {
+        widgetSlots.associate { slot ->
+            slot.appWidgetId to try {
+                appWidgetManager.getAppWidgetInfo(slot.appWidgetId)
+            } catch (_: Exception) {
+                null
             }
+        }
+    }
+
+    // Live WidgetFrames by widget ID, registered/unregistered by each card's AndroidView
+    val widgetFrames = remember { HashMap<Int, WidgetFrame>() }
+
+    // When providers change, drop widgets whose app was uninstalled and delete orphaned IDs
+    LaunchedEffect(providersVersion) {
+        if (providersVersion == 0) return@LaunchedEffect // MainActivity already reconciled at startup
+        widgetHost.hostIdsOrNull()?.let { hostIds ->
+            WidgetRepository.reconcile(context, hostIds, keepPending = true)
+                .forEach { widgetHost.deleteAppWidgetIdSafely(it) }
         }
     }
 
@@ -114,194 +140,232 @@ fun WidgetPage(
         }
     }
 
-    var savedWidgetIdsList by remember {
-        mutableStateOf<List<Int>>(
-            preferences.getString("widget_ids", "")
-                ?.split(",")
-                ?.filter { it.isNotEmpty() }
-                ?.mapNotNull { it.toIntOrNull() }
-                ?: emptyList()
-        )
+    // D-Pad Focus State Management
+    fun defaultFocusSection(): WidgetFocusSection =
+        if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
+        else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
+        else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+        else WidgetFocusSection.HOME_PILL
+
+    var focusSection by remember { mutableStateOf(defaultFocusSection()) }
+    var nowPlayingCol by remember { mutableIntStateOf(1) } // 0 = Prev, 1 = Play/Pause, 2 = Next
+    var focusedWidgetIdx by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+    var centerDownAt by remember { mutableLongStateOf(0L) }
+    var centerLongPressFired by remember { mutableStateOf(false) }
+    var systemMonitorRefreshTrigger by remember { mutableIntStateOf(0) }
+
+    // Hosted widget state
+    var interactingWidgetId by remember { mutableStateOf<Int?>(null) }
+    var optionsWidgetId by remember { mutableStateOf<Int?>(null) }
+    var showWidgetPicker by remember { mutableStateOf(false) }
+    val anyWidgetDialogOpen = optionsWidgetId != null || showWidgetPicker
+
+    fun endWidgetInteraction() {
+        interactingWidgetId?.let { widgetFrames[it]?.endInteraction() }
+        interactingWidgetId = null
     }
 
-    fun saveIds(ids: List<Int>) {
-        if (savedWidgetIdsList != ids) {
-            savedWidgetIdsList = ids
-            preferences.edit()
-                .putString("widget_ids", ids.joinToString(","))
-                .apply()
+    fun focusWidget(appWidgetId: Int) {
+        val idx = WidgetRepository.ids().indexOf(appWidgetId)
+        if (idx >= 0) {
+            focusSection = WidgetFocusSection.USER_WIDGETS
+            focusedWidgetIdx = idx
         }
     }
 
-    var pendingWidgetId by rememberSaveable { mutableStateOf<Int?>(null) }
+    // ── Add-widget flow: allocate -> bind (permission) -> configure -> save ──
+    // The in-flight ID is persisted so startup cleanup can tell it apart from orphans.
 
     fun cancelPendingWidget(id: Int) {
-        appWidgetHost.deleteAppWidgetId(id)
-        pendingWidgetId = null
+        widgetHost.deleteAppWidgetIdSafely(id)
+        WidgetRepository.setPendingWidgetId(context, null)
     }
 
     fun finishWidget(id: Int) {
-        pendingWidgetId = null
-        if (id !in savedWidgetIdsList) {
-            saveIds(savedWidgetIdsList + id)
+        WidgetRepository.setPendingWidgetId(context, null)
+        val provider = try {
+            appWidgetManager.getAppWidgetInfo(id)?.provider?.flattenToString()
+        } catch (_: Exception) {
+            null
         }
+        WidgetRepository.add(context, id, provider)
+        focusWidget(id)
     }
 
-    fun makeConfigIntent(id: Int, configure: ComponentName): Intent =
+    fun configureIntent(id: Int, info: AppWidgetProviderInfo): Intent =
         Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
-            component = configure
+            // No FLAG_ACTIVITY_NEW_TASK: with it, startActivityForResult returns RESULT_CANCELED at once
+            component = info.configure
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
+
+    /** Fallback for config activities that aren't exported: the host starts them via an IntentSender. */
+    fun startConfigureViaHost(id: Int): Boolean {
+        val activity = context.findActivity() ?: return false
+        return try {
+            widgetHost.startAppWidgetConfigureActivityForResult(activity, id, 0, 0, null)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Host could not open config for id=$id", e)
+            false
+        }
+    }
 
     val configLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val id = pendingWidgetId
-        if (id == null) {
-            Log.w(TAG, "Config result arrived but no widget is pending")
+        val id = WidgetRepository.pendingWidgetId(context) ?: return@rememberLauncherForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) {
+            finishWidget(id)
         } else {
-            pendingWidgetId = null
-            val alreadySaved = id in savedWidgetIdsList
-            if (result.resultCode == Activity.RESULT_OK) {
-                if (!alreadySaved) saveIds(savedWidgetIdsList + id)
-            } else if (!alreadySaved) {
-                Log.d(TAG, "Config cancelled for new widget id=$id")
-                appWidgetHost.deleteAppWidgetId(id)
-            }
+            Log.d(TAG, "Config cancelled for new widget id=$id")
+            cancelPendingWidget(id)
         }
     }
 
-    fun continueAfterBind(id: Int) {
-        val info = appWidgetManager.getAppWidgetInfo(id)
-        if (info == null) {
-            Log.w(TAG, "Widget id=$id not visible yet, retrying")
-            Handler(Looper.getMainLooper()).postDelayed({
-                val retry = appWidgetManager.getAppWidgetInfo(id)
-                if (retry == null) {
-                    Log.e(TAG, "Widget id=$id is not bound to a provider")
-                    cancelPendingWidget(id)
-                } else {
-                    continueAfterBind(id)
-                }
-            }, 300)
-            return
+    // Reconfiguring an existing widget: the result doesn't matter, the widget stays either way
+    val reconfigureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { }
+
+    fun continueAfterBind(id: Int, retriesLeft: Int = 1) {
+        val info = try {
+            appWidgetManager.getAppWidgetInfo(id)
+        } catch (_: Exception) {
+            null
         }
-        val configure = info.configure
-        if (configure != null) {
-            pendingWidgetId = id
-            try {
-                configLauncher.launch(makeConfigIntent(id, configure))
-            } catch (e: Exception) {
-                Log.e(TAG, "Could not open config screen $configure for id=$id", e)
+        if (info == null) {
+            if (retriesLeft > 0) {
+                scope.launch {
+                    delay(300)
+                    continueAfterBind(id, retriesLeft - 1)
+                }
+            } else {
+                Log.e(TAG, "Widget id=$id is not bound to a provider")
                 cancelPendingWidget(id)
             }
-        } else {
+            return
+        }
+        val features = info.widgetFeatures
+        val configOptional =
+            (features and AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL) != 0 &&
+                (features and AppWidgetProviderInfo.WIDGET_FEATURE_RECONFIGURABLE) != 0
+        if (info.configure == null || configOptional) {
             finishWidget(id)
+            return
+        }
+        try {
+            configLauncher.launch(configureIntent(id, info))
+        } catch (e: Exception) {
+            Log.w(TAG, "Direct config launch failed for id=$id, trying host", e)
+            // We can't observe the result this way, so keep the widget
+            if (startConfigureViaHost(id)) finishWidget(id) else cancelPendingWidget(id)
         }
     }
 
     val bindLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val id = pendingWidgetId
-        if (id == null) {
-            Log.w(TAG, "Bind result arrived but no widget is pending")
-        } else {
-            val ok = result.resultCode == Activity.RESULT_OK
-            val bound = ok || appWidgetManager.getAppWidgetInfo(id) != null
-            Log.d(TAG, "Bind result=${result.resultCode}, id=$id, bound=$bound")
-            if (bound) {
-                continueAfterBind(id)
-            } else {
-                cancelPendingWidget(id)
-            }
-        }
+        val id = WidgetRepository.pendingWidgetId(context) ?: return@rememberLauncherForActivityResult
+        val bound = result.resultCode == Activity.RESULT_OK ||
+            (try { appWidgetManager.getAppWidgetInfo(id) } catch (_: Exception) { null }) != null
+        Log.d(TAG, "Bind result=${result.resultCode}, id=$id, bound=$bound")
+        if (bound) continueAfterBind(id) else cancelPendingWidget(id)
     }
 
-    val pickLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val id = pendingWidgetId ?: return@rememberLauncherForActivityResult
-        if (result.resultCode != Activity.RESULT_OK) {
-            appWidgetHost.deleteAppWidgetId(id)
-            pendingWidgetId = null
-            return@rememberLauncherForActivityResult
-        }
-
-        val data = result.data
-        val widgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id) ?: id
-        val provider = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            data?.getParcelableExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, ComponentName::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            data?.getParcelableExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER)
-        } ?: appWidgetManager.getAppWidgetInfo(widgetId)?.provider
-
-        if (provider == null) {
-            appWidgetHost.deleteAppWidgetId(widgetId)
-            pendingWidgetId = null
-            return@rememberLauncherForActivityResult
-        }
-
-        if (appWidgetManager.bindAppWidgetIdIfAllowed(widgetId, provider)) {
-            continueAfterBind(widgetId)
-        } else {
-            pendingWidgetId = widgetId
-            val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            try {
-                bindLauncher.launch(bindIntent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Bind screen failed for id=$widgetId", e)
-                appWidgetHost.deleteAppWidgetId(widgetId)
-                pendingWidgetId = null
-            }
-        }
-    }
-
-    val launchWidgetPicker: () -> Unit = {
-        try {
-            val newWidgetId = appWidgetHost.allocateAppWidgetId()
-            pendingWidgetId = newWidgetId
-            val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, newWidgetId)
-            }
-            pickLauncher.launch(pickIntent)
+    fun addWidget(info: AppWidgetProviderInfo) {
+        showWidgetPicker = false
+        val id = try {
+            widgetHost.allocateAppWidgetId()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch widget picker", e)
+            Log.e(TAG, "allocateAppWidgetId failed", e)
+            Toast.makeText(context, "Couldn't add that widget ♡", Toast.LENGTH_SHORT).show()
+            return
+        }
+        WidgetRepository.setPendingWidgetId(context, id)
+        val bound = try {
+            appWidgetManager.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null)
+        } catch (e: Exception) {
+            Log.w(TAG, "bindAppWidgetIdIfAllowed failed for id=$id", e)
+            false
+        }
+        if (bound) {
+            continueAfterBind(id)
+            return
+        }
+        // Not allowed yet: ask the user once (the system dialog offers "always allow")
+        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER_PROFILE, info.profile)
+        }
+        try {
+            bindLauncher.launch(bindIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Bind screen failed for id=$id", e)
+            cancelPendingWidget(id)
         }
     }
 
-    // D-Pad Focus State Management
-    var focusSection by remember {
-        mutableStateOf(
-            if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
-            else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
-            else if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
-            else WidgetFocusSection.HOME_PILL
-        )
+    fun reconfigureWidget(id: Int) {
+        val info = widgetInfos[id] ?: return
+        if (info.configure == null) return
+        try {
+            reconfigureLauncher.launch(configureIntent(id, info))
+        } catch (e: Exception) {
+            Log.w(TAG, "Direct reconfigure failed for id=$id, trying host", e)
+            if (!startConfigureViaHost(id)) {
+                Toast.makeText(context, "This widget can't be configured ♡", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
-    var nowPlayingCol by remember { mutableIntStateOf(1) } // 0 = Prev, 1 = Play/Pause, 2 = Next
-    var focusedWidgetIdx by remember { mutableIntStateOf(0) }
-    var removingWidgetId by remember { mutableStateOf<Int?>(null) }
-    var sawCenterDown by remember { mutableStateOf(false) }
-    var systemMonitorRefreshTrigger by remember { mutableIntStateOf(0) }
+
+    fun removeWidget(id: Int) {
+        if (interactingWidgetId == id) endWidgetInteraction()
+        widgetFrames.remove(id)
+        widgetHost.deleteAppWidgetIdSafely(id)
+        WidgetRepository.remove(context, id)
+        val remaining = WidgetRepository.ids().size
+        if (remaining == 0) {
+            focusSection = WidgetFocusSection.ADD_WIDGET
+            focusedWidgetIdx = 0
+        } else {
+            focusedWidgetIdx = focusedWidgetIdx.coerceIn(0, remaining - 1)
+        }
+    }
+
+    /**
+     * OK on a widget card. One control: tap it. Several: walk them with the D-pad.
+     * None: hint at the options menu.
+     */
+    fun activateWidget(id: Int) {
+        if (widgetInfos[id] == null) {
+            optionsWidgetId = id
+            return
+        }
+        val frame = widgetFrames[id] ?: return
+        when (frame.beginInteraction()) {
+            0 -> {
+                frame.endInteraction()
+                Toast.makeText(context, "This widget has no buttons ♡ Hold OK for options", Toast.LENGTH_SHORT).show()
+            }
+            1 -> {
+                frame.clickSelection()
+                frame.endInteraction()
+            }
+            else -> interactingWidgetId = id
+        }
+    }
 
     val pageFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
     val navigateHomeAndReset: () -> Unit = {
-        focusSection = if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
-            else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
-            else if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
-            else WidgetFocusSection.HOME_PILL
+        endWidgetInteraction()
+        focusSection = defaultFocusSection()
         nowPlayingCol = 1
         focusedWidgetIdx = 0
-        removingWidgetId = null
         sawCenterDown = false
         onNavigateHome()
     }
@@ -310,17 +374,28 @@ fun WidgetPage(
     LaunchedEffect(mediaState.isPlaying, isSystemMonitorEnabled) {
         if (!mediaState.isPlaying && focusSection == WidgetFocusSection.NOW_PLAYING) {
             focusSection = if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
-                else if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+                else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
                 else WidgetFocusSection.HOME_PILL
         } else if (!isSystemMonitorEnabled && focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
-            focusSection = if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+            focusSection = if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
                 else WidgetFocusSection.HOME_PILL
+        }
+    }
+
+    // Keep the focused widget index valid when widgets disappear (removed or uninstalled)
+    LaunchedEffect(widgetSlots.size) {
+        if (widgetSlots.isEmpty() && focusSection == WidgetFocusSection.USER_WIDGETS) {
+            focusSection = WidgetFocusSection.ADD_WIDGET
+        }
+        focusedWidgetIdx = focusedWidgetIdx.coerceIn(0, (widgetSlots.size - 1).coerceAtLeast(0))
+        if (interactingWidgetId != null && widgetSlots.none { it.appWidgetId == interactingWidgetId }) {
+            interactingWidgetId = null
         }
     }
 
     // Ensure focused item is visible in LazyColumn
     LaunchedEffect(focusSection, focusedWidgetIdx) {
-        if (focusSection == WidgetFocusSection.USER_WIDGETS && savedWidgetIdsList.isNotEmpty()) {
+        if (focusSection == WidgetFocusSection.USER_WIDGETS && widgetSlots.isNotEmpty()) {
             val baseOffset = 1 + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
             val targetIdx = baseOffset + focusedWidgetIdx
             val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
@@ -335,8 +410,10 @@ fun WidgetPage(
         }
     }
 
-    LaunchedEffect(isActivePage) {
+    // Re-take key focus when the page becomes active and after a widget dialog closes
+    LaunchedEffect(isActivePage, anyWidgetDialogOpen) {
         if (isActivePage) {
+            if (anyWidgetDialogOpen) return@LaunchedEffect
             repeat(6) {
                 try {
                     pageFocusRequester.requestFocus()
@@ -346,13 +423,12 @@ fun WidgetPage(
                 }
             }
         } else {
-            focusSection = if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
-                else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
-                else if (savedWidgetIdsList.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
-                else WidgetFocusSection.HOME_PILL
+            endWidgetInteraction()
+            optionsWidgetId = null
+            showWidgetPicker = false
+            focusSection = defaultFocusSection()
             nowPlayingCol = 1
             focusedWidgetIdx = 0
-            removingWidgetId = null
             sawCenterDown = false
         }
     }
@@ -369,8 +445,8 @@ fun WidgetPage(
 
                 if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4) {
                     if (event.type == KeyEventType.KeyUp) {
-                        if (removingWidgetId != null) {
-                            removingWidgetId = null
+                        if (interactingWidgetId != null) {
+                            endWidgetInteraction()
                         } else {
                             navigateHomeAndReset()
                         }
@@ -381,6 +457,23 @@ fun WidgetPage(
                 if (isCenterActivateKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         sawCenterDown = true
+                        centerDownAt = native.eventTime
+                        centerLongPressFired = false
+                    } else if (event.type == KeyEventType.KeyDown) {
+                        // Held OK on a widget card: open its options
+                        val heldMs = native.eventTime - centerDownAt
+                        if (sawCenterDown && !centerLongPressFired &&
+                            focusSection == WidgetFocusSection.USER_WIDGETS &&
+                            heldMs >= WIDGET_LONG_PRESS_MS
+                        ) {
+                            centerLongPressFired = true
+                            sawCenterDown = false
+                            val widgetId = widgetSlots.getOrNull(focusedWidgetIdx)?.appWidgetId
+                            if (widgetId != null) {
+                                endWidgetInteraction()
+                                optionsWidgetId = widgetId
+                            }
+                        }
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         when (focusSection) {
@@ -395,19 +488,16 @@ fun WidgetPage(
                                 systemMonitorRefreshTrigger++
                             }
                             WidgetFocusSection.USER_WIDGETS -> {
-                                val widgetId = savedWidgetIdsList.getOrNull(focusedWidgetIdx)
-                                if (widgetId != null) {
-                                    if (removingWidgetId == widgetId) {
-                                        appWidgetHost.deleteAppWidgetId(widgetId)
-                                        saveIds(savedWidgetIdsList.filter { it != widgetId })
-                                        removingWidgetId = null
-                                    } else {
-                                        removingWidgetId = widgetId
-                                    }
+                                val widgetId = widgetSlots.getOrNull(focusedWidgetIdx)?.appWidgetId
+                                val interacting = interactingWidgetId
+                                if (interacting != null && interacting == widgetId) {
+                                    widgetFrames[interacting]?.clickSelection()
+                                } else if (widgetId != null) {
+                                    activateWidget(widgetId)
                                 }
                             }
                             WidgetFocusSection.ADD_WIDGET -> {
-                                launchWidgetPicker()
+                                showWidgetPicker = true
                             }
                             WidgetFocusSection.HOME_PILL -> {
                                 navigateHomeAndReset()
@@ -419,9 +509,32 @@ fun WidgetPage(
 
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
+                // Inside a widget: the D-pad walks its buttons until it runs off the top/bottom
+                val interacting = interactingWidgetId
+                if (interacting != null) {
+                    val direction = when (native.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_UP -> NavDirection.UP
+                        KeyEvent.KEYCODE_DPAD_DOWN -> NavDirection.DOWN
+                        KeyEvent.KEYCODE_DPAD_LEFT -> NavDirection.LEFT
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> NavDirection.RIGHT
+                        else -> null
+                    }
+                    if (direction != null) {
+                        val frame = widgetFrames[interacting]
+                        if (frame != null && frame.moveSelection(direction)) {
+                            return@onPreviewKeyEvent true
+                        }
+                        if (direction == NavDirection.LEFT || direction == NavDirection.RIGHT) {
+                            HapticManager.performBoundaryHaptic(context)
+                            return@onPreviewKeyEvent true
+                        }
+                        // UP/DOWN past the edge: leave the widget and move to the next card
+                        endWidgetInteraction()
+                    }
+                }
+
                 when (native.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> {
-                        removingWidgetId = null
                         when (focusSection) {
                             WidgetFocusSection.NOW_PLAYING -> {
                                 // Already at top
@@ -443,9 +556,9 @@ fun WidgetPage(
                                 }
                             }
                             WidgetFocusSection.ADD_WIDGET -> {
-                                if (savedWidgetIdsList.isNotEmpty()) {
+                                if (widgetSlots.isNotEmpty()) {
                                     focusSection = WidgetFocusSection.USER_WIDGETS
-                                    focusedWidgetIdx = savedWidgetIdsList.size - 1
+                                    focusedWidgetIdx = widgetSlots.size - 1
                                 } else if (isSystemMonitorEnabled) {
                                     focusSection = WidgetFocusSection.SYSTEM_MONITOR
                                 } else if (mediaState.isPlaying) {
@@ -460,12 +573,11 @@ fun WidgetPage(
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        removingWidgetId = null
                         when (focusSection) {
                             WidgetFocusSection.NOW_PLAYING -> {
                                 if (isSystemMonitorEnabled) {
                                     focusSection = WidgetFocusSection.SYSTEM_MONITOR
-                                } else if (savedWidgetIdsList.isNotEmpty()) {
+                                } else if (widgetSlots.isNotEmpty()) {
                                     focusSection = WidgetFocusSection.USER_WIDGETS
                                     focusedWidgetIdx = 0
                                 } else {
@@ -473,7 +585,7 @@ fun WidgetPage(
                                 }
                             }
                             WidgetFocusSection.SYSTEM_MONITOR -> {
-                                if (savedWidgetIdsList.isNotEmpty()) {
+                                if (widgetSlots.isNotEmpty()) {
                                     focusSection = WidgetFocusSection.USER_WIDGETS
                                     focusedWidgetIdx = 0
                                 } else {
@@ -481,7 +593,7 @@ fun WidgetPage(
                                 }
                             }
                             WidgetFocusSection.USER_WIDGETS -> {
-                                if (focusedWidgetIdx < savedWidgetIdsList.size - 1) {
+                                if (focusedWidgetIdx < widgetSlots.size - 1) {
                                     focusedWidgetIdx++
                                 } else {
                                     focusSection = WidgetFocusSection.ADD_WIDGET
@@ -500,9 +612,6 @@ fun WidgetPage(
                         when (focusSection) {
                             WidgetFocusSection.NOW_PLAYING -> {
                                 nowPlayingCol = (nowPlayingCol - 1).coerceAtLeast(0)
-                            }
-                            WidgetFocusSection.USER_WIDGETS -> {
-                                removingWidgetId = null
                             }
                             else -> {}
                         }
@@ -653,100 +762,26 @@ fun WidgetPage(
             }
 
             // User-added Android App Widgets
-            itemsIndexed(savedWidgetIdsList, key = { _, id -> id }) { idx, widgetId ->
-                val info = remember(widgetId) { appWidgetManager.getAppWidgetInfo(widgetId) }
-                if (info == null) {
-                    LaunchedEffect(widgetId) {
-                        appWidgetHost.deleteAppWidgetId(widgetId)
-                        saveIds(savedWidgetIdsList.filter { it != widgetId })
-                    }
-                } else {
-                    val isWidgetFocused = focusSection == WidgetFocusSection.USER_WIDGETS && focusedWidgetIdx == idx
-                    val showRemove = removingWidgetId == widgetId
-                    val cardShape = RoundedCornerShape(18.dp)
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(
-                                with(LocalDensity.current) {
-                                    (info.minHeight.takeIf { it > 0 } ?: 100).dp
-                                }
-                            )
-                            .graphicsLayer { clip = false }
-                            .glowingDoubleBorder(isSelected = isWidgetFocused, shape = cardShape, cornerRadius = 18.dp)
-                            .clip(cardShape)
-                            .background(Color(0xFFFFF6F8))
-                            .border(
-                                width = 1.5.dp,
-                                color = if (isWidgetFocused) Color(0xFFE06287) else Color(0xFFE5A4B4),
-                                shape = cardShape
-                            )
-                    ) {
-                        AndroidView(
-                            factory = { ctx ->
-                                try {
-                                    appWidgetHost.createView(ctx, widgetId, info).apply {
-                                        setAppWidget(widgetId, info)
-                                    }
-                                } catch (_: Exception) {
-                                    TextView(ctx).apply {
-                                        text = "Error loading widget ♡"
-                                        setTextColor(android.graphics.Color.MAGENTA)
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-
-                        // Corner remove handle
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(6.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFFF6F0FD))
-                                .border(1.5.dp, Color(0xFFB5A4CB), RoundedCornerShape(10.dp))
-                                .clickable {
-                                    focusSection = WidgetFocusSection.USER_WIDGETS
-                                    focusedWidgetIdx = idx
-                                    removingWidgetId = if (showRemove) null else widgetId
-                                }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "⋯",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF3E2452)
-                            )
-                        }
-
-                        if (showRemove) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(top = 36.dp, end = 6.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(destructiveBgColor)
-                                    .border(2.dp, destructiveColor, RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        appWidgetHost.deleteAppWidgetId(widgetId)
-                                        saveIds(savedWidgetIdsList.filter { it != widgetId })
-                                        removingWidgetId = null
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "✖ Remove (OK)",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = destructiveColor
-                                )
-                            }
-                        }
-                    }
-                }
+            itemsIndexed(widgetSlots, key = { _, slot -> slot.appWidgetId }) { idx, slot ->
+                AppWidgetHostCard(
+                    slot = slot,
+                    info = widgetInfos[slot.appWidgetId],
+                    host = widgetHost,
+                    isFocused = focusSection == WidgetFocusSection.USER_WIDGETS && focusedWidgetIdx == idx,
+                    isInteracting = interactingWidgetId == slot.appWidgetId,
+                    onFrameAttached = { id, frame -> widgetFrames[id] = frame },
+                    onFrameDetached = { id, frame ->
+                        if (widgetFrames[id] === frame) widgetFrames.remove(id)
+                        if (interactingWidgetId == id) interactingWidgetId = null
+                    },
+                    onOptionsClick = {
+                        endWidgetInteraction()
+                        focusSection = WidgetFocusSection.USER_WIDGETS
+                        focusedWidgetIdx = idx
+                        optionsWidgetId = slot.appWidgetId
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             // "+ Add Widget" kawaii pill action
@@ -767,13 +802,13 @@ fun WidgetPage(
                             .border(1.5.dp, if (isAddFocused) Color(0xFFE06287) else Color(0xFFB5A4CB), RoundedCornerShape(50))
                             .clickable {
                                 focusSection = WidgetFocusSection.ADD_WIDGET
-                                launchWidgetPicker()
+                                showWidgetPicker = true
                             }
                             .padding(horizontal = 20.dp, vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = if (savedWidgetIdsList.isEmpty() && !mediaState.isPlaying) {
+                            text = if (widgetSlots.isEmpty() && !mediaState.isPlaying) {
                                 "+ Add Favorite Widgets ♡"
                             } else {
                                 "+ Add Widget ♡"
@@ -824,6 +859,53 @@ fun WidgetPage(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF3E2452)
+                )
+            }
+        }
+
+        // 5. Widget dialogs (own windows, so they take keys away from this page while open)
+        if (showWidgetPicker) {
+            val density = LocalDensity.current
+            val cardWidthPx = with(density) { (LocalConfiguration.current.screenWidthDp.dp - 28.dp).roundToPx() }
+            WidgetPickerDialog(
+                availableWidthPx = cardWidthPx,
+                onPick = { info -> addWidget(info) },
+                onDismiss = { showWidgetPicker = false }
+            )
+        }
+
+        optionsWidgetId?.let { id ->
+            val idx = widgetSlots.indexOfFirst { it.appWidgetId == id }
+            if (idx >= 0) {
+                val info = widgetInfos[id]
+                val label = remember(id, info) {
+                    info?.loadLabel(context.packageManager)?.takeIf { it.isNotBlank() } ?: "Widget"
+                }
+                WidgetOptionsDialog(
+                    widgetLabel = label,
+                    canMoveUp = idx > 0,
+                    canMoveDown = idx < widgetSlots.lastIndex,
+                    canConfigure = info?.configure != null,
+                    canUseControls = info != null && widgetFrames.containsKey(id),
+                    onMoveUp = {
+                        if (WidgetRepository.move(context, id, -1)) focusWidget(id)
+                    },
+                    onMoveDown = {
+                        if (WidgetRepository.move(context, id, 1)) focusWidget(id)
+                    },
+                    onConfigure = {
+                        optionsWidgetId = null
+                        reconfigureWidget(id)
+                    },
+                    onUseControls = {
+                        optionsWidgetId = null
+                        activateWidget(id)
+                    },
+                    onRemove = {
+                        optionsWidgetId = null
+                        removeWidget(id)
+                    },
+                    onDismiss = { optionsWidgetId = null }
                 )
             }
         }

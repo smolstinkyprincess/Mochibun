@@ -152,10 +152,5 @@
             </intent-filter>
         </service>
 
-        <!-- App Widget Host Provider -->
-        <receiver
-            android:name=".ui.components.MochibunAppWidgetHostView"
-            android:exported="false" />
-
     </application>
 </manifest>

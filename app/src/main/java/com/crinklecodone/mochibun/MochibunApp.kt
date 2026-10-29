@@ -13,6 +13,7 @@ import com.crinklecodone.mochibun.core.system.LidLedManager
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
 import com.crinklecodone.mochibun.data.repository.TypographyManager
+import com.crinklecodone.mochibun.data.repository.WidgetRepository
 import com.topjohnwu.superuser.Shell
 
 class MochibunApp : Application(), ImageLoaderFactory {
@@ -34,6 +35,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
         TypographyManager.scanFonts(this)
         LidLedManager.init(this)
         SoundEffectManager.init(this)
+        WidgetRepository.init(this)
         com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog.init(this)
     }
 

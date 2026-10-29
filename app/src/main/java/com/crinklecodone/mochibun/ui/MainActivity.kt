@@ -21,18 +21,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
+import com.crinklecodone.mochibun.core.widget.MochibunWidgetHost
 import com.crinklecodone.mochibun.ui.theme.MochibunTheme
 import com.crinklecodone.mochibun.ui.theme.ThemeBackground
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.crinklecodone.mochibun.data.repository.IconPackManager
+import com.crinklecodone.mochibun.data.repository.WidgetRepository
 import com.crinklecodone.mochibun.service.InputArbiter
 import com.crinklecodone.mochibun.service.InputLayer
 import com.crinklecodone.mochibun.service.MochibunAccessibilityService
 
 class MainActivity : ComponentActivity() {
     private val launcherViewModel: LauncherViewModel by viewModels()
+
+    // Hosts the Widgets page's app widgets; listens only while this activity is started
+    private val widgetHost by lazy { MochibunWidgetHost.get(this) }
 
     var homePressCount by mutableStateOf(0)
         private set
@@ -90,6 +95,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        widgetHost.startListeningFor(this)
+    }
+
+    override fun onStop() {
+        widgetHost.stopListeningFor(this)
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         MochibunAccessibilityService.isLauncherForeground = true
@@ -132,6 +147,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // Drop the host's references to widget views, which hold this activity
+        widgetHost.releaseViews(this)
         keyEventInterceptor = null
         MochibunAccessibilityService.isLauncherForeground = false
         ClamshellManager.removeListener(clamshellListener)
@@ -204,6 +221,13 @@ class MainActivity : ComponentActivity() {
         registerReceiver(packageChangeReceiver, packageFilter)
         ClamshellManager.init(this)
         ClamshellManager.addListener(clamshellListener)
+
+        // Delete widget IDs left over from crashed or cancelled adds, and drop widgets whose app
+        // is gone. A restored instance may be mid-way through adding a widget, so keep that one.
+        widgetHost.hostIdsOrNull()?.let { hostIds ->
+            WidgetRepository.reconcile(this, hostIds, keepPending = savedInstanceState != null)
+                .forEach(widgetHost::deleteAppWidgetIdSafely)
+        }
 
         enableEdgeToEdge()
         setContent {
