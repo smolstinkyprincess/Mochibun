@@ -62,6 +62,7 @@ import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.KaomojiRepository
+import com.crinklecodone.mochibun.ui.components.curtainUnfurl
 import com.crinklecodone.mochibun.ui.performBoundaryHaptic
 import com.crinklecodone.mochibun.ui.theme.*
 import kotlinx.coroutines.delay
@@ -236,6 +237,7 @@ fun KaomojiWheelDialog(
             modifier = Modifier
                 .width(260.dp)
                 .wrapContentSize()
+                .curtainUnfurl(visible = true)
                 .padding(vertical = 8.dp)
         ) {
             Column(

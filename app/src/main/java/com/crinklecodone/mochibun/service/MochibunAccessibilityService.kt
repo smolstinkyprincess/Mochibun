@@ -51,6 +51,15 @@ class MochibunAccessibilityService : AccessibilityService() {
         @Volatile
         var keyCaptureListener: ((KeyEvent) -> Boolean)? = null
 
+        @Volatile
+        var launcherKeyListener: ((KeyEvent) -> Boolean)? = null
+
+        @Volatile
+        var isLauncherForeground: Boolean = false
+
+        @Volatile
+        var currentForegroundPackage: String = "com.crinklecodone.mochibun"
+
         private var instance: MochibunAccessibilityService? = null
 
         fun reloadActiveConfig(@Suppress("UNUSEDPARAMETER") context: Context? = null) {
@@ -116,7 +125,9 @@ class MochibunAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         ClamshellManager.removeListener(clamshellListener)
-        prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
+        if (::prefs.isInitialized) {
+            prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
+        }
         clearPendingHandlers()
         serviceScope.cancel()
         isServiceRunning = false
@@ -125,7 +136,13 @@ class MochibunAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Not observing UI events to maintain lightweight zero-overhead performance
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val pkg = event.packageName?.toString()
+            if (!pkg.isNullOrEmpty()) {
+                currentForegroundPackage = pkg
+                isLauncherForeground = (pkg == "com.crinklecodone.mochibun")
+            }
+        }
     }
 
     override fun onInterrupt() {
@@ -167,6 +184,14 @@ class MochibunAccessibilityService : AccessibilityService() {
         val captureListener = keyCaptureListener
         if (captureListener != null) {
             if (captureListener(event)) {
+                return true
+            }
+        }
+
+        // 2. Direct Launcher key interception when Mochibun is in the foreground
+        val launcherListener = launcherKeyListener
+        if (launcherListener != null && isLauncherForeground) {
+            if (launcherListener(event)) {
                 return true
             }
         }
@@ -227,8 +252,22 @@ class MochibunAccessibilityService : AccessibilityService() {
                 normalizedCode == KeyEvent.KEYCODE_CAMERA ||
                 event.scanCode in listOf(59, 60, 61, 212)
 
+        // When Mochibun launcher is in the foreground, APP_SWITCH is the Left Soft-Key (LSK).
+        // It must never summon the system Recents task switcher while using the launcher.
+        val isAppSwitchKey = normalizedCode == KeyEvent.KEYCODE_APP_SWITCH ||
+                event.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
+                event.scanCode == 580
+        if (isLauncherForeground && isAppSwitchKey) {
+            return false
+        }
+
         if (config == null || !config.hasAnyAction()) {
             if (isHardwareFunctionKey) {
+                // If Mochibun launcher is in the foreground and softkeys are unmapped, allow them
+                // to pass through so LauncherKeyHandler can handle in-launcher softkey navigation!
+                if (isLauncherForeground && (normalizedCode == KeyEvent.KEYCODE_F1 || normalizedCode == KeyEvent.KEYCODE_CAMERA || event.scanCode in listOf(59, 212))) {
+                    return false
+                }
                 // Consume the key event so stock ROM cannot launch deleted/disabled apps
                 return true
             }

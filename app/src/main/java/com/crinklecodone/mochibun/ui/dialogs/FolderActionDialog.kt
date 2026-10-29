@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
+import com.crinklecodone.mochibun.ui.components.curtainUnfurl
+import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.destructiveColor
 
@@ -168,6 +170,20 @@ fun FolderActionDialog(
                     }
                     return@onPreviewKeyEvent true
                 }
+                if (!confirmingDelete) {
+                    val digit = getDigitFromKeyCode(native.keyCode)
+                    if (digit != null && digit in 1..actions.size) {
+                        if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                            val targetIndex = digit - 1
+                            val item = actions.getOrNull(targetIndex)
+                            if (item != null && item.enabled) {
+                                selectedIndex = targetIndex
+                                item.onClick()
+                            }
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                }
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
                 if (confirmingDelete) {
@@ -236,6 +252,7 @@ fun FolderActionDialog(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
+                .curtainUnfurl(visible = true)
                 .border(1.5.dp, theme.greetingOutlineColor, shape),
             shape = shape,
             color = theme.cardBgColor,
@@ -349,6 +366,7 @@ fun FolderActionDialog(
                             isDestructive = item.isDestructive,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = if (isClose) TextAlign.End else TextAlign.Start,
+                            jumpNumber = if (idx + 1 <= 9) idx + 1 else null,
                             onClick = {
                                 selectedIndex = idx
                                 if (item.enabled) item.onClick()

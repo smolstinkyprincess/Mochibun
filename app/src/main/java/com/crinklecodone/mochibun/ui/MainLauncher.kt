@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,6 +20,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -26,6 +28,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -234,6 +237,8 @@ fun MainLauncher(
     var savedFavoriteIndexOnHome by remember { mutableIntStateOf(0) }
     val homeTracker = remember { HomeTransitionTracker() }
     var selectedDrawerIndex by remember { mutableIntStateOf(0) }
+    var drawerRailFocused by remember { mutableStateOf(false) }
+    var drawerRailHoveredLetter by remember { mutableStateOf<Char?>('A') }
     // Home focus area: 0 = FavoritesCard row, 1 = StatusCard (launcher options / page switcher)
     var homeFocusArea by remember { mutableIntStateOf(0) }
 
@@ -283,6 +288,14 @@ fun MainLauncher(
         pagerState.settledPage == 1 &&
         !pagerState.isScrollInProgress
 
+    val isSidePageActive = !drawerOpen &&
+        !anyModalOpen &&
+        (pagerState.currentPage == 0 || pagerState.currentPage == 2)
+
+    val isDrawerActive = drawerOpen && !anyModalOpen
+
+    val isModalActive = anyModalOpen
+
     // Clamshell lid closed: cleanly dismiss transient modals, collapse folder/drawer, reset T9 state, and position on Home
     LaunchedEffect(lidClosedCount) {
         if (lidClosedCount > 0) {
@@ -322,27 +335,31 @@ fun MainLauncher(
         if (isHomeScreenActive) {
             homeTracker.wasActive = true
             homeTracker.settledTimestamp = SystemClock.uptimeMillis()
+            val liveFavCount = launcherVm.favoriteItems.size
             selectedFavoriteIndex = savedFavoriteIndexOnHome.coerceIn(
                 0,
-                (favoriteItemCount - 1).coerceAtLeast(0)
+                (liveFavCount - 1).coerceAtLeast(0)
             )
-            if (favoriteItemCount > 0 && homeFocusArea != 1) {
+            if (liveFavCount > 0) {
                 homeFocusArea = 0
             }
         }
     }
 
     LaunchedEffect(favoriteItemCount) {
+        val liveFavCount = launcherVm.favoriteItems.size
         selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
             0,
-            (favoriteItemCount - 1).coerceAtLeast(0)
+            (liveFavCount - 1).coerceAtLeast(0)
         )
         savedFavoriteIndexOnHome = savedFavoriteIndexOnHome.coerceIn(
             0,
-            (favoriteItemCount - 1).coerceAtLeast(0)
+            (liveFavCount - 1).coerceAtLeast(0)
         )
-        if (favoriteItemCount == 0) {
+        if (liveFavCount == 0) {
             homeFocusArea = 1
+        } else if (homeFocusArea == 1) {
+            homeFocusArea = 0
         }
     }
 
@@ -370,12 +387,13 @@ fun MainLauncher(
 
     val openContextActionForCurrentFocus: () -> Unit = {
         if (drawerOpen) {
-            visibleApps.getOrNull(selectedDrawerIndex)?.let { app ->
+            launcherVm.visibleApps.getOrNull(selectedDrawerIndex)?.let { app ->
                 selectedApp = app
             }
         } else if (isHomeScreenActive) {
-            if (homeFocusArea == 0 && favoriteItemCount > 0) {
-                when (val item = favoriteItems.getOrNull(selectedFavoriteIndex)) {
+            val favItems = launcherVm.favoriteItems
+            if (homeFocusArea == 0 && favItems.isNotEmpty()) {
+                when (val item = favItems.getOrNull(selectedFavoriteIndex)) {
                     is FavoriteSlotItem.App -> {
                         selectedApp = item.app
                     }
@@ -472,13 +490,20 @@ fun MainLauncher(
 
     val keypadActions = remember(launcherVm) {
         object : LauncherKeypadActions {
-            override fun setDrawerOpen(open: Boolean) { drawerOpen = open }
+            override fun setDrawerOpen(open: Boolean) {
+                drawerOpen = open
+                if (!open) {
+                    drawerRailFocused = false
+                }
+            }
             override fun setSelectedDrawerIndex(index: Int) { selectedDrawerIndex = index }
             override fun setHomeFocusArea(area: Int) { homeFocusArea = area }
             override fun setSelectedFavoriteIndex(index: Int) { selectedFavoriteIndex = index }
             override fun setSavedFavoriteIndexOnHome(index: Int) { savedFavoriteIndexOnHome = index }
             override fun setPendingTargetPage(page: Int?) { pendingTargetPage = page }
             override fun setCenterKeyState(state: Int) { centerKeyState = state }
+            override fun setDrawerRailFocused(focused: Boolean) { drawerRailFocused = focused }
+            override fun setDrawerRailHoveredLetter(letter: Char?) { drawerRailHoveredLetter = letter }
             override fun openContextActionForCurrentFocus() = openContextActionForCurrentFocus()
             override fun openFolder(folderId: String) {
                 folderOpenStartRename = false
@@ -493,6 +518,14 @@ fun MainLauncher(
             }
             override fun setPoundKeyState(state: Int) { poundKeyState = state }
             override fun openKaomojiWheel() { kaomojiWheelDialogOpen = true }
+            override fun cycleDrawerSortMode() {
+                val nextMode = launcherVm.cycleAppDrawerSortMode()
+                SoundEffectManager.play(context, SoundEffect.CLICK)
+                Toast.makeText(context, "♡ Sorted: ${nextMode.toastName}", Toast.LENGTH_SHORT).show()
+            }
+            override fun recordAppLaunch(packageName: String) {
+                launcherVm.recordAppLaunch(packageName)
+            }
         }
     }
 
@@ -508,6 +541,62 @@ fun MainLauncher(
         )
     }
 
+    fun getCurrentKeypadState(): LauncherKeypadState {
+        val modal = selectedApp != null ||
+            launcherMenuOpen ||
+            iconPickerOpen ||
+            iconPackDialogOpen ||
+            hiddenManagerOpen ||
+            themeStudioOpen ||
+            hardwareButtonsDialogOpen ||
+            openedFolderId != null ||
+            createFolderDialogOpen ||
+            folderToCreateFrom != null ||
+            folderIconMenuOpen ||
+            kaomojiWheelDialogOpen ||
+            activeIncomingPreview != null
+        return LauncherKeypadState(
+            anyModalOpen = modal,
+            drawerOpen = drawerOpen,
+            isHomeScreenActive = isHomeScreenActive,
+            isPageTransitioning = !drawerOpen && (pagerState.isScrollInProgress || (pendingTargetPage != null && pendingTargetPage != pagerState.settledPage)),
+            pendingTargetPage = pendingTargetPage,
+            favoriteItemCount = launcherVm.favoriteItems.size,
+            selectedFavoriteIndex = selectedFavoriteIndex,
+            savedFavoriteIndexOnHome = savedFavoriteIndexOnHome,
+            homeFocusArea = homeFocusArea,
+            centerKeyState = centerKeyState,
+            selectedDrawerIndex = selectedDrawerIndex,
+            visibleApps = launcherVm.visibleApps,
+            favoriteApps = launcherVm.favoriteApps,
+            favoriteFolders = launcherVm.favoriteFolders,
+            favoriteItems = launcherVm.favoriteItems,
+            letterStarts = launcherVm.letterStarts,
+            poundKeyState = poundKeyState,
+            isDrawerRailFocused = drawerRailFocused,
+            drawerRailHoveredLetter = drawerRailHoveredLetter,
+            currentPage = pagerState.currentPage
+        )
+    }
+
+    val currentKeyHandler by rememberUpdatedState(keyHandler)
+    val currentKeypadStateProvider by rememberUpdatedState(::getCurrentKeypadState)
+
+    DisposableEffect(Unit) {
+        val listener: (android.view.KeyEvent) -> Boolean = { nativeEvent ->
+            currentKeyHandler.handleKeyEvent(
+                androidx.compose.ui.input.key.KeyEvent(nativeEvent),
+                currentKeypadStateProvider()
+            )
+        }
+        MainActivity.keyEventInterceptor = listener
+        com.crinklecodone.mochibun.service.MochibunAccessibilityService.launcherKeyListener = listener
+        onDispose {
+            MainActivity.keyEventInterceptor = null
+            com.crinklecodone.mochibun.service.MochibunAccessibilityService.launcherKeyListener = null
+        }
+    }
+
     CompositionLocalProvider(LocalLauncherTheme provides currentTheme) {
         Box(
             modifier = Modifier
@@ -516,26 +605,7 @@ fun MainLauncher(
                 .focusable()
                 .focusRequester(focusRequester)
                 .onPreviewKeyEvent { event ->
-                    val keypadState = LauncherKeypadState(
-                        anyModalOpen = anyModalOpen,
-                        drawerOpen = drawerOpen,
-                        isHomeScreenActive = isHomeScreenActive,
-                        isPageTransitioning = !drawerOpen && (pagerState.isScrollInProgress || (pendingTargetPage != null && pendingTargetPage != pagerState.settledPage)),
-                        pendingTargetPage = pendingTargetPage,
-                        favoriteItemCount = favoriteItemCount,
-                        selectedFavoriteIndex = selectedFavoriteIndex,
-                        savedFavoriteIndexOnHome = savedFavoriteIndexOnHome,
-                        homeFocusArea = homeFocusArea,
-                        centerKeyState = centerKeyState,
-                        selectedDrawerIndex = selectedDrawerIndex,
-                        visibleApps = visibleApps,
-                        favoriteApps = launcherVm.favoriteApps,
-                        favoriteFolders = favoriteFolders,
-                        favoriteItems = favoriteItems,
-                        letterStarts = letterStarts,
-                        poundKeyState = poundKeyState
-                    )
-                    keyHandler.handleKeyEvent(event, keypadState)
+                    keyHandler.handleKeyEvent(event, getCurrentKeypadState())
                 }
                 .combinedClickable(
                     onClick = {},
@@ -546,11 +616,47 @@ fun MainLauncher(
                     }
                 )
         ) {
-            BackHandler(enabled = drawerOpen) {
-                drawerOpen = false
+            BackHandler(enabled = selectedApp != null) {
+                selectedApp = null
             }
 
-            BackHandler(enabled = !drawerOpen && !anyModalOpen && (pagerState.currentPage != 1 || pagerState.targetPage != 1 || (pendingTargetPage != null && pendingTargetPage != 1))) {
+            BackHandler(enabled = launcherMenuOpen) {
+                launcherMenuOpen = false
+            }
+
+            BackHandler(enabled = themeStudioOpen) {
+                themeStudioOpen = false
+            }
+
+            BackHandler(enabled = iconPickerOpen) {
+                iconPickerOpen = false
+            }
+
+            BackHandler(enabled = iconPackDialogOpen) {
+                iconPackDialogOpen = false
+            }
+
+            BackHandler(enabled = hiddenManagerOpen) {
+                hiddenManagerOpen = false
+            }
+
+            BackHandler(enabled = createFolderDialogOpen) {
+                createFolderDialogOpen = false
+            }
+
+            BackHandler(enabled = folderIconMenuOpen) {
+                folderIconMenuOpen = false
+            }
+
+            BackHandler(enabled = hardwareButtonsDialogOpen) {
+                hardwareButtonsDialogOpen = false
+            }
+
+            BackHandler(enabled = kaomojiWheelDialogOpen) {
+                kaomojiWheelDialogOpen = false
+            }
+
+            BackHandler(enabled = isSidePageActive || (!drawerOpen && !anyModalOpen && (pagerState.currentPage != 1 || pagerState.targetPage != 1 || (pendingTargetPage != null && pendingTargetPage != 1)))) {
                 pendingTargetPage = 1
                 scope.launch {
                     pagerState.animateScrollToPage(1)
@@ -611,6 +717,7 @@ fun MainLauncher(
             }
             val onHomeAppClick: (LauncherApp) -> Unit = remember(favoriteItems) {
                 { app ->
+                    launcherVm.recordAppLaunch(app.packageName)
                     val appIdx = favoriteItems.indexOfFirst {
                         it is FavoriteSlotItem.App && it.app.packageName == app.packageName
                     }
@@ -1083,6 +1190,7 @@ fun MainLauncher(
                     initialPickingApps = folderOpenStartPicker,
                     cardRoundness = cardRoundness,
                     onLaunchApp = { app ->
+                        launcherVm.recordAppLaunch(app.packageName)
                         context.packageManager.getLaunchIntentForPackage(
                             app.packageName
                         )?.let(context::startActivity)
@@ -1194,10 +1302,24 @@ fun MainLauncher(
                     selectedDrawerIndex = selectedDrawerIndex,
                     currentDrawerLetter = currentDrawerLetter,
                     letterStarts = letterStarts,
+                    isRailFocused = drawerRailFocused,
+                    hoveredRailLetter = drawerRailHoveredLetter,
+                    sortMode = launcherVm.appDrawerSortMode,
                     listState = listState,
+                    onOptionsClick = {
+                        visibleApps.getOrNull(selectedDrawerIndex)?.let { app ->
+                            selectedApp = app
+                        }
+                    },
+                    onCycleSortClick = {
+                        val nextMode = launcherVm.cycleAppDrawerSortMode()
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
+                        Toast.makeText(context, "♡ Sorted: ${nextMode.toastName}", Toast.LENGTH_SHORT).show()
+                    },
                     onAppClick = { app ->
                         selectedDrawerIndex =
                             visibleApps.indexOfFirst { it.componentKey == app.componentKey }
+                        launcherVm.recordAppLaunch(app.packageName)
                         val launchIntent =
                             context.packageManager.getLaunchIntentForPackage(app.packageName)
                         if (launchIntent != null) {
@@ -1210,9 +1332,12 @@ fun MainLauncher(
                         selectedApp = app
                     },
                     onBackToHome = {
+                        drawerRailFocused = false
                         drawerOpen = false
                     },
+                    isModalOpen = anyModalOpen,
                     onLetterTap = { letter ->
+                        drawerRailHoveredLetter = letter
                         val target = letterStarts[letter]
                             ?: letterStarts.entries.firstOrNull { it.key > letter }?.value
                             ?: (visibleApps.size - 1)

@@ -27,6 +27,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.crinklecodone.mochibun.data.repository.IconPackManager
+import com.crinklecodone.mochibun.service.MochibunAccessibilityService
 
 class MainActivity : ComponentActivity() {
     private val launcherViewModel: LauncherViewModel by viewModels()
@@ -84,7 +85,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        MochibunAccessibilityService.isLauncherForeground = true
         com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog.checkAsync(this, force = false)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        MochibunAccessibilityService.isLauncherForeground = false
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -92,23 +99,28 @@ class MainActivity : ComponentActivity() {
         ClamshellManager.onConfigurationChanged(newConfig)
     }
 
+    companion object {
+        @Volatile
+        var keyEventInterceptor: ((KeyEvent) -> Boolean)? = null
+    }
+
+    @android.annotation.SuppressLint("RestrictedApi")
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val interceptor = keyEventInterceptor
+        if (interceptor != null && interceptor(event)) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onDestroy() {
+        keyEventInterceptor = null
+        MochibunAccessibilityService.isLauncherForeground = false
         ClamshellManager.removeListener(clamshellListener)
         try {
             unregisterReceiver(packageChangeReceiver)
         } catch (_: IllegalArgumentException) {}
         super.onDestroy()
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_APP_SWITCH) {
-            val intent = Intent(this, com.android.quickstep.RecentsActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            }
-            startActivity(intent)
-            return true
-        }
-        return super.onKeyDown(keyCode, event)
     }
 
     override fun onNewIntent(intent: Intent) {

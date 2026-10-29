@@ -6,6 +6,7 @@ import android.view.KeyEvent
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
 import com.crinklecodone.mochibun.data.model.PhysicalKey
+import com.crinklecodone.mochibun.data.model.AppDrawerSortMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -89,6 +90,9 @@ object PreferencesManager {
     const val KEY_LID_LED_CHARGING = "pref_lid_led_charging"
     const val DEFAULT_LID_LED_CHARGING = true
 
+    const val KEY_APP_DRAWER_SORT_MODE = "pref_app_drawer_sort_mode"
+    const val DEFAULT_APP_DRAWER_SORT_MODE = "ALPHABETICAL"
+
     const val KEY_LID_LED_COLOR = "pref_lid_led_color"
     const val DEFAULT_LID_LED_COLOR = "pink" // "pink", "purple", "white", "green"
 
@@ -154,6 +158,9 @@ object PreferencesManager {
 
     private val _isLidLedChargingEnabled = MutableStateFlow(DEFAULT_LID_LED_CHARGING)
     val isLidLedChargingEnabled: StateFlow<Boolean> = _isLidLedChargingEnabled.asStateFlow()
+
+    private val _appDrawerSortMode = MutableStateFlow(AppDrawerSortMode.ALPHABETICAL)
+    val appDrawerSortMode: StateFlow<AppDrawerSortMode> = _appDrawerSortMode.asStateFlow()
 
     private val _lidLedColor = MutableStateFlow(DEFAULT_LID_LED_COLOR)
     val lidLedColor: StateFlow<String> = _lidLedColor.asStateFlow()
@@ -248,6 +255,12 @@ object PreferencesManager {
                     KEY_LID_LED_CHARGING,
                     DEFAULT_LID_LED_CHARGING
                 )
+                val sortStr = prefs.getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
+                _appDrawerSortMode.value = try {
+                    AppDrawerSortMode.valueOf(sortStr)
+                } catch (_: Exception) {
+                    AppDrawerSortMode.ALPHABETICAL
+                }
                 _lidLedColor.value = prefs.getString(
                     KEY_LID_LED_COLOR,
                     DEFAULT_LID_LED_COLOR
@@ -707,6 +720,26 @@ object PreferencesManager {
         } catch (_: Exception) {
             DEFAULT_LID_LED_COLOR
         }
+    }
+
+    fun getAppDrawerSortMode(context: Context? = null): AppDrawerSortMode {
+        return if (initialized) {
+            _appDrawerSortMode.value
+        } else if (context != null) {
+            val sortStr = getPrefs(context).getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
+            try {
+                AppDrawerSortMode.valueOf(sortStr)
+            } catch (_: Exception) {
+                AppDrawerSortMode.ALPHABETICAL
+            }
+        } else {
+            AppDrawerSortMode.ALPHABETICAL
+        }
+    }
+
+    fun setAppDrawerSortMode(context: Context, mode: AppDrawerSortMode) {
+        getPrefs(context).edit().putString(KEY_APP_DRAWER_SORT_MODE, mode.name).apply()
+        _appDrawerSortMode.value = mode
     }
 
     fun setLidLedColor(context: Context, color: String) {

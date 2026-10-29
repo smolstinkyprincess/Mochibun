@@ -42,8 +42,20 @@ data class LauncherKeypadState(
     val favoriteFolders: List<FavoriteFolder> = emptyList(),
     val favoriteItems: List<FavoriteSlotItem> = emptyList(),
     val letterStarts: Map<Char, Int>,
-    val poundKeyState: Int = 0
-)
+    val poundKeyState: Int = 0,
+    val isDrawerRailFocused: Boolean = false,
+    val drawerRailHoveredLetter: Char? = null,
+    val currentPage: Int = 1
+) {
+    val isSidePageActive: Boolean
+        get() = (currentPage == 0 || currentPage == 2) && !drawerOpen && !anyModalOpen
+
+    val isDrawerActive: Boolean
+        get() = drawerOpen && !anyModalOpen
+
+    val isModalActive: Boolean
+        get() = anyModalOpen
+}
 
 /**
  * Callbacks invoked during physical keypad navigation.
@@ -57,9 +69,13 @@ interface LauncherKeypadActions {
     fun setPendingTargetPage(page: Int?)
     fun setCenterKeyState(state: Int)
     fun setPoundKeyState(state: Int) {}
+    fun setDrawerRailFocused(focused: Boolean) {}
+    fun setDrawerRailHoveredLetter(letter: Char?) {}
     fun openContextActionForCurrentFocus()
     fun openFolder(folderId: String)
     fun openLauncherMenu()
     fun openSpeedDial(digit: Int)
     fun openKaomojiWheel() {}
+    fun cycleDrawerSortMode() {}
+    fun recordAppLaunch(packageName: String) {}
 }

@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui
 
+
 import android.content.Context
 import android.media.AudioManager
 import android.widget.Toast
@@ -23,6 +24,7 @@ import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
+import com.crinklecodone.mochibun.ui.screens.firstLetterOf
 import com.crinklecodone.mochibun.ui.screens.launchClockApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -48,15 +50,53 @@ internal class LauncherKeyHandler(
     private val t9State: T9InputState,
     private val actions: LauncherKeypadActions
 ) {
+    private var lastConsumedDownKeyCode: Int? = null
+    private var lastConsumedDownScanCode: Int? = null
 
     fun handleKeyEvent(
         event: ComposeKeyEvent,
-        state: LauncherKeypadState
+        inputState: LauncherKeypadState
     ): Boolean {
         val nativeEvent = event.nativeKeyEvent
 
-        if (state.anyModalOpen) {
+        val isHome = !inputState.drawerOpen &&
+            !inputState.anyModalOpen &&
+            (inputState.pendingTargetPage == null || inputState.pendingTargetPage == 1) &&
+            pagerState.currentPage == 1 &&
+            pagerState.targetPage == 1 &&
+            pagerState.settledPage == 1 &&
+            !pagerState.isScrollInProgress
+
+        val isTransitioning = !inputState.drawerOpen &&
+            (pagerState.isScrollInProgress || (inputState.pendingTargetPage != null && inputState.pendingTargetPage != pagerState.settledPage))
+
+        val state = inputState.copy(
+            isHomeScreenActive = isHome,
+            isPageTransitioning = isTransitioning,
+            currentPage = pagerState.currentPage
+        )
+
+        if (nativeEvent.action == KeyEvent.ACTION_UP) {
+            val matchesDown = (lastConsumedDownKeyCode != null && nativeEvent.keyCode == lastConsumedDownKeyCode) ||
+                (lastConsumedDownScanCode != null && nativeEvent.scanCode > 0 && nativeEvent.scanCode == lastConsumedDownScanCode)
+            if (matchesDown) {
+                lastConsumedDownKeyCode = null
+                lastConsumedDownScanCode = null
+                return true
+            }
+        }
+
+        if (state.isModalActive) {
             return false
+        }
+
+        val softKeyHandled = handleSoftKey(nativeEvent, state)
+        if (softKeyHandled != null) {
+            if (softKeyHandled && nativeEvent.action == KeyEvent.ACTION_DOWN) {
+                lastConsumedDownKeyCode = nativeEvent.keyCode
+                lastConsumedDownScanCode = nativeEvent.scanCode
+            }
+            return softKeyHandled
         }
 
         if (state.isPageTransitioning) {
@@ -68,13 +108,14 @@ internal class LauncherKeyHandler(
             if (!homeTracker.wasActive) {
                 homeTracker.wasActive = true
                 homeTracker.settledTimestamp = SystemClock.uptimeMillis()
+                val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
                 actions.setSelectedFavoriteIndex(
                     state.savedFavoriteIndexOnHome.coerceIn(
                         0,
-                        (state.favoriteItemCount - 1).coerceAtLeast(0)
+                        (favCount - 1).coerceAtLeast(0)
                     )
                 )
-                if (state.favoriteItemCount > 0 && state.homeFocusArea != 1 && state.homeFocusArea != 3) {
+                if (favCount > 0) {
                     actions.setHomeFocusArea(0)
                 }
             }
@@ -95,6 +136,17 @@ internal class LauncherKeyHandler(
         }
 
         if (nativeEvent.action == KeyEvent.ACTION_UP) {
+            val isSoftKeyOrBack = nativeEvent.scanCode == 59 || nativeEvent.keyCode == KeyEvent.KEYCODE_F1 ||
+                nativeEvent.scanCode == 212 || nativeEvent.keyCode == KeyEvent.KEYCODE_CAMERA ||
+                nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH || nativeEvent.scanCode == 580 ||
+                nativeEvent.keyCode == KeyEvent.KEYCODE_MENU ||
+                nativeEvent.keyCode == KeyEvent.KEYCODE_BACK || nativeEvent.keyCode == KeyEvent.KEYCODE_ESCAPE ||
+                nativeEvent.keyCode == KeyEvent.KEYCODE_F4
+
+            if (isSoftKeyOrBack) {
+                return true
+            }
+
             if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode, nativeEvent.scanCode, context)) {
                 val wasShortPress = state.poundKeyState == 1
                 actions.setPoundKeyState(0)
@@ -112,39 +164,28 @@ internal class LauncherKeyHandler(
                         KeyEvent.KEYCODE_F4 -> {
                             if (state.drawerOpen) {
                                 SoundEffectManager.play(context, SoundEffect.BACK)
-                                actions.setDrawerOpen(false)
+                                if (state.isDrawerRailFocused) {
+                                    actions.setDrawerRailFocused(false)
+                                } else {
+                                    actions.setDrawerOpen(false)
+                                }
                             }
                         }
                         in KeyEvent.KEYCODE_1..KeyEvent.KEYCODE_9,
                         in KeyEvent.KEYCODE_NUMPAD_1..KeyEvent.KEYCODE_NUMPAD_9 -> {
-                            handleNumericKey(
-                                KeyEvent(KeyEvent.ACTION_DOWN, nativeEvent.keyCode),
-                                state
-                            )
+                            handleNumericKey(nativeEvent, state)
                         }
                     }
                 }
                 return true
             }
 
-            if (nativeEvent.keyCode == KeyEvent.KEYCODE_POUND) {
-                SoundEffectManager.play(context, SoundEffect.SELECT)
-                actions.openLauncherMenu()
-                return true
-            }
-
-            if (isDpadOrActionKey(nativeEvent.keyCode) ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
-                (nativeEvent.keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) ||
-                (nativeEvent.keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9) ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_STAR ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_CALL ||
-                isBackDismissKey(nativeEvent.keyCode) ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_F4 ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_F1 ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_CAMERA
-            ) {
-                return true
+            when (nativeEvent.keyCode) {
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    return handleCenterKey(nativeEvent, state)
+                }
             }
         }
 
@@ -152,6 +193,21 @@ internal class LauncherKeyHandler(
     }
 
     private fun handleCenterKey(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
+        if (state.drawerOpen && state.isDrawerRailFocused) {
+            when (nativeEvent.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (nativeEvent.repeatCount == 0) {
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        actions.setDrawerRailFocused(false)
+                    }
+                    return true
+                }
+                KeyEvent.ACTION_UP -> {
+                    return true
+                }
+            }
+        }
+
         when (nativeEvent.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (nativeEvent.repeatCount == 0) {
@@ -174,16 +230,19 @@ internal class LauncherKeyHandler(
                             actions.setDrawerOpen(false)
                         } else {
                             state.visibleApps.getOrNull(state.selectedDrawerIndex)?.let { app ->
+                                actions.recordAppLaunch(app.packageName)
                                 context.packageManager.getLaunchIntentForPackage(
                                     app.packageName
                                 )?.let(context::startActivity)
                             }
                         }
                     } else if (state.isHomeScreenActive) {
-                        if (state.homeFocusArea == 0 && state.favoriteItemCount > 0) {
+                        val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
+                        if (state.homeFocusArea == 0 && favCount > 0) {
                             if (state.favoriteItems.isNotEmpty()) {
                                 when (val item = state.favoriteItems.getOrNull(state.selectedFavoriteIndex)) {
                                     is FavoriteSlotItem.App -> {
+                                        actions.recordAppLaunch(item.app.packageName)
                                         context.packageManager.getLaunchIntentForPackage(
                                             item.app.packageName
                                         )?.let(context::startActivity)
@@ -195,6 +254,7 @@ internal class LauncherKeyHandler(
                                 }
                             } else if (state.selectedFavoriteIndex < state.favoriteApps.size) {
                                 state.favoriteApps.getOrNull(state.selectedFavoriteIndex)?.let { app ->
+                                    actions.recordAppLaunch(app.packageName)
                                     context.packageManager.getLaunchIntentForPackage(
                                         app.packageName
                                     )?.let(context::startActivity)
@@ -224,6 +284,109 @@ internal class LauncherKeyHandler(
         }
     }
 
+    private fun handleSoftKey(
+        nativeEvent: KeyEvent,
+        state: LauncherKeypadState
+    ): Boolean? {
+        val isLeftSoftKey = nativeEvent.scanCode == 59 ||
+            nativeEvent.keyCode == KeyEvent.KEYCODE_F1 ||
+            nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
+            nativeEvent.scanCode == 580 ||
+            nativeEvent.keyCode == KeyEvent.KEYCODE_MENU
+
+        if (isLeftSoftKey) {
+            if (state.isDrawerActive) {
+                // In App Drawer: LSK opens App Options (AppActionDialog) for highlighted app
+                if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (nativeEvent.repeatCount == 0) {
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
+                        actions.openContextActionForCurrentFocus()
+                    }
+                    return true
+                }
+                if (nativeEvent.action == KeyEvent.ACTION_UP) {
+                    return true
+                }
+            } else if (state.isHomeScreenActive) {
+                // On Home Screen: LSK navigates left to Stats (Page 0), consumes event (blocks stock task switcher)
+                if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (nativeEvent.repeatCount == 0) {
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        actions.setPendingTargetPage(0)
+                        scope.launch { pagerState.animateScrollToPage(0) }
+                    }
+                    return true
+                }
+                if (nativeEvent.action == KeyEvent.ACTION_UP) {
+                    return true
+                }
+            } else if (state.isSidePageActive) {
+                // On Side Pages (Stats Page 0 or Notifs Page 2): LSK retains side navigation, consumes event (blocks stock task switcher)
+                if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (nativeEvent.repeatCount == 0) {
+                        if (state.currentPage == 2) {
+                            // On Notifications Page 2: Navigate left to Stats (Page 0)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                            actions.setPendingTargetPage(0)
+                            scope.launch { pagerState.animateScrollToPage(0) }
+                        } else {
+                            // On Stats Page 0: Already on leftmost page, retain side navigation
+                            SoundEffectManager.play(context, SoundEffect.CLICK)
+                        }
+                    }
+                    return true
+                }
+                if (nativeEvent.action == KeyEvent.ACTION_UP) {
+                    return true
+                }
+            } else if (state.isPageTransitioning) {
+                return true
+            }
+        }
+
+        val isRightSoftKey = nativeEvent.keyCode == KeyEvent.KEYCODE_BACK ||
+            nativeEvent.keyCode == KeyEvent.KEYCODE_ESCAPE ||
+            nativeEvent.keyCode == KeyEvent.KEYCODE_F4 ||
+            nativeEvent.scanCode == 212 ||
+            nativeEvent.keyCode == KeyEvent.KEYCODE_CAMERA
+
+        if (isRightSoftKey) {
+            if (state.isDrawerActive) {
+                // In App Drawer: RSK cycles drawer sort mode, consumes event (stays in drawer, does NOT return home)
+                if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (nativeEvent.repeatCount == 0) {
+                        actions.cycleDrawerSortMode()
+                    }
+                    return true
+                }
+                if (nativeEvent.action == KeyEvent.ACTION_UP) {
+                    return true
+                }
+            } else if (state.isHomeScreenActive) {
+                // On Home Screen: RSK navigates right to Notifications (Page 2), consumes event (blocks default back minimization)
+                if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (nativeEvent.repeatCount == 0) {
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        actions.setPendingTargetPage(2)
+                        scope.launch { pagerState.animateScrollToPage(2) }
+                    }
+                    return true
+                }
+                if (nativeEvent.action == KeyEvent.ACTION_UP) {
+                    return true
+                }
+            } else if (state.isSidePageActive) {
+                // On Side Pages: Let KEYCODE_BACK pass through to Compose BackHandler(enabled = isSidePageActive)
+                // which smoothly animates back to Home (Page 1)
+                return null
+            } else if (state.isPageTransitioning) {
+                return true
+            }
+        }
+
+        return null
+    }
+
     private fun handleActionDown(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
         if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode, nativeEvent.scanCode, context)) {
             if (!PreferencesManager.isKaomojiTriggerLongPress(context)) {
@@ -248,49 +411,7 @@ internal class LauncherKeyHandler(
             }
         }
 
-        if (nativeEvent.scanCode == 59) {
-            if (nativeEvent.repeatCount == 0) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setPendingTargetPage(0)
-                scope.launch { pagerState.animateScrollToPage(0) }
-            }
-            return true
-        }
-        if (nativeEvent.scanCode == 212) {
-            if (nativeEvent.repeatCount == 0) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setPendingTargetPage(2)
-                scope.launch { pagerState.animateScrollToPage(2) }
-            }
-            return true
-        }
-
         when (nativeEvent.keyCode) {
-            KeyEvent.KEYCODE_F1 -> {
-                if (nativeEvent.repeatCount == 0) {
-                    SoundEffectManager.play(context, SoundEffect.NAV)
-                    actions.setPendingTargetPage(0)
-                    scope.launch { pagerState.animateScrollToPage(0) }
-                }
-                return true
-            }
-
-            KeyEvent.KEYCODE_CAMERA -> {
-                if (nativeEvent.repeatCount == 0) {
-                    SoundEffectManager.play(context, SoundEffect.NAV)
-                    actions.setPendingTargetPage(2)
-                    scope.launch { pagerState.animateScrollToPage(2) }
-                }
-                return true
-            }
-
-            KeyEvent.KEYCODE_MENU -> {
-                if (nativeEvent.repeatCount == 0) {
-                    SoundEffectManager.play(context, SoundEffect.CLICK)
-                    actions.openContextActionForCurrentFocus()
-                }
-                return true
-            }
 
             KeyEvent.KEYCODE_STAR -> {
                 if (nativeEvent.repeatCount == 0) {
@@ -327,25 +448,17 @@ internal class LauncherKeyHandler(
             KeyEvent.KEYCODE_DPAD_LEFT -> return handleDpadLeft(nativeEvent, state)
             KeyEvent.KEYCODE_DPAD_RIGHT -> return handleDpadRight(nativeEvent, state)
 
-            KeyEvent.KEYCODE_BACK,
-            KeyEvent.KEYCODE_ESCAPE,
-            KeyEvent.KEYCODE_F4 -> {
-                if (state.drawerOpen) {
-                    SoundEffectManager.play(context, SoundEffect.BACK)
-                    actions.setDrawerOpen(false)
-                    return true
-                } else if (state.isHomeScreenActive && (state.homeFocusArea == 1 || state.homeFocusArea == 2 || state.homeFocusArea == 3) && state.favoriteItemCount > 0) {
-                    SoundEffectManager.play(context, SoundEffect.BACK)
-                    actions.setHomeFocusArea(0)
-                    return true
-                } else if (state.isHomeScreenActive) {
-                    return true
-                } else {
-                    return false
-                }
-            }
-
             else -> return false
+        }
+    }
+
+    private fun jumpToLetter(letter: Char, state: LauncherKeypadState) {
+        val target = state.letterStarts[letter]
+            ?: state.letterStarts.entries.firstOrNull { it.key > letter }?.value
+            ?: (state.visibleApps.size - 1)
+        if (target >= 0 && state.visibleApps.isNotEmpty()) {
+            actions.setSelectedDrawerIndex(target)
+            scope.launch { listState.scrollToItem(target) }
         }
     }
 
@@ -374,6 +487,7 @@ internal class LauncherKeyHandler(
             )
             when (val holdAction = config.longPressAction) {
                 is ActionType.LaunchApp -> {
+                    actions.recordAppLaunch(holdAction.packageName)
                     val launchIntent = context.packageManager.getLaunchIntentForPackage(holdAction.packageName)
                     if (launchIntent != null) {
                         performBoundaryHaptic(context)
@@ -485,13 +599,10 @@ internal class LauncherKeyHandler(
             t9State.t9Time = now
 
             val letter = t9Letters[idx]
-            val target = state.letterStarts[letter]
-                ?: state.letterStarts.entries.firstOrNull { it.key > letter }?.value
-                ?: (state.visibleApps.size - 1)
-            if (target >= 0 && state.visibleApps.isNotEmpty()) {
-                actions.setSelectedDrawerIndex(target)
-                scope.launch { listState.scrollToItem(target) }
+            if (state.isDrawerRailFocused) {
+                actions.setDrawerRailHoveredLetter(letter)
             }
+            jumpToLetter(letter, state)
         }
         return true
     }
@@ -499,6 +610,27 @@ internal class LauncherKeyHandler(
     private fun handleDpadUp(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
         val wrapAround = PreferencesManager.isDpadWrapAround(context)
         if (state.drawerOpen) {
+            if (state.isDrawerRailFocused) {
+                val currentLetter = state.drawerRailHoveredLetter ?: 'A'
+                val currentIndex = ('A'..'Z').indexOf(currentLetter).coerceAtLeast(0)
+                if (currentIndex <= 0) {
+                    if (wrapAround) {
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        val newLetter = 'Z'
+                        actions.setDrawerRailHoveredLetter(newLetter)
+                        jumpToLetter(newLetter, state)
+                    } else {
+                        performBoundaryHaptic(context)
+                    }
+                } else {
+                    SoundEffectManager.play(context, SoundEffect.NAV)
+                    val newLetter = ('A' + (currentIndex - 1))
+                    actions.setDrawerRailHoveredLetter(newLetter)
+                    jumpToLetter(newLetter, state)
+                }
+                return true
+            }
+
             if (state.selectedDrawerIndex <= 0) {
                 if (state.selectedDrawerIndex == 0) {
                     SoundEffectManager.play(context, SoundEffect.NAV)
@@ -523,9 +655,10 @@ internal class LauncherKeyHandler(
             val isCooldown = (SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
             if (isCooldown) return true
 
+            val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
             if (state.homeFocusArea == 2) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(if (state.favoriteItemCount > 0) 0 else 3)
+                actions.setHomeFocusArea(if (favCount > 0) 0 else 3)
             } else if (state.homeFocusArea == 0) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(3)
@@ -544,6 +677,27 @@ internal class LauncherKeyHandler(
     private fun handleDpadDown(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
         val wrapAround = PreferencesManager.isDpadWrapAround(context)
         if (state.drawerOpen) {
+            if (state.isDrawerRailFocused) {
+                val currentLetter = state.drawerRailHoveredLetter ?: 'A'
+                val currentIndex = ('A'..'Z').indexOf(currentLetter).coerceAtLeast(0)
+                if (currentIndex >= 25) {
+                    if (wrapAround) {
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        val newLetter = 'A'
+                        actions.setDrawerRailHoveredLetter(newLetter)
+                        jumpToLetter(newLetter, state)
+                    } else {
+                        performBoundaryHaptic(context)
+                    }
+                } else {
+                    SoundEffectManager.play(context, SoundEffect.NAV)
+                    val newLetter = ('A' + (currentIndex + 1))
+                    actions.setDrawerRailHoveredLetter(newLetter)
+                    jumpToLetter(newLetter, state)
+                }
+                return true
+            }
+
             if (state.selectedDrawerIndex < 0) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setSelectedDrawerIndex(0)
@@ -565,12 +719,13 @@ internal class LauncherKeyHandler(
             val isCooldown = (SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
             if (isCooldown) return true
 
+            val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
             if (state.homeFocusArea == 1) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(3)
             } else if (state.homeFocusArea == 3) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(if (state.favoriteItemCount > 0) 0 else 2)
+                actions.setHomeFocusArea(if (favCount > 0) 0 else 2)
             } else if (state.homeFocusArea == 0) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(2)
@@ -586,6 +741,12 @@ internal class LauncherKeyHandler(
     private fun handleDpadLeft(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
         val wrapAround = PreferencesManager.isDpadWrapAround(context)
         if (state.drawerOpen) {
+            if (state.isDrawerRailFocused) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                actions.setDrawerRailFocused(false)
+                return true
+            }
+
             if (state.visibleApps.isNotEmpty()) {
                 if (state.selectedDrawerIndex <= 0) {
                     if (wrapAround) {
@@ -605,7 +766,8 @@ internal class LauncherKeyHandler(
             val isCooldown = (SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
             if (isCooldown) return true
 
-            if (state.homeFocusArea == 0 && state.favoriteItemCount > 0 && state.selectedFavoriteIndex > 0) {
+            val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
+            if (state.homeFocusArea == 0 && favCount > 0 && state.selectedFavoriteIndex > 0) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 val newIdx = state.selectedFavoriteIndex - 1
                 actions.setSelectedFavoriteIndex(newIdx)
@@ -626,25 +788,26 @@ internal class LauncherKeyHandler(
     private fun handleDpadRight(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
         val wrapAround = PreferencesManager.isDpadWrapAround(context)
         if (state.drawerOpen) {
-            if (state.visibleApps.isNotEmpty()) {
-                if (state.selectedDrawerIndex >= state.visibleApps.size - 1) {
-                    if (wrapAround) {
-                        SoundEffectManager.play(context, SoundEffect.NAV)
-                        actions.setSelectedDrawerIndex(0)
-                        scope.launch { listState.scrollToItem(0) }
-                    } else {
-                        performBoundaryHaptic(context)
-                    }
+            if (!state.isDrawerRailFocused) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                val currentLetter = if (state.selectedDrawerIndex in state.visibleApps.indices) {
+                    firstLetterOf(state.visibleApps[state.selectedDrawerIndex].name)
                 } else {
-                    SoundEffectManager.play(context, SoundEffect.NAV)
-                    actions.setSelectedDrawerIndex(state.selectedDrawerIndex + 1)
+                    'A'
                 }
+                val startingLetter = if (currentLetter in 'A'..'Z') currentLetter else 'A'
+                actions.setDrawerRailFocused(true)
+                actions.setDrawerRailHoveredLetter(startingLetter)
+                jumpToLetter(startingLetter, state)
+                return true
             }
+            return true
         } else if (state.isHomeScreenActive) {
             val isCooldown = (SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
             if (isCooldown) return true
 
-            if (state.homeFocusArea == 0 && state.favoriteItemCount > 0 && state.selectedFavoriteIndex < state.favoriteItemCount - 1) {
+            val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
+            if (state.homeFocusArea == 0 && favCount > 0 && state.selectedFavoriteIndex < favCount - 1) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 val newIdx = state.selectedFavoriteIndex + 1
                 actions.setSelectedFavoriteIndex(newIdx)

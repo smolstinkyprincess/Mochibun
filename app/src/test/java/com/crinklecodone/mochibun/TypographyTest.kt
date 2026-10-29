@@ -2,6 +2,7 @@ package com.crinklecodone.mochibun
 
 import androidx.compose.ui.text.font.FontFamily
 import com.crinklecodone.mochibun.data.repository.TypographyManager
+import com.crinklecodone.mochibun.ui.theme.MaruMinyaMFontFamily
 import com.crinklecodone.mochibun.ui.theme.getLauncherTypography
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -13,10 +14,11 @@ class TypographyTest {
     @Test
     fun testBuiltInTypographyOptionsIntegrity() {
         val options = TypographyManager.BuiltInTypographyOptions
-        assertEquals(4, options.size)
+        assertEquals(5, options.size)
 
         val ids = options.map { it.id }
         assertTrue(ids.contains("default"))
+        assertTrue(ids.contains("clean_sans"))
         assertTrue(ids.contains("pixel"))
         assertTrue(ids.contains("gothic"))
         assertTrue(ids.contains("serif"))
@@ -24,12 +26,13 @@ class TypographyTest {
 
     @Test
     fun testResolveFontFamily() {
-        assertEquals(FontFamily.Default, TypographyManager.resolveFontFamily("default"))
+        assertEquals(MaruMinyaMFontFamily, TypographyManager.resolveFontFamily("default"))
+        assertEquals(FontFamily.Default, TypographyManager.resolveFontFamily("clean_sans"))
         assertEquals(FontFamily.Monospace, TypographyManager.resolveFontFamily("pixel"))
         assertEquals(FontFamily.SansSerif, TypographyManager.resolveFontFamily("gothic"))
         assertEquals(FontFamily.Serif, TypographyManager.resolveFontFamily("serif"))
-        // Unknown defaults to Default
-        assertEquals(FontFamily.Default, TypographyManager.resolveFontFamily("unknown_custom_id"))
+        // Unknown defaults to MaruMinyaMFontFamily
+        assertEquals(MaruMinyaMFontFamily, TypographyManager.resolveFontFamily("unknown_custom_id"))
     }
 
     @Test

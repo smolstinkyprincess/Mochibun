@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,6 +61,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,6 +69,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.data.model.LauncherApp
+import com.crinklecodone.mochibun.data.model.AppDrawerSortMode
 import com.crinklecodone.mochibun.ui.theme.*
 import com.crinklecodone.mochibun.ui.components.*
 
@@ -82,8 +85,8 @@ private val SQUIRCLE_TINTS = listOf(
 private val DrawerCardShape = RoundedCornerShape(22.dp)
 private val DrawerSquircleShape = RoundedCornerShape(16.dp)
 
-private val DRAWER_ALPHABET = ('A'..'Z').toList()
-private val DRAWER_ALPHABET_STRINGS = ('A'..'Z').map { it.toString() }
+internal val DRAWER_ALPHABET = ('A'..'Z').toList()
+internal val DRAWER_ALPHABET_STRINGS = ('A'..'Z').map { it.toString() }
 
 // Helper for A-Z section grouping and fast scrolling
 fun firstLetterOf(label: String): Char {
@@ -126,7 +129,7 @@ fun AppDrawerCard(
             .fillMaxWidth()
             .height(60.dp)
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isSelected, cornerRadius = 22.dp)
+            .focusPop(isSelected = isSelected, cornerRadius = 22.dp)
             .clip(DrawerCardShape)
             .background(cardBrush, DrawerCardShape)
             .then(
@@ -185,32 +188,61 @@ fun AppDrawerCard(
 private fun AlphabetRailItem(
     letterStr: String,
     isActive: Boolean,
+    isDpadHovered: Boolean,
     isAvailable: Boolean,
     theme: LauncherTheme,
     modifier: Modifier = Modifier
 ) {
-    Text(
-        text = letterStr,
-        fontSize = if (isActive) 10.5.sp else 9.5.sp,
-        fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.SemiBold,
-        textAlign = TextAlign.Center,
-        color = when {
-            isActive -> theme.palette.textColor
-            isAvailable -> theme.palette.textColor.copy(alpha = 0.65f)
-            else -> theme.palette.outline.copy(alpha = 0.5f)
-        },
+    val fontSize = if (isActive) 14.5.sp else 12.5.sp
+
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = modifier
-    )
+            .padding(horizontal = 2.dp, vertical = 0.5.dp)
+            .softGlowFocus(
+                isSelected = isDpadHovered,
+                cornerRadius = 8.dp
+            )
+            .then(
+                if (isDpadHovered) {
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(theme.focusedContainerColor.copy(alpha = 0.85f))
+                        .border(1.dp, theme.selectionGlowColor.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        Text(
+            text = letterStr,
+            fontSize = fontSize,
+            lineHeight = fontSize,
+            style = LocalTextStyle.current.copy(
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            ),
+            fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            color = when {
+                isDpadHovered -> theme.palette.textColor
+                isActive -> theme.palette.textColor
+                isAvailable -> theme.palette.textColor.copy(alpha = 0.70f)
+                else -> theme.palette.outline.copy(alpha = 0.45f)
+            }
+        )
+    }
 }
 
 /**
  * Vertical alphabetical rail (A–Z Index) along the far-right edge.
- * Supports both direct tap and continuous drag-scrubbing across the 800px vertical height.
+ * Supports direct tap, continuous drag-scrubbing, and physical D-pad hover selection.
  */
 @Composable
 fun DrawerAlphabetRail(
     availableLetters: Set<Char>,
     activeLetter: Char? = null,
+    isRailFocused: Boolean = false,
+    hoveredLetter: Char? = null,
     onLetterTap: (Char) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -219,7 +251,7 @@ fun DrawerAlphabetRail(
 
     Column(
         modifier = modifier
-            .width(22.dp)
+            .width(28.dp)
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
                     val height = size.height
@@ -246,11 +278,13 @@ fun DrawerAlphabetRail(
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         DRAWER_ALPHABET.forEachIndexed { index, letter ->
-            val isActive = letter == activeLetter
+            val isDpadHovered = isRailFocused && letter == hoveredLetter
+            val isActive = isDpadHovered || (!isRailFocused && letter == activeLetter)
             val isAvailable = letter in availableLetters
             AlphabetRailItem(
                 letterStr = DRAWER_ALPHABET_STRINGS[index],
                 isActive = isActive,
+                isDpadHovered = isDpadHovered,
                 isAvailable = isAvailable,
                 theme = theme,
                 modifier = Modifier
@@ -272,11 +306,17 @@ fun AppDrawerScreen(
     selectedDrawerIndex: Int,
     currentDrawerLetter: Char?,
     letterStarts: Map<Char, Int>,
+    isRailFocused: Boolean = false,
+    hoveredRailLetter: Char? = null,
+    sortMode: AppDrawerSortMode = AppDrawerSortMode.ALPHABETICAL,
     listState: LazyListState = rememberLazyListState(),
     onAppClick: (LauncherApp) -> Unit,
     onAppLongClick: (LauncherApp) -> Unit,
+    onOptionsClick: (() -> Unit)? = null,
+    onCycleSortClick: (() -> Unit)? = null,
     onBackToHome: () -> Unit,
     onLetterTap: (Char) -> Unit,
+    isModalOpen: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val theme = LocalLauncherTheme.current
@@ -291,23 +331,39 @@ fun AppDrawerScreen(
             }
             // Intercept hardware keys at the root level before children can consume them
             .onPreviewKeyEvent { event ->
-                if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                    when (event.nativeKeyEvent.keyCode) {
-                        // F4 is the AT-M120 physical hardware shortcut key
-                        KeyEvent.KEYCODE_F4,
-                        KeyEvent.KEYCODE_BACK,
-                        KeyEvent.KEYCODE_ESCAPE -> {
-                            onBackToHome()
-                            true
+                if (!isModalOpen) {
+                    val native = event.nativeKeyEvent
+                    val isLsk = native.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
+                        native.keyCode == KeyEvent.KEYCODE_MENU ||
+                        native.keyCode == KeyEvent.KEYCODE_F1 ||
+                        native.scanCode == 580 ||
+                        native.scanCode == 59
+                    if (isLsk) {
+                        if (native.action == KeyEvent.ACTION_DOWN && native.repeatCount == 0) {
+                            onOptionsClick?.invoke()
                         }
-                        else -> false
+                        return@onPreviewKeyEvent true
                     }
+                    val isRsk = native.keyCode == KeyEvent.KEYCODE_BACK ||
+                        native.keyCode == KeyEvent.KEYCODE_ESCAPE ||
+                        native.keyCode == KeyEvent.KEYCODE_F4 ||
+                        native.keyCode == KeyEvent.KEYCODE_CAMERA ||
+                        native.scanCode == 212 ||
+                        native.scanCode == 62 ||
+                        native.scanCode == 158
+                    if (isRsk) {
+                        if (native.action == KeyEvent.ACTION_DOWN && native.repeatCount == 0) {
+                            onCycleSortClick?.invoke()
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                    false
                 } else {
                     false
                 }
             }
     ) {
-        // 1. Scrollable App Cards List
+        // Scrollable App Cards List
         // graphicsLayer { clip = false } is critical here so card selection halos aren't cut off by the list viewport
         LazyColumn(
             state = listState,
@@ -325,19 +381,18 @@ fun AppDrawerScreen(
                 AppDrawerCard(
                     app = app,
                     index = index,
-                    isSelected = index == selectedDrawerIndex,
+                    isSelected = (index == selectedDrawerIndex) && !isRailFocused,
                     onAppClick = onAppClick,
                     onAppLongClick = onAppLongClick
                 )
             }
         }
 
-        // 2. Top Scalloped Lavender Clouds Drape
         TopLavenderClouds(
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
-        // 3. Decorative Top Header Title: — ♡ Applications ♡ —
+        // Decorative Top Header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -348,20 +403,45 @@ fun AppDrawerScreen(
             MochibunSectionHeader("Applications")
         }
 
-        // 4. Vertical Alphabetical Rail (A-Z) along the right edge
         DrawerAlphabetRail(
             availableLetters = letterStarts.keys,
-            activeLetter = currentDrawerLetter,
+            activeLetter = if (isRailFocused) hoveredRailLetter ?: currentDrawerLetter else currentDrawerLetter,
+            isRailFocused = isRailFocused,
+            hoveredLetter = hoveredRailLetter,
             onLetterTap = onLetterTap,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .padding(top = 74.dp, bottom = 80.dp, end = 4.dp)
+                .padding(top = 60.dp, bottom = 68.dp, end = 4.dp)
                 .fillMaxHeight()
         )
 
-        // 5. Bottom Scalloped Lavender Clouds
         BottomLavenderClouds(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        // Bottom Keitai Softkey Bar: [ ♡ Options ]  ......  [ 🔤 Sort ]
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val hasFocusedApp = selectedDrawerIndex in visibleApps.indices && !isRailFocused
+            SoftKeyPromptPill(
+                label = "Options",
+                icon = "♡",
+                enabled = hasFocusedApp,
+                onClick = { onOptionsClick?.invoke() }
+            )
+
+            SoftKeyPromptPill(
+                label = sortMode.label,
+                icon = sortMode.icon,
+                enabled = true,
+                onClick = { onCycleSortClick?.invoke() }
+            )
+        }
     }
 }

@@ -457,10 +457,16 @@ object IconPackManager {
 
         val pm = context.packageManager
         val drawable = getAppIconDrawable(context, resolveInfo, customIconName)
+        val installTime = try {
+            pm.getPackageInfo(pkgName, 0).firstInstallTime
+        } catch (_: Exception) {
+            0L
+        }
         val app = LauncherApp(
             resolveInfo = resolveInfo,
             name = resolveInfo.loadLabel(pm).toString(),
-            iconBitmap = drawableToBitmap(drawable, 96)
+            iconBitmap = drawableToBitmap(drawable, 96),
+            installTime = installTime
         )
         appEntryCache[cacheKey] = app
         return app

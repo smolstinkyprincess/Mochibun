@@ -1,6 +1,20 @@
 package com.crinklecodone.mochibun.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import com.crinklecodone.mochibun.core.haptic.HapticManager
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -482,77 +496,146 @@ fun KawaiiCard(
 private val GLOW_EXPANSIONS_DP = floatArrayOf(3.5f, 2.4f, 1.4f, 0.6f)
 private val GLOW_ALPHAS = floatArrayOf(0.16f, 0.35f, 0.60f, 0.78f)
 
+@OptIn(ExperimentalFoundationApi::class)
 fun Modifier.softGlowFocus(
     isSelected: Boolean,
     cornerRadius: Dp = 22.dp,
     glowColor: Color? = null,
     borderColor: Color? = null,
     containerTint: Color? = null
-): Modifier = if (!isSelected) this else composed {
+): Modifier = composed {
+    val context = LocalContext.current
+    val scaleAnim = remember { Animatable(1.0f) }
+
+    LaunchedEffect(isSelected) {
+        if (isSelected) {
+            // Tactile tick haptic on focus gain
+            if (PreferencesManager.isDpadBoundaryHaptics(context)) {
+                HapticManager.vibrateTick(context, fallbackDurationMs = 14)
+            }
+            try {
+                // Keitai focus pop: transient spring scale 1.0f -> 1.06f -> 1.0f
+                scaleAnim.animateTo(
+                    targetValue = 1.06f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+                scaleAnim.animateTo(
+                    targetValue = 1.0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+            } catch (_: Exception) {
+                scaleAnim.snapTo(1.0f)
+            }
+        } else {
+            scaleAnim.snapTo(1.0f)
+        }
+    }
+
     val theme = LocalLauncherTheme.current
     val effectiveGlow = glowColor ?: theme.selectionGlowColor
     val effectiveBorder = borderColor ?: theme.cardBorderColor
     val effectiveTint = containerTint ?: theme.surfaceTint
 
-    this
-        .graphicsLayer { clip = false }
-        .drawWithContent {
-            val cornerPx = cornerRadius.toPx()
-            val d = density
-            val glowStroke = Stroke(width = 2.0f * d)
-            val borderStroke = Stroke(width = 1.8f * d)
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val localDensity = LocalDensity.current
+    val componentHeight = remember { mutableFloatStateOf(0f) }
 
-            // 1. Concentric halo passes extending 0.6dp to 3.5dp beyond the component boundary
-            for (i in 0 until 4) {
-                val expansion = GLOW_EXPANSIONS_DP[i] * d
-                val alpha = GLOW_ALPHAS[i]
-                drawRoundRect(
-                    color = effectiveGlow.copy(alpha = alpha),
-                    topLeft = Offset(-expansion, -expansion),
-                    size = Size(size.width + expansion * 2f, size.height + expansion * 2f),
-                    cornerRadius = CornerRadius(cornerPx + expansion, cornerPx + expansion),
-                    style = glowStroke
+    LaunchedEffect(isSelected) {
+        if (isSelected) {
+            val topMargin = with(localDensity) { 58.dp.toPx() }
+            val bottomMargin = with(localDensity) { 72.dp.toPx() }
+            try {
+                bringIntoViewRequester.bringIntoView(
+                    Rect(
+                        left = 0f,
+                        top = -topMargin,
+                        right = 0f,
+                        bottom = componentHeight.floatValue + bottomMargin
+                    )
                 )
+            } catch (_: Throwable) {
             }
-
-            // 2. Subtle frosted pastel fill over the focused surface
-            if (effectiveTint != Color.Transparent && effectiveTint.alpha > 0f) {
-                drawRoundRect(
-                    color = effectiveTint.copy(alpha = 0.35f),
-                    topLeft = Offset.Zero,
-                    size = size,
-                    cornerRadius = CornerRadius(cornerPx, cornerPx)
-                )
-            }
-
-            // 3. Draw card container content
-            drawContent()
-
-            // 4. Crisp theme outline stroke defining inner boundary
-            drawRoundRect(
-                color = effectiveBorder,
-                topLeft = Offset.Zero,
-                size = size,
-                cornerRadius = CornerRadius(cornerPx, cornerPx),
-                style = borderStroke
-            )
-
-            // 5. Delicate outer glow halo focus accents (1–2 tiny sparkles)
-            val focusSparkleTopRight = Offset(size.width + 1.5f * d, -2f * d)
-            drawFourPointSparkle(
-                center = focusSparkleTopRight,
-                sizePx = 7.5f * d,
-                color = effectiveGlow.copy(alpha = 0.85f),
-                hollow = false
-            )
-            val focusGlintBottomLeft = Offset(-2f * d, size.height + 1.5f * d)
-            drawDiamondGlint(
-                center = focusGlintBottomLeft,
-                sizePx = 6.0f * d,
-                color = effectiveGlow.copy(alpha = 0.75f),
-                strokeWidthPx = 1.0f * d
-            )
         }
+    }
+
+    this
+        .onSizeChanged { componentHeight.floatValue = it.height.toFloat() }
+        .bringIntoViewRequester(bringIntoViewRequester)
+        .graphicsLayer {
+            val s = scaleAnim.value
+            scaleX = s
+            scaleY = s
+            clip = false
+        }
+        .then(
+            if (isSelected) {
+                Modifier.drawWithContent {
+                    val cornerPx = cornerRadius.toPx()
+                    val d = density
+                    val glowStroke = Stroke(width = 2.0f * d)
+                    val borderStroke = Stroke(width = 1.8f * d)
+
+                    // 1. Concentric halo passes extending 0.6dp to 3.5dp beyond the component boundary
+                    for (i in 0 until 4) {
+                        val expansion = GLOW_EXPANSIONS_DP[i] * d
+                        val alpha = GLOW_ALPHAS[i]
+                        drawRoundRect(
+                            color = effectiveGlow.copy(alpha = alpha),
+                            topLeft = Offset(-expansion, -expansion),
+                            size = Size(size.width + expansion * 2f, size.height + expansion * 2f),
+                            cornerRadius = CornerRadius(cornerPx + expansion, cornerPx + expansion),
+                            style = glowStroke
+                        )
+                    }
+
+                    // 2. Subtle frosted pastel fill over the focused surface
+                    if (effectiveTint != Color.Transparent && effectiveTint.alpha > 0f) {
+                        drawRoundRect(
+                            color = effectiveTint.copy(alpha = 0.35f),
+                            topLeft = Offset.Zero,
+                            size = size,
+                            cornerRadius = CornerRadius(cornerPx, cornerPx)
+                        )
+                    }
+
+                    // 3. Draw card container content
+                    drawContent()
+
+                    // 4. Crisp theme outline stroke defining inner boundary
+                    drawRoundRect(
+                        color = effectiveBorder,
+                        topLeft = Offset.Zero,
+                        size = size,
+                        cornerRadius = CornerRadius(cornerPx, cornerPx),
+                        style = borderStroke
+                    )
+
+                    // 5. Delicate outer glow halo focus accents (1–2 tiny sparkles)
+                    val focusSparkleTopRight = Offset(size.width + 1.5f * d, -2f * d)
+                    drawFourPointSparkle(
+                        center = focusSparkleTopRight,
+                        sizePx = 7.5f * d,
+                        color = effectiveGlow.copy(alpha = 0.85f),
+                        hollow = false
+                    )
+                    val focusGlintBottomLeft = Offset(-2f * d, size.height + 1.5f * d)
+                    drawDiamondGlint(
+                        center = focusGlintBottomLeft,
+                        sizePx = 6.0f * d,
+                        color = effectiveGlow.copy(alpha = 0.75f),
+                        strokeWidthPx = 1.0f * d
+                    )
+                }
+            } else {
+                Modifier
+            }
+        )
 }
 
 /**

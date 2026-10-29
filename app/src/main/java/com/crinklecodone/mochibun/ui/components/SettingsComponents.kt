@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.ui.dialogs.PixelRibbonBow
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import com.crinklecodone.mochibun.ui.theme.MaruMinyaMFontFamily
 
 /**
  * Standardized Settings Screen Scaffold for the Chinoe AT-M120 (480x800).
@@ -171,6 +172,49 @@ fun SettingsCard(
 }
 
 /**
+ * Authentic 2000s Galakei numeric jump indicator badge ([1]–[9]).
+ * Allows flip-phone physical keypad shortcuts to instantly trigger menu rows.
+ */
+@Composable
+fun JumpNumberBadge(
+    digit: Int,
+    isFocused: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val color = if (isFocused) {
+        ActiveTheme.selectionGlow
+    } else {
+        ActiveTheme.accentDeep.copy(alpha = 0.65f)
+    }
+
+    Text(
+        text = "[$digit]",
+        color = color,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        fontFamily = MaruMinyaMFontFamily,
+        modifier = modifier
+    )
+}
+
+/**
+ * Maps physical keypad numbers KEYCODE_1 through KEYCODE_9 to their 1-based digit (1..9).
+ * Returns null for non-numeric or out-of-range keys.
+ */
+fun getDigitFromKeyCode(keyCode: Int): Int? = when (keyCode) {
+    android.view.KeyEvent.KEYCODE_1 -> 1
+    android.view.KeyEvent.KEYCODE_2 -> 2
+    android.view.KeyEvent.KEYCODE_3 -> 3
+    android.view.KeyEvent.KEYCODE_4 -> 4
+    android.view.KeyEvent.KEYCODE_5 -> 5
+    android.view.KeyEvent.KEYCODE_6 -> 6
+    android.view.KeyEvent.KEYCODE_7 -> 7
+    android.view.KeyEvent.KEYCODE_8 -> 8
+    android.view.KeyEvent.KEYCODE_9 -> 9
+    else -> null
+}
+
+/**
  * Navigation row leading to a dedicated sub-screen.
  */
 @Composable
@@ -180,6 +224,7 @@ fun SettingsNavigationRow(
     icon: String,
     isFocused: Boolean,
     modifier: Modifier = Modifier,
+    jumpNumber: Int? = null,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(14.dp)
@@ -240,14 +285,25 @@ fun SettingsNavigationRow(
             }
         }
 
-        // Trailing Navigation Arrow
-        Text(
-            text = "›",
-            color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.cardBorder,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+        // Trailing Navigation Arrow & Jump Number
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(end = 4.dp)
-        )
+        ) {
+            if (jumpNumber != null) {
+                JumpNumberBadge(
+                    digit = jumpNumber,
+                    isFocused = isFocused,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+            }
+            Text(
+                text = "›",
+                color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.cardBorder,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
@@ -261,6 +317,7 @@ fun SettingsToggleRow(
     checked: Boolean,
     isFocused: Boolean,
     modifier: Modifier = Modifier,
+    jumpNumber: Int? = null,
     onCheckedChange: (Boolean) -> Unit
 ) {
     val shape = RoundedCornerShape(14.dp)
@@ -303,25 +360,37 @@ fun SettingsToggleRow(
             }
         }
 
-        // Pill-shaped kawaii switch
-        val switchBg = if (checked) ActiveTheme.primary else ActiveTheme.cardBorder.copy(alpha = 0.4f)
-        val switchText = if (checked) "ON ♡" else "OFF"
-        val switchTextColor = if (checked) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.6f)
-
-        Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(switchBg, CircleShape)
-                .border(1.dp, ActiveTheme.cardBorder, CircleShape)
-                .padding(horizontal = 9.dp, vertical = 3.dp),
-            contentAlignment = Alignment.Center
+        Row(
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = switchText,
-                color = switchTextColor,
-                fontSize = 10.5.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (jumpNumber != null) {
+                JumpNumberBadge(
+                    digit = jumpNumber,
+                    isFocused = isFocused,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+            }
+
+            // Pill-shaped kawaii switch
+            val switchBg = if (checked) ActiveTheme.primary else ActiveTheme.cardBorder.copy(alpha = 0.4f)
+            val switchText = if (checked) "ON ♡" else "OFF"
+            val switchTextColor = if (checked) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.6f)
+
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(switchBg, CircleShape)
+                    .border(1.dp, ActiveTheme.cardBorder, CircleShape)
+                    .padding(horizontal = 9.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = switchText,
+                    color = switchTextColor,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
@@ -336,6 +405,8 @@ fun SettingsStepperRow(
     valueDisplay: String,
     isFocused: Boolean,
     modifier: Modifier = Modifier,
+    jumpNumber: Int? = null,
+    onClick: (() -> Unit)? = null,
     onDecrement: () -> Unit,
     onIncrement: () -> Unit
 ) {
@@ -361,7 +432,7 @@ fun SettingsStepperRow(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .clickable { onIncrement() }
+                .clickable { onClick?.invoke() ?: onIncrement() }
         ) {
             Text(
                 text = title,
@@ -386,6 +457,14 @@ fun SettingsStepperRow(
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (jumpNumber != null) {
+                JumpNumberBadge(
+                    digit = jumpNumber,
+                    isFocused = isFocused,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+            }
+
             // Decrement button
             Box(
                 modifier = Modifier
@@ -457,6 +536,7 @@ fun SettingsTextInputRow(
     value: String,
     isFocused: Boolean,
     modifier: Modifier = Modifier,
+    jumpNumber: Int? = null,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(14.dp)
@@ -499,20 +579,32 @@ fun SettingsTextInputRow(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(ActiveTheme.surfaceTint.copy(alpha = 0.45f))
-                .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
-                .padding(horizontal = 8.dp, vertical = 3.dp),
-            contentAlignment = Alignment.Center
+        Row(
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = value.ifBlank { "Not set" },
-                color = ActiveTheme.accentDeep,
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (jumpNumber != null) {
+                JumpNumberBadge(
+                    digit = jumpNumber,
+                    isFocused = isFocused,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(ActiveTheme.surfaceTint.copy(alpha = 0.45f))
+                    .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = value.ifBlank { "Not set" },
+                    color = ActiveTheme.accentDeep,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
@@ -563,6 +655,7 @@ fun SettingsActionRow(
     isFocused: Boolean,
     modifier: Modifier = Modifier,
     isDestructive: Boolean = false,
+    jumpNumber: Int? = null,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(12.dp)
@@ -599,5 +692,12 @@ fun SettingsActionRow(
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold
         )
+        if (jumpNumber != null) {
+            JumpNumberBadge(
+                digit = jumpNumber,
+                isFocused = isFocused,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
+        }
     }
 }

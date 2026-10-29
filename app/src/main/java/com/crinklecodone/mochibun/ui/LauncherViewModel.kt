@@ -17,6 +17,7 @@ import com.crinklecodone.mochibun.core.util.loadWallpaperBitmap
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
 import com.crinklecodone.mochibun.data.model.FavoriteSlotItem
 import com.crinklecodone.mochibun.data.model.LauncherApp
+import com.crinklecodone.mochibun.data.model.AppDrawerSortMode
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.IconPackManager
 import com.crinklecodone.mochibun.ui.screens.firstLetterOf
@@ -46,11 +47,25 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     var hiddenPackages by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    var appDrawerSortMode by mutableStateOf(PreferencesManager.getAppDrawerSortMode())
+        private set
+
+    private var launchCounts by mutableStateOf<Map<String, Int>>(emptyMap())
+
     val visibleApps by derivedStateOf {
-        if (hiddenPackages.isEmpty()) {
+        val filtered = if (hiddenPackages.isEmpty()) {
             apps
         } else {
             apps.filter { it.packageName !in hiddenPackages }
+        }
+        when (appDrawerSortMode) {
+            AppDrawerSortMode.ALPHABETICAL -> filtered.sortedBy { it.lowercaseName }
+            AppDrawerSortMode.NEWEST -> filtered.sortedWith(
+                compareByDescending<LauncherApp> { it.installTime }.thenBy { it.lowercaseName }
+            )
+            AppDrawerSortMode.MOST_USED -> filtered.sortedWith(
+                compareByDescending<LauncherApp> { launchCounts[it.packageName] ?: 0 }.thenBy { it.lowercaseName }
+            )
         }
     }
 
@@ -177,7 +192,37 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     // ── App Discovery & Two-Phase Loading ─────────────────────────────────────
+    fun cycleAppDrawerSortMode(): AppDrawerSortMode {
+        val nextMode = appDrawerSortMode.next()
+        appDrawerSortMode = nextMode
+        PreferencesManager.setAppDrawerSortMode(context, nextMode)
+        return nextMode
+    }
+
+    fun recordAppLaunch(packageName: String) {
+        val currentCount = launchCounts[packageName] ?: 0
+        val newMap = launchCounts.toMutableMap()
+        newMap[packageName] = currentCount + 1
+        launchCounts = newMap
+        val prefs = PreferencesManager.getPrefs(context)
+        prefs.edit().putInt("app_launch_count_", currentCount + 1).apply()
+    }
+
+    private fun loadLaunchCounts() {
+        val prefs = PreferencesManager.getPrefs(context)
+        val map = mutableMapOf<String, Int>()
+        for ((key, value) in prefs.all) {
+            if (key.startsWith("app_launch_count_") && value is Int) {
+                val pkg = key.removePrefix("app_launch_count_")
+                map[pkg] = value
+            }
+        }
+        launchCounts = map
+    }
+
     fun loadApps() {
+        loadLaunchCounts()
+        appDrawerSortMode = PreferencesManager.getAppDrawerSortMode(context)
         viewModelScope.launch {
             val prefs = PreferencesManager.getPrefs(context)
 

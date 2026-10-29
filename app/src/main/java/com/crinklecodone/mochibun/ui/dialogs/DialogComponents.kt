@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.R
+import com.crinklecodone.mochibun.ui.components.JumpNumberBadge
 import com.crinklecodone.mochibun.ui.components.softGlowFocus
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.destructiveBgColor
@@ -92,6 +94,7 @@ fun KawaiiDialogItem(
     enabled: Boolean = true,
     isDestructive: Boolean = false,
     textAlign: TextAlign = TextAlign.Start,
+    jumpNumber: Int? = null,
     onClick: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
@@ -115,7 +118,7 @@ fun KawaiiDialogItem(
         else -> theme.appActionColor
     }
 
-    Box(
+    Row(
         modifier = modifier
             .graphicsLayer { clip = false }
             .softGlowFocus(isSelected = isFocused && enabled, cornerRadius = 12.dp)
@@ -134,11 +137,7 @@ fun KawaiiDialogItem(
                 }
             )
             .padding(horizontal = 10.dp, vertical = 8.dp),
-        contentAlignment = when (textAlign) {
-            TextAlign.Center -> Alignment.Center
-            TextAlign.End -> Alignment.CenterEnd
-            else -> Alignment.CenterStart
-        }
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = text,
@@ -147,8 +146,16 @@ fun KawaiiDialogItem(
             fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium,
             textAlign = textAlign,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
         )
+        if (jumpNumber != null) {
+            JumpNumberBadge(
+                digit = jumpNumber,
+                isFocused = isFocused,
+                modifier = Modifier.padding(start = 6.dp)
+            )
+        }
     }
 }
 

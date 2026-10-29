@@ -253,8 +253,13 @@ fun NowPlayingCard(
                             .weight(1f)
                             .clickable { onOpenMediaApp() }
                     ) {
+                        val displayTitle = rememberSteppedTickerText(
+                            text = mediaState.title.ifBlank { "No Media Active" },
+                            visibleCharCount = 18,
+                            enabled = mediaState.isPlaying
+                        )
                         Text(
-                            text = mediaState.title,
+                            text = displayTitle,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = theme.cardTextColor,
@@ -309,6 +314,7 @@ fun NowPlayingCard(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .offset(x = 12.dp, y = (-16).dp)
+                .keitaiMascotBob(enabled = mediaState.isPlaying)
                 .clip(RoundedCornerShape(12.dp))
                 .background(theme.cardBgColor)
                 .border(1.5.dp, theme.cardBorderColor, RoundedCornerShape(12.dp))

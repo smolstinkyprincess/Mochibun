@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.crinklecodone.mochibun.data.model.LauncherApp
+import com.crinklecodone.mochibun.ui.components.curtainUnfurl
+import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 
@@ -135,6 +137,15 @@ fun AppActionDialog(
                     }
                     return@onPreviewKeyEvent true
                 }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null && digit in 1..actions.size) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        val targetIndex = digit - 1
+                        selectedIndex = targetIndex
+                        actions.getOrNull(targetIndex)?.second?.invoke()
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
                 when (native.keyCode) {
@@ -190,6 +201,7 @@ fun AppActionDialog(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
+                .curtainUnfurl(visible = true)
                 .border(1.5.dp, ActiveTheme.cardBorder, shape),
             shape = shape,
             color = ActiveTheme.surface,
@@ -276,6 +288,7 @@ fun AppActionDialog(
                         isFocused = selectedIndex == idx,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = if (isClose) TextAlign.End else TextAlign.Start,
+                        jumpNumber = if (idx + 1 <= 9) idx + 1 else null,
                         onClick = {
                             selectedIndex = idx
                             action()

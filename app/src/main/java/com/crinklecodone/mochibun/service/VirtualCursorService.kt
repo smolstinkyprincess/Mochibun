@@ -148,7 +148,9 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         ClamshellManager.removeListener(clamshellListener)
         stopMovementTicker()
 
-        prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
+        if (::prefs.isInitialized) {
+            prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
+        }
 
         overlayView?.let { view ->
             if (isOverlayAttached) {

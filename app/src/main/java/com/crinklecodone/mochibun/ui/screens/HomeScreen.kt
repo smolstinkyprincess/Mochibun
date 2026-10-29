@@ -166,6 +166,7 @@ fun HomeScreen(
                 favoriteItems = favoriteItems,
                 selectedIndex = selectedFavoriteIndex,
                 isCardFocused = isHomeScreenActive && homeFocusArea == 0,
+                isHomeScreenActive = isHomeScreenActive,
                 folderIconRefreshKey = folderIconRefreshKey,
                 onAppClick = onAppClick,
                 onAppLongClick = onAppLongClick,
@@ -620,6 +621,7 @@ fun FavoritesCard(
     modifier: Modifier = Modifier,
     selectedIndex: Int = 0,
     isCardFocused: Boolean = true,
+    isHomeScreenActive: Boolean = true,
     folderIconRefreshKey: Int = 0,
     onAppClick: (LauncherApp) -> Unit = {},
     onAppLongClick: (LauncherApp) -> Unit = {},
@@ -783,6 +785,7 @@ fun FavoritesCard(
         modifier = Modifier
             .align(Alignment.TopEnd)
             .offset(x = (-14).dp, y = (-26).dp)
+            .keitaiMascotBob(enabled = isHomeScreenActive)
     )
 }
 }
@@ -823,13 +826,7 @@ private fun FavoriteAppSlot(
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .then(
-                    if (isSelected) {
-                        Modifier.softGlowFocus(isSelected = true, cornerRadius = 20.dp)
-                    } else {
-                        Modifier
-                    }
-                )
+                .focusPop(isSelected = isSelected, cornerRadius = 20.dp)
                 .padding(3.dp)
                 .background(squircleBg, FavoriteSquircleShape)
                 .clip(FavoriteSquircleShape)
@@ -913,13 +910,7 @@ private fun FavoriteFolderSlot(
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .then(
-                    if (isSelected) {
-                        Modifier.softGlowFocus(isSelected = true, cornerRadius = 20.dp)
-                    } else {
-                        Modifier
-                    }
-                )
+                .focusPop(isSelected = isSelected, cornerRadius = 20.dp)
                 .padding(3.dp)
                 .background(squircleBg, FavoriteSquircleShape)
                 .clip(FavoriteSquircleShape)
@@ -1000,65 +991,7 @@ fun BottomDrawerHandle(
     }
 }
 
-/**
- * Tactile Keitai Soft-Key Prompt badge anchored in the bottom corners of the Home screen.
- * Reflects physical F1 (Left / Stats / Page 0) and Camera/F2 (Right / Notifications / Page 2).
- */
-@Composable
-fun SoftKeyPromptPill(
-    label: String,
-    icon: String,
-    modifier: Modifier = Modifier,
-    badgeCount: Int = 0,
-    onClick: () -> Unit = {}
-) {
-    val context = LocalContext.current
-    val theme = LocalLauncherTheme.current
-    val pillShape = RoundedCornerShape(12.dp)
-
-    Box(
-        modifier = modifier
-            .graphicsLayer { clip = false }
-            .background(theme.greetingBgColor.copy(alpha = 0.85f), pillShape)
-            .border(
-                width = 1.dp,
-                color = theme.greetingOutlineColor.copy(alpha = 0.7f),
-                shape = pillShape
-            )
-            .clip(pillShape)
-            .clickable {
-                SoundEffectManager.play(context, SoundEffect.SELECT)
-                onClick()
-            }
-            .padding(horizontal = 9.dp, vertical = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = icon,
-                fontSize = 11.sp
-            )
-            Spacer(modifier = Modifier.width(3.dp))
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = theme.appActionColor
-            )
-            if (badgeCount > 0) {
-                Spacer(modifier = Modifier.width(4.dp))
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .background(theme.palette.squirclePrimary, CircleShape)
-                )
-            }
-        }
-    }
-}
+// SoftKeyPromptPill moved to com.crinklecodone.mochibun.ui.components.SoftKeyPromptPill
 
 /**
  * Lightweight 4-pointed sparkle star drawn using vector geometry.

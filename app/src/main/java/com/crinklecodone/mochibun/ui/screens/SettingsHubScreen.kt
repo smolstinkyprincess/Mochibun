@@ -67,6 +67,7 @@ import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
+import com.crinklecodone.mochibun.ui.dialogs.LidLedColorPickerDialog
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.destructiveColor
@@ -191,12 +192,7 @@ private fun SettingsHubRootScreen(
     LaunchedEffect(focusedIndex) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
         if (visible.isEmpty() || focusedIndex in visible) return@LaunchedEffect
-        if (focusedIndex > visible.last()) {
-            val scrollTarget = (focusedIndex - 1).coerceAtLeast(0)
-            listState.animateScrollToItem(scrollTarget)
-        } else if (focusedIndex < visible.first()) {
-            listState.animateScrollToItem(focusedIndex)
-        }
+        listState.animateScrollToItem(focusedIndex)
     }
 
     requestFocusSafely(focusRequester)
@@ -235,6 +231,23 @@ private fun SettingsHubRootScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null && digit in 1..totalItems) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        val targetIndex = digit - 1
+                        focusedIndex = targetIndex
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        when (targetIndex) {
+                            0 -> onNavigate(SettingsDestination.Appearance)
+                            1 -> onNavigate(SettingsDestination.CursorHardware)
+                            2 -> onNavigate(SettingsDestination.Behavior)
+                            3 -> onNavigate(SettingsDestination.PermissionsRoot)
+                            4 -> onNavigate(SettingsDestination.BackupRestore)
+                            5 -> onNavigate(SettingsDestination.About)
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                     if (event.type == KeyEventType.KeyDown) {
                         focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
@@ -262,6 +275,7 @@ private fun SettingsHubRootScreen(
                         subtitle = "Themes, greeting name, icon packs, wallpapers & FX",
                         icon = "🎨",
                         isFocused = focusedIndex == 0,
+                        jumpNumber = 1,
                         onClick = { onNavigate(SettingsDestination.Appearance) }
                     )
                 }
@@ -274,6 +288,7 @@ private fun SettingsHubRootScreen(
                         subtitle = "Virtual mouse speed, acceleration, scroll step & sprite",
                         icon = "🖱️",
                         isFocused = focusedIndex == 1,
+                        jumpNumber = 2,
                         onClick = { onNavigate(SettingsDestination.CursorHardware) }
                     )
                 }
@@ -286,6 +301,7 @@ private fun SettingsHubRootScreen(
                         subtitle = "Folders, app drawer, keypad remapper & system monitor",
                         icon = "📁",
                         isFocused = focusedIndex == 2,
+                        jumpNumber = 3,
                         onClick = { onNavigate(SettingsDestination.Behavior) }
                     )
                 }
@@ -298,6 +314,7 @@ private fun SettingsHubRootScreen(
                         subtitle = "Accessibility services, Magisk root status & root features",
                         icon = "🛡️",
                         isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
                         onClick = { onNavigate(SettingsDestination.PermissionsRoot) }
                     )
                 }
@@ -310,6 +327,7 @@ private fun SettingsHubRootScreen(
                         subtitle = "Export or restore layout, themes, folders & key remaps",
                         icon = "💾",
                         isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
                         onClick = { onNavigate(SettingsDestination.BackupRestore) }
                     )
                 }
@@ -322,6 +340,7 @@ private fun SettingsHubRootScreen(
                         subtitle = "Version, hardware specs & credits",
                         icon = "♡",
                         isFocused = focusedIndex == 5,
+                        jumpNumber = 6,
                         onClick = { onNavigate(SettingsDestination.About) }
                     )
                 }
@@ -393,11 +412,42 @@ private fun AppearanceSettingsSubScreen(
     LaunchedEffect(targetCardIndex) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
         if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
-        if (targetCardIndex > visible.last()) {
-            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
-            listState.animateScrollToItem(scrollTarget)
-        } else if (targetCardIndex < visible.first()) {
-            listState.animateScrollToItem(targetCardIndex)
+        listState.animateScrollToItem(targetCardIndex)
+    }
+
+    fun activateAppearanceItem(index: Int) {
+        when (items.getOrNull(index)) {
+            "theme" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                onOpenThemeStudio?.invoke()
+            }
+            "typography" -> {
+                val curIdx = fontOptions.indexOfFirst { it.id == fontId }.coerceAtLeast(0)
+                val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
+                PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "name" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                tempNameInput = customName
+                isEditingName = true
+            }
+            "icon_pack" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                onOpenIconPackDialog?.invoke()
+            }
+            "pick_wallpaper" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                onPickWallpaperClick?.invoke()
+            }
+            "reset_wallpaper" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                onResetWallpaperClick?.invoke()
+            }
+            "wallpaper_stickers" -> {
+                PreferencesManager.setWallpaperOverlayEnabled(context, !isWallpaperOverlayEnabled)
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
         }
     }
 
@@ -429,40 +479,20 @@ private fun AppearanceSettingsSubScreen(
                         SoundEffectManager.play(context, SoundEffect.CLICK)
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
-                        when (items.getOrNull(focusedIndex)) {
-                            "theme" -> {
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                                onOpenThemeStudio?.invoke()
-                            }
-                            "typography" -> {
-                                val curIdx = fontOptions.indexOfFirst { it.id == fontId }.coerceAtLeast(0)
-                                val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
-                                PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                            }
-                            "name" -> {
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                                isEditingName = true
-                            }
-                            "icon_pack" -> {
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                                onOpenIconPackDialog?.invoke()
-                            }
-                            "pick_wallpaper" -> {
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                                onPickWallpaperClick?.invoke()
-                            }
-                            "reset_wallpaper" -> {
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                                onResetWallpaperClick?.invoke()
-                            }
-                            "wallpaper_stickers" -> {
-                                PreferencesManager.setWallpaperOverlayEnabled(context, !isWallpaperOverlayEnabled)
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                            }
-                        }
+                        activateAppearanceItem(focusedIndex)
                     }
                     return@onPreviewKeyEvent true
+                }
+                if (!isEditingName) {
+                    val digit = getDigitFromKeyCode(native.keyCode)
+                    if (digit != null && digit in 1..items.size.coerceAtMost(9)) {
+                        if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                            val targetIndex = digit - 1
+                            focusedIndex = targetIndex
+                            activateAppearanceItem(targetIndex)
+                        }
+                        return@onPreviewKeyEvent true
+                    }
                 }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                     if (event.type == KeyEventType.KeyDown) {
@@ -506,6 +536,7 @@ private fun AppearanceSettingsSubScreen(
                         subtitle = "Active: ${ActiveTheme.palette.name}",
                         icon = "🎨",
                         isFocused = items.getOrNull(focusedIndex) == "theme",
+                        jumpNumber = items.indexOf("theme") + 1,
                         onClick = { onOpenThemeStudio?.invoke() }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -517,6 +548,7 @@ private fun AppearanceSettingsSubScreen(
                         subtitle = currentFont.subtitle,
                         valueDisplay = currentFont.name,
                         isFocused = items.getOrNull(focusedIndex) == "typography",
+                        jumpNumber = items.indexOf("typography") + 1,
                         onDecrement = {
                             val curIdx = fontOptions.indexOfFirst { it.id == fontId }.coerceAtLeast(0)
                             val prevIdx = if (curIdx > 0) curIdx - 1 else fontOptions.size - 1
@@ -540,6 +572,7 @@ private fun AppearanceSettingsSubScreen(
                         subtitle = if (customName.isNotBlank()) "♡ Welcome home, $customName ♡" else "Tap or Enter to set greeting name",
                         value = customName.ifBlank { "Not set" },
                         isFocused = items.getOrNull(focusedIndex) == "name",
+                        jumpNumber = items.indexOf("name") + 1,
                         onClick = {
                             tempNameInput = customName
                             isEditingName = true
@@ -555,6 +588,7 @@ private fun AppearanceSettingsSubScreen(
                         subtitle = "Apply ADW / Nova compatible kawaii packs",
                         icon = "🌸",
                         isFocused = items.getOrNull(focusedIndex) == "icon_pack",
+                        jumpNumber = items.indexOf("icon_pack") + 1,
                         onClick = { onOpenIconPackDialog?.invoke() }
                     )
                 }
@@ -567,6 +601,7 @@ private fun AppearanceSettingsSubScreen(
                         subtitle = "Select custom wallpaper image",
                         icon = "🖼",
                         isFocused = items.getOrNull(focusedIndex) == "pick_wallpaper",
+                        jumpNumber = items.indexOf("pick_wallpaper") + 1,
                         onClick = { onPickWallpaperClick?.invoke() }
                     )
                     if (hasCustomWallpaper) {
@@ -575,6 +610,7 @@ private fun AppearanceSettingsSubScreen(
                             title = "Reset to Default Wallpaper",
                             isFocused = items.getOrNull(focusedIndex) == "reset_wallpaper",
                             isDestructive = true,
+                            jumpNumber = items.indexOf("reset_wallpaper") + 1,
                             onClick = { onResetWallpaperClick?.invoke() }
                         )
                     }
@@ -588,6 +624,7 @@ private fun AppearanceSettingsSubScreen(
                         subtitle = "Show rotating pastel pixel overlays above wallpaper",
                         checked = isWallpaperOverlayEnabled,
                         isFocused = items.getOrNull(focusedIndex) == "wallpaper_stickers",
+                        jumpNumber = items.indexOf("wallpaper_stickers") + 1,
                         onCheckedChange = { PreferencesManager.setWallpaperOverlayEnabled(context, it) }
                     )
                 }
@@ -718,12 +755,7 @@ private fun CursorHardwareSettingsSubScreen(
     LaunchedEffect(targetCardIndex) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
         if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
-        if (targetCardIndex > visible.last()) {
-            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
-            listState.animateScrollToItem(scrollTarget)
-        } else if (targetCardIndex < visible.first()) {
-            listState.animateScrollToItem(targetCardIndex)
-        }
+        listState.animateScrollToItem(targetCardIndex)
     }
 
     requestFocusSafely(focusRequester)
@@ -752,6 +784,27 @@ private fun CursorHardwareSettingsSubScreen(
                         sawCenterDown = false
                         SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (focusedIndex) {
+                            4 -> {
+                                try {
+                                    filePicker.launch(arrayOf("image/gif", "image/png"))
+                                } catch (_: Exception) {}
+                            }
+                            5 -> {
+                                CursorPreferences.setCustomCursorUri(context, null)
+                                customUri = null
+                                focusedIndex = 4
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null && digit in 1..totalItems) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        val targetIndex = digit - 1
+                        focusedIndex = targetIndex
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        when (targetIndex) {
                             4 -> {
                                 try {
                                     filePicker.launch(arrayOf("image/gif", "image/png"))
@@ -864,6 +917,7 @@ private fun CursorHardwareSettingsSubScreen(
                         subtitle = "Pointer movement velocity",
                         valueDisplay = "${moveSpeed.roundToInt()} px",
                         isFocused = focusedIndex == 0,
+                        jumpNumber = 1,
                         onDecrement = {
                             val newSpeed = (moveSpeed - 2f).coerceIn(4f, 26f)
                             CursorPreferences.setMoveSpeed(context, newSpeed)
@@ -881,6 +935,7 @@ private fun CursorHardwareSettingsSubScreen(
                         subtitle = "Velocity ramp multiplier",
                         valueDisplay = String.format(Locale.US, "%.2fx", acceleration),
                         isFocused = focusedIndex == 1,
+                        jumpNumber = 2,
                         onDecrement = {
                             val newAccel = (acceleration - 0.02f).coerceIn(1.00f, 1.25f)
                             CursorPreferences.setAcceleration(context, newAccel)
@@ -898,6 +953,7 @@ private fun CursorHardwareSettingsSubScreen(
                         subtitle = "On-screen pointer dimensions",
                         valueDisplay = "$cursorSizeDp dp",
                         isFocused = focusedIndex == 2,
+                        jumpNumber = 3,
                         onDecrement = {
                             val newSize = (cursorSizeDp - 4).coerceIn(20, 52)
                             CursorPreferences.setCursorSizeDp(context, newSize)
@@ -915,6 +971,7 @@ private fun CursorHardwareSettingsSubScreen(
                         subtitle = "Keys 2 (Up) & 8 (Down) swipe distance",
                         valueDisplay = "$scrollStepPx px",
                         isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
                         onDecrement = {
                             val newStep = (scrollStepPx - CursorPreferences.SCROLL_STEP_INCREMENT_PX)
                                 .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
@@ -938,6 +995,7 @@ private fun CursorHardwareSettingsSubScreen(
                         subtitle = if (customUri != null) "Custom sprite active" else "Default kawaii paw sprite",
                         icon = "🐾",
                         isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
                         onClick = {
                             try {
                                 filePicker.launch(arrayOf("image/gif", "image/png"))
@@ -950,6 +1008,7 @@ private fun CursorHardwareSettingsSubScreen(
                             title = "Reset to Default Sprite",
                             isFocused = focusedIndex == 5,
                             isDestructive = true,
+                            jumpNumber = 6,
                             onClick = {
                                 CursorPreferences.setCustomCursorUri(context, null)
                                 customUri = null
@@ -1039,12 +1098,7 @@ private fun PermissionsRootSettingsSubScreen(
     LaunchedEffect(targetCardIndex) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
         if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
-        if (targetCardIndex > visible.last()) {
-            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
-            listState.animateScrollToItem(scrollTarget)
-        } else if (targetCardIndex < visible.first()) {
-            listState.animateScrollToItem(targetCardIndex)
-        }
+        listState.animateScrollToItem(targetCardIndex)
     }
 
     fun toggleRootRecents() {
@@ -1084,6 +1138,59 @@ private fun PermissionsRootSettingsSubScreen(
         clickMethod = nextMethod
     }
 
+    fun activatePermissionItem(index: Int) {
+        when (index) {
+            0, 1 -> {
+                try {
+                    context.startActivity(
+                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                } catch (_: Exception) {}
+            }
+            2 -> {
+                if (!RootShell.isSuBinaryPresent()) {
+                    rootStatus = RootStatus.NotAvailable
+                    Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
+                } else {
+                    scope.launch {
+                        rootStatus = RootStatus.Requesting
+                        rootStatus = RootShell.requestRoot()
+                    }
+                }
+            }
+            3 -> toggleRootRecents()
+            4 -> toggleClickDispatchMethod()
+            5 -> {
+                val next = !isWatchdogEnabled
+                PreferencesManager.setRootA11yWatchdogEnabled(context, next)
+                isWatchdogEnabled = next
+                if (next) {
+                    RootAccessibilityWatchdog.checkAsync(context, force = true) {
+                        refreshPermissionsState()
+                    }
+                }
+            }
+            6 -> {
+                if (!RootShell.isSuBinaryPresent()) {
+                    Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
+                } else {
+                    isHealingServices = true
+                    RootAccessibilityWatchdog.checkAsync(context, force = true) { res ->
+                        isHealingServices = false
+                        refreshPermissionsState()
+                        when (res) {
+                            is WatchdogResult.Healthy -> Toast.makeText(context, "Services are healthy and running ♡", Toast.LENGTH_SHORT).show()
+                            is WatchdogResult.Healed -> Toast.makeText(context, "Services successfully repaired! ♡", Toast.LENGTH_SHORT).show()
+                            is WatchdogResult.Failed -> Toast.makeText(context, "Repair failed: ${res.reason}", Toast.LENGTH_LONG).show()
+                            is WatchdogResult.NoRoot -> Toast.makeText(context, "Root access required to self-heal", Toast.LENGTH_SHORT).show()
+                            is WatchdogResult.Disabled -> Toast.makeText(context, "Watchdog is disabled", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     requestFocusSafely(focusRequester)
 
     SettingsScaffold(
@@ -1109,56 +1216,17 @@ private fun PermissionsRootSettingsSubScreen(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        when (focusedIndex) {
-                            0, 1 -> {
-                                try {
-                                    context.startActivity(
-                                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    )
-                                } catch (_: Exception) {}
-                            }
-                            2 -> {
-                                if (!RootShell.isSuBinaryPresent()) {
-                                    rootStatus = RootStatus.NotAvailable
-                                    Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    scope.launch {
-                                        rootStatus = RootStatus.Requesting
-                                        rootStatus = RootShell.requestRoot()
-                                    }
-                                }
-                            }
-                            3 -> toggleRootRecents()
-                            4 -> toggleClickDispatchMethod()
-                            5 -> {
-                                val next = !isWatchdogEnabled
-                                PreferencesManager.setRootA11yWatchdogEnabled(context, next)
-                                isWatchdogEnabled = next
-                                if (next) {
-                                    RootAccessibilityWatchdog.checkAsync(context, force = true) {
-                                        refreshPermissionsState()
-                                    }
-                                }
-                            }
-                            6 -> {
-                                if (!RootShell.isSuBinaryPresent()) {
-                                    Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    isHealingServices = true
-                                    RootAccessibilityWatchdog.checkAsync(context, force = true) { res ->
-                                        isHealingServices = false
-                                        refreshPermissionsState()
-                                        when (res) {
-                                            is WatchdogResult.Healthy -> Toast.makeText(context, "Services are healthy and running ♡", Toast.LENGTH_SHORT).show()
-                                            is WatchdogResult.Healed -> Toast.makeText(context, "Services successfully repaired! ♡", Toast.LENGTH_SHORT).show()
-                                            is WatchdogResult.Failed -> Toast.makeText(context, "Repair failed: ${res.reason}", Toast.LENGTH_LONG).show()
-                                            is WatchdogResult.NoRoot -> Toast.makeText(context, "Root access required to self-heal", Toast.LENGTH_SHORT).show()
-                                            is WatchdogResult.Disabled -> Toast.makeText(context, "Watchdog is disabled", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        activatePermissionItem(focusedIndex)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null && digit in 1..totalItems) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        val targetIndex = digit - 1
+                        focusedIndex = targetIndex
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        activatePermissionItem(targetIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -1212,6 +1280,7 @@ private fun PermissionsRootSettingsSubScreen(
                         },
                         icon = if (isRemapA11yActive) "✓" else "!",
                         isFocused = focusedIndex == 0,
+                        jumpNumber = 1,
                         onClick = {
                             try {
                                 context.startActivity(
@@ -1230,6 +1299,7 @@ private fun PermissionsRootSettingsSubScreen(
                         },
                         icon = if (isCursorA11yActive) "✓" else "!",
                         isFocused = focusedIndex == 1,
+                        jumpNumber = 2,
                         onClick = {
                             try {
                                 context.startActivity(
@@ -1255,6 +1325,7 @@ private fun PermissionsRootSettingsSubScreen(
                         subtitle = rootStatusLabel,
                         icon = if (rootStatus is RootStatus.Granted) "✓" else "⚡",
                         isFocused = focusedIndex == 2,
+                        jumpNumber = 3,
                         onClick = {
                             if (!RootShell.isSuBinaryPresent()) {
                                 rootStatus = RootStatus.NotAvailable
@@ -1276,6 +1347,7 @@ private fun PermissionsRootSettingsSubScreen(
                         },
                         checked = useRootRecentsFallback,
                         isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
                         onCheckedChange = { toggleRootRecents() }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1288,6 +1360,7 @@ private fun PermissionsRootSettingsSubScreen(
                         },
                         valueDisplay = if (clickMethod == ClickMethod.ROOT_INPUT_TAP) "Root Tap" else "Gesture",
                         isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
                         onDecrement = {
                             toggleClickDispatchMethod()
                             SoundEffectManager.play(context, SoundEffect.NAV)
@@ -1307,6 +1380,7 @@ private fun PermissionsRootSettingsSubScreen(
                         },
                         checked = isWatchdogEnabled,
                         isFocused = focusedIndex == 5,
+                        jumpNumber = 6,
                         onCheckedChange = { enabled ->
                             PreferencesManager.setRootA11yWatchdogEnabled(context, enabled)
                             isWatchdogEnabled = enabled
@@ -1327,6 +1401,7 @@ private fun PermissionsRootSettingsSubScreen(
                         },
                         icon = if (isHealingServices) "⏳" else "♡",
                         isFocused = focusedIndex == 6,
+                        jumpNumber = 7,
                         onClick = {
                             if (!RootShell.isSuBinaryPresent()) {
                                 Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
@@ -1412,6 +1487,7 @@ private fun BehaviorSettingsSubScreen(
     val isLidLedEnabled by PreferencesManager.isLidLedEnabled.collectAsState()
     val isLidLedChargingEnabled by PreferencesManager.isLidLedChargingEnabled.collectAsState()
     val lidLedColor by PreferencesManager.lidLedColor.collectAsState()
+    var showLidLedColorPicker by remember { mutableStateOf(false) }
     val isMediaVolumeLockEnabled by PreferencesManager.isMediaVolumeLockEnabled.collectAsState()
     val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
     val systemMonitorInterval by PreferencesManager.systemMonitorInterval.collectAsState()
@@ -1462,12 +1538,7 @@ private fun BehaviorSettingsSubScreen(
     LaunchedEffect(targetCardIndex) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
         if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
-        if (targetCardIndex > visible.last()) {
-            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
-            listState.animateScrollToItem(scrollTarget)
-        } else if (targetCardIndex < visible.first()) {
-            listState.animateScrollToItem(targetCardIndex)
-        }
+        listState.animateScrollToItem(targetCardIndex)
     }
 
     LaunchedEffect(isCapturingKaomojiKey) {
@@ -1496,6 +1567,103 @@ private fun BehaviorSettingsSubScreen(
         )
     }
 
+    fun activateBehaviorItem(index: Int) {
+        when (items.getOrNull(index)) {
+            "create_folder" -> onCreateFolderClick?.invoke()
+            "folder_grid" -> PreferencesManager.setFolderGridMode(context, !isFolderGridMode)
+            "t9_search" -> PreferencesManager.setT9SearchEnabled(context, !isT9SearchEnabled)
+            "keypad_remapper" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                onOpenHardwareButtons?.invoke()
+            }
+            "kaomoji_trigger" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                isCapturingKaomojiKey = true
+            }
+            "kaomoji_press_mode" -> {
+                PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "dpad_wrap" -> PreferencesManager.setDpadWrapAround(context, !isDpadWrapAround)
+            "boundary_haptics" -> PreferencesManager.setDpadBoundaryHaptics(context, !isDpadBoundaryHaptics)
+            "keypad_sound" -> {
+                val nextMode = when (keypadSoundMode) {
+                    "kawaii" -> "retro"
+                    "retro" -> "off"
+                    else -> "kawaii"
+                }
+                PreferencesManager.setKeypadSoundMode(context, nextMode)
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "audio_stream" -> {
+                val next = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
+                    PreferencesManager.AUDIO_STREAM_NOTIFICATION
+                } else {
+                    PreferencesManager.AUDIO_STREAM_MEDIA
+                }
+                PreferencesManager.setLauncherAudioStream(context, next)
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "sound_volume" -> {
+                val next = if (launcherSoundVolume >= 100) 0 else launcherSoundVolume + 10
+                PreferencesManager.setLauncherSoundVolume(context, next)
+                SoundEffectManager.play(context, SoundEffect.CLICK)
+            }
+            "media_volume_lock" -> {
+                val next = !isMediaVolumeLockEnabled
+                if (next && !HardwareRemapManager.isAccessibilityServiceEnabled(context)) {
+                    Toast.makeText(
+                        context,
+                        "Please enable Mochibun in Accessibility Services ♡",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    try {
+                        context.startActivity(
+                            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    } catch (_: Exception) {}
+                } else {
+                    PreferencesManager.setMediaVolumeLockEnabled(context, next)
+                    if (next) {
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                    } else {
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                    }
+                }
+            }
+            "lid_led_notification" -> {
+                val next = !isLidLedEnabled
+                PreferencesManager.setLidLedEnabled(context, next)
+                if (next) LidLedManager.updateLedState() else LidLedManager.clearAllLeds()
+            }
+            "lid_led_color" -> {
+                showLidLedColorPicker = true
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "lid_led_charging" -> {
+                val next = !isLidLedChargingEnabled
+                PreferencesManager.setLidLedChargingEnabled(context, next)
+                LidLedManager.updateLedState()
+            }
+            "hidden_apps" -> onOpenHiddenApps?.invoke()
+            "system_monitor" -> PreferencesManager.setSystemMonitorEnabled(context, !isSystemMonitorEnabled)
+            "monitor_interval" -> {
+                val nextInterval = when (systemMonitorInterval) {
+                    1 -> 2
+                    2 -> 3
+                    3 -> 5
+                    else -> 1
+                }
+                PreferencesManager.setSystemMonitorInterval(context, nextInterval)
+            }
+        }
+    }
+
+    val jumpNum: (String) -> Int? = { id ->
+        val idx = items.indexOf(id)
+        if (idx in 0..8) idx + 1 else null
+    }
+
     SettingsScaffold(
         title = "Behavior",
         showBack = true,
@@ -1519,101 +1687,16 @@ private fun BehaviorSettingsSubScreen(
                         SoundEffectManager.play(context, SoundEffect.CLICK)
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
-                        when (items.getOrNull(focusedIndex)) {
-                            "create_folder" -> onCreateFolderClick?.invoke()
-                            "folder_grid" -> PreferencesManager.setFolderGridMode(context, !isFolderGridMode)
-                            "t9_search" -> PreferencesManager.setT9SearchEnabled(context, !isT9SearchEnabled)
-                            "keypad_remapper" -> {
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                                onOpenHardwareButtons?.invoke()
-                            }
-                            "kaomoji_trigger" -> {
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                                isCapturingKaomojiKey = true
-                            }
-                            "kaomoji_press_mode" -> {
-                                PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                            }
-                            "dpad_wrap" -> PreferencesManager.setDpadWrapAround(context, !isDpadWrapAround)
-                            "boundary_haptics" -> PreferencesManager.setDpadBoundaryHaptics(context, !isDpadBoundaryHaptics)
-                            "keypad_sound" -> {
-                                val nextMode = when (keypadSoundMode) {
-                                    "kawaii" -> "retro"
-                                    "retro" -> "off"
-                                    else -> "kawaii"
-                                }
-                                PreferencesManager.setKeypadSoundMode(context, nextMode)
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                            }
-                            "audio_stream" -> {
-                                val next = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
-                                    PreferencesManager.AUDIO_STREAM_NOTIFICATION
-                                } else {
-                                    PreferencesManager.AUDIO_STREAM_MEDIA
-                                }
-                                PreferencesManager.setLauncherAudioStream(context, next)
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                            }
-                            "sound_volume" -> {
-                                val next = if (launcherSoundVolume >= 100) 0 else launcherSoundVolume + 10
-                                PreferencesManager.setLauncherSoundVolume(context, next)
-                                SoundEffectManager.play(context, SoundEffect.CLICK)
-                            }
-                            "media_volume_lock" -> {
-                                val next = !isMediaVolumeLockEnabled
-                                if (next && !HardwareRemapManager.isAccessibilityServiceEnabled(context)) {
-                                    Toast.makeText(
-                                        context,
-                                        "Please enable Mochibun in Accessibility Services ♡",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                    try {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        )
-                                    } catch (_: Exception) {}
-                                } else {
-                                    PreferencesManager.setMediaVolumeLockEnabled(context, next)
-                                    if (next) {
-                                        SoundEffectManager.play(context, SoundEffect.SELECT)
-                                    } else {
-                                        SoundEffectManager.play(context, SoundEffect.NAV)
-                                    }
-                                }
-                            }
-                            "lid_led_notification" -> {
-                                val next = !isLidLedEnabled
-                                PreferencesManager.setLidLedEnabled(context, next)
-                                if (next) LidLedManager.updateLedState() else LidLedManager.clearAllLeds()
-                            }
-                            "lid_led_color" -> {
-                                val nextColor = when (lidLedColor) {
-                                    "pink" -> "purple"
-                                    "purple" -> "white"
-                                    "white" -> "green"
-                                    else -> "pink"
-                                }
-                                PreferencesManager.setLidLedColor(context, nextColor)
-                                SoundEffectManager.play(context, SoundEffect.SELECT)
-                            }
-                            "lid_led_charging" -> {
-                                val next = !isLidLedChargingEnabled
-                                PreferencesManager.setLidLedChargingEnabled(context, next)
-                                LidLedManager.updateLedState()
-                            }
-                            "hidden_apps" -> onOpenHiddenApps?.invoke()
-                            "system_monitor" -> PreferencesManager.setSystemMonitorEnabled(context, !isSystemMonitorEnabled)
-                            "monitor_interval" -> {
-                                val nextInterval = when (systemMonitorInterval) {
-                                    1 -> 2
-                                    2 -> 3
-                                    3 -> 5
-                                    else -> 1
-                                }
-                                PreferencesManager.setSystemMonitorInterval(context, nextInterval)
-                            }
-                        }
+                        activateBehaviorItem(focusedIndex)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null && digit in 1..items.size.coerceAtMost(9)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        val targetIndex = digit - 1
+                        focusedIndex = targetIndex
+                        activateBehaviorItem(targetIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -1661,13 +1744,10 @@ private fun BehaviorSettingsSubScreen(
                                         SoundEffectManager.play(context, SoundEffect.NAV)
                                     }
                                     "lid_led_color" -> {
-                                        val nextColor = when (lidLedColor) {
-                                            "pink" -> "green"
-                                            "purple" -> "pink"
-                                            "white" -> "purple"
-                                            else -> "white"
-                                        }
-                                        PreferencesManager.setLidLedColor(context, nextColor)
+                                        val presets = LidLedManager.PRESET_COLORS
+                                        val curIdx = presets.indexOfFirst { it.id.equals(lidLedColor, ignoreCase = true) }
+                                        val nextIdx = if (curIdx <= 0) presets.size - 1 else curIdx - 1
+                                        PreferencesManager.setLidLedColor(context, presets[nextIdx].id)
                                         SoundEffectManager.play(context, SoundEffect.NAV)
                                     }
                                     "monitor_interval" -> {
@@ -1712,13 +1792,10 @@ private fun BehaviorSettingsSubScreen(
                                         SoundEffectManager.play(context, SoundEffect.NAV)
                                     }
                                     "lid_led_color" -> {
-                                        val nextColor = when (lidLedColor) {
-                                            "pink" -> "purple"
-                                            "purple" -> "white"
-                                            "white" -> "green"
-                                            else -> "pink"
-                                        }
-                                        PreferencesManager.setLidLedColor(context, nextColor)
+                                        val presets = LidLedManager.PRESET_COLORS
+                                        val curIdx = presets.indexOfFirst { it.id.equals(lidLedColor, ignoreCase = true) }
+                                        val nextIdx = if (curIdx == -1 || curIdx >= presets.size - 1) 0 else curIdx + 1
+                                        PreferencesManager.setLidLedColor(context, presets[nextIdx].id)
                                         SoundEffectManager.play(context, SoundEffect.NAV)
                                     }
                                     "monitor_interval" -> {
@@ -1754,6 +1831,7 @@ private fun BehaviorSettingsSubScreen(
                             subtitle = "Group favorite apps into a kawaii folder",
                             icon = "📁",
                             isFocused = items.getOrNull(focusedIndex) == "create_folder",
+                            jumpNumber = jumpNum("create_folder"),
                             onClick = { onCreateFolderClick() }
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -1763,6 +1841,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = if (isFolderGridMode) "2×2 Grid layout active" else "Compact single-column list active",
                         checked = isFolderGridMode,
                         isFocused = items.getOrNull(focusedIndex) == "folder_grid",
+                        jumpNumber = jumpNum("folder_grid"),
                         onCheckedChange = { PreferencesManager.setFolderGridMode(context, it) }
                     )
                 }
@@ -1775,6 +1854,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = "Filter applications using physical numeric keypad",
                         checked = isT9SearchEnabled,
                         isFocused = items.getOrNull(focusedIndex) == "t9_search",
+                        jumpNumber = jumpNum("t9_search"),
                         onCheckedChange = { PreferencesManager.setT9SearchEnabled(context, it) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1783,6 +1863,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = "Manage hidden launcher packages",
                         icon = "🙈",
                         isFocused = items.getOrNull(focusedIndex) == "hidden_apps",
+                        jumpNumber = jumpNum("hidden_apps"),
                         onClick = { onOpenHiddenApps?.invoke() }
                     )
                 }
@@ -1805,6 +1886,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = remapSubtitle,
                         icon = "🎮",
                         isFocused = items.getOrNull(focusedIndex) == "keypad_remapper",
+                        jumpNumber = jumpNum("keypad_remapper"),
                         onClick = { onOpenHardwareButtons?.invoke() }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1813,6 +1895,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = "Assigned: $kaomojiKeyName • Tap to press & assign any button",
                         icon = "✨",
                         isFocused = items.getOrNull(focusedIndex) == "kaomoji_trigger",
+                        jumpNumber = jumpNum("kaomoji_trigger"),
                         onClick = { isCapturingKaomojiKey = true }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1821,6 +1904,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = if (kaomojiLongPress) "Hold $kaomojiKeyName to open Kaomoji Wheel" else "Single press $kaomojiKeyName opens Kaomoji Wheel",
                         valueDisplay = if (kaomojiLongPress) "Hold" else "Single Tap",
                         isFocused = items.getOrNull(focusedIndex) == "kaomoji_press_mode",
+                        jumpNumber = jumpNum("kaomoji_press_mode"),
                         onDecrement = {
                             PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
                             SoundEffectManager.play(context, SoundEffect.NAV)
@@ -1836,6 +1920,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = if (isDpadWrapAround) "Navigation loops top to bottom & left to right" else "Navigation stops at list boundaries",
                         checked = isDpadWrapAround,
                         isFocused = items.getOrNull(focusedIndex) == "dpad_wrap",
+                        jumpNumber = jumpNum("dpad_wrap"),
                         onCheckedChange = { PreferencesManager.setDpadWrapAround(context, it) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1844,6 +1929,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = if (isDpadBoundaryHaptics) "Subtle buzz when hitting edge limits" else "Silent boundaries",
                         checked = isDpadBoundaryHaptics,
                         isFocused = items.getOrNull(focusedIndex) == "boundary_haptics",
+                        jumpNumber = jumpNum("boundary_haptics"),
                         onCheckedChange = { PreferencesManager.setDpadBoundaryHaptics(context, it) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1862,6 +1948,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = soundModeSubtitle,
                         valueDisplay = soundModeLabel,
                         isFocused = items.getOrNull(focusedIndex) == "keypad_sound",
+                        jumpNumber = jumpNum("keypad_sound"),
                         onDecrement = {
                             val nextMode = when (keypadSoundMode) {
                                 "kawaii" -> "off"
@@ -1901,6 +1988,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = audioStreamSubtitle,
                         valueDisplay = audioStreamLabel,
                         isFocused = items.getOrNull(focusedIndex) == "audio_stream",
+                        jumpNumber = jumpNum("audio_stream"),
                         onDecrement = {
                             val next = if (launcherAudioStream == PreferencesManager.AUDIO_STREAM_MEDIA) {
                                 PreferencesManager.AUDIO_STREAM_NOTIFICATION
@@ -1926,6 +2014,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = "Master volume for keypad & mascot sounds",
                         valueDisplay = "$launcherSoundVolume%",
                         isFocused = items.getOrNull(focusedIndex) == "sound_volume",
+                        jumpNumber = jumpNum("sound_volume"),
                         onDecrement = {
                             val next = (launcherSoundVolume - 10).coerceIn(0, 100)
                             PreferencesManager.setLauncherSoundVolume(context, next)
@@ -1943,6 +2032,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = if (isMediaVolumeLockEnabled) "Physical volume buttons adjust media only & keep call vol max" else "System default volume behavior",
                         checked = isMediaVolumeLockEnabled,
                         isFocused = items.getOrNull(focusedIndex) == "media_volume_lock",
+                        jumpNumber = jumpNum("media_volume_lock"),
                         onCheckedChange = { enabled ->
                             if (enabled && !HardwareRemapManager.isAccessibilityServiceEnabled(context)) {
                                 Toast.makeText(
@@ -1975,6 +2065,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = if (isLidLedEnabled) "Pulse exterior breathing LED when lid is closed" else "Exterior notification LED disabled",
                         checked = isLidLedEnabled,
                         isFocused = items.getOrNull(focusedIndex) == "lid_led_notification",
+                        jumpNumber = jumpNum("lid_led_notification"),
                         onCheckedChange = {
                             PreferencesManager.setLidLedEnabled(context, it)
                             if (it) LidLedManager.updateLedState() else LidLedManager.clearAllLeds()
@@ -1982,35 +2073,29 @@ private fun BehaviorSettingsSubScreen(
                     )
                     if (isLidLedEnabled) {
                         Spacer(modifier = Modifier.height(4.dp))
-                        val colorLabel = when (lidLedColor) {
-                            "purple" -> "💜 Lavender Purple"
-                            "white" -> "🤍 Pure White"
-                            "green" -> "🌿 Retro Green"
-                            else -> "🌸 Sakura Pink"
-                        }
+                        val colorLabel = LidLedManager.getColorLabel(lidLedColor)
                         SettingsStepperRow(
                             title = "Lid LED Color",
-                            subtitle = "Exterior light accent for notifications & charging",
+                            subtitle = "Exterior light accent (Press Center for palette)",
                             valueDisplay = colorLabel,
                             isFocused = items.getOrNull(focusedIndex) == "lid_led_color",
+                            jumpNumber = jumpNum("lid_led_color"),
+                            onClick = {
+                                showLidLedColorPicker = true
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                            },
                             onDecrement = {
-                                val nextColor = when (lidLedColor) {
-                                    "pink" -> "green"
-                                    "purple" -> "pink"
-                                    "white" -> "purple"
-                                    else -> "white"
-                                }
-                                PreferencesManager.setLidLedColor(context, nextColor)
+                                val presets = LidLedManager.PRESET_COLORS
+                                val curIdx = presets.indexOfFirst { it.id.equals(lidLedColor, ignoreCase = true) }
+                                val nextIdx = if (curIdx <= 0) presets.size - 1 else curIdx - 1
+                                PreferencesManager.setLidLedColor(context, presets[nextIdx].id)
                                 SoundEffectManager.play(context, SoundEffect.NAV)
                             },
                             onIncrement = {
-                                val nextColor = when (lidLedColor) {
-                                    "pink" -> "purple"
-                                    "purple" -> "white"
-                                    "white" -> "green"
-                                    else -> "pink"
-                                }
-                                PreferencesManager.setLidLedColor(context, nextColor)
+                                val presets = LidLedManager.PRESET_COLORS
+                                val curIdx = presets.indexOfFirst { it.id.equals(lidLedColor, ignoreCase = true) }
+                                val nextIdx = if (curIdx == -1 || curIdx >= presets.size - 1) 0 else curIdx + 1
+                                PreferencesManager.setLidLedColor(context, presets[nextIdx].id)
                                 SoundEffectManager.play(context, SoundEffect.NAV)
                             }
                         )
@@ -2020,6 +2105,7 @@ private fun BehaviorSettingsSubScreen(
                             subtitle = if (isLidLedChargingEnabled) "Light exterior LED while charging with lid closed" else "Charging light disabled",
                             checked = isLidLedChargingEnabled,
                             isFocused = items.getOrNull(focusedIndex) == "lid_led_charging",
+                            jumpNumber = jumpNum("lid_led_charging"),
                             onCheckedChange = {
                                 PreferencesManager.setLidLedChargingEnabled(context, it)
                                 LidLedManager.updateLedState()
@@ -2036,6 +2122,7 @@ private fun BehaviorSettingsSubScreen(
                         subtitle = "Display live CPU, RAM, & storage gauges",
                         checked = isSystemMonitorEnabled,
                         isFocused = items.getOrNull(focusedIndex) == "system_monitor",
+                        jumpNumber = jumpNum("system_monitor"),
                         onCheckedChange = { PreferencesManager.setSystemMonitorEnabled(context, it) }
                     )
                     if (isSystemMonitorEnabled) {
@@ -2045,6 +2132,7 @@ private fun BehaviorSettingsSubScreen(
                             subtitle = "Polling frequency (lower = smoother, higher = battery friendly)",
                             valueDisplay = "$systemMonitorInterval sec",
                             isFocused = items.getOrNull(focusedIndex) == "monitor_interval",
+                            jumpNumber = jumpNum("monitor_interval"),
                             onDecrement = {
                                 val nextInterval = when (systemMonitorInterval) {
                                     5 -> 3
@@ -2068,6 +2156,19 @@ private fun BehaviorSettingsSubScreen(
                 }
             }
         }
+    }
+
+    if (showLidLedColorPicker) {
+        LidLedColorPickerDialog(
+            currentColor = lidLedColor,
+            onColorSelected = { selected ->
+                PreferencesManager.setLidLedColor(context, selected)
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            },
+            onDismiss = {
+                showLidLedColorPicker = false
+            }
+        )
     }
 }
 
@@ -2853,11 +2954,16 @@ private fun BackupRestoreSettingsSubScreen(
     LaunchedEffect(targetCardIndex) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
         if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
-        if (targetCardIndex > visible.last()) {
-            val scrollTarget = (targetCardIndex - 1).coerceAtLeast(0)
-            listState.animateScrollToItem(scrollTarget)
-        } else if (targetCardIndex < visible.first()) {
-            listState.animateScrollToItem(targetCardIndex)
+        listState.animateScrollToItem(targetCardIndex)
+    }
+
+    fun activateBackupItem(index: Int) {
+        when (items.getOrNull(index)) {
+            "export_bundle" -> showExportBundleDialog = true
+            "import_bundle" -> bundleImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+            "export" -> exportLauncher.launch(BackupRestoreManager.generateBackupFileName())
+            "restore" -> importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
+            "reset" -> showResetConfirmDialog = true
         }
     }
 
@@ -2886,13 +2992,17 @@ private fun BackupRestoreSettingsSubScreen(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        when (items.getOrNull(focusedIndex)) {
-                            "export_bundle" -> showExportBundleDialog = true
-                            "import_bundle" -> bundleImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
-                            "export" -> exportLauncher.launch(BackupRestoreManager.generateBackupFileName())
-                            "restore" -> importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
-                            "reset" -> showResetConfirmDialog = true
-                        }
+                        activateBackupItem(focusedIndex)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null && digit in 1..totalItems) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        val targetIndex = digit - 1
+                        focusedIndex = targetIndex
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        activateBackupItem(targetIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -2923,6 +3033,7 @@ private fun BackupRestoreSettingsSubScreen(
                         subtitle = "Share theme, colors, greeting & cursor in a safe archive",
                         icon = "🎀",
                         isFocused = focusedIndex == 0,
+                        jumpNumber = 1,
                         onClick = {
                             showExportBundleDialog = true
                         }
@@ -2933,6 +3044,7 @@ private fun BackupRestoreSettingsSubScreen(
                         subtitle = "Preview and apply a shared .mochibun preset",
                         icon = "✨",
                         isFocused = focusedIndex == 1,
+                        jumpNumber = 2,
                         onClick = {
                             bundleImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
                         }
@@ -2947,6 +3059,7 @@ private fun BackupRestoreSettingsSubScreen(
                         subtitle = "Save layout, folders, themes & key remaps to a .json file",
                         icon = "📤",
                         isFocused = focusedIndex == 2,
+                        jumpNumber = 3,
                         onClick = {
                             exportLauncher.launch(BackupRestoreManager.generateBackupFileName())
                         }
@@ -2957,6 +3070,7 @@ private fun BackupRestoreSettingsSubScreen(
                         subtitle = "Import a complete Mochibun .json backup file",
                         icon = "📥",
                         isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
                         onClick = {
                             importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
                         }
@@ -2971,6 +3085,7 @@ private fun BackupRestoreSettingsSubScreen(
                         subtitle = "Reset launcher layout, folders, remaps & preferences",
                         icon = "🔄",
                         isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
                         onClick = {
                             showResetConfirmDialog = true
                         }
@@ -3092,6 +3207,9 @@ fun SettingsHubDialog(
         modifier = Modifier.fillMaxSize()
     ) {
         SettingsHubScreen(
+            modifier = Modifier
+                .fillMaxSize()
+                .curtainUnfurl(visible = true),
             onClose = onDismiss,
             onOpenThemeStudio = onOpenThemeStudio,
             onOpenIconPackDialog = onOpenIconPackDialog,
