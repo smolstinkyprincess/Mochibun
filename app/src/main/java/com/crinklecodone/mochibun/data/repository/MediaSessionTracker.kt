@@ -18,6 +18,7 @@ import android.util.Log
 import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.service.MochibunNotificationListenerService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,7 +26,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class MochibunMediaState(
     val isPlaying: Boolean = false,
@@ -65,6 +68,14 @@ object MediaSessionTracker {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var artworkDecodeJob: Job? = null
 
+    // Art URI whose bitmap is currently published (or being decoded); guards against re-decoding
+    // the same cover on every metadata refresh and against stale writes from cancelled jobs.
+    @Volatile
+    private var artworkUriKey: String? = null
+
+    // Longest edge target for decoded covers; the card renders art at 64dp (~96px on the AT-M120)
+    private const val ARTWORK_TARGET_PX = 160
+
     private var activeController: MediaController? = null
     private var sessionManager: MediaSessionManager? = null
     private var activeSessionsListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
@@ -75,7 +86,7 @@ object MediaSessionTracker {
     private val controllerCallback = object : MediaController.Callback() {
         override fun onPlaybackStateChanged(state: PlaybackState?) {
             mainHandler.post {
-                updateFromController(activeController)
+                updatePlaybackState(state)
             }
         }
 
@@ -88,6 +99,7 @@ object MediaSessionTracker {
         override fun onSessionDestroyed() {
             mainHandler.post {
                 activeController = null
+                cancelArtworkDecode()
                 _mediaState.value = MochibunMediaState()
             }
         }
@@ -95,8 +107,7 @@ object MediaSessionTracker {
 
     private val clamshellListener = object : ClamshellListener {
         override fun onLidClosed() {
-            artworkDecodeJob?.cancel()
-            artworkDecodeJob = null
+            cancelArtworkDecode()
         }
 
         override fun onLidOpened() {
@@ -190,11 +201,29 @@ object MediaSessionTracker {
         updateFromController(activeController)
     }
 
-    fun updateFromController(controller: MediaController?) {
+    private fun cancelArtworkDecode() {
         artworkDecodeJob?.cancel()
         artworkDecodeJob = null
+        artworkUriKey = null
+    }
 
+    /**
+     * Playback-only refresh: updates play flag, position and speed without re-reading metadata
+     * (a binder round-trip that unparcels a fresh artwork bitmap) or restarting the art decode.
+     */
+    private fun updatePlaybackState(pbState: PlaybackState?) {
+        if (activeController == null) return
+        _mediaState.value = _mediaState.value.copy(
+            isPlaying = pbState?.state == PlaybackState.STATE_PLAYING,
+            positionMs = pbState?.position ?: 0L,
+            lastPositionUpdateTime = pbState?.lastPositionUpdateTime ?: 0L,
+            playbackSpeed = pbState?.playbackSpeed ?: 1.0f
+        )
+    }
+
+    fun updateFromController(controller: MediaController?) {
         if (controller == null) {
+            cancelArtworkDecode()
             _mediaState.value = MochibunMediaState()
             return
         }
@@ -215,15 +244,20 @@ object MediaSessionTracker {
             ?: "Unknown Artist"
         val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
 
-        val artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+        val embeddedArtwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
 
-        val artUri = if (artwork == null) {
+        val artUri = if (embeddedArtwork == null) {
             metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
                 ?: metadata?.getString(MediaMetadata.METADATA_KEY_ART_URI)
         } else {
             null
         }
+
+        // Same URI as the cover already shown/decoding: keep it instead of flashing to null
+        val reuseUriArtwork = embeddedArtwork == null && artUri != null && artUri == artworkUriKey
+        if (!reuseUriArtwork) cancelArtworkDecode()
+        val artwork = embeddedArtwork ?: if (reuseUriArtwork) _mediaState.value.artwork else null
 
         _mediaState.value = MochibunMediaState(
             isPlaying = isPlaying,
@@ -238,20 +272,47 @@ object MediaSessionTracker {
             sessionActivity = controller.sessionActivity
         )
 
-        if (artwork == null && artUri != null && appContext != null) {
-            val context = appContext
+        if (!reuseUriArtwork && artUri != null) {
+            val context = appContext ?: return
+            artworkUriKey = artUri
             artworkDecodeJob = scope.launch(Dispatchers.IO) {
                 try {
-                    val uri = Uri.parse(artUri)
-                    val bitmap = context?.contentResolver?.openInputStream(uri)?.use { stream ->
-                        BitmapFactory.decodeStream(stream)
-                    }
+                    val bitmap = decodeSampledArtwork(context, Uri.parse(artUri))
+                    ensureActive()
                     if (bitmap != null) {
-                        _mediaState.value = _mediaState.value.copy(artwork = bitmap)
+                        // Hop to main so the URI check and the write can't interleave with a track change
+                        withContext(Dispatchers.Main) {
+                            if (artworkUriKey == artUri) {
+                                _mediaState.value = _mediaState.value.copy(artwork = bitmap)
+                            }
+                        }
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) {}
             }
         }
+    }
+
+    /**
+     * Two-pass decode: reads bounds first, then decodes with a power-of-two inSampleSize so the
+     * longest edge lands near [ARTWORK_TARGET_PX]. A 3000px cover becomes ~187px (~140 KB)
+     * instead of a ~36 MB full-resolution allocation.
+     */
+    private fun decodeSampledArtwork(context: Context, uri: Uri): Bitmap? {
+        val resolver = context.contentResolver
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+        var sampleSize = 1
+        val longestEdge = maxOf(bounds.outWidth, bounds.outHeight)
+        while (longestEdge / (sampleSize * 2) >= ARTWORK_TARGET_PX) {
+            sampleSize *= 2
+        }
+
+        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
     }
 
     fun skipToPrevious() {
@@ -302,8 +363,7 @@ object MediaSessionTracker {
 
     fun stopTracking() {
         ClamshellManager.removeListener(clamshellListener)
-        artworkDecodeJob?.cancel()
-        artworkDecodeJob = null
+        cancelArtworkDecode()
         try {
             activeController?.unregisterCallback(controllerCallback)
         } catch (_: IllegalArgumentException) {}

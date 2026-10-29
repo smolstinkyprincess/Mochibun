@@ -49,17 +49,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.M120Launcher" >
 
-        <receiver
-            android:name=".core.app.PackageChangeReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.PACKAGE_ADDED" />
-                <action android:name="android.intent.action.PACKAGE_REMOVED" />
-                <action android:name="android.intent.action.PACKAGE_REPLACED" />
-                <data android:scheme="package" />
-            </intent-filter>
-        </receiver>
-
         <activity
             android:name=".ui.MainActivity"
             android:launchMode="singleTask"

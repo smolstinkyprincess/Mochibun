@@ -60,10 +60,17 @@ class MochibunAccessibilityService : AccessibilityService() {
         @Volatile
         var currentForegroundPackage: String = "com.crinklecodone.mochibun"
 
+        @Volatile
         private var instance: MochibunAccessibilityService? = null
 
         fun reloadActiveConfig(@Suppress("UNUSEDPARAMETER") context: Context? = null) {
-            instance?.loadConfiguration()
+            val service = instance ?: return
+            // activeMappings is read on the main thread in onKeyEvent; never mutate it from a worker
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                service.loadConfiguration()
+            } else {
+                service.mainHandler.post { service.loadConfiguration() }
+            }
         }
     }
 
