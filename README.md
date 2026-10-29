@@ -1,32 +1,28 @@
+<div align="center">
+
 ![Mochibun Header](assets/mochibunheader.png)
 
-A lightweight, pastel Android launcher built with Jetpack Compose and Material 3, tailored specifically for the **ALT Mive Style Folder (AT-M120)**.
+A cozy, pastel Android launcher made with love for physical keypads and flip phones, tailored especially for the **ALT Mive Style Folder (AT-M120)**.
+
+[Download Latest APK](https://github.com/smolstinkyprincess/Mochibun/releases/latest) • [Screenshots](#-gallery--showcase-) • [Keypad Guide](#️-physical-key-map)
+
+</div>
 
 ---
 
 ## ✨ Features
 
-- **Keypad First**: Built from the ground up for physical buttons. Use your directional pad to move through every card, drawer, and menu.
-
-- **Made for Small Screens**: Designed specifically for 480 × 800 flip phone displays—no awkward overlapping cards or text running off the screen.
-
-- **Virtual Mouse Cursor**: A built-in mouse pointer you can turn on and off anytime using your side button. Great for apps that demand touchscreen taps. Supports animated `.gif` or `.png` cursors, adjustable speeds, and vertical scrolling(using 2 and 8 on the keypad).
-
-- **T9 App Search**: Start typing on your number pad to filter and launch apps right inside the app drawer.
-
-- **Kaomoji Radial Wheel**: Long-press the physical **`#` (Pound)** key(remappable) anywhere on the Home Screen or App Drawer to pop up an authentic radial selection wheel! Browse 6 categorized moods (*Happy*, *Love*, *Cute*, *Sleepy*, *Surprised*, and *Silly*) using your D-Pad or numeric keys `1`–`6`, then press **Center/Enter** to copy your chosen kaomoji straight to your clipboard with sweet haptic feedback `( ˶ˆᗜˆ˵ ) ♡`.
-
-- **Procedural Keitai Sound Themes**: Authentic tactile audio feedback synthesized procedurally in memory on first boot—zero heavy audio assets inflating the APK! Choose your favorite sound profile in settings: *Kawaii Pop*, *Retro Keitai* (classic 2000s flip phone click!), *8-Bit Chiptune*, *Cyber Pager*, *Tactile Thock*, *Water Drop*, or silent mode.
-
-- **Hardware Key Remapping(root required)**: Remap function buttons and other hardware keys to simple actions or launch an app.
-
+- **Built for Real Buttons**: Every card, folder, and menu is mapped for physical D-pad navigation. Focus rings have a soft pastel glow that won't get cut off by card edges.
+- **Snug on Small Screens**: Fitted specifically for 480 × 800 flip-phone displays—no squished text or cut-off buttons.
+- **Virtual Mouse Cursor**: Toggle an on-screen mouse pointer anytime with your side key for pesky touch-only apps. Supports custom `.png` or animated `.gif` sprites, scroll keys (2 & 8), and adjustable speed.
+- **Physical T9 App Search**: Just start typing numbers on the keypad to filter and launch apps in the drawer—no tapping tiny search bars.
+- **Kaomoji Radial Wheel**: Hold down **`#`** anywhere to pop up a quick-dial mood wheel. Spin through 6 cozy vibes (*Happy*, *Love*, *Cute*, *Sleepy*, *Surprised*, and *Silly*) with your D-pad or `1`–`6` keys, tap Enter, and copy your favorite faces straight to your clipboard with a cute click `( ˶ˆᗜˆ˵ ) ♡`.
+- **Nostalgic Keitai Click Sounds**: Retro tactile sound effects that generate right on your device so the app stays tiny. Choose from fun sound profiles in settings (*Kawaii Pop*, *Retro Keitai* 2000s clicks, *8-Bit Chiptune*, *Cyber Pager*, *Soft Thock*, *Water Drop*, or mute).
+- **Key Remapping (Root Optional)**: Remap your extra physical buttons to launch your favorite apps or trigger quick shortcuts.
 - **Widgets Page**: A dedicated widget screen featuring a dynamic Now Playing media card that automatically appears during active playback and tucks away when audio stops, alongside support for your own Android widgets.
-
-- **Theme Studio & YAML Formatting**: Pick from 4 built-in pastel themes (*Sakura Dream*, *Lavender Mist*, *Minty Matcha*, and *Milky Peach*) with instant live previews, or design your own clean, human-readable YAML themes powered by `kaml`.
-
-- **Backup, Restore & Setup Sharing**: Full disaster-recovery system backups (`.json`) alongside lightweight, shareable theme packs (`.mochibun` bundles) to swap aesthetic setups with the flip-phone community.
-
-- **Icon Pack Support**: Compatible with standard icon packs (Nova, Apex, ADW) with smart caching so it stays light on memory.
+- **Theme Studio & Simple YAML**: Pick from 4 built-in pastel themes (*Sakura Dream*, *Lavender Mist*, *Minty Matcha*, and *Milky Peach*) with live previews, or write your own theme files in clean, readable YAML.
+- **Setup Sharing & Backups**: Export your pinned apps, folders, and settings to a quick `.json` backup, or pack your colors, custom cursor, and wallpaper into a shareable `.mochibun` theme bundle to swap with friends.
+- **Icon Pack Support**: Works with standard icon packs (Nova, Apex, ADW) with gentle memory caching to keep things breezy.
 
 ---
 
@@ -44,50 +40,43 @@ A lightweight, pastel Android launcher built with Jetpack Compose and Material 3
 
 </div>
 
+---
+
 ## ⌨️ Physical Key Map
 
-| Button | Short Press | Long Press (Hold ~400ms) |
+| Button | Click | Hold (~400ms) |
 | :--- | :--- | :--- |
-| **D-Pad (Arrows)** | Navigate cards, app drawer & wheel sectors | Continuous fast scroll |
-| **Center / Enter** | Launch app, select item, or activate | Open context menu (pin, edit icon, info) |
-| **`#` (Pound Key)** | Open launcher menu & theme switcher | **Open Kaomoji Radial Wheel 🌸** |
-| **`*` (Star Key)** | Open context actions | Toggle ringer mode (Normal / Vibrate) |
-| **`0` Key** | Jump to page / input | **Toggle Flashlight On / Off 🔦** |
-| **`2`–`9` Keys** | T9 app search (drawer) / Page switch | **One-Touch Speed Dial Launch** |
-| **Side Button (F4)** | Toggle virtual mouse pointer on / off | Dismiss active modal or overlay |
-| **Call Key** | Open phone dialer | — |
+| **D-Pad (Arrows)** | Move around cards, drawers & wheel wedges | Fast-scroll |
+| **Center / Enter** | Open app, select item, or click | Quick menu (pin, edit icon, app info) |
+| **`#` (Pound)** | Open settings & theme switcher | **Open Kaomoji Wheel 🌸** |
+| **`*` (Star)** | Context actions | Toggle silent / vibrate |
+| **`0`** | Jump to top / input | **Flashlight toggle 🔦** |
+| **`2`–`9`** | T9 search (in drawer) | **One-touch speed dial** |
+| **Side Button (F4)** | Turn virtual mouse cursor on / off | Dismiss popup / dialog |
+| **Call Key** | Phone dialer | — |
 | **Back Button** | Close dialogs, folders, or drawer & return Home | — |
 
 ---
-## 🌸 Kaomoji Radial Wheel (`#` Long-Press)
 
-Need to drop a cute face in your chat without wrestling with an awkward software keyboard? Mochibun includes an on-device Kaomoji radial menu tailored specifically for physical keypad navigation:
+## 🌸 Kaomoji Wheel (`#` Long-Press)
 
-1. **Invoke**: Hold the **`#`** key on your keypad for ~400ms from anywhere on the home screen or app drawer.
-2. **Browse Moods**: Tap **D-Pad Left / Right** (or press keys **`1`–`6`**) to rotate through the mood segments (*Happy*, *Love*, *Cute*, *Sleepy*, *Surprised*, and *Silly*).
-3. **Pick Expression**: Tap **D-Pad Up / Down** to cycle through the expressions in the center hub.
-4. **Copy & Share**: Hit **Center / Enter** to copy the kaomoji to your clipboard and close the wheel with a bubbly sound effect.
-5. **Dismiss**: Press **Back**, **F4**, or tap **`#`** again to close without copying.
+Never wrestle with tiny touch keyboards just to send a cute face:
+
+1. **Pop it open**: Hold **`#`** for a split second anywhere on the home screen or drawer.
+2. **Pick a mood**: Use **D-Pad Left / Right** (or press keys **`1`–`6`**) to spin through *Happy*, *Love*, *Cute*, *Sleepy*, *Surprised*, or *Silly*.
+3. **Pick a face**: Use **D-Pad Up / Down** to browse through kaomojis in the middle.
+4. **Copy & paste**: Press **Center / Enter** to copy it straight to your clipboard.
+5. **Close**: Tap **Back**, your side key, or **`#`** again to tuck it away.
 
 ---
 
+## 🎨 Themes & Custom Styling
 
-## 🎨 Themes, Backups & Setup Sharing
+### 🎀 Shareable Theme Packs (`.mochibun`)
+Want to show off your setup on r/flipphones or Discord? Export a `.mochibun` bundle to pack up your colors, greeting text, wallpaper, and custom mouse cursor (`.gif`/`.png`). Opening a `.mochibun` file on your phone shows a live color swatch card and applies in one click!
 
-Mochibun makes it easy to preserve your layout or share aesthetic presets with the dumbphone community:
-
-### 📦 Full System Backup & Restore (`.json`)
-Located in **Settings > Backup & Restore**, this generates a timestamped `.json` snapshot using Android's Storage Access Framework:
-- **What's Saved**: Pinned favorites, folders and custom icons, hidden bloatware, hardware key remaps, T9 settings, and virtual cursor physics.
-- **Hot-Reloading**: Restoring or resetting applies immediately across your home screen and drawer without restarting the app or killing your session.
-
-### 🎀 Shareable Theme Bundles (`.mochibun`)
-Want to share your look on Reddit or Discord without exposing private app lists or shortcuts? 
-- Exports an archive containing your color palette, greeting text, custom cursor (`.gif`/`.png`), and wallpaper.
-- **Deep Link Ready**: Tapping any `.mochibun` file from a download or file manager opens a live preview card with color swatches and instant one-click apply.
-
-### 📝 YAML Theme Editing (`kaml`)
-Typing JSON on a 480 × 800 flip-phone keyboard is clumsy and prone to bracket errors. Custom community themes use clean, human-readable YAML parsed via `kaml`:
+### 📝 Hand-Crafted YAML Themes (`kaml`)
+Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom themes:
 
 ```yaml
 # /sdcard/Mochibun/themes/sweet_sakura.yaml
@@ -108,59 +97,41 @@ greeting:
   sparkles: true
 ```
 
+### 📦 Full Backups (`.json`)
+Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, and cursor tweaks to a simple `.json` file. Restoring reloads everything instantly without needing a reboot.
+
 ---
 
-## 📱 Hardware & Compatibility
+## 📱 Hardware & Specs
 
-Mochibun is tuned to run smoothly on modest flip phone hardware:
+Mochibun is tuned specifically to run smoothly on modest flip-phone hardware without battery drain:
 
 | Specification | Target Details |
 | :--- | :--- |
-| **Primary Device** | ALT Mive Style Folder AT-M120 |
-| **Operating System** | Android 12 (API 31) |
-| **Chipset** | MediaTek MT6761 (ARMv7 / 32-bit) |
+| **Target Device** | ALT Mive Style Folder (AT-M120) |
+| **Android Version** | Android 12 (API 31) |
+| **Processor** | MediaTek MT6761 (32-bit ARMv7) |
 | **Display** | 480 × 800 portrait |
-| **Memory** | ~1.8 GB RAM |
+| **RAM** | ~1.8 GB RAM |
 
-> **Performance Note**: To keep animations smooth and scrolling responsive, Mochibun avoids expensive real-time blur shaders and heavy image buffers. Decorative cloud trims and accents are drawn using lightweight vector paths.
+> **Note on Performance**: Mochibun skips heavy GPU blur shaders and giant uncompressed images. Cloud trims and accents are drawn using lightweight vector paths to keep scrolling smooth and snappy!
 
 ---
-### 📊 Hardware Diagnostics & Benchmarks
 
-Profiled live on physical hardware (**ALT Mive Style Folder AT-M120**) under active D-pad navigation and drawer interaction:
+## 📥 Downloads & Setup
 
-#### Memory Footprint (`dumpsys meminfo`)
-| Metric | Footprint |
-| :--- | :--- |
-| **Total PSS** | **~77.5 MB** |
-| **Dalvik (Java Heap)** | **~11.7 MB** |
-| **Native Heap** | **~19.1 MB** |
-| **Graphics (GL/EGL)** | **~16.8 MB** |
-| **Attached Views** | **37 views** |
-
-#### Graphics & Frame Rendering (`dumpsys gfxinfo`)
-| Metric | Measurement |
-| :--- | :--- |
-| **Median Frame Time (50th %)** | **15 ms** |
-| **GPU Render Time (99th %)** | **6 ms** |
-| **Slow Bitmap Uploads** | **0** |
-| **GPU Cache Usage** | **~8.6 MB** |
-
-
-### 📥 Install & Updates
-
-| Platform | Status | Link |
+| Source | Details | Link |
 | :--- | :--- | :--- |
-| **GitHub Releases** | Official / Direct APK | [Download Latest](https://github.com/smolstinkyprincess/Mochibun/releases/latest) |
-| **Obtainium** | One-Click Auto-Updates | [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun) |
+| **GitHub Releases** | Standalone APK | [Download Latest APK](https://github.com/smolstinkyprincess/Mochibun/releases/latest) |
+| **Obtainium** | Auto-Updates | [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun) |
 
-### 🗝️ Set Up Permissions
+### 🗝️ Quick Permissions Checklist
 
-1. **Default Home App**: Go to *Settings > Apps > Default Apps > Home app* and select **Mochibun**.
-2. **Media / Notification Access**: Enable notification access for Mochibun in *Settings > Apps > Special app access > Notification access* so the Now Playing widget can display live track info and album art.
-3. **Virtual Mouse Cursor**: Turn on **Mochibun Virtual Cursor** in *Settings > Accessibility*. When Android asks, grant the *Display over other apps* (`SYSTEM_ALERT_WINDOW`) permission.
-4. **Root Access (Optional)**: If your phone is rooted with Magisk, granting superuser access lets the cursor use faster shell tap fallbacks (`libsu`) and integrates with custom recents providers.
-5. **QuickSwitch Integration (Optional)**: If you use QuickSwitch for physical recents/multitasking, set Mochibun as your provider:
+1. **Default Home**: Set Mochibun as your home app in *Settings > Apps > Default Apps > Home app*.
+2. **Now Playing Card**: Enable notification access in *Settings > Apps > Special app access > Notification access* so the media widget can show your currently playing song and album art.
+3. **Virtual Mouse Cursor and Key Remapper**: Turn on **Mochibun Virtual Cursor** and **Mochibun Button Remapper** in *Settings > Accessibility*, and allow *Display over other apps* when asked.
+4. **Root Access (Optional)**: If you're rooted with Magisk, granting superuser access lets the cursor click through privileged shell taps and hooks into custom recents providers.
+5. **QuickSwitch (Optional)**: If you use QuickSwitch for hardware multitasking, set Mochibun as your provider:
    ```bash
    su -c "/data/adb/modules/quickswitch/quickswitch --ch=com.crinklecodone.mochibun"
    ```
@@ -169,34 +140,29 @@ Profiled live on physical hardware (**ALT Mive Style Folder AT-M120**) under act
 
 ## 🛠️ Building from Source
 
-Mochibun builds with standard Gradle tooling:
-
 ```bash
-# Clone the repository
 git clone [https://github.com/smolstinkyprincess/Mochibun.git](https://github.com/smolstinkyprincess/Mochibun.git)
 cd Mochibun
-
-# Build release APK
 ./gradlew assembleRelease
 ```
 
-The compiled APK will be located at `app/build/outputs/apk/release/app-release.apk`.
+The APK will be waiting for you in `app/build/outputs/apk/release/app-release.apk`!
 
 ---
 
-## 🌸 Sweet Credits & Special Thanks ♡
+## 🌸 Sweet Credits & Thanks ♡
 
-Mochibun stays tiny, breezy, and cute thanks to these wonderful open-source libraries and/or assets:
+Mochibun stays tiny, breezy, and cute thanks to these awesome projects:
 
-- **[Coil](https://github.com/coil-kt/coil)** — Keeps our cute animated `.gif` and `.png` cursors(and our adorable mochibunny mascot!!!) dancing smoothly with an ultra-lightweight memory footprint so our flip phone RAM never gets sad! (˶ᵔ ᵕ ᵔ˶)
-- **[libsu](https://github.com/topjohnwu/libsu)** by [@topjohnwu](https://github.com/topjohnwu) — A rock-solid, persistent root bridge daemon that powers super-fast privileged clicks and smooth recents task management without dropping a single frame! (•̀ᴗ•́)و
-- **[kaml](https://github.com/charleskorn/kaml)** — Brings clean, whitespace-friendly YAML parsing to `kotlinx.serialization` so creating and editing custom themes on a flip phone is sweet and painless! ♡
-- **[MaruMinya (マルミーニャ)](https://www.freejapanesefont.com/maruminya-cute-free-font/)** — The darling rounded dot-matrix font powering Mochibun's nostalgic typography! ♡
+- **[Coil](https://github.com/coil-kt/coil)** — Keeps animated `.gif` and `.png` cursors (and Mochibunny!) dancing smoothly without chewing up precious RAM! (˶ᵔ ᵕ ᵔ˶)
+- **[libsu](https://github.com/topjohnwu/libsu)** by [@topjohnwu](https://github.com/topjohnwu) — Handles fast background root clicks and clean recents switching. (•̀ᴗ•́)و
+- **[kaml](https://github.com/charleskorn/kaml)** — Friendly, human-readable YAML parsing for custom themes. ♡
+- **[MaruMinya (マルミーニャ)](https://www.freejapanesefont.com/maruminya-cute-free-font/)** — The darling rounded dot-matrix font powering Mochibun's nostalgic keitai typography! ♡
+
 ---
 
-## 🤖 Disclaimer
-Just a girl, her flip phone, and a sprinkle of AI magic to make the code cute! 🌸✨📱
+## 🍡 Disclaimer
+Just a girl, her flip phone, and a sprinkle of ai magic to make the code cute! 🌸✨📱
 
 ## 📄 License
-
-Distributed under the [Apache 2.0 License](LICENSE). Feel free to fork, customize, and adapt it for your own physical-key Android devices!
+Distributed under the [Apache 2.0 License](LICENSE). Feel free to fork, customize, and adapt it for your own physical-key Android setups!
