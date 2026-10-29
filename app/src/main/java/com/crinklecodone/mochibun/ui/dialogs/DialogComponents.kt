@@ -70,12 +70,14 @@ fun isDpadOrActionKey(keyCode: Int): Boolean =
  */
 suspend fun FocusRequester.awaitFocusSafely(attempts: Int = 8, delayMs: Long = 35L) {
     repeat(attempts) {
-        try {
+        // requestFocus() returns false (no longer throws) while the dialog window isn't attached yet
+        val focused = try {
             requestFocus()
-            return
         } catch (_: Exception) {
-            delay(delayMs)
+            false
         }
+        if (focused) return
+        delay(delayMs)
     }
 }
 

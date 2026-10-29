@@ -530,7 +530,9 @@ fun MainLauncher(
 
     fun getCurrentKeypadState(): LauncherKeypadState {
         return LauncherKeypadState(
-            anyModalOpen = anyModalOpen,
+            // Read activeModal live: the captured anyModalOpen val goes stale here, which let the
+            // handler eat D-pad presses meant for an open dialog
+            anyModalOpen = activeModal != null,
             drawerOpen = drawerOpen,
             isHomeScreenActive = isHomeScreenActive,
             isPageTransitioning = !drawerOpen && (pagerState.isScrollInProgress || (pendingTargetPage != null && pendingTargetPage != pagerState.settledPage)),
