@@ -57,6 +57,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 | **Side Key (F4)** | Mouse pointer on / off | Dismiss popup / dialog |
 | **Call Key** | Phone dialer | — |
 | **Back** | Close dialogs, folders, or drawer & return Home | — |
+| **Home** | Return Home from anywhere; on Home, open the app drawer | — |
 
 ---
 

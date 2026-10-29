@@ -35,6 +35,11 @@ class MainActivity : ComponentActivity() {
     var homePressCount by mutableStateOf(0)
         private set
 
+    // True when the latest Home press arrived while the launcher already had window focus
+    // (user was looking at Mochibun), as opposed to returning from another app.
+    var homePressedWhileVisible by mutableStateOf(false)
+        private set
+
     var requestedPage by mutableStateOf<Int?>(null)
         private set
 
@@ -145,6 +150,8 @@ class MainActivity : ComponentActivity() {
                 }
                 startActivity(recentsIntent)
             } else {
+                homePressedWhileVisible = hasWindowFocus() &&
+                    (intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT == 0)
                 homePressCount++
             }
         }
@@ -198,6 +205,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding),
                         viewModel = launcherViewModel,
                         homePressCount = homePressCount,
+                        homePressedWhileVisible = homePressedWhileVisible,
                         appListRefreshCount = appListRefreshCount,
                         lidOpenCount = lidOpenCount,
                         lidClosedCount = lidClosedCount,

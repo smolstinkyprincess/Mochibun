@@ -373,9 +373,11 @@ internal class LauncherKeyHandler(
                     return true
                 }
             } else if (state.isHomeScreenActive) {
-                // On Home Screen: RSK navigates right to Notifications (Page 2), consumes event (blocks default back minimization)
+                // On Home Screen: RSK navigates right to Notifications (Page 2), consumes event (blocks default back minimization).
+                // The side key (F4 / scan 62) is consumed without navigating; it belongs to the virtual cursor toggle.
+                val isSideKey = nativeEvent.keyCode == KeyEvent.KEYCODE_F4 || nativeEvent.scanCode == 62
                 if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
-                    if (nativeEvent.repeatCount == 0) {
+                    if (nativeEvent.repeatCount == 0 && !isSideKey) {
                         SoundEffectManager.play(context, SoundEffect.NAV)
                         actions.setPendingTargetPage(2)
                         scope.launch { pagerState.animateScrollToPage(2) }
@@ -554,7 +556,7 @@ internal class LauncherKeyHandler(
         }
 
         if (nativeEvent.keyCode == KeyEvent.KEYCODE_0 || nativeEvent.keyCode == KeyEvent.KEYCODE_NUMPAD_0) {
-            if (nativeEvent.repeatCount == 1) {
+            if (nativeEvent.repeatCount == 1 && state.isHomeScreenActive) {
                 val isTorchOn = TorchManager.toggleTorch(context)
                 performBoundaryHaptic(context)
                 if (isTorchOn == true) {

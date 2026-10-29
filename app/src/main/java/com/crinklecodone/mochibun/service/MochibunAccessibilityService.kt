@@ -160,7 +160,7 @@ class MochibunAccessibilityService : AccessibilityService() {
         }
         clearPendingHandlers()
         cancelPoundHold()
-        kaomojiOverlay?.dismiss()
+        kaomojiOverlay?.release()
         kaomojiOverlay = null
         mainHandler.removeCallbacks(reloadRunnable)
         serviceScope.cancel()

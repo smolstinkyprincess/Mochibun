@@ -5,6 +5,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.PixelFormat
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -29,6 +32,7 @@ import com.crinklecodone.mochibun.ui.dialogs.handleKaomojiWheelNavKey
 import com.crinklecodone.mochibun.ui.performBoundaryHaptic
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.loadSavedTheme
+import com.topjohnwu.superuser.Shell
 
 /**
  * Hosts the Kaomoji Wheel as a TYPE_ACCESSIBILITY_OVERLAY over any app.
@@ -36,6 +40,9 @@ import com.crinklecodone.mochibun.ui.theme.loadSavedTheme
  * The window is deliberately NOT focusable: keeping input focus on the underlying text field is
  * what makes ACTION_PASTE land there. Keys reach the wheel through the service's key filter
  * ([handleKey]) instead of window focus.
+ *
+ * The focused input node is captured before the overlay attaches, then on confirm the kaomoji is
+ * injected through a fallback chain: ACTION_PASTE -> ACTION_SET_TEXT -> root `input text`.
  */
 class KaomojiOverlayController(private val service: AccessibilityService) {
 
@@ -43,6 +50,12 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
     private var view: ComposeView? = null
     private var owner: OverlayOwner? = null
     private var state: KaomojiWheelState? = null
+    private val handler = Handler(Looper.getMainLooper())
+
+    // Input field focused when the wheel was summoned; owned here and recycled after use
+    private var targetInputNode: AccessibilityNodeInfo? = null
+    private var pendingInject: Runnable? = null
+    private var pendingTarget: AccessibilityNodeInfo? = null
 
     // Swallow the release of the key that summoned / was handled by the wheel
     private var swallowUpKeyCode = KeyEvent.KEYCODE_UNKNOWN
@@ -80,11 +93,14 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.CENTER }
 
+        cancelPendingInject()
+        replaceTarget(captureInputNode())
         try {
             overlayOwner.start()
             windowManager.addView(composeView, params)
         } catch (_: Exception) {
             overlayOwner.destroy()
+            replaceTarget(null)
             return
         }
         view = composeView
@@ -122,22 +138,117 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
 
     private fun confirm() {
         val kaomoji = state?.currentKaomoji.orEmpty()
+        // Take ownership of the target before dismiss() recycles it
+        val target = targetInputNode
+        targetInputNode = null
         dismiss()
-        if (kaomoji.isBlank()) return
+        if (kaomoji.isBlank()) {
+            target?.recycle()
+            return
+        }
         try {
             val clipboard = service.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("Kaomoji", kaomoji))
         } catch (_: Exception) {}
         SoundEffectManager.play(service, SoundEffect.SELECT)
-        val inputNode = try {
-            service.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-        } catch (_: Exception) {
-            null
+        // Give window focus a moment to settle back on the app after the overlay is removed
+        val runnable = Runnable {
+            val node = pendingTarget
+            pendingTarget = null
+            pendingInject = null
+            inject(kaomoji, node)
         }
-        inputNode?.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        pendingTarget = target
+        pendingInject = runnable
+        handler.postDelayed(runnable, INJECT_DELAY_MS)
+    }
+
+    private fun inject(kaomoji: String, captured: AccessibilityNodeInfo?) {
+        // A stale capture (view gone) falls back to whatever holds input focus now
+        val node = if (captured != null && safeRefresh(captured)) captured else {
+            captured?.recycle()
+            captureInputNode()
+        }
+        try {
+            if (node != null) {
+                if (tryAction { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }) return
+                if (node.isEditable && trySetText(node, kaomoji)) return
+            }
+            if (Shell.isAppGrantedRoot() == true) {
+                // `input text` treats %s as space; quote everything else for the shell
+                val escaped = kaomoji.replace(" ", "%s").replace("'", "'\\''")
+                Shell.cmd("input text '$escaped'").submit()
+            }
+        } finally {
+            node?.recycle()
+        }
+    }
+
+    private fun trySetText(node: AccessibilityNodeInfo, kaomoji: String): Boolean {
+        val current = if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
+        val start = node.textSelectionStart
+        val end = node.textSelectionEnd
+        val newText = if (start in 0..current.length && end in start..current.length) {
+            current.substring(0, start) + kaomoji + current.substring(end)
+        } else {
+            current + kaomoji
+        }
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText)
+        }
+        if (!tryAction { node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args) }) return false
+        // Move the caret to just after the inserted kaomoji
+        val caret = (if (start in 0..current.length) start else current.length) + kaomoji.length
+        val selArgs = Bundle().apply {
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, caret)
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, caret)
+        }
+        tryAction { node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs) }
+        return true
+    }
+
+    /** Focused input node of the app underneath; never our own overlay. Caller owns the result. */
+    private fun captureInputNode(): AccessibilityNodeInfo? {
+        val direct = try { service.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) } catch (_: Exception) { null }
+        if (isUsableTarget(direct)) return direct
+        direct?.recycle()
+        val root = try { service.rootInActiveWindow } catch (_: Exception) { null } ?: return null
+        val fromRoot = try { root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) } catch (_: Exception) { null }
+        root.recycle()
+        if (isUsableTarget(fromRoot)) return fromRoot
+        fromRoot?.recycle()
+        return null
+    }
+
+    private fun isUsableTarget(node: AccessibilityNodeInfo?): Boolean =
+        node != null && node.packageName?.toString() != service.packageName
+
+    private fun safeRefresh(node: AccessibilityNodeInfo): Boolean =
+        try { node.refresh() } catch (_: Exception) { false }
+
+    private inline fun tryAction(block: () -> Boolean): Boolean =
+        try { block() } catch (_: Exception) { false }
+
+    private fun replaceTarget(node: AccessibilityNodeInfo?) {
+        targetInputNode?.recycle()
+        targetInputNode = node
+    }
+
+    private fun cancelPendingInject() {
+        pendingInject?.let { handler.removeCallbacks(it) }
+        pendingInject = null
+        pendingTarget?.recycle()
+        pendingTarget = null
+    }
+
+    /** Service teardown: drop the overlay and any queued injection. */
+    fun release() {
+        cancelPendingInject()
+        dismiss()
     }
 
     fun dismiss() {
+        replaceTarget(null)
         val v = view ?: return
         view = null
         state = null
@@ -146,6 +257,10 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
         } catch (_: Exception) {}
         owner?.destroy()
         owner = null
+    }
+
+    private companion object {
+        const val INJECT_DELAY_MS = 50L
     }
 
     private class OverlayOwner : LifecycleOwner, SavedStateRegistryOwner {

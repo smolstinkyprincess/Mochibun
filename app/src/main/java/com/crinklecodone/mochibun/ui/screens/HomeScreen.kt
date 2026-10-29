@@ -44,7 +44,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -78,6 +80,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -197,6 +200,7 @@ fun HomeScreen(
 
             BottomDrawerHandle(
                 isFocused = isHomeScreenActive && homeFocusArea == 2,
+                isAnimating = isHomeScreenActive,
                 onClick = onOpenDrawer
             )
 
@@ -961,6 +965,7 @@ private fun FavoriteFolderSlot(
 fun BottomDrawerHandle(
     modifier: Modifier = Modifier,
     isFocused: Boolean = false,
+    isAnimating: Boolean = false,
     onClick: () -> Unit = {}
 ) {
     val theme = LocalLauncherTheme.current
@@ -982,12 +987,61 @@ fun BottomDrawerHandle(
             .clickable { onClick() },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "♥⇣♡ ♡⇣♥",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = theme.appActionColor
-        )
+        AnimatedMenuIndicator(isAnimating = isAnimating, color = theme.appActionColor)
+    }
+}
+
+/**
+ * "♡ ▼ menu ▼ ♡" prompt. Hearts flip ♡/♥ each second, chevrons bob 0→2dp→0.
+ * Driven by a 250ms step ticker (not Compose animations) so it behaves the same
+ * regardless of the system animator duration scale. Runs only while [isAnimating]
+ * and the activity is RESUMED; the bob offset is read in the layout phase.
+ */
+@Composable
+private fun AnimatedMenuIndicator(isAnimating: Boolean, color: Color) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // 8 steps x 250ms = 2000ms full period
+    var step by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(isAnimating, lifecycleOwner) {
+        if (!isAnimating) {
+            step = 0
+            return@LaunchedEffect
+        }
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(250)
+                step = (step + 1) % 8
+            }
+        }
+    }
+
+    val heart by remember { derivedStateOf { if (step >= 4) "♥" else "♡" } }
+    // Integer dp bob: 0,1,2,1 repeating each second
+    val bobModifier = Modifier.offset {
+        val bobDp = when (step % 4) { 1, 3 -> 1; 2 -> 2; else -> 0 }
+        IntOffset(0, bobDp.dp.roundToPx())
+    }
+
+    @Composable
+    fun Glyph(text: String, modifier: Modifier = Modifier) = Text(
+        text = text,
+        modifier = modifier,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = color
+    )
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Glyph(heart)
+        Spacer(Modifier.width(4.dp))
+        Glyph("▼", bobModifier)
+        Spacer(Modifier.width(4.dp))
+        Glyph("menu")
+        Spacer(Modifier.width(4.dp))
+        Glyph("▼", bobModifier)
+        Spacer(Modifier.width(4.dp))
+        Glyph(heart)
     }
 }
 

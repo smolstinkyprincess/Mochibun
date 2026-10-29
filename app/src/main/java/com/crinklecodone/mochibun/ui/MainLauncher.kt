@@ -121,6 +121,7 @@ fun MainLauncher(
     modifier: Modifier = Modifier,
     viewModel: LauncherViewModel? = null,
     homePressCount: Int = 0,
+    homePressedWhileVisible: Boolean = false,
     appListRefreshCount: Int = 0,
     lidOpenCount: Int = 0,
     lidClosedCount: Int = 0,
@@ -448,9 +449,13 @@ fun MainLauncher(
         }
     }
 
-    // physical home button press brings user back to home screen
+    // physical home button press brings user back to home screen;
+    // pressed again while already sitting on Home, it opens the app drawer instead
     LaunchedEffect(homePressCount) {
-        if (homePressCount > 0) {
+        if (homePressCount > 0 && homePressedWhileVisible && isHomeScreenActive) {
+            selectedDrawerIndex = 0
+            drawerOpen = true
+        } else if (homePressCount > 0) {
             drawerOpen = false
             activeModal = null
             poundKeyState = 0
