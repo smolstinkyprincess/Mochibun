@@ -161,8 +161,9 @@ Mochibun stays tiny, breezy, and cute thanks to these awesome projects:
 
 ---
 
-## 🍡 Disclaimer
-Just a girl, her flip phone, and a sprinkle of ai magic to make the code cute! 🌸✨📱
-
 ## 📄 License
 Distributed under the [Apache 2.0 License](LICENSE). Feel free to fork, customize, and adapt it for your own physical-key Android setups!
+
+---
+
+*Mochibun was created with love, eepy late-night tinkering, and a little help from AI tools(Gemini/Claude) for code scaffolding and debugging.* ♡
