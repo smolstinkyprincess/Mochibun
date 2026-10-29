@@ -130,8 +130,8 @@ Mochibun is tuned to run smoothly on modest flip phone hardware:
 Profiled live on physical hardware (**ALT Mive Style Folder AT-M120**) under active D-pad navigation and drawer interaction:
 
 #### Memory Footprint (`dumpsys meminfo`)
-| Metric | Footprint | Notes |
-| :--- | :--- | :--- |
+| Metric | Footprint |
+| :--- | :--- |
 | **Total PSS** | **~77.5 MB** |
 | **Dalvik (Java Heap)** | **~11.7 MB** |
 | **Native Heap** | **~19.1 MB** |
@@ -139,8 +139,8 @@ Profiled live on physical hardware (**ALT Mive Style Folder AT-M120**) under act
 | **Attached Views** | **37 views** |
 
 #### Graphics & Frame Rendering (`dumpsys gfxinfo`)
-| Metric | Measurement | Target / Hardware Limit |
-| :--- | :--- | :--- |
+| Metric | Measurement |
+| :--- | :--- |
 | **Median Frame Time (50th %)** | **15 ms** |
 | **GPU Render Time (99th %)** | **6 ms** |
 | **Slow Bitmap Uploads** | **0** |
