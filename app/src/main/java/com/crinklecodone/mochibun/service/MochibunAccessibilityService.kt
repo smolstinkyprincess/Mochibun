@@ -123,6 +123,8 @@ class MochibunAccessibilityService : AccessibilityService() {
     private val clamshellListener = object : ClamshellListener {
         override fun onLidClosed() {
             clearPendingHandlers()
+            cancelPoundHold()
+            kaomojiOverlay?.dismiss()
         }
     }
 
@@ -224,23 +226,66 @@ class MochibunAccessibilityService : AccessibilityService() {
     }
 
     private fun handleKeyEvent(event: KeyEvent): Boolean {
+        val keyCode = event.keyCode
+        if (InputArbiter.isNewPress(event)) {
+            // The virtual cursor outranks every stage below and consumes this press itself
+            if (InputArbiter.cursorTakesPress(event)) return false
+            val layer = dispatchToStages(event, isNewPress = true)
+            InputArbiter.setOwner(keyCode, layer)
+            return layer != InputLayer.NONE
+        }
 
+        // Repeats and releases go back to the stage that took the press. They are consumed even if
+        // that stage closed in between (wheel dismissed, launcher paused, key picker done), so the
+        // window underneath never gets the second half of a press it didn't see start.
+        return when (InputArbiter.ownerOf(keyCode)) {
+            InputLayer.CURSOR_OVERLAY -> false
+            InputLayer.KEY_CAPTURE -> {
+                keyCaptureListener?.invoke(event)
+                true
+            }
+            InputLayer.KAOMOJI_OVERLAY -> {
+                kaomojiOverlay?.let { if (it.isShowing) it.handleKey(event) }
+                true
+            }
+            InputLayer.LAUNCHER -> {
+                val listener = launcherKeyListener
+                if (listener != null && isLauncherForeground) listener(event)
+                true
+            }
+            InputLayer.SERVICE_REMAP -> {
+                if (ClamshellManager.isLidClosed(this)) clearPendingHandlers() else handleRemappedKey(event)
+                true
+            }
+            InputLayer.NONE -> dispatchToStages(event, isNewPress = false) != InputLayer.NONE
+        }
+    }
+
+    /** Offers [event] to each stage in priority order and returns the one that consumed it. */
+    private fun dispatchToStages(event: KeyEvent, isNewPress: Boolean): InputLayer {
         // 1. Direct hardware key capture callback (e.g. inside Keypad Remapper dialog or Kaomoji Trigger key picker).
         // If the listener handles and consumes the key, we return true so PhoneWindowManager
         // never sees it (completely preventing stock actions or unhandled crash loops).
         val captureListener = keyCaptureListener
-        if (captureListener != null) {
-            if (captureListener(event)) {
-                return true
+        if (captureListener != null && captureListener(event)) {
+            return InputLayer.KEY_CAPTURE
+        }
+
+        // 2. Global Kaomoji Wheel: owns every new press while visible. Of the presses that started
+        // before it opened, only the summoning key's repeats and release still belong to it.
+        val overlay = kaomojiOverlay
+        if (overlay != null && overlay.isShowing) {
+            if (ClamshellManager.isLidClosed(this)) {
+                overlay.dismiss()
+            } else if (isNewPress || overlay.isSummonKey(event.keyCode)) {
+                return if (overlay.handleKey(event)) InputLayer.KAOMOJI_OVERLAY else InputLayer.NONE
             }
         }
 
-        // 2. Direct Launcher key interception when Mochibun is in the foreground
+        // 3. Direct Launcher key interception when Mochibun is in the foreground
         val launcherListener = launcherKeyListener
-        if (launcherListener != null && isLauncherForeground) {
-            if (launcherListener(event)) {
-                return true
-            }
+        if (launcherListener != null && isLauncherForeground && launcherListener(event)) {
+            return InputLayer.LAUNCHER
         }
 
         // Suppress hardware button shortcuts while closed in pocket to prevent accidental triggering
@@ -248,17 +293,21 @@ class MochibunAccessibilityService : AccessibilityService() {
             clearPendingHandlers()
             cancelPoundHold()
             kaomojiOverlay?.dismiss()
-            return false
+            return InputLayer.NONE
         }
 
-        // Global Kaomoji Wheel: overlay owns all keys while visible; '#' hold summons it.
-        kaomojiOverlay?.let { if (it.isShowing) return it.handleKey(event) }
+        // Global '#' hold summons the Kaomoji Wheel outside the launcher
         if (event.keyCode == KeyEvent.KEYCODE_POUND && !isLauncherForeground &&
             !activeMappings.containsKey(KeyEvent.KEYCODE_POUND)
         ) {
-            return handlePoundHold(event)
+            return if (handlePoundHold(event)) InputLayer.KAOMOJI_OVERLAY else InputLayer.NONE
         }
 
+        return if (handleRemappedKey(event)) InputLayer.SERVICE_REMAP else InputLayer.NONE
+    }
+
+    /** Media volume lock, unmapped function-key swallowing, and user button remaps. */
+    private fun handleRemappedKey(event: KeyEvent): Boolean {
         // Intercept hardware volume keys when Media Volume Lock is active
         if (isMediaVolumeLockActive && (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
             when (event.action) {

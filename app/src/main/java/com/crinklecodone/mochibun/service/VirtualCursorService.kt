@@ -72,6 +72,9 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     private var isToggleKeyDown = false
     private var lastScrollTimeMs = 0L
 
+    // Preallocated so the toggle key doesn't allocate a lambda per press
+    private val toggleRunnable = Runnable { toggleCursorVisibility() }
+
     private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         reloadConfig()
     }
@@ -144,6 +147,8 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         isServiceRunning = false
         isCursorVisible = false
         instance = null
+        InputArbiter.cursorToggleKeyCode = KeyEvent.KEYCODE_UNKNOWN
+        mainHandler.removeCallbacks(toggleRunnable)
 
         ClamshellManager.removeListener(clamshellListener)
         stopMovementTicker()
@@ -184,6 +189,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         accelerationRate = CursorPreferences.getAcceleration(this)
         scrollStepPx = CursorPreferences.getScrollStepPx(this)
         clickMethod = CursorPreferences.getClickMethod(this)
+        InputArbiter.cursorToggleKeyCode = toggleKeyCode
         overlayView?.reloadConfiguration()
     }
 
@@ -216,7 +222,29 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
 
     override fun onKeyEvent(event: KeyEvent?): Boolean {
         if (event == null) return false
+        val keyCode = event.keyCode
 
+        if (InputArbiter.isNewPress(event)) {
+            // Same rule MochibunAccessibilityService applies, so only one of us claims the press
+            if (!InputArbiter.cursorTakesPress(event)) {
+                if (InputArbiter.ownerOf(keyCode) == InputLayer.CURSOR_OVERLAY) {
+                    InputArbiter.setOwner(keyCode, InputLayer.NONE)
+                }
+                return false
+            }
+            InputArbiter.setOwner(keyCode, InputLayer.CURSOR_OVERLAY)
+        } else if (InputArbiter.ownerOf(keyCode) != InputLayer.CURSOR_OVERLAY) {
+            // Repeat or release of a press someone else took (or that predates the cursor)
+            return false
+        }
+
+        // From here on the press is ours: consume every event of it, even if the cursor was
+        // hidden mid-press, so a stray release never leaks to the app underneath.
+        handleOwnedKey(event)
+        return true
+    }
+
+    private fun handleOwnedKey(event: KeyEvent) {
         val keyCode = event.keyCode
         val action = event.action
 
@@ -230,76 +258,46 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
                 KeyEvent.ACTION_DOWN -> {
                     if (!isToggleKeyDown && event.repeatCount == 0) {
                         isToggleKeyDown = true
-                        mainHandler.post { toggleCursorVisibility() }
+                        mainHandler.post(toggleRunnable)
                     }
-                    return true
                 }
-                KeyEvent.ACTION_UP -> {
-                    isToggleKeyDown = false
-                    return true
-                }
+                KeyEvent.ACTION_UP -> isToggleKeyDown = false
             }
+            return
         }
 
-        // When virtual cursor is off, pass all hardware keys through untouched to the active app
-        if (!isCursorVisible) {
-            return false
-        }
+        // A press that started while visible: still swallow its tail after the cursor hides
+        if (!isCursorVisible) return
 
-        // When cursor is visible, hijack D-pad directional navigation, click keys, and 2/8 scroll keys
         when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                handleDirectionKey(action, up = true)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                handleDirectionKey(action, down = true)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                handleDirectionKey(action, left = true)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                handleDirectionKey(action, right = true)
-                return true
-            }
+            KeyEvent.KEYCODE_DPAD_UP -> handleDirectionKey(action, up = true)
+            KeyEvent.KEYCODE_DPAD_DOWN -> handleDirectionKey(action, down = true)
+            KeyEvent.KEYCODE_DPAD_LEFT -> handleDirectionKey(action, left = true)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> handleDirectionKey(action, right = true)
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                if (action == KeyEvent.ACTION_DOWN) {
-                    if (event.repeatCount == 0) {
-                        performTapDispatch()
-                    }
+                if (action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    performTapDispatch()
                 }
-                return true
             }
             KeyEvent.KEYCODE_2,
             KeyEvent.KEYCODE_NUMPAD_2 -> {
-                if (action == KeyEvent.ACTION_DOWN) {
-                    val now = SystemClock.uptimeMillis()
-                    if (now - lastScrollTimeMs >= SCROLL_DEBOUNCE_MS) {
-                        lastScrollTimeMs = now
-                        performScrollDispatch(scrollUp = true)
-                    }
-                }
-                return true
+                if (action == KeyEvent.ACTION_DOWN) handleScrollKey(scrollUp = true)
             }
             KeyEvent.KEYCODE_8,
             KeyEvent.KEYCODE_NUMPAD_8 -> {
-                if (action == KeyEvent.ACTION_DOWN) {
-                    val now = SystemClock.uptimeMillis()
-                    if (now - lastScrollTimeMs >= SCROLL_DEBOUNCE_MS) {
-                        lastScrollTimeMs = now
-                        performScrollDispatch(scrollUp = false)
-                    }
-                }
-                return true
+                if (action == KeyEvent.ACTION_DOWN) handleScrollKey(scrollUp = false)
             }
         }
+    }
 
-        // Allow system back or other non-dpad keys to pass through
-        return false
+    private fun handleScrollKey(scrollUp: Boolean) {
+        val now = SystemClock.uptimeMillis()
+        if (now - lastScrollTimeMs >= SCROLL_DEBOUNCE_MS) {
+            lastScrollTimeMs = now
+            performScrollDispatch(scrollUp)
+        }
     }
 
     private fun handleDirectionKey(

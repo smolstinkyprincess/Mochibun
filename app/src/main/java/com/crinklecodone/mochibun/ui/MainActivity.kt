@@ -27,6 +27,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.crinklecodone.mochibun.data.repository.IconPackManager
+import com.crinklecodone.mochibun.service.InputArbiter
+import com.crinklecodone.mochibun.service.InputLayer
 import com.crinklecodone.mochibun.service.MochibunAccessibilityService
 
 class MainActivity : ComponentActivity() {
@@ -114,7 +116,16 @@ class MainActivity : ComponentActivity() {
         // Already handled by MochibunAccessibilityService; don't run it through the launcher again
         if (MochibunAccessibilityService.wasConsumedByService(event)) return true
         val interceptor = keyEventInterceptor
-        if (interceptor != null && interceptor(event)) {
+        if (InputArbiter.isNewPress(event)) {
+            val consumed = interceptor != null && interceptor(event)
+            InputArbiter.setOwner(event.keyCode, if (consumed) InputLayer.LAUNCHER else InputLayer.NONE)
+            if (consumed) return true
+        } else if (InputArbiter.ownerOf(event.keyCode) == InputLayer.LAUNCHER) {
+            // The launcher handler took this press: keep its repeats and release away from the
+            // Compose tree (and any dialog the press just opened), even if the handler is gone
+            interceptor?.invoke(event)
+            return true
+        } else if (interceptor != null && interceptor(event)) {
             return true
         }
         return super.dispatchKeyEvent(event)

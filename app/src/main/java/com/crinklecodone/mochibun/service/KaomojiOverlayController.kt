@@ -107,8 +107,13 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
         owner = overlayOwner
         state = wheelState
         swallowUpKeyCode = summonKeyCode
+        InputArbiter.isKaomojiOverlayShowing = true
         performBoundaryHaptic(service)
     }
+
+    /** The held key that summoned the wheel, whose repeats and release the wheel still swallows. */
+    fun isSummonKey(keyCode: Int): Boolean =
+        keyCode != KeyEvent.KEYCODE_UNKNOWN && keyCode == swallowUpKeyCode
 
     /** Key filter while the overlay is showing. Consumes everything so the app underneath stays still. */
     fun handleKey(event: KeyEvent): Boolean {
@@ -119,12 +124,11 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
                 swallowUpKeyCode = KeyEvent.KEYCODE_UNKNOWN
                 return true
             }
-            when (code) {
-                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_F4, KeyEvent.KEYCODE_POUND -> {
-                    SoundEffectManager.play(service, SoundEffect.BACK)
-                    dismiss()
-                }
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> confirm()
+            if (isDismissKey(code)) {
+                SoundEffectManager.play(service, SoundEffect.BACK)
+                dismiss()
+            } else if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER) {
+                confirm()
             }
             return true
         }
@@ -252,6 +256,7 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
         val v = view ?: return
         view = null
         state = null
+        InputArbiter.isKaomojiOverlayShowing = false
         try {
             windowManager.removeViewImmediate(v)
         } catch (_: Exception) {}
@@ -259,8 +264,15 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
         owner = null
     }
 
-    private companion object {
-        const val INJECT_DELAY_MS = 50L
+    internal companion object {
+        private const val INJECT_DELAY_MS = 50L
+
+        /**
+         * Keys that close the wheel without pasting. The side key (F4) is deliberately absent: it
+         * belongs to the virtual cursor, and InputArbiter routes it there even while the wheel is open.
+         */
+        fun isDismissKey(keyCode: Int): Boolean =
+            keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_POUND
     }
 
     private class OverlayOwner : LifecycleOwner, SavedStateRegistryOwner {
