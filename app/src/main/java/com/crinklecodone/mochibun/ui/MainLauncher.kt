@@ -418,12 +418,9 @@ fun MainLauncher(
         }
     }
 
-    // Timed long-press detection for configured Kaomoji trigger key to open Kaomoji radial wheel
-    val kaomojiTriggerKeyCode by PreferencesManager.kaomojiTriggerKeyCode.collectAsState()
-    val kaomojiTriggerScanCode by PreferencesManager.kaomojiTriggerScanCode.collectAsState()
-    val kaomojiTriggerLongPress by PreferencesManager.kaomojiTriggerLongPress.collectAsState()
-    LaunchedEffect(poundKeyState, drawerOpen, isHomeScreenActive, anyModalOpen, kaomojiTriggerKeyCode, kaomojiTriggerScanCode, kaomojiTriggerLongPress) {
-        if (kaomojiTriggerLongPress && poundKeyState == 1 && !anyModalOpen && (drawerOpen || isHomeScreenActive)) {
+    // Timed long-press detection on '#' to open Kaomoji radial wheel
+    LaunchedEffect(poundKeyState, drawerOpen, isHomeScreenActive, anyModalOpen) {
+        if (poundKeyState == 1 && !anyModalOpen && (drawerOpen || isHomeScreenActive)) {
             delay(400L)
             if (poundKeyState == 1 && !anyModalOpen) {
                 poundKeyState = 2

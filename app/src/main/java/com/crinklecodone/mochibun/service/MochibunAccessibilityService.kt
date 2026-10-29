@@ -35,6 +35,7 @@ class MochibunAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "MochibunAccessibility"
         const val PREFS_NAME = "hardware_remap_preferences"
+        private const val POUND_HOLD_MS = 450L
 
         @Volatile
         var isServiceRunning = false
@@ -96,6 +97,11 @@ class MochibunAccessibilityService : AccessibilityService() {
     private var pendingLongPressRunnable: Runnable? = null
     private var longPressFired = false
 
+    // Global '#' hold -> Kaomoji Wheel overlay (outside the launcher only)
+    private var kaomojiOverlay: KaomojiOverlayController? = null
+    private var poundHoldRunnable: Runnable? = null
+    private var poundHoldFired = false
+
     // activeMappings is read on the main thread in onKeyEvent; never mutate it from a worker.
     // Bursts of pref writes (each fires the listener, plus explicit reloads) collapse into one load.
     private val reloadRunnable = Runnable { loadConfiguration() }
@@ -153,6 +159,9 @@ class MochibunAccessibilityService : AccessibilityService() {
             prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
         }
         clearPendingHandlers()
+        cancelPoundHold()
+        kaomojiOverlay?.dismiss()
+        kaomojiOverlay = null
         mainHandler.removeCallbacks(reloadRunnable)
         serviceScope.cancel()
         isServiceRunning = false
@@ -237,7 +246,17 @@ class MochibunAccessibilityService : AccessibilityService() {
         // Suppress hardware button shortcuts while closed in pocket to prevent accidental triggering
         if (ClamshellManager.isLidClosed(this)) {
             clearPendingHandlers()
+            cancelPoundHold()
+            kaomojiOverlay?.dismiss()
             return false
+        }
+
+        // Global Kaomoji Wheel: overlay owns all keys while visible; '#' hold summons it.
+        kaomojiOverlay?.let { if (it.isShowing) return it.handleKey(event) }
+        if (event.keyCode == KeyEvent.KEYCODE_POUND && !isLauncherForeground &&
+            !activeMappings.containsKey(KeyEvent.KEYCODE_POUND)
+        ) {
+            return handlePoundHold(event)
         }
 
         // Intercept hardware volume keys when Media Volume Lock is active
@@ -385,6 +404,44 @@ class MochibunAccessibilityService : AccessibilityService() {
         }
 
         return false
+    }
+
+    /**
+     * Accessibility key filtering can't re-inject a held-back event, so taps pass through untouched:
+     * DOWN and UP always reach the app. Once the hold threshold fires, the auto-repeats are consumed
+     * (so the IME never sees its own long-press) and the overlay swallows the final UP.
+     */
+    private fun handlePoundHold(event: KeyEvent): Boolean {
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (event.repeatCount == 0) {
+                    cancelPoundHold()
+                    poundHoldFired = false
+                    val runnable = Runnable {
+                        poundHoldRunnable = null
+                        poundHoldFired = true
+                        val overlay = kaomojiOverlay ?: KaomojiOverlayController(this).also { kaomojiOverlay = it }
+                        overlay.show(KeyEvent.KEYCODE_POUND)
+                    }
+                    poundHoldRunnable = runnable
+                    mainHandler.postDelayed(runnable, POUND_HOLD_MS)
+                    return false
+                }
+                return poundHoldFired
+            }
+            KeyEvent.ACTION_UP -> {
+                cancelPoundHold()
+                val fired = poundHoldFired
+                poundHoldFired = false
+                return fired
+            }
+        }
+        return false
+    }
+
+    private fun cancelPoundHold() {
+        poundHoldRunnable?.let { mainHandler.removeCallbacks(it) }
+        poundHoldRunnable = null
     }
 
     private fun executeAction(action: ActionType) {

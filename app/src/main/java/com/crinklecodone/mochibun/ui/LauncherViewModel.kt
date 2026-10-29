@@ -453,14 +453,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         favoriteItemKeys = loadedKeys
         favoritePackages = loadedKeys.filterNot { it.startsWith("folder:") }.map { it.removePrefix("app:") }
 
-        PreferencesManager.getWallpaperUri(context)?.let {
-            val parsedUri = Uri.parse(it)
-            wallpaperUri = parsedUri
-            loadWallpaper(parsedUri)
-        } ?: run {
-            wallpaperUri = null
-            wallpaperBitmap = null
-        }
+        val uri = PreferencesManager.getWallpaperUri(context)?.let(Uri::parse)
+        wallpaperUri = uri
+        if (uri != null) loadWallpaper(uri) else wallpaperBitmap = null
         iconRefreshKey++
         folderIconRefreshKey++
         apps = emptyList()

@@ -11,14 +11,11 @@ import org.junit.Test
 class KaomojiRepositoryTest {
 
     @Test
-    fun testKaomojiTriggerDefaultsAndArbitraryKeyMatching() {
-        assertEquals("pref_kaomoji_trigger_keycode", PreferencesManager.KEY_KAOMOJI_TRIGGER_KEYCODE)
-        assertEquals(KeyEvent.KEYCODE_POUND, PreferencesManager.DEFAULT_KAOMOJI_TRIGGER_KEYCODE)
-        assertTrue(PreferencesManager.DEFAULT_KAOMOJI_TRIGGER_LONG_PRESS)
-
-        // Default matches pound key
+    fun testKaomojiTriggerIsPoundAndKeyFormatting() {
+        // Trigger is permanently bound to '#'
         assertTrue(PreferencesManager.matchesKaomojiTrigger(KeyEvent.KEYCODE_POUND, 0))
         assertFalse(PreferencesManager.matchesKaomojiTrigger(KeyEvent.KEYCODE_STAR, 0))
+        assertEquals("#", PreferencesManager.getKaomojiTriggerBadge())
 
         // Verify badge and label formatting for physical and arbitrary keys
         assertEquals("#", PreferencesManager.formatKaomojiKeyBadge(KeyEvent.KEYCODE_POUND))

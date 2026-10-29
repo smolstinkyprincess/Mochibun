@@ -102,15 +102,6 @@ object PreferencesManager {
     const val KEY_THEME_FONT_FAMILY = "pref_theme_font_family"
     const val DEFAULT_THEME_FONT_FAMILY = "default"
 
-    const val KEY_KAOMOJI_TRIGGER_KEYCODE = "pref_kaomoji_trigger_keycode"
-    const val DEFAULT_KAOMOJI_TRIGGER_KEYCODE = KeyEvent.KEYCODE_POUND
-
-    const val KEY_KAOMOJI_TRIGGER_SCANCODE = "pref_kaomoji_trigger_scancode"
-    const val DEFAULT_KAOMOJI_TRIGGER_SCANCODE = 0
-
-    const val KEY_KAOMOJI_TRIGGER_LONG_PRESS = "pref_kaomoji_trigger_long_press"
-    const val DEFAULT_KAOMOJI_TRIGGER_LONG_PRESS = true
-
     const val KEY_SPEED_DIAL_PREFIX = "pref_speed_dial_"
 
     const val KEY_ROOT_A11Y_WATCHDOG_ENABLED = "pref_root_a11y_watchdog_enabled"
@@ -180,225 +171,97 @@ object PreferencesManager {
     private val _themeFontFamily = MutableStateFlow(DEFAULT_THEME_FONT_FAMILY)
     val themeFontFamily: StateFlow<String> = _themeFontFamily.asStateFlow()
 
-    private val _kaomojiTriggerKeyCode = MutableStateFlow(DEFAULT_KAOMOJI_TRIGGER_KEYCODE)
-    val kaomojiTriggerKeyCode: StateFlow<Int> = _kaomojiTriggerKeyCode.asStateFlow()
-
-    private val _kaomojiTriggerScanCode = MutableStateFlow(DEFAULT_KAOMOJI_TRIGGER_SCANCODE)
-    val kaomojiTriggerScanCode: StateFlow<Int> = _kaomojiTriggerScanCode.asStateFlow()
-
-    private val _kaomojiTriggerLongPress = MutableStateFlow(DEFAULT_KAOMOJI_TRIGGER_LONG_PRESS)
-    val kaomojiTriggerLongPress: StateFlow<Boolean> = _kaomojiTriggerLongPress.asStateFlow()
-
     private var initialized = false
 
     fun init(context: Context) {
         if (!initialized) {
-            try {
-                val prefs = getPrefs(context)
-                _isWallpaperOverlayEnabled.value = prefs.getBoolean(
-                    KEY_WALLPAPER_OVERLAY_ENABLED,
-                    DEFAULT_WALLPAPER_OVERLAY_ENABLED
-                )
-                _wallpaperOverlayRotationMode.value = prefs.getString(
-                    KEY_WALLPAPER_OVERLAY_ROTATION_MODE,
-                    DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE
-                ) ?: DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE
-                _isSystemMonitorEnabled.value = prefs.getBoolean(
-                    KEY_SYSTEM_MONITOR_ENABLED,
-                    DEFAULT_SYSTEM_MONITOR_ENABLED
-                )
-                _isFolderGridMode.value = prefs.getBoolean(
-                    KEY_FOLDER_GRID_MODE,
-                    DEFAULT_FOLDER_GRID_MODE
-                )
-                _isT9SearchEnabled.value = prefs.getBoolean(
-                    KEY_T9_SEARCH_ENABLED,
-                    DEFAULT_T9_SEARCH_ENABLED
-                )
-                _systemMonitorInterval.value = prefs.getInt(
-                    KEY_SYSTEM_MONITOR_INTERVAL,
-                    DEFAULT_SYSTEM_MONITOR_INTERVAL
-                )
-                _customUserName.value = prefs.getString(
-                    KEY_CUSTOM_USER_NAME,
-                    DEFAULT_CUSTOM_USER_NAME
-                ) ?: DEFAULT_CUSTOM_USER_NAME
-                _themePreset.value = prefs.getString(
-                    KEY_THEME_PRESET,
-                    DEFAULT_THEME_PRESET
-                ) ?: DEFAULT_THEME_PRESET
-                _isDpadWrapAround.value = prefs.getBoolean(
-                    KEY_DPAD_WRAP_AROUND,
-                    DEFAULT_DPAD_WRAP_AROUND
-                )
-                _isDpadBoundaryHaptics.value = prefs.getBoolean(
-                    KEY_DPAD_BOUNDARY_HAPTICS,
-                    DEFAULT_DPAD_BOUNDARY_HAPTICS
-                )
-                _keypadSoundMode.value = prefs.getString(
-                    KEY_KEYPAD_SOUND_MODE,
-                    DEFAULT_KEYPAD_SOUND_MODE
-                ) ?: DEFAULT_KEYPAD_SOUND_MODE
-                _launcherAudioStream.value = prefs.getString(
-                    KEY_LAUNCHER_AUDIO_STREAM,
-                    DEFAULT_LAUNCHER_AUDIO_STREAM
-                ) ?: DEFAULT_LAUNCHER_AUDIO_STREAM
-                _launcherSoundVolume.value = prefs.getInt(
-                    KEY_LAUNCHER_SOUND_VOLUME,
-                    DEFAULT_LAUNCHER_SOUND_VOLUME
-                )
-                _isLidLedEnabled.value = prefs.getBoolean(
-                    KEY_LID_LED_ENABLED,
-                    DEFAULT_LID_LED_ENABLED
-                )
-                _isLidLedChargingEnabled.value = prefs.getBoolean(
-                    KEY_LID_LED_CHARGING,
-                    DEFAULT_LID_LED_CHARGING
-                )
-                val sortStr = prefs.getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
-                _appDrawerSortMode.value = try {
-                    AppDrawerSortMode.valueOf(sortStr)
-                } catch (_: Exception) {
-                    AppDrawerSortMode.ALPHABETICAL
-                }
-                _lidLedColor.value = prefs.getString(
-                    KEY_LID_LED_COLOR,
-                    DEFAULT_LID_LED_COLOR
-                ) ?: DEFAULT_LID_LED_COLOR
-                _isMediaVolumeLockEnabled.value = prefs.getBoolean(
-                    KEY_MEDIA_VOLUME_LOCK_ENABLED,
-                    DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
-                )
-                _themeFontFamily.value = prefs.getString(
-                    KEY_THEME_FONT_FAMILY,
-                    DEFAULT_THEME_FONT_FAMILY
-                ) ?: DEFAULT_THEME_FONT_FAMILY
-                _kaomojiTriggerKeyCode.value = prefs.getInt(
-                    KEY_KAOMOJI_TRIGGER_KEYCODE,
-                    DEFAULT_KAOMOJI_TRIGGER_KEYCODE
-                )
-                _kaomojiTriggerScanCode.value = prefs.getInt(
-                    KEY_KAOMOJI_TRIGGER_SCANCODE,
-                    DEFAULT_KAOMOJI_TRIGGER_SCANCODE
-                )
-                _kaomojiTriggerLongPress.value = prefs.getBoolean(
-                    KEY_KAOMOJI_TRIGGER_LONG_PRESS,
-                    DEFAULT_KAOMOJI_TRIGGER_LONG_PRESS
-                )
-            } catch (_: Exception) {
-            }
+            val prefs = getPrefs(context)
+            _isWallpaperOverlayEnabled.value = prefs.getBoolean(
+                KEY_WALLPAPER_OVERLAY_ENABLED,
+                DEFAULT_WALLPAPER_OVERLAY_ENABLED
+            )
+            _wallpaperOverlayRotationMode.value = prefs.getString(
+                KEY_WALLPAPER_OVERLAY_ROTATION_MODE,
+                DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE
+            ) ?: DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE
+            _isSystemMonitorEnabled.value = prefs.getBoolean(
+                KEY_SYSTEM_MONITOR_ENABLED,
+                DEFAULT_SYSTEM_MONITOR_ENABLED
+            )
+            _isFolderGridMode.value = prefs.getBoolean(
+                KEY_FOLDER_GRID_MODE,
+                DEFAULT_FOLDER_GRID_MODE
+            )
+            _isT9SearchEnabled.value = prefs.getBoolean(
+                KEY_T9_SEARCH_ENABLED,
+                DEFAULT_T9_SEARCH_ENABLED
+            )
+            _systemMonitorInterval.value = prefs.getInt(
+                KEY_SYSTEM_MONITOR_INTERVAL,
+                DEFAULT_SYSTEM_MONITOR_INTERVAL
+            )
+            _customUserName.value = prefs.getString(
+                KEY_CUSTOM_USER_NAME,
+                DEFAULT_CUSTOM_USER_NAME
+            ) ?: DEFAULT_CUSTOM_USER_NAME
+            _themePreset.value = prefs.getString(
+                KEY_THEME_PRESET,
+                DEFAULT_THEME_PRESET
+            ) ?: DEFAULT_THEME_PRESET
+            _isDpadWrapAround.value = prefs.getBoolean(
+                KEY_DPAD_WRAP_AROUND,
+                DEFAULT_DPAD_WRAP_AROUND
+            )
+            _isDpadBoundaryHaptics.value = prefs.getBoolean(
+                KEY_DPAD_BOUNDARY_HAPTICS,
+                DEFAULT_DPAD_BOUNDARY_HAPTICS
+            )
+            _keypadSoundMode.value = prefs.getString(
+                KEY_KEYPAD_SOUND_MODE,
+                DEFAULT_KEYPAD_SOUND_MODE
+            ) ?: DEFAULT_KEYPAD_SOUND_MODE
+            _launcherAudioStream.value = prefs.getString(
+                KEY_LAUNCHER_AUDIO_STREAM,
+                DEFAULT_LAUNCHER_AUDIO_STREAM
+            ) ?: DEFAULT_LAUNCHER_AUDIO_STREAM
+            _launcherSoundVolume.value = prefs.getInt(
+                KEY_LAUNCHER_SOUND_VOLUME,
+                DEFAULT_LAUNCHER_SOUND_VOLUME
+            )
+            _isLidLedEnabled.value = prefs.getBoolean(
+                KEY_LID_LED_ENABLED,
+                DEFAULT_LID_LED_ENABLED
+            )
+            _isLidLedChargingEnabled.value = prefs.getBoolean(
+                KEY_LID_LED_CHARGING,
+                DEFAULT_LID_LED_CHARGING
+            )
+            val sortStr = prefs.getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
+            _appDrawerSortMode.value = AppDrawerSortMode.entries.firstOrNull { it.name == sortStr }
+                ?: AppDrawerSortMode.ALPHABETICAL
+            _lidLedColor.value = prefs.getString(
+                KEY_LID_LED_COLOR,
+                DEFAULT_LID_LED_COLOR
+            ) ?: DEFAULT_LID_LED_COLOR
+            _isMediaVolumeLockEnabled.value = prefs.getBoolean(
+                KEY_MEDIA_VOLUME_LOCK_ENABLED,
+                DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
+            )
+            _themeFontFamily.value = prefs.getString(
+                KEY_THEME_FONT_FAMILY,
+                DEFAULT_THEME_FONT_FAMILY
+            ) ?: DEFAULT_THEME_FONT_FAMILY
             initialized = true
         }
     }
 
-    fun getKaomojiTriggerKeyCode(context: Context? = null): Int {
-        return try {
-            if (initialized) {
-                _kaomojiTriggerKeyCode.value
-            } else if (context != null) {
-                getPrefs(context).getInt(
-                    KEY_KAOMOJI_TRIGGER_KEYCODE,
-                    DEFAULT_KAOMOJI_TRIGGER_KEYCODE
-                )
-            } else {
-                _kaomojiTriggerKeyCode.value
-            }
-        } catch (_: Exception) {
-            DEFAULT_KAOMOJI_TRIGGER_KEYCODE
-        }
-    }
-
-    fun getKaomojiTriggerScanCode(context: Context? = null): Int {
-        return try {
-            if (initialized) {
-                _kaomojiTriggerScanCode.value
-            } else if (context != null) {
-                getPrefs(context).getInt(
-                    KEY_KAOMOJI_TRIGGER_SCANCODE,
-                    DEFAULT_KAOMOJI_TRIGGER_SCANCODE
-                )
-            } else {
-                _kaomojiTriggerScanCode.value
-            }
-        } catch (_: Exception) {
-            DEFAULT_KAOMOJI_TRIGGER_SCANCODE
-        }
-    }
-
-    fun isKaomojiTriggerLongPress(context: Context? = null): Boolean {
-        return try {
-            if (initialized) {
-                _kaomojiTriggerLongPress.value
-            } else if (context != null) {
-                getPrefs(context).getBoolean(
-                    KEY_KAOMOJI_TRIGGER_LONG_PRESS,
-                    DEFAULT_KAOMOJI_TRIGGER_LONG_PRESS
-                )
-            } else {
-                _kaomojiTriggerLongPress.value
-            }
-        } catch (_: Exception) {
-            DEFAULT_KAOMOJI_TRIGGER_LONG_PRESS
-        }
-    }
-
-    fun setKaomojiTriggerButton(context: Context, keyCode: Int, scanCode: Int = 0) {
-        getPrefs(context).edit()
-            .putInt(KEY_KAOMOJI_TRIGGER_KEYCODE, keyCode)
-            .putInt(KEY_KAOMOJI_TRIGGER_SCANCODE, scanCode)
-            .apply()
-        _kaomojiTriggerKeyCode.value = keyCode
-        _kaomojiTriggerScanCode.value = scanCode
-    }
-
-    fun setKaomojiTriggerLongPress(context: Context, isLongPress: Boolean) {
-        getPrefs(context).edit()
-            .putBoolean(KEY_KAOMOJI_TRIGGER_LONG_PRESS, isLongPress)
-            .apply()
-        _kaomojiTriggerLongPress.value = isLongPress
-    }
-
-    fun resetKaomojiTrigger(context: Context) {
-        getPrefs(context).edit()
-            .putInt(KEY_KAOMOJI_TRIGGER_KEYCODE, DEFAULT_KAOMOJI_TRIGGER_KEYCODE)
-            .putInt(KEY_KAOMOJI_TRIGGER_SCANCODE, DEFAULT_KAOMOJI_TRIGGER_SCANCODE)
-            .putBoolean(KEY_KAOMOJI_TRIGGER_LONG_PRESS, DEFAULT_KAOMOJI_TRIGGER_LONG_PRESS)
-            .apply()
-        _kaomojiTriggerKeyCode.value = DEFAULT_KAOMOJI_TRIGGER_KEYCODE
-        _kaomojiTriggerScanCode.value = DEFAULT_KAOMOJI_TRIGGER_SCANCODE
-        _kaomojiTriggerLongPress.value = DEFAULT_KAOMOJI_TRIGGER_LONG_PRESS
-    }
-
+    /** The Kaomoji Wheel is permanently bound to holding '#'. */
+    @Suppress("UNUSED_PARAMETER")
     fun matchesKaomojiTrigger(
         eventKeyCode: Int,
         eventScanCode: Int = 0,
         context: Context? = null
-    ): Boolean {
-        val targetKeyCode = getKaomojiTriggerKeyCode(context)
-        val targetScanCode = getKaomojiTriggerScanCode(context)
-
-        if (targetKeyCode != KeyEvent.KEYCODE_UNKNOWN && eventKeyCode == targetKeyCode) {
-            return true
-        }
-        // Match numpad digits with standard numeric keypad digits
-        if (targetKeyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) {
-            val numpadCode = targetKeyCode - KeyEvent.KEYCODE_0 + KeyEvent.KEYCODE_NUMPAD_0
-            if (eventKeyCode == numpadCode) return true
-        } else if (targetKeyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9) {
-            val digitCode = targetKeyCode - KeyEvent.KEYCODE_NUMPAD_0 + KeyEvent.KEYCODE_0
-            if (eventKeyCode == digitCode) return true
-        }
-        // Match raw scanCode when keyCode is UNKNOWN or for OEM side key (scanCode 62 / F4)
-        if (targetScanCode > 0 && eventScanCode == targetScanCode) {
-            if (targetKeyCode == KeyEvent.KEYCODE_UNKNOWN ||
-                eventKeyCode == KeyEvent.KEYCODE_UNKNOWN ||
-                targetKeyCode == KeyEvent.KEYCODE_F4
-            ) {
-                return true
-            }
-        }
-        return false
-    }
+    ): Boolean = eventKeyCode == KeyEvent.KEYCODE_POUND
 
     fun formatKaomojiKeyName(keyCode: Int, scanCode: Int = 0): String {
         val physical = PhysicalKey.fromKeyCode(keyCode)
@@ -454,26 +317,17 @@ object PreferencesManager {
         }
     }
 
-    fun getKaomojiTriggerBadge(context: Context? = null): String {
-        return formatKaomojiKeyBadge(
-            getKaomojiTriggerKeyCode(context),
-            getKaomojiTriggerScanCode(context)
-        )
-    }
+    fun getKaomojiTriggerBadge(): String = "#"
 
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     fun isWallpaperOverlayEnabled(context: Context): Boolean {
-        return try {
-            getPrefs(context).getBoolean(
-                KEY_WALLPAPER_OVERLAY_ENABLED,
-                DEFAULT_WALLPAPER_OVERLAY_ENABLED
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getBoolean(
+            KEY_WALLPAPER_OVERLAY_ENABLED,
             DEFAULT_WALLPAPER_OVERLAY_ENABLED
-        }
+        )
     }
 
     fun setWallpaperOverlayEnabled(context: Context, enabled: Boolean) {
@@ -484,14 +338,10 @@ object PreferencesManager {
     }
 
     fun isSystemMonitorEnabled(context: Context): Boolean {
-        return try {
-            getPrefs(context).getBoolean(
-                KEY_SYSTEM_MONITOR_ENABLED,
-                DEFAULT_SYSTEM_MONITOR_ENABLED
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getBoolean(
+            KEY_SYSTEM_MONITOR_ENABLED,
             DEFAULT_SYSTEM_MONITOR_ENABLED
-        }
+        )
     }
 
     fun setSystemMonitorEnabled(context: Context, enabled: Boolean) {
@@ -500,14 +350,10 @@ object PreferencesManager {
     }
 
     fun isFolderGridMode(context: Context): Boolean {
-        return try {
-            getPrefs(context).getBoolean(
-                KEY_FOLDER_GRID_MODE,
-                DEFAULT_FOLDER_GRID_MODE
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getBoolean(
+            KEY_FOLDER_GRID_MODE,
             DEFAULT_FOLDER_GRID_MODE
-        }
+        )
     }
 
     fun setFolderGridMode(context: Context, enabled: Boolean) {
@@ -516,14 +362,10 @@ object PreferencesManager {
     }
 
     fun isT9SearchEnabled(context: Context): Boolean {
-        return try {
-            getPrefs(context).getBoolean(
-                KEY_T9_SEARCH_ENABLED,
-                DEFAULT_T9_SEARCH_ENABLED
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getBoolean(
+            KEY_T9_SEARCH_ENABLED,
             DEFAULT_T9_SEARCH_ENABLED
-        }
+        )
     }
 
     fun setT9SearchEnabled(context: Context, enabled: Boolean) {
@@ -532,14 +374,10 @@ object PreferencesManager {
     }
 
     fun getSystemMonitorInterval(context: Context): Int {
-        return try {
-            getPrefs(context).getInt(
-                KEY_SYSTEM_MONITOR_INTERVAL,
-                DEFAULT_SYSTEM_MONITOR_INTERVAL
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getInt(
+            KEY_SYSTEM_MONITOR_INTERVAL,
             DEFAULT_SYSTEM_MONITOR_INTERVAL
-        }
+        )
     }
 
     fun setSystemMonitorInterval(context: Context, seconds: Int) {
@@ -548,14 +386,10 @@ object PreferencesManager {
     }
 
     fun getCustomUserName(context: Context): String {
-        return try {
-            getPrefs(context).getString(
-                KEY_CUSTOM_USER_NAME,
-                DEFAULT_CUSTOM_USER_NAME
-            ) ?: DEFAULT_CUSTOM_USER_NAME
-        } catch (_: Exception) {
+        return getPrefs(context).getString(
+            KEY_CUSTOM_USER_NAME,
             DEFAULT_CUSTOM_USER_NAME
-        }
+        ) ?: DEFAULT_CUSTOM_USER_NAME
     }
 
     fun setCustomUserName(context: Context, name: String) {
@@ -564,14 +398,10 @@ object PreferencesManager {
     }
 
     fun getThemePreset(context: Context): String {
-        return try {
-            getPrefs(context).getString(
-                KEY_THEME_PRESET,
-                DEFAULT_THEME_PRESET
-            ) ?: DEFAULT_THEME_PRESET
-        } catch (_: Exception) {
+        return getPrefs(context).getString(
+            KEY_THEME_PRESET,
             DEFAULT_THEME_PRESET
-        }
+        ) ?: DEFAULT_THEME_PRESET
     }
 
     fun setThemePreset(context: Context, preset: String) {
@@ -580,14 +410,10 @@ object PreferencesManager {
     }
 
     fun isDpadWrapAround(context: Context): Boolean {
-        return try {
-            getPrefs(context).getBoolean(
-                KEY_DPAD_WRAP_AROUND,
-                DEFAULT_DPAD_WRAP_AROUND
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getBoolean(
+            KEY_DPAD_WRAP_AROUND,
             DEFAULT_DPAD_WRAP_AROUND
-        }
+        )
     }
 
     fun setDpadWrapAround(context: Context, enabled: Boolean) {
@@ -596,14 +422,10 @@ object PreferencesManager {
     }
 
     fun isDpadBoundaryHaptics(context: Context): Boolean {
-        return try {
-            getPrefs(context).getBoolean(
-                KEY_DPAD_BOUNDARY_HAPTICS,
-                DEFAULT_DPAD_BOUNDARY_HAPTICS
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getBoolean(
+            KEY_DPAD_BOUNDARY_HAPTICS,
             DEFAULT_DPAD_BOUNDARY_HAPTICS
-        }
+        )
     }
 
     fun setDpadBoundaryHaptics(context: Context, enabled: Boolean) {
@@ -612,19 +434,15 @@ object PreferencesManager {
     }
 
     fun getKeypadSoundMode(context: Context? = null): String {
-        return try {
-            if (initialized) {
-                _keypadSoundMode.value
-            } else if (context != null) {
-                getPrefs(context).getString(
-                    KEY_KEYPAD_SOUND_MODE,
-                    DEFAULT_KEYPAD_SOUND_MODE
-                ) ?: DEFAULT_KEYPAD_SOUND_MODE
-            } else {
-                _keypadSoundMode.value
-            }
-        } catch (_: Exception) {
-            DEFAULT_KEYPAD_SOUND_MODE
+        return if (initialized) {
+            _keypadSoundMode.value
+        } else if (context != null) {
+            getPrefs(context).getString(
+                KEY_KEYPAD_SOUND_MODE,
+                DEFAULT_KEYPAD_SOUND_MODE
+            ) ?: DEFAULT_KEYPAD_SOUND_MODE
+        } else {
+            _keypadSoundMode.value
         }
     }
 
@@ -634,19 +452,15 @@ object PreferencesManager {
     }
 
     fun getLauncherAudioStream(context: Context? = null): String {
-        return try {
-            if (initialized) {
-                _launcherAudioStream.value
-            } else if (context != null) {
-                getPrefs(context).getString(
-                    KEY_LAUNCHER_AUDIO_STREAM,
-                    DEFAULT_LAUNCHER_AUDIO_STREAM
-                ) ?: DEFAULT_LAUNCHER_AUDIO_STREAM
-            } else {
-                _launcherAudioStream.value
-            }
-        } catch (_: Exception) {
-            DEFAULT_LAUNCHER_AUDIO_STREAM
+        return if (initialized) {
+            _launcherAudioStream.value
+        } else if (context != null) {
+            getPrefs(context).getString(
+                KEY_LAUNCHER_AUDIO_STREAM,
+                DEFAULT_LAUNCHER_AUDIO_STREAM
+            ) ?: DEFAULT_LAUNCHER_AUDIO_STREAM
+        } else {
+            _launcherAudioStream.value
         }
     }
 
@@ -657,19 +471,15 @@ object PreferencesManager {
     }
 
     fun getLauncherSoundVolume(context: Context? = null): Int {
-        return try {
-            if (initialized) {
-                _launcherSoundVolume.value
-            } else if (context != null) {
-                getPrefs(context).getInt(
-                    KEY_LAUNCHER_SOUND_VOLUME,
-                    DEFAULT_LAUNCHER_SOUND_VOLUME
-                )
-            } else {
-                _launcherSoundVolume.value
-            }
-        } catch (_: Exception) {
-            DEFAULT_LAUNCHER_SOUND_VOLUME
+        return if (initialized) {
+            _launcherSoundVolume.value
+        } else if (context != null) {
+            getPrefs(context).getInt(
+                KEY_LAUNCHER_SOUND_VOLUME,
+                DEFAULT_LAUNCHER_SOUND_VOLUME
+            )
+        } else {
+            _launcherSoundVolume.value
         }
     }
 
@@ -680,14 +490,10 @@ object PreferencesManager {
     }
 
     fun isLidLedEnabled(context: Context): Boolean {
-        return try {
-            getPrefs(context).getBoolean(
-                KEY_LID_LED_ENABLED,
-                DEFAULT_LID_LED_ENABLED
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getBoolean(
+            KEY_LID_LED_ENABLED,
             DEFAULT_LID_LED_ENABLED
-        }
+        )
     }
 
     fun setLidLedEnabled(context: Context, enabled: Boolean) {
@@ -696,14 +502,10 @@ object PreferencesManager {
     }
 
     fun isLidLedChargingEnabled(context: Context): Boolean {
-        return try {
-            getPrefs(context).getBoolean(
-                KEY_LID_LED_CHARGING,
-                DEFAULT_LID_LED_CHARGING
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getBoolean(
+            KEY_LID_LED_CHARGING,
             DEFAULT_LID_LED_CHARGING
-        }
+        )
     }
 
     fun setLidLedChargingEnabled(context: Context, enabled: Boolean) {
@@ -712,14 +514,10 @@ object PreferencesManager {
     }
 
     fun getLidLedColor(context: Context): String {
-        return try {
-            getPrefs(context).getString(
-                KEY_LID_LED_COLOR,
-                DEFAULT_LID_LED_COLOR
-            ) ?: DEFAULT_LID_LED_COLOR
-        } catch (_: Exception) {
+        return getPrefs(context).getString(
+            KEY_LID_LED_COLOR,
             DEFAULT_LID_LED_COLOR
-        }
+        ) ?: DEFAULT_LID_LED_COLOR
     }
 
     fun getAppDrawerSortMode(context: Context? = null): AppDrawerSortMode {
@@ -727,11 +525,7 @@ object PreferencesManager {
             _appDrawerSortMode.value
         } else if (context != null) {
             val sortStr = getPrefs(context).getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
-            try {
-                AppDrawerSortMode.valueOf(sortStr)
-            } catch (_: Exception) {
-                AppDrawerSortMode.ALPHABETICAL
-            }
+            AppDrawerSortMode.entries.firstOrNull { it.name == sortStr } ?: AppDrawerSortMode.ALPHABETICAL
         } else {
             AppDrawerSortMode.ALPHABETICAL
         }
@@ -748,14 +542,10 @@ object PreferencesManager {
     }
 
     fun isMediaVolumeLockEnabled(context: Context): Boolean {
-        return try {
-            getPrefs(context).getBoolean(
-                KEY_MEDIA_VOLUME_LOCK_ENABLED,
-                DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
-            )
-        } catch (_: Exception) {
+        return getPrefs(context).getBoolean(
+            KEY_MEDIA_VOLUME_LOCK_ENABLED,
             DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
-        }
+        )
     }
 
     fun setMediaVolumeLockEnabled(context: Context, enabled: Boolean) {
@@ -764,19 +554,15 @@ object PreferencesManager {
     }
 
     fun getThemeFontFamily(context: Context? = null): String {
-        return try {
-            if (initialized) {
-                _themeFontFamily.value
-            } else if (context != null) {
-                getPrefs(context).getString(
-                    KEY_THEME_FONT_FAMILY,
-                    DEFAULT_THEME_FONT_FAMILY
-                ) ?: DEFAULT_THEME_FONT_FAMILY
-            } else {
-                _themeFontFamily.value
-            }
-        } catch (_: Exception) {
-            DEFAULT_THEME_FONT_FAMILY
+        return if (initialized) {
+            _themeFontFamily.value
+        } else if (context != null) {
+            getPrefs(context).getString(
+                KEY_THEME_FONT_FAMILY,
+                DEFAULT_THEME_FONT_FAMILY
+            ) ?: DEFAULT_THEME_FONT_FAMILY
+        } else {
+            _themeFontFamily.value
         }
     }
 
@@ -786,11 +572,7 @@ object PreferencesManager {
     }
 
     fun getWallpaperUri(context: Context): String? {
-        return try {
-            getPrefs(context).getString(KEY_WALLPAPER_URI, null)
-        } catch (_: Exception) {
-            null
-        }
+        return getPrefs(context).getString(KEY_WALLPAPER_URI, null)
     }
 
     fun setWallpaperUri(context: Context, uri: String?) {
@@ -870,11 +652,7 @@ object PreferencesManager {
     }
 
     fun loadFavoriteFolders(context: Context): List<FavoriteFolder> {
-        val raw = try {
-            getPrefs(context).getString(KEY_FAVORITE_FOLDERS, null)
-        } catch (_: Exception) {
-            null
-        } ?: return emptyList()
+        val raw = getPrefs(context).getString(KEY_FAVORITE_FOLDERS, null) ?: return emptyList()
         return try {
             val array = JSONArray(raw)
             val list = mutableListOf<FavoriteFolder>()
@@ -896,11 +674,7 @@ object PreferencesManager {
     }
 
     fun getFavoriteItemKeys(context: Context): List<String> {
-        val raw = try {
-            getPrefs(context).getString(KEY_FAVORITE_ITEMS_ORDERED, "") ?: ""
-        } catch (_: Exception) {
-            ""
-        }
+        val raw = getPrefs(context).getString(KEY_FAVORITE_ITEMS_ORDERED, "") ?: ""
         if (raw.isBlank()) return emptyList()
         return raw.split("|").filter { it.isNotEmpty() }
     }
@@ -913,11 +687,7 @@ object PreferencesManager {
 
     fun getSpeedDialPackage(context: Context, digit: Int): String? {
         if (digit !in 2..9) return null
-        return try {
-            getPrefs(context).getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
-        } catch (_: Exception) {
-            null
-        }
+        return getPrefs(context).getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
     }
 
     fun setSpeedDialPackage(context: Context, digit: Int, packageName: String?) {
@@ -934,11 +704,7 @@ object PreferencesManager {
         val map = mutableMapOf<Int, String>()
         val prefs = getPrefs(context)
         for (digit in 2..9) {
-            val pkg = try {
-                prefs.getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
-            } catch (_: Exception) {
-                null
-            }
+            val pkg = prefs.getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
             if (pkg != null) {
                 map[digit] = pkg
             }

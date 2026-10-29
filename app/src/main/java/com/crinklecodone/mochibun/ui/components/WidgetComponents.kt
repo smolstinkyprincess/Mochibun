@@ -360,7 +360,7 @@ fun WidgetPage(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFFCECEF)) // Flat pastel blush pink matching mockup
+            .background(Color.Transparent) // Let wallpaper + sticker overlay show through
             .focusRequester(pageFocusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->

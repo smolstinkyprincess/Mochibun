@@ -77,17 +77,6 @@ internal fun BehaviorSettingsSubScreen(
 
     val isFolderGridMode by PreferencesManager.isFolderGridMode.collectAsState()
     val isT9SearchEnabled by PreferencesManager.isT9SearchEnabled.collectAsState()
-    val kaomojiKeyCode by PreferencesManager.kaomojiTriggerKeyCode.collectAsState()
-    val kaomojiScanCode by PreferencesManager.kaomojiTriggerScanCode.collectAsState()
-    val kaomojiLongPress by PreferencesManager.kaomojiTriggerLongPress.collectAsState()
-    var isCapturingKaomojiKey by remember { mutableStateOf(false) }
-
-    val kaomojiKeyName = remember(kaomojiKeyCode, kaomojiScanCode) {
-        PreferencesManager.formatKaomojiKeyName(kaomojiKeyCode, kaomojiScanCode)
-    }
-    val kaomojiKeyBadge = remember(kaomojiKeyCode, kaomojiScanCode) {
-        PreferencesManager.formatKaomojiKeyBadge(kaomojiKeyCode, kaomojiScanCode)
-    }
     var configuredRemapBadges by remember {
         mutableStateOf(HardwareRemapManager.getConfiguredKeyBadges(context))
     }
@@ -133,8 +122,6 @@ internal fun BehaviorSettingsSubScreen(
             add("t9_search")
             add("hidden_apps")
             add("keypad_remapper")
-            add("kaomoji_trigger")
-            add("kaomoji_press_mode")
             add("dpad_wrap")
             add("boundary_haptics")
             add("keypad_sound")
@@ -159,7 +146,7 @@ internal fun BehaviorSettingsSubScreen(
         when (items.getOrNull(focusedIndex)) {
             "create_folder", "folder_grid" -> 0
             "t9_search", "hidden_apps" -> 1
-            "keypad_remapper", "kaomoji_trigger", "kaomoji_press_mode", "dpad_wrap", "boundary_haptics", "keypad_sound", "audio_stream", "sound_volume", "media_volume_lock" -> 2
+            "keypad_remapper", "dpad_wrap", "boundary_haptics", "keypad_sound", "audio_stream", "sound_volume", "media_volume_lock" -> 2
             "lid_led_notification", "lid_led_color", "lid_led_charging" -> 3
             "system_monitor", "monitor_interval" -> 4
             else -> 0
@@ -172,31 +159,7 @@ internal fun BehaviorSettingsSubScreen(
         listState.animateScrollToItem(targetCardIndex)
     }
 
-    LaunchedEffect(isCapturingKaomojiKey) {
-        if (!isCapturingKaomojiKey) {
-            focusRequester.requestFocus()
-        }
-    }
-
     requestFocusSafely(focusRequester)
-
-    if (isCapturingKaomojiKey) {
-        KaomojiKeyCaptureDialog(
-            currentKeyCode = kaomojiKeyCode,
-            currentScanCode = kaomojiScanCode,
-            isLongPress = kaomojiLongPress,
-            onDismiss = { isCapturingKaomojiKey = false },
-            onAssignButton = { newKeyCode, newScanCode ->
-                PreferencesManager.setKaomojiTriggerButton(context, newKeyCode, newScanCode)
-            },
-            onToggleLongPress = { newLongPress ->
-                PreferencesManager.setKaomojiTriggerLongPress(context, newLongPress)
-            },
-            onResetDefault = {
-                PreferencesManager.resetKaomojiTrigger(context)
-            }
-        )
-    }
 
     fun activateBehaviorItem(index: Int) {
         when (items.getOrNull(index)) {
@@ -206,14 +169,6 @@ internal fun BehaviorSettingsSubScreen(
             "keypad_remapper" -> {
                 SoundEffectManager.play(context, SoundEffect.SELECT)
                 onOpenHardwareButtons?.invoke()
-            }
-            "kaomoji_trigger" -> {
-                SoundEffectManager.play(context, SoundEffect.SELECT)
-                isCapturingKaomojiKey = true
-            }
-            "kaomoji_press_mode" -> {
-                PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
-                SoundEffectManager.play(context, SoundEffect.SELECT)
             }
             "dpad_wrap" -> PreferencesManager.setDpadWrapAround(context, !isDpadWrapAround)
             "boundary_haptics" -> PreferencesManager.setDpadBoundaryHaptics(context, !isDpadBoundaryHaptics)
@@ -303,7 +258,6 @@ internal fun BehaviorSettingsSubScreen(
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
-                if (isCapturingKaomojiKey) return@onPreviewKeyEvent false
                 val native = event.nativeKeyEvent
                 if (isBackDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) {
@@ -347,10 +301,6 @@ internal fun BehaviorSettingsSubScreen(
                         when (native.keyCode) {
                             KeyEvent.KEYCODE_DPAD_LEFT -> {
                                 when (items.getOrNull(focusedIndex)) {
-                                    "kaomoji_press_mode" -> {
-                                        PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
-                                        SoundEffectManager.play(context, SoundEffect.NAV)
-                                    }
                                     "keypad_sound" -> {
                                         val nextMode = when (keypadSoundMode) {
                                             "kawaii" -> "off"
@@ -395,10 +345,6 @@ internal fun BehaviorSettingsSubScreen(
                             }
                             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                                 when (items.getOrNull(focusedIndex)) {
-                                    "kaomoji_press_mode" -> {
-                                        PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
-                                        SoundEffectManager.play(context, SoundEffect.NAV)
-                                    }
                                     "keypad_sound" -> {
                                         val nextMode = when (keypadSoundMode) {
                                             "kawaii" -> "retro"
@@ -519,31 +465,6 @@ internal fun BehaviorSettingsSubScreen(
                         isFocused = items.getOrNull(focusedIndex) == "keypad_remapper",
                         jumpNumber = jumpNum("keypad_remapper"),
                         onClick = { onOpenHardwareButtons?.invoke() }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsNavigationRow(
-                        title = "Kaomoji Trigger Key [$kaomojiKeyBadge]",
-                        subtitle = "Assigned: $kaomojiKeyName • Tap to press & assign any button",
-                        icon = "✨",
-                        isFocused = items.getOrNull(focusedIndex) == "kaomoji_trigger",
-                        jumpNumber = jumpNum("kaomoji_trigger"),
-                        onClick = { isCapturingKaomojiKey = true }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsStepperRow(
-                        title = "Kaomoji Trigger Mode",
-                        subtitle = if (kaomojiLongPress) "Hold $kaomojiKeyName to open Kaomoji Wheel" else "Single press $kaomojiKeyName opens Kaomoji Wheel",
-                        valueDisplay = if (kaomojiLongPress) "Hold" else "Single Tap",
-                        isFocused = items.getOrNull(focusedIndex) == "kaomoji_press_mode",
-                        jumpNumber = jumpNum("kaomoji_press_mode"),
-                        onDecrement = {
-                            PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                        },
-                        onIncrement = {
-                            PreferencesManager.setKaomojiTriggerLongPress(context, !kaomojiLongPress)
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                        }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
@@ -800,517 +721,5 @@ internal fun BehaviorSettingsSubScreen(
                 showLidLedColorPicker = false
             }
         )
-    }
-}
-
-/**
- * Interactive Hardware Key Capture Dialog for assigning any physical button
- * to open the Kaomoji Wheel (modeled after the Hardware Button Remapper's Key Capture dialog).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun KaomojiKeyCaptureDialog(
-    currentKeyCode: Int,
-    currentScanCode: Int,
-    isLongPress: Boolean,
-    onDismiss: () -> Unit,
-    onAssignButton: (Int, Int) -> Unit,
-    onToggleLongPress: (Boolean) -> Unit,
-    onResetDefault: () -> Unit
-) {
-    val context = LocalContext.current
-    val theme = LocalLauncherTheme.current
-    val focusRequester = remember { FocusRequester() }
-
-    var isListening by remember { mutableStateOf(true) }
-    var capturedKeyCode by remember { mutableIntStateOf(currentKeyCode) }
-    var capturedScanCode by remember { mutableIntStateOf(currentScanCode) }
-    var statusHint by remember { mutableStateOf<String?>(null) }
-    var selectedActionIndex by remember { mutableIntStateOf(0) } // 0: Done, 1: Mode, 2: Listen Again, 3: Reset
-    var sawCenterDown by remember { mutableStateOf(false) }
-
-    val infiniteTransition = rememberInfiniteTransition(label = "kaomoji_key_pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "kaomoji_pulse_scale"
-    )
-
-    requestFocusSafely(focusRequester)
-
-    val displayKeyCode = if (isListening) currentKeyCode else capturedKeyCode
-    val displayScanCode = if (isListening) currentScanCode else capturedScanCode
-    val physicalKey = remember(displayKeyCode, displayScanCode) {
-        PhysicalKey.fromKeyCode(displayKeyCode)
-            ?: if (displayScanCode > 0) PhysicalKey.fromScancode(displayScanCode) else null
-    }
-    val keyName = remember(displayKeyCode, displayScanCode) {
-        PreferencesManager.formatKaomojiKeyName(displayKeyCode, displayScanCode)
-    }
-    val keyBadge = remember(displayKeyCode, displayScanCode) {
-        PreferencesManager.formatKaomojiKeyBadge(displayKeyCode, displayScanCode)
-    }
-
-    DisposableEffect(isListening) {
-        if (isListening) {
-            MochibunAccessibilityService.keyCaptureListener = { event ->
-                val native = event
-                val isNav = native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
-                    native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
-                    native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
-                    native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
-                    isCenterActivateKey(native.keyCode)
-
-                if (isNav) {
-                    if (native.action == KeyEvent.ACTION_DOWN) {
-                        statusHint = "D-Pad & OK are reserved for launcher navigation ♡"
-                        SoundEffectManager.play(context, SoundEffect.BOUNDARY)
-                    }
-                    false
-                } else if (isBackDismissKey(native.keyCode)) {
-                    if (native.action == KeyEvent.ACTION_UP) {
-                        SoundEffectManager.play(context, SoundEffect.BACK)
-                        onDismiss()
-                    }
-                    false
-                } else {
-                    if (native.action == KeyEvent.ACTION_DOWN && native.repeatCount == 0) {
-                        val resolvedKeyCode = if (native.keyCode == KeyEvent.KEYCODE_UNKNOWN && native.scanCode == 62) {
-                            KeyEvent.KEYCODE_F4
-                        } else {
-                            native.keyCode
-                        }
-                        capturedKeyCode = resolvedKeyCode
-                        capturedScanCode = native.scanCode
-                        statusHint = null
-                        isListening = false
-                        selectedActionIndex = 0
-                        onAssignButton(resolvedKeyCode, native.scanCode)
-                        SoundEffectManager.play(context, SoundEffect.SELECT)
-                    }
-                    true
-                }
-            }
-        } else {
-            MochibunAccessibilityService.keyCaptureListener = null
-        }
-        onDispose {
-            MochibunAccessibilityService.keyCaptureListener = null
-        }
-    }
-
-    BasicAlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false
-        ),
-        modifier = Modifier
-            .fillMaxWidth(0.92f)
-            .focusRequester(focusRequester)
-            .focusable()
-            .onPreviewKeyEvent { event ->
-                val native = event.nativeKeyEvent
-
-                if (native.keyCode == KeyEvent.KEYCODE_BACK || native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
-                    if (event.type == KeyEventType.KeyUp) {
-                        SoundEffectManager.play(context, SoundEffect.BACK)
-                        onDismiss()
-                    }
-                    return@onPreviewKeyEvent true
-                }
-
-                if (isListening) {
-                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
-                        val isNavigationDpad = native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
-                            native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
-                            native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
-                            native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
-                            isCenterActivateKey(native.keyCode)
-
-                        if (isNavigationDpad) {
-                            statusHint = "D-Pad & OK are reserved for launcher navigation ♡"
-                            SoundEffectManager.play(context, SoundEffect.BOUNDARY)
-                            return@onPreviewKeyEvent true
-                        }
-
-                        val resolvedKeyCode = if (native.keyCode == KeyEvent.KEYCODE_UNKNOWN && native.scanCode == 62) {
-                            KeyEvent.KEYCODE_F4
-                        } else {
-                            native.keyCode
-                        }
-                        capturedKeyCode = resolvedKeyCode
-                        capturedScanCode = native.scanCode
-                        statusHint = null
-                        isListening = false
-                        selectedActionIndex = 0
-                        onAssignButton(resolvedKeyCode, native.scanCode)
-                        SoundEffectManager.play(context, SoundEffect.SELECT)
-                    }
-                    return@onPreviewKeyEvent true
-                }
-
-                // Post-capture navigation inside the confirmation view
-                if (isCenterActivateKey(native.keyCode)) {
-                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
-                        sawCenterDown = true
-                        SoundEffectManager.play(context, SoundEffect.CLICK)
-                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
-                        sawCenterDown = false
-                        SoundEffectManager.play(context, SoundEffect.SELECT)
-                        when (selectedActionIndex) {
-                            0 -> onDismiss()
-                            1 -> onToggleLongPress(!isLongPress)
-                            2 -> {
-                                statusHint = null
-                                isListening = true
-                            }
-                            3 -> {
-                                onResetDefault()
-                                capturedKeyCode = PreferencesManager.DEFAULT_KAOMOJI_TRIGGER_KEYCODE
-                                capturedScanCode = PreferencesManager.DEFAULT_KAOMOJI_TRIGGER_SCANCODE
-                                onDismiss()
-                            }
-                        }
-                    }
-                    return@onPreviewKeyEvent true
-                }
-
-                if (event.type == KeyEventType.KeyDown) {
-                    when (native.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_UP -> {
-                            selectedActionIndex = if (selectedActionIndex > 0) selectedActionIndex - 1 else 3
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                            return@onPreviewKeyEvent true
-                        }
-                        KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            selectedActionIndex = if (selectedActionIndex < 3) selectedActionIndex + 1 else 0
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                            return@onPreviewKeyEvent true
-                        }
-                        KeyEvent.KEYCODE_DPAD_LEFT,
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            onToggleLongPress(!isLongPress)
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                            return@onPreviewKeyEvent true
-                        }
-                    }
-                }
-                true
-            }
-    ) {
-        val shape = RoundedCornerShape(22.dp)
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.5.dp, ActiveTheme.cardBorder, shape),
-            shape = shape,
-            color = ActiveTheme.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    PixelRibbonBow(width = 22.dp, height = 18.dp)
-                    Text(
-                        text = "— ♡ Kaomoji Key Capture ♡ —",
-                        color = ActiveTheme.accentDeep,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f)
-                    )
-                    PixelRibbonBow(width = 22.dp, height = 18.dp)
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .graphicsLayer {
-                            scaleX = if (isListening) pulseScale else 1f
-                            scaleY = if (isListening) pulseScale else 1f
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    MochibunMascot(
-                        mood = if (!isListening) MascotMood.CHEER else MascotMood.WORRIED,
-                        themeTintColor = theme.mascotTintColor,
-                        size = 48.dp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (isListening) {
-                    Text(
-                        text = "Listening for physical key...",
-                        color = ActiveTheme.accentDeep,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Press any button on your keypad to assign it\n(Side Key, Call, Camera, F1–F4, *, #, 0–9, etc.)",
-                        color = ActiveTheme.textPrimary.copy(alpha = 0.65f),
-                        fontSize = 10.sp,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 13.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(ActiveTheme.surfaceTint.copy(alpha = 0.3f))
-                            .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = "Current:",
-                            color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        if (physicalKey != null) {
-                            RetroKeyBadge(key = physicalKey, isFocused = true)
-                        } else {
-                            RetroKeyBadge(label = keyBadge, isFocused = true)
-                        }
-                        Text(
-                            text = "${if (isLongPress) "Hold" else "Tap"} $keyName",
-                            color = ActiveTheme.accentDeep,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    statusHint?.let { hint ->
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = hint,
-                            color = destructiveColor,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(ActiveTheme.container)
-                                .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
-                                .clickable {
-                                    onResetDefault()
-                                    SoundEffectManager.play(context, SoundEffect.SELECT)
-                                    onDismiss()
-                                }
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "↺ Default (#)",
-                                color = ActiveTheme.accentDeep,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(ActiveTheme.surfaceTint.copy(alpha = 0.25f))
-                                .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                                .clickable { onDismiss() }
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Cancel (Back)",
-                                color = ActiveTheme.textPrimary.copy(alpha = 0.7f),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                } else {
-                    Text(
-                        text = "Button Assigned! ♡",
-                        color = ActiveTheme.accentDeep,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(ActiveTheme.surfaceTint.copy(alpha = 0.4f))
-                            .border(1.dp, ActiveTheme.selectionGlow, RoundedCornerShape(10.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        if (physicalKey != null) {
-                            RetroKeyBadge(key = physicalKey, isFocused = true)
-                        } else {
-                            RetroKeyBadge(label = keyBadge, isFocused = true)
-                        }
-                        Column {
-                            Text(
-                                text = keyName,
-                                color = ActiveTheme.accentDeep,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            val scanHex = "0x" + displayScanCode.toString(16).uppercase().padStart(4, '0')
-                            Text(
-                                text = "Scan $scanHex ($displayScanCode) • KeyCode #$displayKeyCode",
-                                color = ActiveTheme.textPrimary.copy(alpha = 0.6f),
-                                fontSize = 9.sp
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Action 0: Done / Confirm
-                    val isDoneFocused = selectedActionIndex == 0
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isDoneFocused) ActiveTheme.accentDeep else ActiveTheme.container)
-                            .border(
-                                width = if (isDoneFocused) 1.5.dp else 1.dp,
-                                color = if (isDoneFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            .clickable { onDismiss() }
-                            .padding(vertical = 7.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "✓ Done (OK)",
-                            color = if (isDoneFocused) Color.White else ActiveTheme.accentDeep,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(5.dp))
-
-                    // Action 1: Trigger Mode toggle (Hold vs Single Press)
-                    val isModeFocused = selectedActionIndex == 1
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isModeFocused) ActiveTheme.surfaceTint.copy(alpha = 0.45f) else ActiveTheme.container)
-                            .border(
-                                width = if (isModeFocused) 1.5.dp else 1.dp,
-                                color = if (isModeFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            .clickable { onToggleLongPress(!isLongPress) }
-                            .padding(vertical = 6.dp, horizontal = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "◄ Mode: ${if (isLongPress) "Hold (Long-Press)" else "Single Tap"} ►",
-                            color = ActiveTheme.accentDeep,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(5.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        val isListenAgainFocused = selectedActionIndex == 2
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (isListenAgainFocused) ActiveTheme.surfaceTint.copy(alpha = 0.45f) else ActiveTheme.container)
-                                .border(
-                                    width = if (isListenAgainFocused) 1.5.dp else 1.dp,
-                                    color = if (isListenAgainFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                .clickable {
-                                    statusHint = null
-                                    isListening = true
-                                }
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "🔄 Re-Capture",
-                                color = ActiveTheme.accentDeep,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        val isResetFocused = selectedActionIndex == 3
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (isResetFocused) ActiveTheme.surfaceTint.copy(alpha = 0.45f) else ActiveTheme.container)
-                                .border(
-                                    width = if (isResetFocused) 1.5.dp else 1.dp,
-                                    color = if (isResetFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                .clickable {
-                                    onResetDefault()
-                                    onDismiss()
-                                }
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "↺ Default (#)",
-                                color = ActiveTheme.accentDeep,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
     }
 }

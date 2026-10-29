@@ -160,7 +160,7 @@ internal class LauncherKeyHandler(
             if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode, nativeEvent.scanCode, context)) {
                 val wasShortPress = state.poundKeyState == 1
                 actions.setPoundKeyState(0)
-                if (wasShortPress && PreferencesManager.isKaomojiTriggerLongPress(context)) {
+                if (wasShortPress) {
                     when (nativeEvent.keyCode) {
                         KeyEvent.KEYCODE_POUND -> {
                             SoundEffectManager.play(context, SoundEffect.SELECT)
@@ -399,26 +399,16 @@ internal class LauncherKeyHandler(
 
     private fun handleActionDown(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
         if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode, nativeEvent.scanCode, context)) {
-            if (!PreferencesManager.isKaomojiTriggerLongPress(context)) {
-                if (nativeEvent.repeatCount == 0) {
-                    actions.setPoundKeyState(2)
-                    performBoundaryHaptic(context)
-                    SoundEffectManager.play(context, SoundEffect.CLICK)
-                    actions.openKaomojiWheel()
-                }
-                return true
-            } else {
-                if (nativeEvent.repeatCount == 0) {
-                    SoundEffectManager.play(context, SoundEffect.CLICK)
-                    actions.setPoundKeyState(1)
-                } else if (state.poundKeyState == 1 || nativeEvent.isLongPress) {
-                    actions.setPoundKeyState(2)
-                    performBoundaryHaptic(context)
-                    SoundEffectManager.play(context, SoundEffect.CLICK)
-                    actions.openKaomojiWheel()
-                }
-                return true
+            if (nativeEvent.repeatCount == 0) {
+                SoundEffectManager.play(context, SoundEffect.CLICK)
+                actions.setPoundKeyState(1)
+            } else if (state.poundKeyState == 1 || nativeEvent.isLongPress) {
+                actions.setPoundKeyState(2)
+                performBoundaryHaptic(context)
+                SoundEffectManager.play(context, SoundEffect.CLICK)
+                actions.openKaomojiWheel()
             }
+            return true
         }
 
         when (nativeEvent.keyCode) {
@@ -676,9 +666,7 @@ internal class LauncherKeyHandler(
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(1)
             } else if (nativeEvent.repeatCount == 0) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setSelectedDrawerIndex(0)
-                actions.setDrawerOpen(true)
+                performBoundaryHaptic(context)
             }
         }
         return true

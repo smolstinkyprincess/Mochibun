@@ -125,6 +125,7 @@ class RecentsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setBackgroundDrawableResource(android.R.color.transparent)
         tasksManager = RecentTasksManager(applicationContext)
 
         setContent {

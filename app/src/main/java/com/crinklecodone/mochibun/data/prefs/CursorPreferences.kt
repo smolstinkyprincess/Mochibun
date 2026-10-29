@@ -68,11 +68,7 @@ object CursorPreferences {
 
     fun getClickMethod(context: Context): ClickMethod {
         val name = getPrefs(context).getString(KEY_CLICK_METHOD, ClickMethod.ACCESSIBILITY_GESTURE.name)
-        return try {
-            ClickMethod.valueOf(name ?: ClickMethod.ACCESSIBILITY_GESTURE.name)
-        } catch (_: Exception) {
-            ClickMethod.ACCESSIBILITY_GESTURE
-        }
+        return ClickMethod.entries.firstOrNull { it.name == name } ?: ClickMethod.ACCESSIBILITY_GESTURE
     }
 
     fun setClickMethod(context: Context, method: ClickMethod) {
@@ -81,11 +77,7 @@ object CursorPreferences {
 
     fun getHotspotAlignment(context: Context): HotspotAlignment {
         val name = getPrefs(context).getString(KEY_HOTSPOT_ALIGNMENT, HotspotAlignment.TOP_LEFT.name)
-        return try {
-            HotspotAlignment.valueOf(name ?: HotspotAlignment.TOP_LEFT.name)
-        } catch (_: Exception) {
-            HotspotAlignment.TOP_LEFT
-        }
+        return HotspotAlignment.entries.firstOrNull { it.name == name } ?: HotspotAlignment.TOP_LEFT
     }
 
     fun setHotspotAlignment(context: Context, alignment: HotspotAlignment) {

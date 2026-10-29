@@ -451,7 +451,6 @@ fun SettingsStepperRow(
 
             Spacer(modifier = Modifier.width(6.dp))
 
-            // Increment button
             Box(
                 modifier = Modifier
                     .size(26.dp)

@@ -8,4 +8,10 @@
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="android:windowSplashScreenAnimationDuration">200</item>
     </style>
+
+    <style name="Theme.Mochibun.Recents" parent="Theme.M120Launcher">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowShowWallpaper">true</item>
+    </style>
 </resources>

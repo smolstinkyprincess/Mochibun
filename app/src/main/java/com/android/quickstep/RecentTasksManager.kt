@@ -327,39 +327,78 @@ class RecentTasksManager(context: Context) {
         val reflectionThumb = getTaskThumbnailViaReflection(taskId)
         if (reflectionThumb != null) return reflectionThumb
 
-        // 2. Try reading cached snapshot file from system storage if accessible
-        val snapshotFiles = listOf(
-            File("/data/system_ce/0/snapshots/${taskId}_reduced.jpg"),
-            File("/data/system_ce/0/snapshots/${taskId}.jpg"),
-            File("/data/system/users/0/snapshots/${taskId}_reduced.jpg"),
-            File("/data/system/users/0/snapshots/${taskId}.jpg")
+        // 2. Try reading cached snapshot file from system storage. /data/system_ce/0 is
+        // 0770 system:system, so without root the app can't traverse it; with root we
+        // copy the jpg into our cache dir and decode it from there.
+        val snapshotPaths = listOf(
+            "/data/system_ce/0/snapshots/${taskId}_reduced.jpg",
+            "/data/system_ce/0/snapshots/${taskId}.jpg",
+            "/data/system/users/0/snapshots/${taskId}_reduced.jpg",
+            "/data/system/users/0/snapshots/${taskId}.jpg"
         )
-        for (file in snapshotFiles) {
+        for (path in snapshotPaths) {
+            val file = File(path)
             if (file.exists() && file.canRead()) {
-                try {
-                    val rawBmp = BitmapFactory.decodeFile(file.absolutePath)
-                    if (rawBmp != null) {
-                        val finalBmp = if (rawBmp.width > 260) {
-                            val targetWidth = 240
-                            val targetHeight = ((rawBmp.height.toFloat() / rawBmp.width.toFloat()) * targetWidth)
-                                .toInt()
-                                .coerceAtLeast(1)
-                            val scaled = Bitmap.createScaledBitmap(rawBmp, targetWidth, targetHeight, true)
-                            if (scaled !== rawBmp) {
-                                rawBmp.recycle()
-                            }
-                            scaled
-                        } else {
-                            rawBmp
-                        }
-                        finalBmp.prepareToDraw()
-                        return finalBmp.asImageBitmap()
-                    }
-                } catch (_: Exception) {}
+                decodeSnapshotFile(file)?.let { return it }
             }
         }
 
+        if (RootShell.isSuBinaryPresent()) {
+            val dst = File(appContext.cacheDir, "snap_$taskId.jpg")
+            try {
+                for (path in snapshotPaths) {
+                    val res = RootShell.executeBlocking(
+                        "[ -f '$path' ] && cat '$path' > '${dst.absolutePath}' && chmod 644 '${dst.absolutePath}'"
+                    )
+                    if (res.isSuccess && dst.length() > 0) {
+                        val bmp = decodeSnapshotFile(dst)
+                        if (bmp != null) return bmp
+                        Log.w(TAG, "Snapshot decode failed for task $taskId from $path")
+                    }
+                }
+                Log.w(TAG, "No snapshot file found via root for task $taskId")
+            } catch (e: Exception) {
+                Log.w(TAG, "Root snapshot copy failed for task $taskId: ${e.message}")
+            } finally {
+                dst.delete()
+            }
+        } else {
+            Log.w(TAG, "No readable snapshot for task $taskId (no root, reflection unavailable)")
+        }
+
         return null
+    }
+
+    /** Decodes a snapshot jpg subsampled toward ~240px wide to keep RAM low on the MT6761. */
+    private fun decodeSnapshotFile(file: File): ImageBitmap? {
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, bounds)
+            if (bounds.outWidth <= 0) return null
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= 240) sample *= 2
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            val raw = BitmapFactory.decodeFile(file.absolutePath, opts) ?: return null
+            val finalBmp = downscaleCrisp(raw)
+            finalBmp.prepareToDraw()
+            finalBmp.asImageBitmap()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to decode snapshot ${file.path}: ${e.message}")
+            null
+        }
+    }
+
+    /** Nearest-neighbor downscale to 240px width (no filtering, per project invariant). */
+    private fun downscaleCrisp(src: Bitmap): Bitmap {
+        if (src.width <= 260) return src
+        val targetWidth = 240
+        val targetHeight = ((src.height.toFloat() / src.width.toFloat()) * targetWidth).toInt().coerceAtLeast(1)
+        val scaled = Bitmap.createScaledBitmap(src, targetWidth, targetHeight, false)
+        if (scaled !== src) src.recycle()
+        return scaled
     }
 
     @SuppressLint("BlockedPrivateApi")
@@ -390,11 +429,7 @@ class RecentTasksManager(context: Context) {
                     ?: snapshot.javaClass.getMethod("getColorSpace").also { getColorSpaceMethod = it }
                 val colorSpace = getColorSpaceMethod.invoke(snapshot)
                         as? android.graphics.ColorSpace
-                    ?: return null
-
-                if (android.os.Build.VERSION.SDK_INT < 29) {
-                    return null
-                }
+                    ?: android.graphics.ColorSpace.get(android.graphics.ColorSpace.Named.SRGB)
 
                 val wrappedBitmap = Bitmap.wrapHardwareBuffer(
                     hardwareBuffer,
@@ -404,19 +439,7 @@ class RecentTasksManager(context: Context) {
                 try {
                     val rawCopy = wrappedBitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return null
                     // Downscale snapshot directly to 240px width for 480x800 display
-                    val finalBitmap = if (rawCopy.width > 260) {
-                        val targetWidth = 240
-                        val targetHeight = ((rawCopy.height.toFloat() / rawCopy.width.toFloat()) * targetWidth)
-                            .toInt()
-                            .coerceAtLeast(1)
-                        val scaled = Bitmap.createScaledBitmap(rawCopy, targetWidth, targetHeight, true)
-                        if (scaled !== rawCopy) {
-                            rawCopy.recycle()
-                        }
-                        scaled
-                    } else {
-                        rawCopy
-                    }
+                    val finalBitmap = downscaleCrisp(rawCopy)
                     finalBitmap.prepareToDraw()
                     finalBitmap.asImageBitmap()
                 } finally {
@@ -426,6 +449,9 @@ class RecentTasksManager(context: Context) {
                 hardwareBuffer.close()
             }
         } catch (e: Exception) {
+            // Usually SecurityException: getTaskSnapshot needs READ_FRAME_BUFFER (system-only)
+            val cause = (e as? java.lang.reflect.InvocationTargetException)?.targetException ?: e
+            Log.w(TAG, "getTaskSnapshot reflection failed for task $taskId: ${cause.javaClass.simpleName}: ${cause.message}")
             null
         }
     }

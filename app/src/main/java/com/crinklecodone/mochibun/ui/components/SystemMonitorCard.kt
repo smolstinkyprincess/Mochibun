@@ -101,28 +101,26 @@ object SystemStatsSampler {
         var mochibunPssMb = 0L
 
         try {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            if (am != null) {
-                val memInfo = ActivityManager.MemoryInfo()
-                am.getMemoryInfo(memInfo)
-                val totalBytes = memInfo.totalMem
-                val availBytes = memInfo.availMem
-                val usedBytes = (totalBytes - availBytes).coerceAtLeast(0L)
-                totalRamMb = totalBytes / (1024L * 1024L)
-                usedRamMb = usedBytes / (1024L * 1024L)
-                ramPercent = if (totalRamMb > 0) {
-                    (usedRamMb.toFloat() / totalRamMb.toFloat()) * 100f
-                } else 0f
+            val am = context.getSystemService(ActivityManager::class.java)
+            val memInfo = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(memInfo)
+            val totalBytes = memInfo.totalMem
+            val availBytes = memInfo.availMem
+            val usedBytes = (totalBytes - availBytes).coerceAtLeast(0L)
+            totalRamMb = totalBytes / (1024L * 1024L)
+            usedRamMb = usedBytes / (1024L * 1024L)
+            ramPercent = if (totalRamMb > 0) {
+                (usedRamMb.toFloat() / totalRamMb.toFloat()) * 100f
+            } else 0f
 
-                // Mochibun process PSS in MB
-                try {
-                    val pssArr = am.getProcessMemoryInfo(intArrayOf(Process.myPid()))
-                    val pssKb = pssArr.firstOrNull()?.totalPss ?: 0
-                    if (pssKb > 0) {
-                        mochibunPssMb = pssKb / 1024L
-                    }
-                } catch (_: Throwable) {}
-            }
+            // Mochibun process PSS in MB
+            try {
+                val pssArr = am.getProcessMemoryInfo(intArrayOf(Process.myPid()))
+                val pssKb = pssArr.firstOrNull()?.totalPss ?: 0
+                if (pssKb > 0) {
+                    mochibunPssMb = pssKb / 1024L
+                }
+            } catch (_: Throwable) {}
         } catch (_: Throwable) {}
 
         if (mochibunPssMb <= 0L) {
