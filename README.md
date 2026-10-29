@@ -125,6 +125,27 @@ Mochibun is tuned to run smoothly on modest flip phone hardware:
 > **Performance Note**: To keep animations smooth and scrolling responsive, Mochibun avoids expensive real-time blur shaders and heavy image buffers. Decorative cloud trims and accents are drawn using lightweight vector paths.
 
 ---
+### 📊 Hardware Diagnostics & Benchmarks
+
+Profiled live on physical hardware (**ALT Mive Style Folder AT-M120**) under active D-pad navigation and drawer interaction:
+
+#### Memory Footprint (`dumpsys meminfo`)
+| Metric | Footprint | Notes |
+| :--- | :--- | :--- |
+| **Total PSS** | **~77.5 MB** |
+| **Dalvik (Java Heap)** | **~11.7 MB** |
+| **Native Heap** | **~19.1 MB** |
+| **Graphics (GL/EGL)** | **~16.8 MB** |
+| **Attached Views** | **37 views** |
+
+#### Graphics & Frame Rendering (`dumpsys gfxinfo`)
+| Metric | Measurement | Target / Hardware Limit |
+| :--- | :--- | :--- |
+| **Median Frame Time (50th %)** | **15 ms** |
+| **GPU Render Time (99th %)** | **6 ms** |
+| **Slow Bitmap Uploads** | **0** |
+| **GPU Cache Usage** | **~8.6 MB** |
+
 
 ### 📥 Install & Updates
 
