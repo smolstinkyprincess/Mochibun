@@ -106,6 +106,8 @@ class MainActivity : ComponentActivity() {
 
     @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Already handled by MochibunAccessibilityService; don't run it through the launcher again
+        if (MochibunAccessibilityService.wasConsumedByService(event)) return true
         val interceptor = keyEventInterceptor
         if (interceptor != null && interceptor(event)) {
             return true

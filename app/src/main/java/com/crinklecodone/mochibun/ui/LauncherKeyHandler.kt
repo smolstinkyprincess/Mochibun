@@ -36,6 +36,16 @@ internal fun performBoundaryHaptic(context: Context) {
     HapticManager.performBoundaryHaptic(context)
 }
 
+private val T9_LETTERS_2 = charArrayOf('A', 'B', 'C')
+private val T9_LETTERS_3 = charArrayOf('D', 'E', 'F')
+private val T9_LETTERS_4 = charArrayOf('G', 'H', 'I')
+private val T9_LETTERS_5 = charArrayOf('J', 'K', 'L')
+private val T9_LETTERS_6 = charArrayOf('M', 'N', 'O')
+private val T9_LETTERS_7 = charArrayOf('P', 'Q', 'R', 'S')
+private val T9_LETTERS_8 = charArrayOf('T', 'U', 'V')
+private val T9_LETTERS_9 = charArrayOf('W', 'X', 'Y', 'Z')
+private val T9_LETTERS_NONE = CharArray(0)
+
 /**
  * Physical keypad and D-pad event coordinator for the Chinoe AT-M120 flip phone.
  * Decomposes key events into structured, testable sub-handlers for Center, Numeric/T9,
@@ -454,7 +464,7 @@ internal class LauncherKeyHandler(
 
     private fun jumpToLetter(letter: Char, state: LauncherKeypadState) {
         val target = state.letterStarts[letter]
-            ?: state.letterStarts.entries.firstOrNull { it.key > letter }?.value
+            ?: state.letterStarts.entries.filter { it.key > letter }.minByOrNull { it.key }?.value
             ?: (state.visibleApps.size - 1)
         if (target >= 0 && state.visibleApps.isNotEmpty()) {
             actions.setSelectedDrawerIndex(target)
@@ -575,15 +585,15 @@ internal class LauncherKeyHandler(
         }
 
         val t9Letters = when (nativeEvent.keyCode) {
-            KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_NUMPAD_2 -> listOf('A', 'B', 'C')
-            KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_NUMPAD_3 -> listOf('D', 'E', 'F')
-            KeyEvent.KEYCODE_4, KeyEvent.KEYCODE_NUMPAD_4 -> listOf('G', 'H', 'I')
-            KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_NUMPAD_5 -> listOf('J', 'K', 'L')
-            KeyEvent.KEYCODE_6, KeyEvent.KEYCODE_NUMPAD_6 -> listOf('M', 'N', 'O')
-            KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_NUMPAD_7 -> listOf('P', 'Q', 'R', 'S')
-            KeyEvent.KEYCODE_8, KeyEvent.KEYCODE_NUMPAD_8 -> listOf('T', 'U', 'V')
-            KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_NUMPAD_9 -> listOf('W', 'X', 'Y', 'Z')
-            else -> emptyList()
+            KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_NUMPAD_2 -> T9_LETTERS_2
+            KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_NUMPAD_3 -> T9_LETTERS_3
+            KeyEvent.KEYCODE_4, KeyEvent.KEYCODE_NUMPAD_4 -> T9_LETTERS_4
+            KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_NUMPAD_5 -> T9_LETTERS_5
+            KeyEvent.KEYCODE_6, KeyEvent.KEYCODE_NUMPAD_6 -> T9_LETTERS_6
+            KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_NUMPAD_7 -> T9_LETTERS_7
+            KeyEvent.KEYCODE_8, KeyEvent.KEYCODE_NUMPAD_8 -> T9_LETTERS_8
+            KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_NUMPAD_9 -> T9_LETTERS_9
+            else -> T9_LETTERS_NONE
         }
 
         if (t9Letters.isNotEmpty()) {

@@ -187,11 +187,7 @@ fun SettingsNavigationRow(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
-    val borderStroke = if (isFocused) {
-        BorderStroke(1.5.dp, ActiveTheme.selectionGlow)
-    } else {
-        BorderStroke(0.dp, Color.Transparent)
-    }
+    val borderStroke = BorderStroke(0.dp, Color.Transparent)
 
     Row(
         modifier = modifier
@@ -280,11 +276,7 @@ fun SettingsToggleRow(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
-    val borderStroke = if (isFocused) {
-        BorderStroke(1.5.dp, ActiveTheme.selectionGlow)
-    } else {
-        BorderStroke(0.dp, Color.Transparent)
-    }
+    val borderStroke = BorderStroke(0.dp, Color.Transparent)
 
     Row(
         modifier = modifier
@@ -370,11 +362,7 @@ fun SettingsStepperRow(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
-    val borderStroke = if (isFocused) {
-        BorderStroke(1.5.dp, ActiveTheme.selectionGlow)
-    } else {
-        BorderStroke(0.dp, Color.Transparent)
-    }
+    val borderStroke = BorderStroke(0.dp, Color.Transparent)
 
     Row(
         modifier = modifier
@@ -499,11 +487,7 @@ fun SettingsTextInputRow(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
-    val borderStroke = if (isFocused) {
-        BorderStroke(1.5.dp, ActiveTheme.selectionGlow)
-    } else {
-        BorderStroke(0.dp, Color.Transparent)
-    }
+    val borderStroke = BorderStroke(0.dp, Color.Transparent)
 
     Row(
         modifier = modifier
@@ -636,8 +620,8 @@ fun SettingsActionRow(
             .clip(shape)
             .background(bg, shape)
             .border(
-                width = if (isFocused) 1.5.dp else 1.dp,
-                color = if (isFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder.copy(alpha = 0.6f),
+                width = 1.dp,
+                color = if (isFocused) Color.Transparent else ActiveTheme.cardBorder.copy(alpha = 0.6f),
                 shape = shape
             )
             .clickable { onClick() }

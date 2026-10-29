@@ -250,14 +250,13 @@ fun SystemMonitorCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer { clip = false }
             .softGlowFocus(isSelected = isFocused, cornerRadius = 22.dp)
             .kawaiiCardMotifs(isFocused = isFocused, cornerRadius = 22.dp)
             .clip(cardShape)
             .background(palette.container)
             .border(
                 width = 1.5.dp,
-                color = palette.outline,
+                color = if (isFocused) Color.Transparent else palette.outline,
                 shape = cardShape
             )
             .clickable {

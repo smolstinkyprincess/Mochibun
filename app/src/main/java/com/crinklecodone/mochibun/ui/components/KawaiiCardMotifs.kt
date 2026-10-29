@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.components
 
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -507,36 +508,6 @@ fun Modifier.softGlowFocus(
     val context = LocalContext.current
     val scaleAnim = remember { Animatable(1.0f) }
 
-    LaunchedEffect(isSelected) {
-        if (isSelected) {
-            // Tactile tick haptic on focus gain
-            if (PreferencesManager.isDpadBoundaryHaptics(context)) {
-                HapticManager.vibrateTick(context, fallbackDurationMs = 14)
-            }
-            try {
-                // Keitai focus pop: transient spring scale 1.0f -> 1.06f -> 1.0f
-                scaleAnim.animateTo(
-                    targetValue = 1.06f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    )
-                )
-                scaleAnim.animateTo(
-                    targetValue = 1.0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    )
-                )
-            } catch (_: Exception) {
-                scaleAnim.snapTo(1.0f)
-            }
-        } else {
-            scaleAnim.snapTo(1.0f)
-        }
-    }
-
     val theme = LocalLauncherTheme.current
     val effectiveGlow = glowColor ?: theme.selectionGlowColor
     val effectiveBorder = borderColor ?: theme.cardBorderColor
@@ -548,6 +519,31 @@ fun Modifier.softGlowFocus(
 
     LaunchedEffect(isSelected) {
         if (isSelected) {
+            // Tactile tick haptic on focus gain
+            if (PreferencesManager.isDpadBoundaryHaptics(context)) {
+                HapticManager.vibrateTick(context, fallbackDurationMs = 14)
+            }
+            launch {
+                try {
+                    // Keitai focus pop: transient spring scale 1.0f -> 1.06f -> 1.0f
+                    scaleAnim.animateTo(
+                        targetValue = 1.06f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    )
+                    scaleAnim.animateTo(
+                        targetValue = 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    )
+                } catch (_: Exception) {
+                    if (scaleAnim.value != 1.0f) scaleAnim.snapTo(1.0f)
+                }
+            }
             val topMargin = with(localDensity) { 58.dp.toPx() }
             val bottomMargin = with(localDensity) { 72.dp.toPx() }
             try {
@@ -561,6 +557,8 @@ fun Modifier.softGlowFocus(
                 )
             } catch (_: Throwable) {
             }
+        } else if (scaleAnim.value != 1.0f) {
+            scaleAnim.snapTo(1.0f)
         }
     }
 

@@ -13,6 +13,7 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import com.android.quickstep.RecentsActivity
+import com.crinklecodone.mochibun.BuildConfig
 import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.core.system.RootShell
@@ -64,14 +65,21 @@ class MochibunAccessibilityService : AccessibilityService() {
         private var instance: MochibunAccessibilityService? = null
 
         fun reloadActiveConfig(@Suppress("UNUSEDPARAMETER") context: Context? = null) {
-            val service = instance ?: return
-            // activeMappings is read on the main thread in onKeyEvent; never mutate it from a worker
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                service.loadConfiguration()
-            } else {
-                service.mainHandler.post { service.loadConfiguration() }
-            }
+            instance?.scheduleReload()
         }
+
+        // Identity of the last key event this service consumed, so MainActivity can skip it
+        // if the same event is also dispatched to the window. Primitives only: no allocation.
+        @Volatile private var consumedKeyCode = KeyEvent.KEYCODE_UNKNOWN
+        @Volatile private var consumedAction = -1
+        @Volatile private var consumedEventTime = -1L
+        @Volatile private var consumedDownTime = -1L
+
+        fun wasConsumedByService(event: KeyEvent): Boolean =
+            event.eventTime == consumedEventTime &&
+                event.downTime == consumedDownTime &&
+                event.keyCode == consumedKeyCode &&
+                event.action == consumedAction
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -88,8 +96,17 @@ class MochibunAccessibilityService : AccessibilityService() {
     private var pendingLongPressRunnable: Runnable? = null
     private var longPressFired = false
 
+    // activeMappings is read on the main thread in onKeyEvent; never mutate it from a worker.
+    // Bursts of pref writes (each fires the listener, plus explicit reloads) collapse into one load.
+    private val reloadRunnable = Runnable { loadConfiguration() }
+
+    private fun scheduleReload() {
+        mainHandler.removeCallbacks(reloadRunnable)
+        mainHandler.post(reloadRunnable)
+    }
+
     private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        loadConfiguration()
+        scheduleReload()
     }
 
     private var audioManager: AudioManager? = null
@@ -136,6 +153,7 @@ class MochibunAccessibilityService : AccessibilityService() {
             prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
         }
         clearPendingHandlers()
+        mainHandler.removeCallbacks(reloadRunnable)
         serviceScope.cancel()
         isServiceRunning = false
         instance = null
@@ -183,7 +201,20 @@ class MochibunAccessibilityService : AccessibilityService() {
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        Log.d("MochibunA11y", "onKeyEvent: code=${event.keyCode}, scan=${event.scanCode}, action=${event.action}")
+        if (BuildConfig.DEBUG) {
+            Log.d("MochibunA11y", "onKeyEvent: code=${event.keyCode}, scan=${event.scanCode}, action=${event.action}")
+        }
+        val consumed = handleKeyEvent(event)
+        if (consumed) {
+            consumedKeyCode = event.keyCode
+            consumedAction = event.action
+            consumedEventTime = event.eventTime
+            consumedDownTime = event.downTime
+        }
+        return consumed
+    }
+
+    private fun handleKeyEvent(event: KeyEvent): Boolean {
 
         // 1. Direct hardware key capture callback (e.g. inside Keypad Remapper dialog or Kaomoji Trigger key picker).
         // If the listener handles and consumes the key, we return true so PhoneWindowManager
@@ -257,7 +288,7 @@ class MochibunAccessibilityService : AccessibilityService() {
                 normalizedCode == KeyEvent.KEYCODE_F2 ||
                 normalizedCode == KeyEvent.KEYCODE_F3 ||
                 normalizedCode == KeyEvent.KEYCODE_CAMERA ||
-                event.scanCode in listOf(59, 60, 61, 212)
+                when (event.scanCode) { 59, 60, 61, 212 -> true else -> false }
 
         // When Mochibun launcher is in the foreground, APP_SWITCH is the Left Soft-Key (LSK).
         // It must never summon the system Recents task switcher while using the launcher.
@@ -272,7 +303,7 @@ class MochibunAccessibilityService : AccessibilityService() {
             if (isHardwareFunctionKey) {
                 // If Mochibun launcher is in the foreground and softkeys are unmapped, allow them
                 // to pass through so LauncherKeyHandler can handle in-launcher softkey navigation!
-                if (isLauncherForeground && (normalizedCode == KeyEvent.KEYCODE_F1 || normalizedCode == KeyEvent.KEYCODE_CAMERA || event.scanCode in listOf(59, 212))) {
+                if (isLauncherForeground && (normalizedCode == KeyEvent.KEYCODE_F1 || normalizedCode == KeyEvent.KEYCODE_CAMERA || event.scanCode == 59 || event.scanCode == 212)) {
                     return false
                 }
                 // Consume the key event so stock ROM cannot launch deleted/disabled apps
@@ -281,7 +312,9 @@ class MochibunAccessibilityService : AccessibilityService() {
             return false
         }
 
-        Log.d("MochibunA11y", "Intercepted keycode ${event.keyCode} (norm=$normalizedCode), action: ${event.action}")
+        if (BuildConfig.DEBUG) {
+            Log.d("MochibunA11y", "Intercepted keycode ${event.keyCode} (norm=$normalizedCode), action: ${event.action}")
+        }
 
         when (event.action) {
             KeyEvent.ACTION_DOWN -> {

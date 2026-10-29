@@ -128,7 +128,6 @@ fun AppDrawerCard(
         modifier = modifier
             .fillMaxWidth()
             .height(60.dp)
-            .graphicsLayer { clip = false }
             .focusPop(isSelected = isSelected, cornerRadius = 22.dp)
             .clip(DrawerCardShape)
             .background(cardBrush, DrawerCardShape)
@@ -364,12 +363,10 @@ fun AppDrawerScreen(
             }
     ) {
         // Scrollable App Cards List
-        // graphicsLayer { clip = false } is critical here so card selection halos aren't cut off by the list viewport
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { clip = false }
                 .padding(start = 14.dp, end = 32.dp),
             contentPadding = PaddingValues(top = 74.dp, bottom = 86.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
