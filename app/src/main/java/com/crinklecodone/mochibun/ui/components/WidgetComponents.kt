@@ -45,6 +45,7 @@ import com.crinklecodone.mochibun.core.haptic.HapticManager
 import com.crinklecodone.mochibun.core.widget.MochibunWidgetHost
 import com.crinklecodone.mochibun.core.widget.NavDirection
 import com.crinklecodone.mochibun.core.widget.WidgetFrame
+import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.WidgetRepository
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
@@ -141,8 +142,11 @@ fun WidgetPage(
         }
     }
 
-    // D-Pad Focus State Management
-    fun defaultFocusSection(): WidgetFocusSection = WidgetFocusSection.QUICK_SETTINGS
+    // Quick Settings card only renders with root present and the root toggle enabled
+    val isRootQuickSettingsEnabled by PreferencesManager.isRootQuickSettingsEnabled.collectAsState()
+    val rootAvailable = remember { RootShell.isRootAvailable() }
+    val isQuickSettingsVisible = isRootQuickSettingsEnabled && rootAvailable
+    val qsOffset = if (isQuickSettingsVisible) 1 else 0
 
     // First section below the Quick Settings grid
     fun sectionBelowQuickSettings(): WidgetFocusSection =
@@ -150,6 +154,10 @@ fun WidgetPage(
         else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
         else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
         else WidgetFocusSection.ADD_WIDGET
+
+    // D-Pad Focus State Management
+    fun defaultFocusSection(): WidgetFocusSection =
+        if (isQuickSettingsVisible) WidgetFocusSection.QUICK_SETTINGS else sectionBelowQuickSettings()
 
     var focusSection by remember { mutableStateOf(defaultFocusSection()) }
     var nowPlayingCol by remember { mutableIntStateOf(1) } // 0 = Prev, 1 = Play/Pause, 2 = Next
@@ -403,7 +411,7 @@ fun WidgetPage(
     // Ensure focused item is visible in LazyColumn
     LaunchedEffect(focusSection, focusedWidgetIdx) {
         if (focusSection == WidgetFocusSection.USER_WIDGETS && widgetSlots.isNotEmpty()) {
-            val baseOffset = 2 + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
+            val baseOffset = 1 + qsOffset + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
             val targetIdx = baseOffset + focusedWidgetIdx
             val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
             if (!isVisible) {
@@ -412,9 +420,9 @@ fun WidgetPage(
         } else if (focusSection == WidgetFocusSection.QUICK_SETTINGS) {
             listState.animateScrollToItem(0)
         } else if (focusSection == WidgetFocusSection.NOW_PLAYING) {
-            listState.animateScrollToItem(1)
+            listState.animateScrollToItem(qsOffset)
         } else if (focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
-            val targetIdx = if (mediaState.isPlaying) 2 else 1
+            val targetIdx = qsOffset + if (mediaState.isPlaying) 1 else 0
             listState.animateScrollToItem(targetIdx)
         }
     }
@@ -555,14 +563,16 @@ fun WidgetPage(
                                 if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
                             }
                             WidgetFocusSection.NOW_PLAYING -> {
-                                focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                quickSettingsIndex = if (nowPlayingCol > 1) 3 else 2
+                                if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = if (nowPlayingCol > 1) 3 else 2
+                                }
                             }
                             WidgetFocusSection.SYSTEM_MONITOR -> {
                                 if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
-                                } else {
+                                } else if (isQuickSettingsVisible) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
                                     quickSettingsIndex = 2
                                 }
@@ -575,7 +585,7 @@ fun WidgetPage(
                                 } else if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
-                                } else {
+                                } else if (isQuickSettingsVisible) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
                                     quickSettingsIndex = 2
                                 }
@@ -589,7 +599,7 @@ fun WidgetPage(
                                 } else if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
-                                } else {
+                                } else if (isQuickSettingsVisible) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
                                     quickSettingsIndex = 2
                                 }
@@ -781,19 +791,21 @@ fun WidgetPage(
                 }
             }
 
-            item(key = "quick_settings_card") {
-                QuickSettingsCard(
-                    isActivePage = isActivePage,
-                    focusedIndex = if (focusSection == WidgetFocusSection.QUICK_SETTINGS) quickSettingsIndex else -1,
-                    onPillClick = { index ->
-                        focusSection = WidgetFocusSection.QUICK_SETTINGS
-                        quickSettingsIndex = index
-                        performQuickSettingsAction(context, index)
-                        quickSettingsRefresh++
-                    },
-                    refreshKey = quickSettingsRefresh,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            if (isQuickSettingsVisible) {
+                item(key = "quick_settings_card") {
+                    QuickSettingsCard(
+                        isActivePage = isActivePage,
+                        focusedIndex = if (focusSection == WidgetFocusSection.QUICK_SETTINGS) quickSettingsIndex else -1,
+                        onPillClick = { index ->
+                            focusSection = WidgetFocusSection.QUICK_SETTINGS
+                            quickSettingsIndex = index
+                            performQuickSettingsAction(context, index)
+                            quickSettingsRefresh++
+                        },
+                        refreshKey = quickSettingsRefresh,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             // Dedicated, Dynamic "Now Playing" Native Card (Active Playback Only)
