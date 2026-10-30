@@ -26,6 +26,7 @@ class InputArbiterTest {
     private fun reset() {
         InputArbiter.isKaomojiOverlayShowing = false
         InputArbiter.cursorToggleKeyCode = KeyEvent.KEYCODE_UNKNOWN
+        InputArbiter.isInputActive = false
         for (code in 0 until 512) InputArbiter.setOwner(code, InputLayer.NONE)
     }
 
@@ -93,6 +94,38 @@ class InputArbiterTest {
         assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_F4, 62, cursorVisible = true))
         // Raw side key with no keycode mapping
         assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_UNKNOWN, 62, cursorVisible = false))
+    }
+
+    @Test
+    fun `focused text field keeps digit scroll keys away from the cursor`() {
+        InputArbiter.cursorToggleKeyCode = KeyEvent.KEYCODE_F4
+        InputArbiter.isInputActive = true
+        assertFalse(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_2, 0, cursorVisible = true))
+        assertFalse(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_4, 0, cursorVisible = true))
+        assertFalse(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_6, 0, cursorVisible = true))
+        assertFalse(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_8, 0, cursorVisible = true))
+        // Navigation and the toggle still belong to the cursor
+        assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_DPAD_UP, 0, cursorVisible = true))
+        assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_F4, 0, cursorVisible = true))
+    }
+
+    @Test
+    fun `reset clears the text field flag`() {
+        InputArbiter.isInputActive = true
+        reset()
+        assertFalse(InputArbiter.isInputActive)
+        InputArbiter.cursorToggleKeyCode = KeyEvent.KEYCODE_F4
+        assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_2, 0, cursorVisible = true))
+    }
+
+    @Test
+    fun `typing keys are digits, star and pound only`() {
+        assertTrue(InputArbiter.isTypingKey(KeyEvent.KEYCODE_0))
+        assertTrue(InputArbiter.isTypingKey(KeyEvent.KEYCODE_9))
+        assertTrue(InputArbiter.isTypingKey(KeyEvent.KEYCODE_STAR))
+        assertTrue(InputArbiter.isTypingKey(KeyEvent.KEYCODE_POUND))
+        assertFalse(InputArbiter.isTypingKey(KeyEvent.KEYCODE_DPAD_CENTER))
+        assertFalse(InputArbiter.isTypingKey(KeyEvent.KEYCODE_BACK))
     }
 
     @Test

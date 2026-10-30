@@ -59,6 +59,7 @@ import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.BundlePreviewData
 import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
 import com.crinklecodone.mochibun.data.repository.ThemeBundleManager
+import com.crinklecodone.mochibun.service.InputArbiter
 import com.crinklecodone.mochibun.ui.components.WidgetPage
 import com.crinklecodone.mochibun.ui.dialogs.AppActionDialog
 import com.crinklecodone.mochibun.ui.dialogs.CreateFavoriteFolderDialog
@@ -565,7 +566,10 @@ fun MainLauncher(
             poundKeyState = poundKeyState,
             isDrawerRailFocused = drawerRailFocused,
             drawerRailHoveredLetter = drawerRailHoveredLetter,
-            currentPage = pagerState.currentPage
+            currentPage = pagerState.currentPage,
+            // Text fields only exist inside modals. Requiring one keeps a stale flag (a dialog
+            // closed without a focus event) from silencing digits on Home and in the drawer.
+            isInputActive = InputArbiter.isInputActive && activeModal != null
         )
     }
 

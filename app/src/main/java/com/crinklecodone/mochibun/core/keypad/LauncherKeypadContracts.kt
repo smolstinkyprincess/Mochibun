@@ -45,7 +45,8 @@ data class LauncherKeypadState(
     val poundKeyState: Int = 0,
     val isDrawerRailFocused: Boolean = false,
     val drawerRailHoveredLetter: Char? = null,
-    val currentPage: Int = 1
+    val currentPage: Int = 1,
+    val isInputActive: Boolean = false
 ) {
     val isSidePageActive: Boolean
         get() = (currentPage == 0 || currentPage == 2) && !drawerOpen && !anyModalOpen

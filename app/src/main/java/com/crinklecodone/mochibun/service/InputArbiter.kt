@@ -43,6 +43,14 @@ object InputArbiter {
     @Volatile
     var cursorToggleKeyCode = KeyEvent.KEYCODE_UNKNOWN
 
+    /**
+     * True while an editable field has input focus (any app, including ours). Set by
+     * MochibunAccessibilityService from focus and window events. Keypad digits, '*' and '#'
+     * then belong to the field and its IME (TT9), not to the cursor or the launcher.
+     */
+    @Volatile
+    var isInputActive = false
+
     fun isNewPress(event: KeyEvent): Boolean =
         event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
 
@@ -65,7 +73,17 @@ object InputArbiter {
         val toggle = cursorToggleKeyCode
         if (toggle == KeyEvent.KEYCODE_UNKNOWN) return false
         if (keyCode == toggle || (scanCode == 62 && toggle == KeyEvent.KEYCODE_F4)) return true
-        return !isKaomojiOverlayShowing && cursorVisible && isCursorKey(keyCode)
+        return !isKaomojiOverlayShowing && cursorVisible && isCursorKey(keyCode) &&
+            !(isInputActive && isTypingKey(keyCode))
+    }
+
+    /** Keypad keys that type into a focused text field: digits, '*' and '#'. */
+    fun isTypingKey(keyCode: Int): Boolean = when (keyCode) {
+        in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9,
+        in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9,
+        KeyEvent.KEYCODE_STAR,
+        KeyEvent.KEYCODE_POUND -> true
+        else -> false
     }
 
     /** Keys the visible cursor drives: D-pad movement, center tap, 2 / 8 and 4 / 6 scrolling. */

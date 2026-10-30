@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import com.android.quickstep.RecentsActivity
 import com.crinklecodone.mochibun.BuildConfig
 import com.crinklecodone.mochibun.core.system.ClamshellListener
@@ -36,6 +37,7 @@ class MochibunAccessibilityService : AccessibilityService() {
         private const val TAG = "MochibunAccessibility"
         const val PREFS_NAME = "hardware_remap_preferences"
         private const val POUND_HOLD_MS = 400L
+        private const val TT9_PACKAGE = "org.sspanak.tt9"
 
         @Volatile
         var isServiceRunning = false
@@ -168,14 +170,39 @@ class MochibunAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
+    @Suppress("DEPRECATION") // recycle() is still required on API 31
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val pkg = event.packageName?.toString()
-            if (!pkg.isNullOrEmpty()) {
-                currentForegroundPackage = pkg
-                isLauncherForeground = (pkg == "com.crinklecodone.mochibun")
+        when (event?.eventType) {
+            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
+                val source = try { event.source } catch (_: Exception) { null }
+                InputArbiter.isInputActive = source?.isEditable == true || event.isPassword
+                source?.recycle()
+            }
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                val pkg = event.packageName?.toString()
+                // An IME window (TT9's status bar) only appears for a focused field. It is not the
+                // foreground app: tracking it would mark the launcher as backgrounded mid-typing.
+                if (pkg == TT9_PACKAGE || event.className?.contains("InputMethod") == true) {
+                    InputArbiter.isInputActive = true
+                    return
+                }
+                if (!pkg.isNullOrEmpty()) {
+                    currentForegroundPackage = pkg
+                    isLauncherForeground = (pkg == "com.crinklecodone.mochibun")
+                }
+                // New window: its initial focus may have been reported before this event
+                InputArbiter.isInputActive = hasEditableInputFocus()
             }
         }
+    }
+
+    /** One lookup per window change, never on the key path. */
+    @Suppress("DEPRECATION")
+    private fun hasEditableInputFocus(): Boolean {
+        val node = try { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) } catch (_: Exception) { null } ?: return false
+        val editable = node.isEditable || node.isPassword
+        node.recycle()
+        return editable
     }
 
     override fun onInterrupt() {
@@ -264,6 +291,16 @@ class MochibunAccessibilityService : AccessibilityService() {
 
     /** Offers [event] to each stage in priority order and returns the one that consumed it. */
     private fun dispatchToStages(event: KeyEvent, isNewPress: Boolean): InputLayer {
+        // A focused text field owns digits and '*' outright: no launcher T9 search, no speed dial,
+        // no digit remaps, so TT9 gets every press exactly once. '#' still goes through the hold
+        // logic below (tap replays '#' for TT9's mode switch, hold opens the wheel).
+        val typingIntoField = InputArbiter.isInputActive && InputArbiter.isTypingKey(event.keyCode)
+        if (typingIntoField && event.keyCode != KeyEvent.KEYCODE_POUND && keyCaptureListener == null &&
+            kaomojiOverlay?.isShowing != true
+        ) {
+            return InputLayer.NONE
+        }
+
         // 1. Direct hardware key capture callback (e.g. inside Keypad Remapper dialog or Kaomoji Trigger key picker).
         // If the listener handles and consumes the key, we return true so PhoneWindowManager
         // never sees it (completely preventing stock actions or unhandled crash loops).
@@ -297,8 +334,8 @@ class MochibunAccessibilityService : AccessibilityService() {
             return InputLayer.NONE
         }
 
-        // Global '#' hold summons the Kaomoji Wheel outside the launcher
-        if (event.keyCode == KeyEvent.KEYCODE_POUND && !isLauncherForeground &&
+        // Global '#' hold summons the Kaomoji Wheel outside the launcher, or over a text field in it
+        if (event.keyCode == KeyEvent.KEYCODE_POUND && (!isLauncherForeground || typingIntoField) &&
             !activeMappings.containsKey(KeyEvent.KEYCODE_POUND)
         ) {
             return if (handlePoundHold(event)) InputLayer.KAOMOJI_OVERLAY else InputLayer.NONE

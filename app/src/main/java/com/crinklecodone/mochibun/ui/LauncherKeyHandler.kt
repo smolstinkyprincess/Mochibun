@@ -8,6 +8,7 @@ import android.media.AudioManager
 import android.widget.Toast
 import android.os.SystemClock
 import android.view.KeyEvent
+import com.crinklecodone.mochibun.service.InputArbiter
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
@@ -118,7 +119,8 @@ internal class LauncherKeyHandler(
             }
         }
 
-        if (state.isModalActive) {
+        // A focused text field gets typing keys for TT9; D-pad navigation is handled as usual
+        if (state.isModalActive || (state.isInputActive && InputArbiter.isTypingKey(nativeEvent.keyCode))) {
             return false
         }
 

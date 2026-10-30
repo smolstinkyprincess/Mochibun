@@ -295,10 +295,6 @@ fun DrawerAlphabetRail(
     }
 }
 
-/**
- * Mochibun Kawaii App Drawer Screen.
- * Renders the scrollable app collection with edge-to-edge cloud overlays and physical D-pad focus contracts.
- */
 @Composable
 fun AppDrawerScreen(
     visibleApps: List<LauncherApp>,
