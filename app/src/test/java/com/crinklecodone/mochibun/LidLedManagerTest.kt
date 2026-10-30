@@ -86,6 +86,8 @@ class LidLedManagerTest {
             assertTrue("Should zero PWM register 0x%02x".format(reg),
                 script.contains("echo \"0x%02x 0x00\" > /sys/class/leds/aw22xxx_led/reg".format(reg)))
         }
+        assertTrue(script.contains("echo 0 > /sys/class/leds/aw22xxx_led/effect"))
+        assertTrue(script.contains("echo 0 > /sys/class/leds/aw22xxx_led/brightness"))
     }
 
     @Test
@@ -109,6 +111,20 @@ class LidLedManagerTest {
             lidClosed = false, enabled = true, hasIncomingCall = true, hasNotifications = true, chargingLight = true))
         assertEquals(LidLedMode.OFF, LidLedManager.resolveMode(
             lidClosed = true, enabled = false, hasIncomingCall = true, hasNotifications = true, chargingLight = true))
+        assertEquals(LidLedMode.OFF, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = true, chargingLight = true, batteryPct = 4))
+    }
+
+    @Test
+    fun testCriticalBatteryTurnsOffLeds() {
+        assertEquals(LidLedMode.OFF, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = true, chargingLight = false, batteryPct = 4))
+        assertEquals(LidLedMode.OFF, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = false, chargingLight = true, batteryPct = 4))
+        assertEquals(LidLedMode.NOTIFICATION, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = true, chargingLight = true, batteryPct = 5))
+        assertEquals(LidLedMode.CHARGING, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = false, chargingLight = true, batteryPct = 5))
     }
 
     @Test

@@ -62,6 +62,7 @@ object LidLedManager : ClamshellListener {
     const val LED_PATH_RGB = "/sys/class/leds/aw22xxx_led/rgb"
     const val LED_PATH_TASK0 = "/sys/class/leds/aw22xxx_led/task0"
     const val LED_PATH_EFFECT = "/sys/class/leds/aw22xxx_led/effect"
+    const val CRITICAL_BATTERY_PCT = 5
     const val LED_PATH_BRIGHTNESS = "/sys/class/leds/aw22xxx_led/brightness"
 
     // Channel mapping for the 5 physical exterior lid windows
@@ -125,6 +126,11 @@ object LidLedManager : ClamshellListener {
     var chargingLedActive: Boolean = false
         private set
 
+    /** Below [CRITICAL_BATTERY_PCT] the ladder forces the lid dark to save the last few percent. */
+    @Volatile
+    var batteryPct: Int = 100
+        private set
+
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
@@ -140,7 +146,11 @@ object LidLedManager : ClamshellListener {
                     val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
                     val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                             status == BatteryManager.BATTERY_STATUS_FULL
-                    if (isChargingState != charging) {
+                    val pct = batteryPercent(intent)
+                    val critical = pct?.let { it < CRITICAL_BATTERY_PCT }
+                    val wasCritical = batteryPct < CRITICAL_BATTERY_PCT
+                    if (pct != null) batteryPct = pct
+                    if (isChargingState != charging || (critical != null && critical != wasCritical)) {
                         isChargingState = charging
                         updateLedState()
                     }
@@ -262,6 +272,8 @@ object LidLedManager : ClamshellListener {
             append("echo \"0xff 0x00\" > $LED_PATH_REG\n")
             append("echo \"0x05 0x00\" > $LED_PATH_REG\n")
             append("echo \"0x04 0x00\" > $LED_PATH_REG\n")
+            append("echo 0 > $LED_PATH_EFFECT\n")
+            append("echo 0 > $LED_PATH_BRIGHTNESS\n")
         }
     }
 
@@ -312,9 +324,10 @@ object LidLedManager : ClamshellListener {
         enabled: Boolean,
         hasIncomingCall: Boolean,
         hasNotifications: Boolean,
-        chargingLight: Boolean
+        chargingLight: Boolean,
+        batteryPct: Int = 100
     ): LidLedMode = when {
-        !lidClosed || !enabled -> LidLedMode.OFF
+        !lidClosed || !enabled || batteryPct < CRITICAL_BATTERY_PCT -> LidLedMode.OFF
         hasIncomingCall -> LidLedMode.CALL
         hasNotifications -> LidLedMode.NOTIFICATION
         chargingLight -> LidLedMode.CHARGING
@@ -375,6 +388,7 @@ object LidLedManager : ClamshellListener {
             val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
             isChargingState = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                     status == BatteryManager.BATTERY_STATUS_FULL
+            batteryStatus?.let(::batteryPercent)?.let { batteryPct = it }
         } catch (e: Exception) {
             Log.w(TAG, "Failed reading initial battery status", e)
         }
@@ -421,7 +435,7 @@ object LidLedManager : ClamshellListener {
         // The windows lose power when the flip opens; still clear the chip so it doesn't resume
         // a stale frame on the next close
         Log.d(TAG, "Clamshell opened: turning off exterior LEDs")
-        updateLedState()
+        stopLeds()
     }
 
     /**
@@ -438,7 +452,8 @@ object LidLedManager : ClamshellListener {
             enabled = PreferencesManager.isLidLedEnabled(context),
             hasIncomingCall = items.any(MochibunNotificationItem::isIncomingCall),
             hasNotifications = items.isNotEmpty(),
-            chargingLight = isChargingState && PreferencesManager.isLidLedChargingEnabled(context)
+            chargingLight = isChargingState && PreferencesManager.isLidLedChargingEnabled(context),
+            batteryPct = batteryPct
         )
         val hex = getHexColor(PreferencesManager.getLidLedColor(context))
         val newestPostTime = items.maxOfOrNull { it.postTime } ?: 0L
@@ -534,6 +549,17 @@ object LidLedManager : ClamshellListener {
             shimmerWakeLock?.takeIf { it.isHeld }?.release()
         } catch (_: Exception) {
         }
+    }
+
+    private fun batteryPercent(intent: Intent): Int? {
+        val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        return if (level >= 0 && scale > 0) level * 100 / scale else null
+    }
+
+    @VisibleForTesting
+    internal fun setMockBatteryPct(pct: Int) {
+        batteryPct = pct
     }
 
     @VisibleForTesting

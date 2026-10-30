@@ -1,17 +1,17 @@
 ### 🔓 Advanced Setup: Rooting (Magisk), Performance Tuning & microG
 
-While Mochibun runs out of the box as a standard launcher, rooting your AT-M120 unlocks its full capability: instantaneous in-place Quick Settings toggles, zero-latency virtual cursor clicking, custom lid LED patterns, and automated RAM management[cite: 2, 11, 20].
+Mochibun works fine as a regular launcher right out of the box. Root your AT-M120, though, and you get the good stuff: Quick Settings toggles that flip in place, virtual cursor clicks with no lag, custom lid LED patterns, and RAM management that runs itself.
 
 ---
 
 #### 1. Obtaining Stock `boot.img` Directly from Device (MTKClient)
 
-Because the stock `boot.img` contains proprietary OEM binary firmware, it cannot be hosted or bundled in this repository. You can dump your phone's exact boot image directly over USB using `mtkclient` in MediaTek BootROM (BROM) mode[cite: 2, 7]:
+The stock `boot.img` contains proprietary OEM firmware, so we can't host it or ship it in this repo. That's fine, because you can pull your own phone's boot image straight over USB with `mtkclient` in MediaTek BootROM (BROM) mode:
 
 ##### Step A: Install MTKClient on PC
 ```bash
 # Clone and install dependencies (Linux / macOS / WSL)
-git clone [https://github.com/bkerler/mtkclient.git](https://github.com/bkerler/mtkclient.git)
+git clone https://github.com/bkerler/mtkclient.git
 cd mtkclient
 pip3 install -r requirements.txt
 
@@ -23,110 +23,110 @@ sudo udevadm trigger
 ```
 
 ##### Step B: Dump the Boot Partition
-1. Power off your AT-M120 completely and unplug it from USB[cite: 4, 14].
-2. Start the read command on your PC:
+1. Fully power off your AT-M120 and unplug it.
+2. On your PC, start the read command:
    ```bash
    python3 mtk r boot boot.img
    ```
-3. Hold **Volume Down** (or both volume keys) on the physical keypad and plug the phone into the computer via USB.
-4. `mtkclient` will handshake with the MediaTek MT6761 BROM, dump the active `boot.img` to your current directory, and exit cleanly. Unplug and power on the device[cite: 1, 7].
+3. Hold **Volume Down** (or both volume keys) and plug the phone into your computer.
+4. `mtkclient` talks to the MT6761's BROM, saves the active `boot.img` to your current folder, and exits. Unplug and power the phone back on.
 
 ---
 
 #### 2. Unlocking the Bootloader & Installing Magisk
 
-> ⚠️ **Warning**: Unlocking the bootloader will wipe all user data (`/data`). Back up your files before proceeding[cite: 2].
+> ⚠️ **Warning**: Unlocking the bootloader wipes all your user data (`/data`). Back up anything you care about first.
 
 1. **Enable Developer Options & OEM Unlocking**:
-   - Navigate to **Settings > System > About phone**.
-   - Tap **Build number** 7 times to enable Developer options.
-   - Go to **Settings > System > Developer options** and enable:
+   - Go to **Settings > System > About phone**.
+   - Tap **Build number** 7 times to turn on Developer options.
+   - Head to **Settings > System > Developer options** and turn on:
      - **OEM unlocking**
      - **USB debugging**
 
 2. **Unlock the Bootloader**:
-   - Connect the AT-M120 to your PC via USB.
+   - Plug the AT-M120 into your PC.
    - Reboot into fastboot:
      ```bash
      adb reboot bootloader
      ```
-   - Unlock the device:
+   - Unlock it:
      ```bash
      fastboot flashing unlock
      ```
-   - Follow the on-screen prompt on the phone (using the physical volume keys) to confirm the wipe and unlock. Reboot to Android:
+   - The phone will ask you to confirm. Use the volume keys to accept the wipe and unlock, then boot back into Android:
      ```bash
      fastboot reboot
      ```
 
 3. **Patch `boot.img` with Magisk**:
-   - Push your dumped `boot.img` to the phone:
+   - Copy your dumped `boot.img` to the phone:
      ```bash
      adb push boot.img /sdcard/Download/
      ```
-   - Install the latest [Magisk APK](https://github.com/topjohnwu/Magisk/releases) on the device:
+   - Install the latest [Magisk APK](https://github.com/topjohnwu/Magisk/releases):
      ```bash
      adb install Magisk-vXX.X.apk
      ```
-   - Open Magisk, tap **Install > Select and Patch a File**, and choose `/sdcard/Download/boot.img`.
+   - Open Magisk, tap **Install > Select and Patch a File**, and pick `/sdcard/Download/boot.img`.
    - Pull the patched image back to your PC:
      ```bash
      adb pull /sdcard/Download/magisk_patched_*.img ./magisk_boot.img
      ```
 
 4. **Flash Patched Boot Image**:
-   - Reboot into fastboot:
+   - Reboot into fastboot again:
      ```bash
      adb reboot bootloader
      ```
-   - Flash to the active boot partition:
+   - Flash it to the active boot partition:
      ```bash
      fastboot flash boot magisk_boot.img
      fastboot reboot
      ```
-   - Open the Magisk app to complete the initial setup environment.
+   - Open the Magisk app and let it finish its first-time setup.
 
 ---
 
 #### 3. Installing microG (Replacing Heavy Google Play Services)
 
-The MediaTek MT6761 has ~1.8 GB RAM[cite: 1, 2]. Replacing standard Google Play Services (GMS) with microG drastically cuts memory usage and prevents background Low Memory Killer (LMK) app closures[cite: 1, 2].
+The MT6761 only has about 1.8 GB of RAM. Swapping Google Play Services (GMS) for microG frees up a lot of memory and keeps the Low Memory Killer (LMK) from closing your apps in the background.
 
-Because Android 12 on the AT-M120 uses a read-only shared system partition (EROFS/ext4)[cite: 1, 10], do not attempt to write directly to `/system`.
+Android 12 on the AT-M120 uses a read-only shared system partition (EROFS/ext4), so don't try to write to `/system` directly.
 
 1. **Enable Zygisk**:
-   - Open Magisk > Settings ⚙️ > toggle **Zygisk** ON.
-   - Reboot the phone.
+   - Open Magisk > Settings ⚙️ and turn **Zygisk** on.
+   - Reboot.
 
 2. **Enable Signature Spoofing**:
-   - Flash **FakeGApps** or **LSPosed (Zygisk release)** via Magisk Modules.
-   - If using LSPosed, install and enable the **FakeGApps** module to grant signature spoofing permissions.
+   - Flash **FakeGApps** or **LSPosed (Zygisk release)** from Magisk Modules.
+   - Going the LSPosed route? Install and enable the **FakeGApps** module there to get signature spoofing.
 
 3. **Install microG Components**:
-   - Download the latest microG builds from [microg.org](https://microg.org/download.html):
+   - Grab the latest microG builds from [microg.org](https://microg.org/download.html):
      - `Services Core` (GmsCore)
      - `Services Framework Proxy` (GsfProxy)
-   - Install both via ADB:
+   - Install both over ADB:
      ```bash
      adb install com.google.android.gms-*.apk
      adb install com.google.android.gsf-*.apk
      ```
-   - Open **microG Settings** on the phone and run the **Self-Check** checklist to ensure all spoofing and permission checkmarks are active.
+   - Open **microG Settings** on the phone and run **Self-Check**. Every spoofing and permission box should be ticked.
 
 4. **Install Aurora Store**:
    - Install Aurora Store (ARMv7 32-bit / universal APK):
      ```bash
      adb install -r AuroraStore.apk
      ```
-   - Use Aurora Store with microG for Play Store app installation without running official Google Mobile Services[cite: 4].
+   - With Aurora Store and microG together, you can install Play Store apps without running Google's official services.
 
 ---
 
 #### 4. Essential Magisk Boot Tuning for Mochibun
 
-To prevent frame drops and keep Mochibun from being killed under memory pressure, install Mochibun's automated boot tuning script[cite: 2, 7]:
+This boot script keeps animations snappy and stops Android from killing Mochibun when memory gets tight:
 
-1. Create `/data/adb/service.d/01_m120_tune.sh`[cite: 2, 8]:
+1. Create `/data/adb/service.d/01_m120_tune.sh`:
    ```bash
    adb shell su -c "cat << 'EOF' > /data/adb/service.d/01_m120_tune.sh
    #!/system/bin/sh
@@ -173,7 +173,7 @@ To prevent frame drops and keep Mochibun from being killed under memory pressure
    EOF"
    ```
 
-2. Make the script executable[cite: 8, 15]:
+2. Make it executable:
    ```bash
    adb shell su -c "chmod 755 /data/adb/service.d/01_m120_tune.sh"
    ```
@@ -182,10 +182,10 @@ To prevent frame drops and keep Mochibun from being killed under memory pressure
 
 #### 5. Post-Root Feature Checklist for Mochibun
 
-Once rooted, verify and enable these features in Mochibun:
-* **Grant Root**: When opening Mochibun or triggering the virtual cursor, allow Magisk superuser access[cite: 2, 13].
-* **Quick Settings Toggles**: Turn on direct root toggles in Mochibun settings so Wi-Fi and Bluetooth toggle instantly on the Widget deck without opening stock Android dialogs[cite: 2, 11].
-* **Lid LED Notifications**: Ensure exterior notification pulses hook directly into `/sys/class/leds/aw22xxx_led/` via root[cite: 13, 20].
+Now that you're rooted, check and turn on these features in Mochibun:
+* **Grant Root**: Allow Magisk superuser access when Mochibun asks. That happens when you open it or start the virtual cursor.
+* **Quick Settings Toggles**: Turn on direct root toggles in Mochibun's settings. Wi-Fi and Bluetooth then flip right on the Widget deck, with no stock Android dialogs in the way.
+* **Lid LED Notifications**: Make sure notification pulses on the outer lid are going through `/sys/class/leds/aw22xxx_led/` with root.
 * **Disable Stock Simple Mode**:
   ```bash
   adb shell pm disable-user --user 0 com.hnlens.simplemode

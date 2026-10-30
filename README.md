@@ -129,7 +129,10 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 | **GitHub Releases** | Direct APK download | [Download Latest APK](https://github.com/smolstinkyprincess/Mochibun/releases/latest) |
 | **Obtainium** | One-click update tracking | [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun) |
 
-> **Boot animation bonus 🎀**: Rooted with Magisk? Grab the optional `mochibun-bootanimation.zip` from [Releases](https://github.com/smolstinkyprincess/Mochibun/releases/latest) for a matching pastel boot screen.
+> 💡 **Using an ALT Mive Style Folder (AT-M120)?**  
+> Mochibun works great out of the box, but if you want instant in-place Quick Settings toggles, zero-latency virtual cursor clicking, custom lid LED pulses, and microG, check out our **[AT-M120 Root, Magisk & Tuning Guide](docs/m120_root_setup.md)**.
+
+> **Boot animation bonus 🎀**: Got root now? Grab the optional `mochibun-bootanimation.zip` from [Releases](https://github.com/smolstinkyprincess/Mochibun/releases/latest) for a matching pastel boot screen!
 
 ### 🗝️ Quick Permissions Checklist
 
