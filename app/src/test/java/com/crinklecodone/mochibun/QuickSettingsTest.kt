@@ -11,35 +11,29 @@ import org.junit.Test
 class QuickSettingsTest {
 
     @Test
-    fun leftMovesWithinRowAndStopsAtLeftEdge() {
+    fun leftMovesAlongRowAndStopsAtLeftEdge() {
         assertEquals(Move.To(0), QuickSettingsNav.left(1))
+        assertEquals(Move.To(1), QuickSettingsNav.left(2))
         assertEquals(Move.To(2), QuickSettingsNav.left(3))
         assertEquals(Move.Boundary, QuickSettingsNav.left(0))
-        assertEquals(Move.Boundary, QuickSettingsNav.left(2))
     }
 
     @Test
-    fun rightMovesWithinRowAndExitsHomeAtRightEdge() {
+    fun rightMovesAlongRowAndExitsHomeAtRightEdge() {
         assertEquals(Move.To(1), QuickSettingsNav.right(0))
+        assertEquals(Move.To(2), QuickSettingsNav.right(1))
         assertEquals(Move.To(3), QuickSettingsNav.right(2))
-        assertEquals(Move.ExitRight, QuickSettingsNav.right(1))
         assertEquals(Move.ExitRight, QuickSettingsNav.right(3))
     }
 
     @Test
-    fun upMovesToTopRowAndStopsAtTop() {
-        assertEquals(Move.To(0), QuickSettingsNav.up(2))
-        assertEquals(Move.To(1), QuickSettingsNav.up(3))
-        assertEquals(Move.Boundary, QuickSettingsNav.up(0))
-        assertEquals(Move.Boundary, QuickSettingsNav.up(1))
+    fun upAlwaysHitsBoundary() {
+        for (i in 0..3) assertEquals(Move.Boundary, QuickSettingsNav.up(i))
     }
 
     @Test
-    fun downMovesToBottomRowThenExits() {
-        assertEquals(Move.To(2), QuickSettingsNav.down(0))
-        assertEquals(Move.To(3), QuickSettingsNav.down(1))
-        assertEquals(Move.ExitDown, QuickSettingsNav.down(2))
-        assertEquals(Move.ExitDown, QuickSettingsNav.down(3))
+    fun downAlwaysExits() {
+        for (i in 0..3) assertEquals(Move.ExitDown, QuickSettingsNav.down(i))
     }
 
     @Test

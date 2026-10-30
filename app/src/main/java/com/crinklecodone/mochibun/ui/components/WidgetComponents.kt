@@ -667,7 +667,11 @@ fun WidgetPage(
                             WidgetFocusSection.NOW_PLAYING -> {
                                 if (isQuickSettingsVisible && isQuickSettingsExpanded) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = if (nowPlayingCol > 1) 3 else 2
+                                    quickSettingsIndex = when (nowPlayingCol) {
+                                        0 -> 0
+                                        2 -> 3
+                                        else -> 1
+                                    }
                                 } else if (isQuickSettingsVisible) {
                                     focusSection = WidgetFocusSection.HEADER
                                 }
@@ -678,7 +682,7 @@ fun WidgetPage(
                                     nowPlayingCol = 1
                                 } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = 2
+                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
                                 } else if (isQuickSettingsVisible) {
                                     focusSection = WidgetFocusSection.HEADER
                                 }
@@ -691,7 +695,7 @@ fun WidgetPage(
                                     nowPlayingCol = 1
                                 } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = 2
+                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
                                 } else if (isQuickSettingsVisible) {
                                     focusSection = WidgetFocusSection.HEADER
                                 }
@@ -708,7 +712,7 @@ fun WidgetPage(
                                     nowPlayingCol = 1
                                 } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = 2
+                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
                                 } else if (isQuickSettingsVisible) {
                                     focusSection = WidgetFocusSection.HEADER
                                 }
@@ -726,7 +730,7 @@ fun WidgetPage(
                                     nowPlayingCol = 1
                                 } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = 2
+                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
                                 } else if (isQuickSettingsVisible) {
                                     focusSection = WidgetFocusSection.HEADER
                                 }
@@ -756,7 +760,11 @@ fun WidgetPage(
                                     else -> {
                                         val next = sectionBelowQuickSettings()
                                         if (next == WidgetFocusSection.NOW_PLAYING) {
-                                            nowPlayingCol = if (quickSettingsIndex == 3) 2 else 1
+                                            nowPlayingCol = when (quickSettingsIndex) {
+                                                0 -> 0
+                                                3 -> 2
+                                                else -> 1
+                                            }
                                         }
                                         if (next == WidgetFocusSection.USER_WIDGETS) focusedWidgetIdx = 0
                                         focusSection = next
@@ -1108,6 +1116,8 @@ fun WidgetPage(
         KawaiiReturnHomePill(
             isFocused = focusSection == WidgetFocusSection.HOME_PILL,
             onClick = { navigateHomeAndReset() },
+            direction = HomePillDirection.RIGHT,
+            animateAlways = isActivePage,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 12.dp)

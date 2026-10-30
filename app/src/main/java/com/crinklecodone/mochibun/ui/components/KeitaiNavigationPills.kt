@@ -71,7 +71,7 @@ private fun bobDpFor(step: Int): Int = when (step % 4) { 1, 3 -> 1; 2 -> 2; else
 private fun KeitaiNavPill(
     label: String,
     chevron: String,
-    horizontalBob: Boolean,
+    bobOffset: (bobPx: Int) -> IntOffset,
     isFocused: Boolean,
     animate: Boolean,
     onClick: () -> Unit,
@@ -81,7 +81,7 @@ private fun KeitaiNavPill(
     val heart by remember { derivedStateOf { if (step.intValue >= 4) "♥" else "♡" } }
     val bobModifier = Modifier.offset {
         val bobPx = bobDpFor(step.intValue).dp.roundToPx()
-        if (horizontalBob) IntOffset(-bobPx, 0) else IntOffset(0, -bobPx)
+        bobOffset(bobPx)
     }
     val textColor = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary
     val shape = CircleShape
@@ -141,13 +141,13 @@ fun KawaiiClosePill(
     isFocused: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "Close",
+    label: String = "close",
     animateAlways: Boolean = false
 ) {
     KeitaiNavPill(
         label = label,
         chevron = "◄",
-        horizontalBob = true,
+        bobOffset = { IntOffset(-it, 0) },
         isFocused = isFocused,
         animate = isFocused || animateAlways,
         onClick = onClick,
@@ -155,22 +155,41 @@ fun KawaiiClosePill(
     )
 }
 
+/** Which way Home lies from the screen hosting a [KawaiiReturnHomePill]. */
+enum class HomePillDirection {
+    UP,    // App Drawer: ▲, bobs up
+    LEFT,  // Notifications (page 2 -> 1): ◀, bobs left
+    RIGHT  // Widgets/Stats (page 0 -> 1): ▶, bobs right
+}
+
 /**
- * Screen return pill: "♡ ▲ Home ▲ ♡". Chevrons bob upward while focused.
+ * Screen return pill: "♡ ▲ Home ▲ ♡". Chevrons point and bob toward Home while focused.
  */
 @Composable
 fun KawaiiReturnHomePill(
     isFocused: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "Home"
+    label: String = "home",
+    direction: HomePillDirection = HomePillDirection.UP,
+    animateAlways: Boolean = false
 ) {
+    val chevron = when (direction) {
+        HomePillDirection.UP -> "▲"
+        HomePillDirection.LEFT -> "◀"
+        HomePillDirection.RIGHT -> "▶"
+    }
+    val bobOffset: (Int) -> IntOffset = when (direction) {
+        HomePillDirection.UP -> { bobPx -> IntOffset(0, -bobPx) }
+        HomePillDirection.LEFT -> { bobPx -> IntOffset(-bobPx, 0) }
+        HomePillDirection.RIGHT -> { bobPx -> IntOffset(bobPx, 0) }
+    }
     KeitaiNavPill(
         label = label,
-        chevron = "▲",
-        horizontalBob = false,
+        chevron = chevron,
+        bobOffset = bobOffset,
         isFocused = isFocused,
-        animate = isFocused,
+        animate = isFocused || animateAlways,
         onClick = onClick,
         modifier = modifier
     )

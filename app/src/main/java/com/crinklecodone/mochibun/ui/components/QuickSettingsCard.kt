@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.core.haptic.HapticManager
@@ -34,7 +33,7 @@ private const val QUICK_SETTINGS_POLL_MS = 2_500L
 /** Bumped after an in-place root toggle so the card re-samples quickly. */
 private val rootToggleCount = mutableIntStateOf(0)
 
-/** Pure 2x2 grid navigation + ringer label logic (unit-tested). Layout: 0 1 / 2 3. */
+/** Pure 1x4 toolbar navigation + ringer label logic (unit-tested). Layout: 0 1 2 3. */
 object QuickSettingsNav {
     const val WIFI = 0
     const val BLUETOOTH = 1
@@ -49,10 +48,12 @@ object QuickSettingsNav {
         object ExitDown : Move()
     }
 
-    fun left(index: Int): Move = if (index % 2 == 1) Move.To(index - 1) else Move.Boundary
-    fun right(index: Int): Move = if (index % 2 == 0) Move.To(index + 1) else Move.ExitRight
-    fun up(index: Int): Move = if (index >= 2) Move.To(index - 2) else Move.Boundary
-    fun down(index: Int): Move = if (index < 2) Move.To(index + 2) else Move.ExitDown
+    fun left(index: Int): Move = if (index > 0) Move.To(index - 1) else Move.Boundary
+    fun right(index: Int): Move = if (index < 3) Move.To(index + 1) else Move.ExitRight
+    @Suppress("UNUSED_PARAMETER")
+    fun up(index: Int): Move = Move.Boundary // single row: UP exits to the Widgets header
+    @Suppress("UNUSED_PARAMETER")
+    fun down(index: Int): Move = Move.ExitDown // single row: DOWN exits to the card below
 
     fun nextRingerMode(mode: Int): Int = when (mode) {
         AudioManager.RINGER_MODE_NORMAL -> AudioManager.RINGER_MODE_VIBRATE
@@ -190,52 +191,37 @@ fun QuickSettingsCard(
         }
     }
 
-    val shape = RoundedCornerShape(22.dp)
-    Column(
-        modifier = modifier
-            .background(palette.unfocusedCardBg, shape)
-            .border(1.5.dp, palette.outline, shape)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    val soundGlyph = when (state.ringerMode) {
+        AudioManager.RINGER_MODE_VIBRATE -> "📳"
+        AudioManager.RINGER_MODE_SILENT -> "🔇"
+        else -> "🔔"
+    }
+    val pills = listOf(
+        "📶" to state.wifiOn,
+        "ᛒ" to state.bluetoothOn,
+        "🔦" to state.torchOn,
+        soundGlyph to (state.ringerMode == AudioManager.RINGER_MODE_NORMAL)
+    )
+    Row(
+        modifier = modifier.padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "— ♡ Quick Settings ♡ —",
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = palette.deepAccent,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-        val pills = listOf(
-            "📶 Wi-Fi" to state.wifiOn,
-            "ᛒ Bluetooth" to state.bluetoothOn,
-            "🔦 Torch" to state.torchOn,
-            QuickSettingsNav.ringerLabel(state.ringerMode) to (state.ringerMode == AudioManager.RINGER_MODE_NORMAL)
-        )
-        for (row in 0..1) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (col in 0..1) {
-                    val index = row * 2 + col
-                    val (label, active) = pills[index]
-                    val status = if (index == QuickSettingsNav.SOUND) "Profile" else if (active) "On" else "Off"
-                    QuickSettingsPill(
-                        label = label,
-                        status = status,
-                        active = active,
-                        isFocused = focusedIndex == index,
-                        onClick = { onPillClick(index) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+        pills.forEachIndexed { index, (glyph, active) ->
+            QuickSettingsPill(
+                glyph = glyph,
+                active = active,
+                isFocused = focusedIndex == index,
+                onClick = { onPillClick(index) },
+                modifier = Modifier.size(48.dp)
+            )
         }
     }
 }
 
 @Composable
 private fun QuickSettingsPill(
-    label: String,
-    status: String,
+    glyph: String,
     active: Boolean,
     isFocused: Boolean,
     onClick: () -> Unit,
@@ -249,26 +235,20 @@ private fun QuickSettingsPill(
         active -> palette.primary
         else -> palette.unfocusedCardBorder
     }
-    Column(
+    Box(
         modifier = modifier
             .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .background(bg, shape)
             .border(if (isFocused) 2.dp else 1.dp, border, shape)
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Text(
-            text = label,
-            fontSize = 12.sp,
+            text = glyph,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = if (active) palette.deepAccent else palette.textColor,
             maxLines = 1
-        )
-        Text(
-            text = status,
-            fontSize = 10.sp,
-            color = palette.textColor.copy(alpha = if (active) 0.9f else 0.6f)
         )
     }
 }

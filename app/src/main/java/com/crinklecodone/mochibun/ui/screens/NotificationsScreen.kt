@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.screens
 
+import com.crinklecodone.mochibun.ui.components.HomePillDirection
 import com.crinklecodone.mochibun.ui.components.KawaiiReturnHomePill
 import android.content.Context
 import android.content.Intent
@@ -538,6 +539,8 @@ fun NotificationsScreen(
                 KawaiiReturnHomePill(
                     isFocused = focusTarget == NotifFocusTarget.HOME_PILL,
                     onClick = onNavigateHome,
+                    direction = HomePillDirection.LEFT,
+                    animateAlways = isActivePage,
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
                         .padding(top = 8.dp)
