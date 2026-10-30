@@ -472,7 +472,7 @@ class RecentTasksManager(context: Context) {
             }
         }
 
-        // 2. Try moveTaskToFront via ActivityManager
+        // 2. Try moveTaskToFront via ActivityManager (needs REORDER_TASKS)
         try {
             activityManager.moveTaskToFront(task.taskId, ActivityManager.MOVE_TASK_WITH_HOME)
             return true
@@ -480,13 +480,25 @@ class RecentTasksManager(context: Context) {
             Log.w(TAG, "moveTaskToFront failed for task ${task.taskId}", e)
         }
 
-        // 3. Root shell: bring task to front via am start
-        if (RootShell.isSuBinaryPresent()) {
+        // 3. Root shell: start the task's own root activity, which brings its existing task forward.
+        // `am start` exits 0 even when it fails, so check its output too. A false success here
+        // would close Recents onto whichever app was already on top.
+        val component = task.baseIntent?.component
+        if (component != null && RootShell.isSuBinaryPresent()) {
             try {
-                val result = RootShell.executeBlocking("am start --activity-brought-to-front -p ${task.packageName}")
-                if (result.isSuccess) return true
+                val action = task.baseIntent.action?.let { " -a $it" }.orEmpty()
+                val categories = task.baseIntent.categories?.joinToString("") { " -c $it" }.orEmpty()
+                // 0x10200000 = FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                val result = RootShell.executeBlocking(
+                    "am start$action$categories -n ${component.flattenToShortString()} -f 0x10200000"
+                )
+                val failed = !result.isSuccess ||
+                        result.stdout.any { it.startsWith("Error") } ||
+                        result.stderr.any { it.startsWith("Error") }
+                if (!failed) return true
+                Log.w(TAG, "Root am start failed for $component: ${result.stdout + result.stderr}")
             } catch (e: Exception) {
-                Log.w(TAG, "Root am start failed for ${task.packageName}", e)
+                Log.w(TAG, "Root am start failed for $component", e)
             }
         }
 

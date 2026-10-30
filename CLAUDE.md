@@ -41,10 +41,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - `homePressCount`: the physical Home button was pressed, so return to the home state.
 - `appListRefreshCount`: a package was added, removed, or replaced, which also clears the `IconPackManager` cache.
 - `lidOpenCount` / `lidClosedCount`: flip-lid events.
+- `unlockCount`: the keyguard was dismissed (`ACTION_USER_PRESENT`), so close the drawer. A Home intent while the keyguard is up or within ~1 s of a wake/unlock never counts as the "second press on Home" that opens the drawer.
 - `requestedPage` (from the `OPEN_PAGE` extra) and `pendingThemeBundleUri` (from opening a `.mochibun` file). The consumer callbacks reset these.
 - In `onNewIntent`, a HOME intent with `FLAG_ACTIVITY_RESET_TASK_IF_NEEDED` and without `TASK_ON_HOME` is SystemUI asking for Recents. That intent is forwarded to `com.android.quickstep.RecentsActivity`.
 
 **Key handling.** Physical keys drive the whole UI. `MainActivity.dispatchKeyEvent` first offers each event to the static `MainActivity.keyEventInterceptor`. `MainLauncher` installs `LauncherKeyHandler` there (`ui/LauncherKeyHandler.kt`), and dialogs and screens can swap the interceptor in and out. That handler covers D-pad focus, T9 search, long-press timing (~400 ms), `#` (settings / kaomoji wheel), `*`, `0`, speed dial, and F4 (virtual cursor). When you add a screen or dialog that needs keys, follow the existing interceptor pattern. The key map in README.md is the user-facing spec.
+
+Accessibility key filters (`MochibunAccessibilityService`, `VirtualCursorService`) only ever see a press's DOWN (`repeatCount == 0`) and its UP; this was verified on the device. Android synthesizes auto-repeats after the filter and sends them straight to the focused window. So a hold detected in a service, or through `launcherKeyListener`, must use a timer, not repeats. A DOWN the filter lets through will auto-repeat into the app no matter what the filter does later. That is why the global `#` hold holds the DOWN back and replays a tap with root `input keyevent`. Injected events like that one skip the accessibility filters.
 
 **UI composition.** `ui/MainLauncher.kt` is the root composable. It owns a `HorizontalPager` (page 0 = Widgets, 1 = Home, 2 = Notifications; `requestedPage` is clamped to 0..2). It also owns the app-drawer overlay (opened by swiping up) and the flags for which modals are open. `LauncherViewModel` holds app-list, favorites/folders, hidden-app, wallpaper, and KAWAIIICON state as Compose `mutableStateOf`, persisted through `PreferencesManager`. Screens are in `ui/screens` (settings sub-screens are in `ui/screens/settings/`). Dialogs are in `ui/dialogs`, reusable pieces and decorations (stickers, mascot, card motifs, widgets) in `ui/components`, and colors, theme, and typography in `ui/theme`.
 
@@ -61,7 +64,3 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 - `tools/`: standalone desktop Python utilities (wallpaper overlay generator, boot animation builder). They aren't part of the Gradle build.
 - `fastlane/metadata`: store listing and screenshots used by the README. `docs/` is a static project page.
-
-## Known issue
-
-`AndroidManifest.xml` declares a receiver `.core.app.PackageChangeReceiver`, but no `core/app` package exists. Package changes are actually handled by a receiver registered at runtime in `MainActivity`. Ask before removing the manifest entry.

@@ -1,10 +1,12 @@
 package com.crinklecodone.mochibun.ui
 
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -74,12 +76,32 @@ class MainActivity : ComponentActivity() {
     var lidClosedCount by mutableIntStateOf(0)
         private set
 
+    // Keyguard dismissed (ACTION_USER_PRESENT): MainLauncher closes the drawer so unlocking lands on Home
+    var unlockCount by mutableIntStateOf(0)
+        private set
+
+    // Display wake or keyguard dismissal. A Home intent right after it is the wake/unlock press,
+    // not a second press on a visible Home screen, so it must not open the drawer.
+    private var lastWakeOrUnlockUptime = 0L
+
     // Entering CLOSED resets the UI; entering OPEN_AWAKE restores D-pad focus. A display timeout with
     // the flip open only moves between OPEN_AWAKE and OPEN_DOZING, so it never resets anything.
     private val clamshellListener = object : ClamshellListener {
         override fun onStateChanged(previous: ClamshellState, current: ClamshellState) {
             if (current.isClosed && !previous.isClosed) lidClosedCount++
-            if (current == ClamshellState.OPEN_AWAKE) lidOpenCount++
+            if (current == ClamshellState.OPEN_AWAKE) {
+                lastWakeOrUnlockUptime = SystemClock.uptimeMillis()
+                lidOpenCount++
+            }
+        }
+    }
+
+    private val userPresentReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_USER_PRESENT) {
+                lastWakeOrUnlockUptime = SystemClock.uptimeMillis()
+                unlockCount++
+            }
         }
     }
 
@@ -129,6 +151,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         @Volatile
         var keyEventInterceptor: ((KeyEvent) -> Boolean)? = null
+
+        private const val WAKE_SETTLE_MS = 1000L
     }
 
     @android.annotation.SuppressLint("RestrictedApi")
@@ -160,6 +184,9 @@ class MainActivity : ComponentActivity() {
         try {
             unregisterReceiver(packageChangeReceiver)
         } catch (_: IllegalArgumentException) {}
+        try {
+            unregisterReceiver(userPresentReceiver)
+        } catch (_: IllegalArgumentException) {}
         super.onDestroy()
     }
 
@@ -183,7 +210,11 @@ class MainActivity : ComponentActivity() {
                 }
                 startActivity(recentsIntent)
             } else {
+                val keyguardLocked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
+                val justWokeOrUnlocked = SystemClock.uptimeMillis() - lastWakeOrUnlockUptime < WAKE_SETTLE_MS
                 homePressedWhileVisible = hasWindowFocus() &&
+                    !keyguardLocked &&
+                    !justWokeOrUnlocked &&
                     (intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT == 0)
                 homePressCount++
             }
@@ -224,6 +255,7 @@ class MainActivity : ComponentActivity() {
         }
 
         registerReceiver(packageChangeReceiver, packageFilter)
+        registerReceiver(userPresentReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
         ClamshellManager.init(this)
         ClamshellManager.addListener(clamshellListener)
 
@@ -249,6 +281,7 @@ class MainActivity : ComponentActivity() {
                         appListRefreshCount = appListRefreshCount,
                         lidOpenCount = lidOpenCount,
                         lidClosedCount = lidClosedCount,
+                        unlockCount = unlockCount,
                         requestedPage = requestedPage,
                         onPageConsumed = ::consumeRequestedPage,
                         incomingBundleUri = pendingThemeBundleUri,

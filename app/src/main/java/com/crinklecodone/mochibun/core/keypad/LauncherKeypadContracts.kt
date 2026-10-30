@@ -78,4 +78,5 @@ interface LauncherKeypadActions {
     fun openKaomojiWheel() {}
     fun cycleDrawerSortMode() {}
     fun recordAppLaunch(packageName: String) {}
+    fun boopMascot() {}
 }

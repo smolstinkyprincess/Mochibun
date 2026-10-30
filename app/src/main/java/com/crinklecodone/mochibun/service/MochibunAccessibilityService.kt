@@ -22,6 +22,7 @@ import com.crinklecodone.mochibun.data.model.ButtonActionConfig
 import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
+import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,7 +35,7 @@ class MochibunAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "MochibunAccessibility"
         const val PREFS_NAME = "hardware_remap_preferences"
-        private const val POUND_HOLD_MS = 450L
+        private const val POUND_HOLD_MS = 400L
 
         @Volatile
         var isServiceRunning = false
@@ -100,6 +101,8 @@ class MochibunAccessibilityService : AccessibilityService() {
     private var kaomojiOverlay: KaomojiOverlayController? = null
     private var poundHoldRunnable: Runnable? = null
     private var poundHoldFired = false
+    // A '#' press whose DOWN was held back from the app; a release before the hold replays a tap
+    private var poundPressPending = false
 
     // activeMappings is read on the main thread in onKeyEvent; never mutate it from a worker.
     // Bursts of pref writes (each fires the listener, plus explicit reloads) collapse into one load.
@@ -207,7 +210,7 @@ class MochibunAccessibilityService : AccessibilityService() {
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         if (BuildConfig.DEBUG) {
-            Log.d("MochibunA11y", "onKeyEvent: code=${event.keyCode}, scan=${event.scanCode}, action=${event.action}")
+            Log.d("MochibunA11y", "onKeyEvent: code=${event.keyCode}, scan=${event.scanCode}, action=${event.action}, repeat=${event.repeatCount}")
         }
         val consumed = handleKeyEvent(event)
         if (consumed) {
@@ -239,7 +242,11 @@ class MochibunAccessibilityService : AccessibilityService() {
                 true
             }
             InputLayer.KAOMOJI_OVERLAY -> {
-                kaomojiOverlay?.let { if (it.isShowing) it.handleKey(event) }
+                if (keyCode == KeyEvent.KEYCODE_POUND && poundPressPending) {
+                    handlePoundHold(event)
+                } else {
+                    kaomojiOverlay?.let { if (it.isShowing) it.handleKey(event) }
+                }
                 true
             }
             InputLayer.LAUNCHER -> {
@@ -450,41 +457,82 @@ class MochibunAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Accessibility key filtering can't re-inject a held-back event, so taps pass through untouched:
-     * DOWN and UP always reach the app. Once the hold threshold fires, the auto-repeats are consumed
-     * (so the IME never sees its own long-press) and the overlay swallows the final UP.
+     * '#' outside the launcher: a tap types '#', a hold opens the Kaomoji Wheel.
+     *
+     * Accessibility key filters only ever see a press's DOWN and UP. Android synthesizes the
+     * auto-repeats afterwards and sends them straight to the app, so once a DOWN passes through,
+     * nothing here can stop the IME (TT9) from getting its repeats and long-press. So with root the
+     * DOWN is held back: a release before [POUND_HOLD_MS] replays a real '#' tap through `input
+     * keyevent` (injected events skip accessibility filters, so it isn't caught again), and a hold
+     * opens the wheel with the app never having seen the key.
+     *
+     * Without root the press can't be replayed, so it passes through as before: the wheel still
+     * opens on hold, but the app also sees the key.
      */
     private fun handlePoundHold(event: KeyEvent): Boolean {
         when (event.action) {
             KeyEvent.ACTION_DOWN -> {
-                if (event.repeatCount == 0) {
-                    cancelPoundHold()
-                    poundHoldFired = false
-                    val runnable = Runnable {
-                        poundHoldRunnable = null
-                        poundHoldFired = true
-                        val overlay = kaomojiOverlay ?: KaomojiOverlayController(this).also { kaomojiOverlay = it }
-                        overlay.show(KeyEvent.KEYCODE_POUND)
+                if (event.repeatCount != 0) return true
+                cancelPoundHold()
+                poundHoldFired = false
+                val overlay = kaomojiOverlay ?: KaomojiOverlayController(this).also { kaomojiOverlay = it }
+                val holdBack = canReplayPoundTap()
+                val runnable = Runnable {
+                    poundHoldRunnable = null
+                    poundPressPending = false
+                    poundHoldFired = true
+                    overlay.show(KeyEvent.KEYCODE_POUND)
+                    if (overlay.isShowing) {
+                        // The wheel swallows the rest of this press, including its release
+                        InputArbiter.setOwner(KeyEvent.KEYCODE_POUND, InputLayer.KAOMOJI_OVERLAY)
                     }
-                    poundHoldRunnable = runnable
-                    mainHandler.postDelayed(runnable, POUND_HOLD_MS)
-                    return false
                 }
-                return poundHoldFired
+                poundHoldRunnable = runnable
+                poundPressPending = holdBack
+                mainHandler.postDelayed(runnable, POUND_HOLD_MS)
+                return holdBack
             }
             KeyEvent.ACTION_UP -> {
-                cancelPoundHold()
+                val pending = poundPressPending
                 val fired = poundHoldFired
+                cancelPoundHold()
                 poundHoldFired = false
+                if (pending) {
+                    if (!fired) replayPoundTap()
+                    return true
+                }
                 return fired
             }
         }
         return false
     }
 
+    /** True when a held-back '#' can be replayed. Never blocks: unknown root status counts as no. */
+    private fun canReplayPoundTap(): Boolean {
+        if (Shell.isAppGrantedRoot() == true) return true
+        // Root not confirmed yet in this process: let this press through and warm a shell for the next
+        if (RootShell.isSuBinaryPresent()) {
+            try {
+                Shell.getShell { }
+            } catch (_: Throwable) {
+            }
+        }
+        return false
+    }
+
+    private fun replayPoundTap() {
+        try {
+            Shell.cmd("input keyevent ${KeyEvent.KEYCODE_POUND}").submit()
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to replay '#' tap", e)
+        }
+    }
+
     private fun cancelPoundHold() {
         poundHoldRunnable?.let { mainHandler.removeCallbacks(it) }
         poundHoldRunnable = null
+        // A held-back press interrupted by sleep or teardown is dropped, not replayed later
+        poundPressPending = false
     }
 
     private fun executeAction(action: ActionType) {

@@ -17,7 +17,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Snug on Small Screens**: Fitted specifically for 480 × 800 flip-phone displays, so there's no squished text or cut-off buttons.
 - **Physical T9 App Search**: Just start typing numbers on the keypad to filter your apps and launch one in a blink. No tiny search bars to poke at!
 - **Global Kaomoji Wheel**: Long-press **`#`** anywhere on the phone, even inside your messaging apps, to pop up the radial mood wheel and paste cute text faces straight into your chat `( ˶ˆᗜˆ˵ ) ♡`
-- **Virtual Mouse Pointer**: Press the side key to toggle a little mouse cursor for those apps that were only ever made for touchscreens. Dress it up with your own `.png` or animated `.gif` sprite, scroll with `2` & `8`, and set the speed just how you like it.
+- **Virtual Mouse Pointer**: Press the side key to toggle a little mouse cursor for those apps that were only ever made for touchscreens. Dress it up with your own `.png` or animated `.gif` sprite, scroll with `2` & `8` (and sideways with `4` & `6`), and set the speed just how you like it.
 - **Nostalgic Keitai Click Sounds**: Retro tactile sound effects that are generated right on your phone, so the app stays tiny. Pick a sound profile in settings (*Kawaii Pop*, *Retro Keitai* 2000s clicks, *8-Bit Chiptune*, *Cyber Pager*, *Soft Thock*, *Water Drop*, or mute).
 - **Key Remapping (Root Optional)**: Remap your extra physical buttons to launch your favorite apps or trigger quick shortcuts.
 - **Widgets & Music Deck**: A cozy widget page with a Now Playing card that pops in while music is playing and tucks itself away when the audio stops, plus room for your own Android widgets.
@@ -58,6 +58,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 | **Call Key** | Phone dialer | — |
 | **Back** | Close dialogs, folders, or drawer & return Home | — |
 | **Home** | Return Home from anywhere; on Home, open the app drawer | — |
+| **Recents (LSK)** | On Home, go to the Stats page | On Home, open Recents |
 
 ---
 

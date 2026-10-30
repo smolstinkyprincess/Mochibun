@@ -2,6 +2,8 @@ package com.crinklecodone.mochibun.ui
 
 
 import android.content.Context
+import android.content.Intent
+import android.util.Log
 import android.media.AudioManager
 import android.widget.Toast
 import android.os.SystemClock
@@ -9,6 +11,7 @@ import android.view.KeyEvent
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
+import com.android.quickstep.RecentsActivity
 import com.crinklecodone.mochibun.core.haptic.HapticManager
 import com.crinklecodone.mochibun.core.keypad.HomeTransitionTracker
 import com.crinklecodone.mochibun.core.keypad.LauncherKeypadActions
@@ -27,6 +30,8 @@ import com.crinklecodone.mochibun.ui.dialogs.isDpadOrActionKey
 import com.crinklecodone.mochibun.ui.screens.firstLetterOf
 import com.crinklecodone.mochibun.ui.screens.launchClockApp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -51,6 +56,8 @@ private val T9_LETTERS_NONE = CharArray(0)
  * Decomposes key events into structured, testable sub-handlers for Center, Numeric/T9,
  * D-Pad navigation, and dismissal keys.
  */
+private const val APP_SWITCH_HOLD_MS = 400L
+
 internal class LauncherKeyHandler(
     private val context: Context,
     private val scope: CoroutineScope,
@@ -62,6 +69,11 @@ internal class LauncherKeyHandler(
 ) {
     private var lastConsumedDownKeyCode: Int? = null
     private var lastConsumedDownScanCode: Int? = null
+
+    // Recents key held on Home: pending until the hold fires (opens Recents) or the key is released
+    // first (a short press, which is the LSK move to Stats). Timed rather than repeat-based, like
+    // the Center and '#' holds.
+    private var appSwitchHoldJob: Job? = null
 
     fun handleKeyEvent(
         event: ComposeKeyEvent,
@@ -85,6 +97,16 @@ internal class LauncherKeyHandler(
             isPageTransitioning = isTransitioning,
             currentPage = pagerState.currentPage
         )
+
+        if (nativeEvent.action == KeyEvent.ACTION_UP && isAppSwitchKey(nativeEvent)) {
+            val pendingHold = appSwitchHoldJob
+            if (pendingHold != null) {
+                // Released before the hold threshold: short press
+                pendingHold.cancel()
+                appSwitchHoldJob = null
+                navigateToStatsPage()
+            }
+        }
 
         if (nativeEvent.action == KeyEvent.ACTION_UP) {
             val matchesDown = (lastConsumedDownKeyCode != null && nativeEvent.keyCode == lastConsumedDownKeyCode) ||
@@ -282,6 +304,8 @@ internal class LauncherKeyHandler(
                         } else if (state.homeFocusArea == 3) {
                             SoundEffectManager.play(context, SoundEffect.SELECT)
                             launchClockApp(context)
+                        } else if (state.homeFocusArea == 4) {
+                            actions.boopMascot()
                         } else {
                             actions.openLauncherMenu()
                         }
@@ -318,12 +342,15 @@ internal class LauncherKeyHandler(
                     return true
                 }
             } else if (state.isHomeScreenActive) {
-                // On Home Screen: LSK navigates left to Stats (Page 0), consumes event (blocks stock task switcher)
+                // On Home Screen: LSK navigates left to Stats (Page 0), consumes event (blocks stock task switcher).
+                // The Recents key waits for release instead: holding it opens Recents.
                 if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
                     if (nativeEvent.repeatCount == 0) {
-                        SoundEffectManager.play(context, SoundEffect.NAV)
-                        actions.setPendingTargetPage(0)
-                        scope.launch { pagerState.animateScrollToPage(0) }
+                        if (isAppSwitchKey(nativeEvent)) {
+                            startAppSwitchHold()
+                        } else {
+                            navigateToStatsPage()
+                        }
                     }
                     return true
                 }
@@ -657,11 +684,15 @@ internal class LauncherKeyHandler(
             val isCooldown = (SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
             if (isCooldown) return true
 
+            // Top to bottom: 1 header, 3 clock, 4 mascot, 0 favorites (skipped when empty), 2 drawer handle
             val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
             if (state.homeFocusArea == 2) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(if (favCount > 0) 0 else 3)
+                actions.setHomeFocusArea(if (favCount > 0) 0 else 4)
             } else if (state.homeFocusArea == 0) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                actions.setHomeFocusArea(4)
+            } else if (state.homeFocusArea == 4) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(3)
             } else if (state.homeFocusArea == 3) {
@@ -724,6 +755,9 @@ internal class LauncherKeyHandler(
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(3)
             } else if (state.homeFocusArea == 3) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                actions.setHomeFocusArea(4)
+            } else if (state.homeFocusArea == 4) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(if (favCount > 0) 0 else 2)
             } else if (state.homeFocusArea == 0) {
@@ -823,6 +857,40 @@ internal class LauncherKeyHandler(
             }
         }
         return true
+    }
+
+    private fun isAppSwitchKey(event: KeyEvent): Boolean =
+        event.keyCode == KeyEvent.KEYCODE_APP_SWITCH || event.scanCode == 580
+
+    private fun navigateToStatsPage() {
+        SoundEffectManager.play(context, SoundEffect.NAV)
+        actions.setPendingTargetPage(0)
+        scope.launch { pagerState.animateScrollToPage(0) }
+    }
+
+    private fun startAppSwitchHold() {
+        appSwitchHoldJob?.cancel()
+        appSwitchHoldJob = scope.launch {
+            delay(APP_SWITCH_HOLD_MS)
+            appSwitchHoldJob = null
+            performBoundaryHaptic(context)
+            SoundEffectManager.play(context, SoundEffect.SELECT)
+            openRecents()
+        }
+    }
+
+    /** Same task switcher SystemUI's Recents request reaches through MainActivity. */
+    private fun openRecents() {
+        if (RecentsActivity.shouldThrottleLaunch()) return
+        try {
+            context.startActivity(
+                Intent(context, RecentsActivity::class.java).addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+            )
+        } catch (e: Exception) {
+            Log.w("LauncherKeyHandler", "Failed to open Recents", e)
+        }
     }
 
     private fun toggleRingerMode(context: Context) {

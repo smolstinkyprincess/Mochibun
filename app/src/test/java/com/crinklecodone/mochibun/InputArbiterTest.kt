@@ -68,6 +68,8 @@ class InputArbiterTest {
         assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_DPAD_CENTER, 0, cursorVisible = true))
         assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_2, 0, cursorVisible = true))
         assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_8, 0, cursorVisible = true))
+        assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_4, 0, cursorVisible = true))
+        assertTrue(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_6, 0, cursorVisible = true))
         assertFalse(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_BACK, 0, cursorVisible = true))
         assertFalse(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_5, 0, cursorVisible = true))
         // Hidden cursor leaves navigation alone

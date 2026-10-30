@@ -1,17 +1,17 @@
 package com.crinklecodone.mochibun.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
@@ -50,21 +50,35 @@ fun Modifier.keitaiMascotBob(enabled: Boolean = true): Modifier {
  * Keitai "Curtain / Blinds" Modal Unfurl:
  * Replaces modern alpha-fading with a snappy vertical unroll from the top edge downward.
  * Uses GPU scissor clipping to keep render passes cheap on low-spec hardware.
+ *
+ * Starts rolled up and unrolls on entry in [CURTAIN_STEPS] discrete blinds steps. Each step is
+ * held for at least [CURTAIN_STEP_MS] and gets its own drawn frame, so a heavy dialog's slow first
+ * frame on the MT6761 can't swallow the whole unroll (a 140 ms tween finished before its second
+ * frame). Stepping with delay() also means the system animator duration scale (0 on this device)
+ * doesn't skip it. The progress is read only in the graphics layer, so each step redraws the layer
+ * without recomposing the dialog.
  */
 fun Modifier.curtainUnfurl(visible: Boolean): Modifier = composed {
-    val progress by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = 140),
-        label = "curtainUnfurl"
-    )
+    val progress = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(visible) {
+        val from = progress.floatValue
+        val target = if (visible) 1f else 0f
+        for (step in 1..CURTAIN_STEPS) {
+            delay(CURTAIN_STEP_MS)
+            withFrameNanos { progress.floatValue = from + (target - from) * step / CURTAIN_STEPS }
+        }
+    }
 
     this
         .clip(RectangleShape)
         .graphicsLayer {
-            scaleY = progress
+            scaleY = progress.floatValue
             transformOrigin = TransformOrigin(0.5f, 0f)
         }
 }
+
+private const val CURTAIN_STEPS = 5
+private const val CURTAIN_STEP_MS = 28L
 
 /**
  * Stepped Keitai Marquee String Generator:

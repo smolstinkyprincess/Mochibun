@@ -68,7 +68,7 @@ object InputArbiter {
         return !isKaomojiOverlayShowing && cursorVisible && isCursorKey(keyCode)
     }
 
-    /** Keys the visible cursor drives: D-pad movement, center tap, and 2 / 8 scrolling. */
+    /** Keys the visible cursor drives: D-pad movement, center tap, 2 / 8 and 4 / 6 scrolling. */
     private fun isCursorKey(keyCode: Int): Boolean = when (keyCode) {
         KeyEvent.KEYCODE_DPAD_UP,
         KeyEvent.KEYCODE_DPAD_DOWN,
@@ -79,6 +79,10 @@ object InputArbiter {
         KeyEvent.KEYCODE_NUMPAD_ENTER,
         KeyEvent.KEYCODE_2,
         KeyEvent.KEYCODE_NUMPAD_2,
+        KeyEvent.KEYCODE_4,
+        KeyEvent.KEYCODE_NUMPAD_4,
+        KeyEvent.KEYCODE_6,
+        KeyEvent.KEYCODE_NUMPAD_6,
         KeyEvent.KEYCODE_8,
         KeyEvent.KEYCODE_NUMPAD_8 -> true
         else -> false

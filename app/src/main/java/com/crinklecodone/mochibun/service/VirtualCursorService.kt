@@ -279,22 +279,31 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
                     performTapDispatch()
                 }
             }
+            // Scroll keys drag the finger opposite to the scroll direction, like a touch swipe
             KeyEvent.KEYCODE_2,
             KeyEvent.KEYCODE_NUMPAD_2 -> {
-                if (action == KeyEvent.ACTION_DOWN) handleScrollKey(scrollUp = true)
+                if (action == KeyEvent.ACTION_DOWN) handleScrollKey(dragX = 0, dragY = 1) // scroll up
             }
             KeyEvent.KEYCODE_8,
             KeyEvent.KEYCODE_NUMPAD_8 -> {
-                if (action == KeyEvent.ACTION_DOWN) handleScrollKey(scrollUp = false)
+                if (action == KeyEvent.ACTION_DOWN) handleScrollKey(dragX = 0, dragY = -1) // scroll down
+            }
+            KeyEvent.KEYCODE_4,
+            KeyEvent.KEYCODE_NUMPAD_4 -> {
+                if (action == KeyEvent.ACTION_DOWN) handleScrollKey(dragX = 1, dragY = 0) // scroll left
+            }
+            KeyEvent.KEYCODE_6,
+            KeyEvent.KEYCODE_NUMPAD_6 -> {
+                if (action == KeyEvent.ACTION_DOWN) handleScrollKey(dragX = -1, dragY = 0) // scroll right
             }
         }
     }
 
-    private fun handleScrollKey(scrollUp: Boolean) {
+    private fun handleScrollKey(dragX: Int, dragY: Int) {
         val now = SystemClock.uptimeMillis()
         if (now - lastScrollTimeMs >= SCROLL_DEBOUNCE_MS) {
             lastScrollTimeMs = now
-            performScrollDispatch(scrollUp)
+            performScrollDispatch(dragX, dragY)
         }
     }
 
@@ -398,53 +407,54 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     }
 
     /**
-     * Dispatches a vertical scroll swipe gesture originating at the current pointer coordinates.
+     * Dispatches a one-step scroll swipe from the current pointer coordinates. The finger drags in
+     * direction ([dragX], [dragY]), one of them ±1, which scrolls the content the opposite way:
      *
-     * - Key 2 (scrollUp = true): Dispatches a downward drag (startY -> startY + scrollStepPx) to scroll UP.
-     * - Key 8 (scrollUp = false): Dispatches an upward drag (startY -> startY - scrollStepPx) to scroll DOWN.
+     * - Key 2 (0, +1): downward drag to scroll UP.      Key 8 (0, -1): upward drag to scroll DOWN.
+     * - Key 4 (+1, 0): rightward drag to scroll LEFT.   Key 6 (-1, 0): leftward drag to scroll RIGHT.
      *
      * Clamps start and end coordinates to screen bounds (0f..480f, 0f..800f) so swipes remain on-screen.
      */
-    private fun performScrollDispatch(scrollUp: Boolean) {
+    private fun performScrollDispatch(dragX: Int, dragY: Int) {
         val view = overlayView ?: return
 
         val maxX = (physics.screenWidth - 1f).coerceAtLeast(1f)
         val maxY = (physics.screenHeight - 1f).coerceAtLeast(1f)
 
-        val startX = view.getHotspotX().coerceIn(0f, maxX)
+        var startX = view.getHotspotX().coerceIn(0f, maxX)
         var startY = view.getHotspotY().coerceIn(0f, maxY)
         val distance = scrollStepPx.toFloat().coerceIn(
             CursorPreferences.MIN_SCROLL_STEP_PX.toFloat(),
             CursorPreferences.MAX_SCROLL_STEP_PX.toFloat()
         )
 
-        val rawEndY = if (scrollUp) startY + distance else startY - distance
-        val endY = rawEndY.coerceIn(0f, maxY)
+        val endX = (startX + dragX * distance).coerceIn(0f, maxX)
+        val endY = (startY + dragY * distance).coerceIn(0f, maxY)
 
         // If cursor is parked against the screen edge in the swipe direction,
         // shift the stroke start inward so the swipe still has travel distance.
-        if (abs(endY - startY) < 16f) {
-            startY = if (scrollUp) {
-                (endY - distance).coerceIn(0f, maxY)
-            } else {
-                (endY + distance).coerceIn(0f, maxY)
-            }
+        if (dragX != 0 && abs(endX - startX) < 16f) {
+            startX = (endX - dragX * distance).coerceIn(0f, maxX)
+        }
+        if (dragY != 0 && abs(endY - startY) < 16f) {
+            startY = (endY - dragY * distance).coerceIn(0f, maxY)
         }
 
-        if (abs(endY - startY) < 5f) return
+        if (abs(endX - startX) + abs(endY - startY) < 5f) return
 
-        val xInt = startX.toInt()
+        val x1Int = startX.toInt()
         val y1Int = startY.toInt()
+        val x2Int = endX.toInt()
         val y2Int = endY.toInt()
 
         if (clickMethod == ClickMethod.ROOT_INPUT_TAP) {
-            RootTouchInjector.swipeAsync(xInt, y1Int, xInt, y2Int, SCROLL_SWIPE_DURATION_MS)
+            RootTouchInjector.swipeAsync(x1Int, y1Int, x2Int, y2Int, SCROLL_SWIPE_DURATION_MS)
             return
         }
 
         val path = Path().apply {
             moveTo(startX, startY)
-            lineTo(startX, endY)
+            lineTo(endX, endY)
         }
         val stroke = GestureDescription.StrokeDescription(path, 0L, SCROLL_SWIPE_DURATION_MS)
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
@@ -452,14 +462,14 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         val dispatched = dispatchGesture(gesture, object : GestureResultCallback() {
             override fun onCancelled(gestureDescription: GestureDescription?) {
                 super.onCancelled(gestureDescription)
-                Log.w(TAG, "Accessibility scroll gesture cancelled at ($startX, $startY)->($startX, $endY), falling back to root swipe")
-                RootTouchInjector.swipeAsync(xInt, y1Int, xInt, y2Int, SCROLL_SWIPE_DURATION_MS)
+                Log.w(TAG, "Accessibility scroll gesture cancelled at ($startX, $startY)->($endX, $endY), falling back to root swipe")
+                RootTouchInjector.swipeAsync(x1Int, y1Int, x2Int, y2Int, SCROLL_SWIPE_DURATION_MS)
             }
         }, null)
 
         if (!dispatched) {
-            Log.w(TAG, "dispatchGesture() scroll returned false at ($startX, $startY)->($startX, $endY), falling back to root swipe")
-            RootTouchInjector.swipeAsync(xInt, y1Int, xInt, y2Int, SCROLL_SWIPE_DURATION_MS)
+            Log.w(TAG, "dispatchGesture() scroll returned false at ($startX, $startY)->($endX, $endY), falling back to root swipe")
+            RootTouchInjector.swipeAsync(x1Int, y1Int, x2Int, y2Int, SCROLL_SWIPE_DURATION_MS)
         }
     }
 }

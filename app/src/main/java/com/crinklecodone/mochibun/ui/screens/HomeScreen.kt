@@ -114,8 +114,9 @@ fun HomeScreen(
     userName: String = "",
     selectedFavoriteIndex: Int = 0,
     folderIconRefreshKey: Int = 0,
-    homeFocusArea: Int = 0, // 0 = favorites, 1 = header banner, 2 = drawer handle, 3 = clock
+    homeFocusArea: Int = 0, // 0 = favorites, 1 = header banner, 2 = drawer handle, 3 = clock, 4 = mascot
     isHomeScreenActive: Boolean = true,
+    mascotBoopRequest: Int = 0,
     onHeaderClick: () -> Unit = {},
     onHeaderLongClick: () -> Unit = {},
     onAppClick: (LauncherApp) -> Unit = {},
@@ -170,6 +171,8 @@ fun HomeScreen(
                 selectedIndex = selectedFavoriteIndex,
                 isCardFocused = isHomeScreenActive && homeFocusArea == 0,
                 isHomeScreenActive = isHomeScreenActive,
+                isMascotFocused = isHomeScreenActive && homeFocusArea == 4,
+                mascotBoopRequest = mascotBoopRequest,
                 folderIconRefreshKey = folderIconRefreshKey,
                 onAppClick = onAppClick,
                 onAppLongClick = onAppLongClick,
@@ -626,6 +629,8 @@ fun FavoritesCard(
     selectedIndex: Int = 0,
     isCardFocused: Boolean = true,
     isHomeScreenActive: Boolean = true,
+    isMascotFocused: Boolean = false,
+    mascotBoopRequest: Int = 0,
     folderIconRefreshKey: Int = 0,
     onAppClick: (LauncherApp) -> Unit = {},
     onAppLongClick: (LauncherApp) -> Unit = {},
@@ -786,6 +791,8 @@ fun FavoritesCard(
         mood = getDefaultTimeOfDayMood(),
         size = 56.dp,
         themeTintColor = theme.mascotTintColor,
+        isFocused = isMascotFocused,
+        boopRequest = mascotBoopRequest,
         modifier = Modifier
             .align(Alignment.TopEnd)
             .offset(x = (-14).dp, y = (-26).dp)

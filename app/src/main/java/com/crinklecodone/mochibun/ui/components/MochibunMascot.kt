@@ -461,6 +461,8 @@ fun MochibunnyWithSpeechBubble(
     themeTintColor: Color? = null,
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
+    isFocused: Boolean = false,
+    boopRequest: Int = 0, // bumped by the D-pad (Center on the focused mascot); boops like a tap
     onClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -504,9 +506,14 @@ fun MochibunnyWithSpeechBubble(
         }
     }
 
+    LaunchedEffect(boopRequest) {
+        if (boopRequest > 0) onBoop()
+    }
+
     Box(
         modifier = modifier
             .size(size)
+            .softGlowFocus(isSelected = isFocused, cornerRadius = size / 2)
             .graphicsLayer { clip = false }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

@@ -125,6 +125,7 @@ fun MainLauncher(
     appListRefreshCount: Int = 0,
     lidOpenCount: Int = 0,
     lidClosedCount: Int = 0,
+    unlockCount: Int = 0,
     requestedPage: Int? = null,
     onPageConsumed: () -> Unit = {},
     incomingBundleUri: Uri? = null,
@@ -262,6 +263,7 @@ fun MainLauncher(
     var drawerRailHoveredLetter by remember { mutableStateOf<Char?>('A') }
     // Home focus area: 0 = FavoritesCard row, 1 = StatusCard (launcher options / page switcher)
     var homeFocusArea by remember { mutableIntStateOf(0) }
+    var mascotBoopRequest by remember { mutableIntStateOf(0) }
 
     val moveFavoriteSlotItem: (itemKey: String, direction: Int) -> Unit = remember(launcherVm) {
         { itemKey, direction ->
@@ -316,6 +318,14 @@ fun MainLauncher(
             homeFocusArea = if (favoriteItemCount > 0) 0 else 1
             pendingTargetPage = 1
             pagerState.scrollToPage(1)
+        }
+    }
+
+    // Keyguard dismissed: unlocking always lands on Home, never inside a drawer left open before the lock
+    LaunchedEffect(unlockCount) {
+        if (unlockCount > 0) {
+            drawerOpen = false
+            drawerRailFocused = false
         }
     }
 
@@ -516,6 +526,7 @@ fun MainLauncher(
             override fun recordAppLaunch(packageName: String) {
                 launcherVm.recordAppLaunch(packageName)
             }
+            override fun boopMascot() { mascotBoopRequest++ }
         }
     }
 
@@ -915,6 +926,7 @@ fun MainLauncher(
                                 folderIconRefreshKey = launcherVm.folderIconRefreshKey,
                                 homeFocusArea = homeFocusArea,
                                 isHomeScreenActive = isHomeScreenActive,
+                                mascotBoopRequest = mascotBoopRequest,
                                 onHeaderClick = onHomeHeaderClick,
                                 onHeaderLongClick = onHomeHeaderLongClick,
                                 onAppClick = onHomeAppClick,
