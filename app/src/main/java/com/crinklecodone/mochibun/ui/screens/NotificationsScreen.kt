@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.core.util.drawableToBitmap
 import com.crinklecodone.mochibun.data.model.MochibunNotificationItem
 import com.crinklecodone.mochibun.data.repository.NotificationTracker
+import com.crinklecodone.mochibun.ui.components.BottomLavenderClouds
 import com.crinklecodone.mochibun.ui.components.MochibunMascot
 import com.crinklecodone.mochibun.ui.components.TopLavenderClouds
 import com.crinklecodone.mochibun.ui.components.getDefaultTimeOfDayMood
@@ -568,6 +569,13 @@ fun NotificationsScreen(
                 }
             }
         }
+        // Bottom Clouds
+        BottomLavenderClouds(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+        )
+
     }
 }
 

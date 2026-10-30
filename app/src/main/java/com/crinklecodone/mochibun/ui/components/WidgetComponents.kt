@@ -63,6 +63,7 @@ private const val TAG = "WidgetPage"
 private const val WIDGET_LONG_PRESS_MS = 400L
 
 enum class WidgetFocusSection {
+    QUICK_SETTINGS,
     NOW_PLAYING,
     SYSTEM_MONITOR,
     USER_WIDGETS,
@@ -141,14 +142,19 @@ fun WidgetPage(
     }
 
     // D-Pad Focus State Management
-    fun defaultFocusSection(): WidgetFocusSection =
+    fun defaultFocusSection(): WidgetFocusSection = WidgetFocusSection.QUICK_SETTINGS
+
+    // First section below the Quick Settings grid
+    fun sectionBelowQuickSettings(): WidgetFocusSection =
         if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
         else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
         else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
-        else WidgetFocusSection.HOME_PILL
+        else WidgetFocusSection.ADD_WIDGET
 
     var focusSection by remember { mutableStateOf(defaultFocusSection()) }
     var nowPlayingCol by remember { mutableIntStateOf(1) } // 0 = Prev, 1 = Play/Pause, 2 = Next
+    var quickSettingsIndex by remember { mutableIntStateOf(0) } // 0 Wi-Fi, 1 BT, 2 Torch, 3 Sound
+    var quickSettingsRefresh by remember { mutableIntStateOf(0) }
     var focusedWidgetIdx by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
     var centerDownAt by remember { mutableLongStateOf(0L) }
@@ -365,6 +371,7 @@ fun WidgetPage(
         endWidgetInteraction()
         focusSection = defaultFocusSection()
         nowPlayingCol = 1
+        quickSettingsIndex = 0
         focusedWidgetIdx = 0
         sawCenterDown = false
         onNavigateHome()
@@ -396,16 +403,18 @@ fun WidgetPage(
     // Ensure focused item is visible in LazyColumn
     LaunchedEffect(focusSection, focusedWidgetIdx) {
         if (focusSection == WidgetFocusSection.USER_WIDGETS && widgetSlots.isNotEmpty()) {
-            val baseOffset = 1 + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
+            val baseOffset = 2 + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
             val targetIdx = baseOffset + focusedWidgetIdx
             val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
             if (!isVisible) {
                 listState.animateScrollToItem(targetIdx)
             }
-        } else if (focusSection == WidgetFocusSection.NOW_PLAYING) {
+        } else if (focusSection == WidgetFocusSection.QUICK_SETTINGS) {
             listState.animateScrollToItem(0)
+        } else if (focusSection == WidgetFocusSection.NOW_PLAYING) {
+            listState.animateScrollToItem(1)
         } else if (focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
-            val targetIdx = if (mediaState.isPlaying) 1 else 0
+            val targetIdx = if (mediaState.isPlaying) 2 else 1
             listState.animateScrollToItem(targetIdx)
         }
     }
@@ -428,6 +437,7 @@ fun WidgetPage(
             showWidgetPicker = false
             focusSection = defaultFocusSection()
             nowPlayingCol = 1
+            quickSettingsIndex = 0
             focusedWidgetIdx = 0
             sawCenterDown = false
         }
@@ -477,6 +487,10 @@ fun WidgetPage(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         when (focusSection) {
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                performQuickSettingsAction(context, quickSettingsIndex)
+                                quickSettingsRefresh++
+                            }
                             WidgetFocusSection.NOW_PLAYING -> {
                                 when (nowPlayingCol) {
                                     0 -> MediaSessionTracker.skipToPrevious()
@@ -536,13 +550,21 @@ fun WidgetPage(
                 when (native.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         when (focusSection) {
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                val move = QuickSettingsNav.up(quickSettingsIndex)
+                                if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
+                            }
                             WidgetFocusSection.NOW_PLAYING -> {
-                                // Already at top
+                                focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                quickSettingsIndex = if (nowPlayingCol > 1) 3 else 2
                             }
                             WidgetFocusSection.SYSTEM_MONITOR -> {
                                 if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
+                                } else {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = 2
                                 }
                             }
                             WidgetFocusSection.USER_WIDGETS -> {
@@ -553,6 +575,9 @@ fun WidgetPage(
                                 } else if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
+                                } else {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = 2
                                 }
                             }
                             WidgetFocusSection.ADD_WIDGET -> {
@@ -564,6 +589,9 @@ fun WidgetPage(
                                 } else if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
+                                } else {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = 2
                                 }
                             }
                             WidgetFocusSection.HOME_PILL -> {
@@ -574,6 +602,19 @@ fun WidgetPage(
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
                         when (focusSection) {
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                when (val move = QuickSettingsNav.down(quickSettingsIndex)) {
+                                    is QuickSettingsNav.Move.To -> quickSettingsIndex = move.index
+                                    else -> {
+                                        val next = sectionBelowQuickSettings()
+                                        if (next == WidgetFocusSection.NOW_PLAYING) {
+                                            nowPlayingCol = if (quickSettingsIndex == 3) 2 else 1
+                                        }
+                                        if (next == WidgetFocusSection.USER_WIDGETS) focusedWidgetIdx = 0
+                                        focusSection = next
+                                    }
+                                }
+                            }
                             WidgetFocusSection.NOW_PLAYING -> {
                                 if (isSystemMonitorEnabled) {
                                     focusSection = WidgetFocusSection.SYSTEM_MONITOR
@@ -610,6 +651,11 @@ fun WidgetPage(
                     }
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
                         when (focusSection) {
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                val move = QuickSettingsNav.left(quickSettingsIndex)
+                                if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
+                                else HapticManager.performBoundaryHaptic(context)
+                            }
                             WidgetFocusSection.NOW_PLAYING -> {
                                 nowPlayingCol = (nowPlayingCol - 1).coerceAtLeast(0)
                             }
@@ -619,6 +665,11 @@ fun WidgetPage(
                     }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
                         when (focusSection) {
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                val move = QuickSettingsNav.right(quickSettingsIndex)
+                                if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
+                                else navigateHomeAndReset()
+                            }
                             WidgetFocusSection.NOW_PLAYING -> {
                                 if (nowPlayingCol < 2) {
                                     nowPlayingCol++
@@ -728,6 +779,21 @@ fun WidgetPage(
                         )
                     }
                 }
+            }
+
+            item(key = "quick_settings_card") {
+                QuickSettingsCard(
+                    isActivePage = isActivePage,
+                    focusedIndex = if (focusSection == WidgetFocusSection.QUICK_SETTINGS) quickSettingsIndex else -1,
+                    onPillClick = { index ->
+                        focusSection = WidgetFocusSection.QUICK_SETTINGS
+                        quickSettingsIndex = index
+                        performQuickSettingsAction(context, index)
+                        quickSettingsRefresh++
+                    },
+                    refreshKey = quickSettingsRefresh,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             // Dedicated, Dynamic "Now Playing" Native Card (Active Playback Only)

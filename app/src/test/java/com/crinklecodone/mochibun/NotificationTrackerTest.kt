@@ -102,6 +102,28 @@ class NotificationTrackerTest {
     }
 
     @Test
+    fun listState_burstOfPostsAndRemovalsFoldsToConsistentSnapshot() {
+        val state = NotificationListState()
+        // Ten rapid chat pings on one key plus interleaved posts/removals, applied without snapshots
+        for (i in 1..10) {
+            state.upsert(item("chat", postTime = i.toLong()))
+            state.upsert(item("tmp$i", postTime = 100L + i))
+            if (i % 2 == 0) state.remove("tmp$i")
+        }
+        state.remove("missing")
+        state.upsert(item("call", postTime = 50, incomingCall = true))
+        state.setRanking(arrayOf("call", "chat"))
+
+        val snapshot = state.snapshot()
+        assertEquals(listOf("call", "chat", "tmp9", "tmp7", "tmp5", "tmp3", "tmp1"), snapshot.map { it.key })
+        assertEquals(10L, snapshot.first { it.key == "chat" }.postTime)
+        assertTrue(snapshot.first().isIncomingCall)
+        // Snapshots are copies: later mutations don't leak into an already published list
+        state.clear()
+        assertEquals(7, snapshot.size)
+    }
+
+    @Test
     fun item_incomingCallDefaultsToFalse() {
         assertFalse(item("k", postTime = 0).copy(isIncomingCall = false).isIncomingCall)
         assertTrue(item("call", postTime = 0, incomingCall = true).isIncomingCall)
