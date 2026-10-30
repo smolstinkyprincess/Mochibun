@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
@@ -285,8 +286,8 @@ fun FolderActionDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                     ) {
-                        KawaiiDialogPillButton(
-                            text = "♥ Cancel (◄) ♥",
+                        KawaiiClosePill(
+                            label = "Cancel",
                             isFocused = confirmDeleteIndex == 0,
                             onClick = { confirmingDelete = false }
                         )
@@ -359,7 +360,17 @@ fun FolderActionDialog(
                             Spacer(modifier = Modifier.height(2.dp))
                             HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
                         }
-                        KawaiiDialogItem(
+                        if (isClose) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                KawaiiClosePill(
+                                    isFocused = selectedIndex == idx,
+                                    onClick = { selectedIndex = idx; item.onClick() }
+                                )
+                            }
+                        } else KawaiiDialogItem(
                             text = item.label,
                             isFocused = selectedIndex == idx,
                             enabled = item.enabled,

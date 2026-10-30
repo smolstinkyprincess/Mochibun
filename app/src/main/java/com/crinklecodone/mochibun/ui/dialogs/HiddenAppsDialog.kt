@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -241,8 +242,7 @@ fun HiddenAppsDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    KawaiiDialogPillButton(
-                        text = "♥ Close ♥",
+                    KawaiiClosePill(
                         isFocused = selectedIndex == hiddenApps.size,
                         onClick = onDismiss
                     )

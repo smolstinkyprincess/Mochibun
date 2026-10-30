@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.crinklecodone.mochibun.data.model.LauncherApp
+import com.crinklecodone.mochibun.ui.components.KeitaiLaceContainer
 import com.crinklecodone.mochibun.ui.components.curtainUnfurl
 import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
@@ -195,18 +197,12 @@ fun AppActionDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(22.dp)
-
-        Surface(
+        KeitaiLaceContainer(
+            cardCornerRadius = 22.dp,
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
                 .curtainUnfurl(visible = true)
-                .border(1.5.dp, ActiveTheme.cardBorder, shape),
-            shape = shape,
-            color = ActiveTheme.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
         ) {
             Column(
                 modifier = Modifier
@@ -283,7 +279,17 @@ fun AppActionDialog(
                         Spacer(modifier = Modifier.height(2.dp))
                         HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
                     }
-                    KawaiiDialogItem(
+                    if (isClose) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            KawaiiClosePill(
+                                isFocused = selectedIndex == idx,
+                                onClick = { selectedIndex = idx; action() }
+                            )
+                        }
+                    } else KawaiiDialogItem(
                         text = label,
                         isFocused = selectedIndex == idx,
                         modifier = Modifier.fillMaxWidth(),

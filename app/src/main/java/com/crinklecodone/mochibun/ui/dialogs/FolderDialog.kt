@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
+import com.crinklecodone.mochibun.ui.components.KeitaiLaceContainer
 import com.crinklecodone.mochibun.ui.components.*
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.R
@@ -87,52 +88,6 @@ private val SQUIRCLE_TINTS = listOf(
     FolderSquircleTint(container = Color(0xFFD4F1E8), border = Color(0xFFA5E2CD)),
     FolderSquircleTint(container = Color(0xFFFFE5D9), border = Color(0xFFF9C6B3))
 )
-
-/**
- * Centered pill button anchored at or slightly overlapping the bottom rim:
- * "♥ Close (◄) ♥" in pastel lilac with deep plum typography.
- * Renders an unclipped pastel focus outline when selected via physical D-pad.
- */
-@Composable
-fun FolderClosePillButton(
-    isFocused: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val buttonWidth = 154.dp
-    val buttonHeight = 36.dp
-    val pillShape = CircleShape
-
-    Box(
-        modifier = modifier
-            .size(width = buttonWidth, height = buttonHeight)
-            .graphicsLayer { clip = false }
-            .softGlowFocus(
-                isSelected = isFocused,
-                cornerRadius = 20.dp,
-                glowColor = ActiveTheme.selectionGlow,
-                borderColor = ActiveTheme.primary,
-                containerTint = ActiveTheme.surfaceTint
-            )
-            .clip(pillShape)
-            .background(if (isFocused) ActiveTheme.current.focusedContainerColor else Color(0xFFF7F1FA))
-            .border(
-                width = if (isFocused) 1.5.dp else 1.2.dp,
-                color = if (isFocused) ActiveTheme.primary else ActiveTheme.cardBorder,
-                shape = pillShape
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "♥ Close (◄) ♥",
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
-            textAlign = TextAlign.Center
-        )
-    }
-}
 
 /**
  * Subtle floating pixel sparkle stars and hearts on the dialog backdrop.
@@ -563,7 +518,7 @@ fun FavoriteFolderDialog(
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
                         when (focusSection) {
                             2 -> {
-                                // "♥ Close (◄) ♥": Left dismisses folder cleanly
+                                // Close pill: Left dismisses folder cleanly
                                 onDismiss()
                                 true
                             }
@@ -668,20 +623,22 @@ fun FavoriteFolderDialog(
             ) {
                 // Main Folder Modal Card Container
                 val cardCornerRadius = cardRoundness.coerceIn(22.dp, 24.dp)
-                val cardShape = RoundedCornerShape(cardCornerRadius)
 
-                Box(
+                KeitaiLaceContainer(
+                    cardCornerRadius = cardCornerRadius,
                     modifier = Modifier
                         .width(308.dp)
                         .curtainUnfurl(visible = true)
+                ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
                         .graphicsLayer { clip = false }
-                        .background(ActiveTheme.surface, cardShape)
-                        .border(1.5.dp, ActiveTheme.cardBorder, cardShape)
                         .padding(
                             top = 24.dp,
                             bottom = if (isMainView) 28.dp else 16.dp,
-                            start = 14.dp,
-                            end = 14.dp
+                            start = 8.dp,
+                            end = 8.dp
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1150,22 +1107,17 @@ fun FavoriteFolderDialog(
                         }
                     }
                 }
-
-                // Top-Center Overlapping Bow Badge
-                PixelRibbonBow(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset(y = (-23).dp)
-                )
+                }
 
                 // Bottom Dismiss Action: Centered pill button anchored at or slightly overlapping the bottom rim
                 if (isMainView) {
-                    FolderClosePillButton(
+                    KawaiiClosePill(
                         isFocused = focusSection == 2,
                         onClick = onDismiss,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .offset(y = 18.dp)
+                            .offset(y = 2.dp)
+                            .width(154.dp)
                     )
                 }
             }

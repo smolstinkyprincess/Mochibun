@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.content.Context
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
@@ -352,8 +353,8 @@ fun KawaiiIconPicker(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    KawaiiDialogPillButton(
-                        text = "♥ Cancel (◄) ♥",
+                    KawaiiClosePill(
+                        label = "Cancel",
                         isFocused = focusZone == 2,
                         onClick = onDismiss
                     )

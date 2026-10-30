@@ -393,7 +393,12 @@ fun AppDrawerScreen(
                 .padding(top = 48.dp),
             contentAlignment = Alignment.Center
         ) {
-            MochibunSectionHeader("Applications")
+            // UP past the first card parks focus at -1: show the return pill in the header slot
+            if (selectedDrawerIndex == -1 && !isRailFocused) {
+                KawaiiReturnHomePill(isFocused = true, onClick = onBackToHome)
+            } else {
+                MochibunSectionHeader("Applications")
+            }
         }
 
         DrawerAlphabetRail(

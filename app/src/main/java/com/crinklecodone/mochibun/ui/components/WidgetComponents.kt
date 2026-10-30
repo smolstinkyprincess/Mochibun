@@ -977,39 +977,14 @@ fun WidgetPage(
                 .align(Alignment.BottomCenter)
         )
 
-        // 4. Upward Chevron and "Back to Home" Navigation Pill
-        Column(
+        // 4. "Back to Home" Navigation Pill
+        KawaiiReturnHomePill(
+            isFocused = focusSection == WidgetFocusSection.HOME_PILL,
+            onClick = { navigateHomeAndReset() },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "^",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF3E2452)
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            val isHomeFocused = focusSection == WidgetFocusSection.HOME_PILL
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFFFFF6F8))
-                    .glowingDoubleBorder(isSelected = isHomeFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
-                    .border(1.2.dp, if (isHomeFocused) Color(0xFFE06287) else Color(0xFFB5A4CB), RoundedCornerShape(50))
-                    .clickable { navigateHomeAndReset() }
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "♥ Back to Home ▶",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF3E2452)
-                )
-            }
-        }
+                .padding(bottom = 12.dp)
+        )
 
         // 5. Widget dialogs (own windows, so they take keys away from this page while open)
         if (showWidgetPicker) {

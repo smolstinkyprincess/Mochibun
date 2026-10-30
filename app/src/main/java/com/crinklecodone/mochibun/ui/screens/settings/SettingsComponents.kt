@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.screens.settings
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -80,23 +81,12 @@ fun SettingsScaffold(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             if (showBack) {
-                // Back button pill
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(ActiveTheme.container)
-                        .border(1.5.dp, ActiveTheme.cardBorder, CircleShape)
-                        .clickable { onBack() }
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "◄ Back",
-                        color = ActiveTheme.accentDeep,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                KawaiiClosePill(
+                    isFocused = false,
+                    onClick = onBack,
+                    label = "Back",
+                    modifier = Modifier.height(28.dp)
+                )
             } else {
                 PixelRibbonBow(
                     width = 28.dp,

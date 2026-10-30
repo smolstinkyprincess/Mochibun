@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -219,23 +220,12 @@ fun ExportBundleDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (focusedIndex == 4) theme.greetingOutlineColor else Color.Transparent)
-                            .border(1.dp, theme.greetingOutlineColor, RoundedCornerShape(12.dp))
-                            .clickable { onDismiss() }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "♥ Cancel (◄) ♥",
-                            color = theme.cardTextColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                    KawaiiClosePill(
+                        label = "Cancel",
+                        isFocused = focusedIndex == 4,
+                        onClick = { onDismiss() },
+                        modifier = Modifier.weight(1f)
+                    )
 
                     Box(
                         modifier = Modifier
@@ -443,27 +433,12 @@ fun PresetPreviewDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (focusedButton == 0) theme.greetingOutlineColor else Color.Transparent)
-                            .border(
-                                if (focusedButton == 0) 2.dp else 1.dp,
-                                if (focusedButton == 0) theme.greetingColor else theme.greetingOutlineColor,
-                                RoundedCornerShape(12.dp)
-                            )
-                            .clickable { onDismiss() }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "♥ Cancel (◄) ♥",
-                            color = theme.cardTextColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                    KawaiiClosePill(
+                        label = "Cancel",
+                        isFocused = focusedButton == 0,
+                        onClick = { onDismiss() },
+                        modifier = Modifier.weight(1f)
+                    )
 
                     Box(
                         modifier = Modifier

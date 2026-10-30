@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -284,8 +285,7 @@ fun LidLedColorPickerDialog(
                                 isCustomHexMode = true
                             }
                         )
-                        KawaiiDialogPillButton(
-                            text = "Close",
+                        KawaiiClosePill(
                             isFocused = focusedIndex == totalSwatches + 1,
                             onClick = {
                                 SoundEffectManager.play(context, SoundEffect.BACK)

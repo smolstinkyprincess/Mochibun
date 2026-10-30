@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.screens
 
+import com.crinklecodone.mochibun.ui.components.KawaiiReturnHomePill
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -534,39 +535,13 @@ fun NotificationsScreen(
 
             // Bottom Navigation Pill: Return to Home
             item(key = "home_pill") {
-                val isPillFocused = focusTarget == NotifFocusTarget.HOME_PILL
-                Box(
+                KawaiiReturnHomePill(
+                    isFocused = focusTarget == NotifFocusTarget.HOME_PILL,
+                    onClick = onNavigateHome,
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
                         .padding(top = 8.dp)
-                        .height(38.dp)
-                        .graphicsLayer { clip = false }
-                        .softGlowFocus(isSelected = isPillFocused, cornerRadius = 20.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            if (isPillFocused) {
-                                Brush.horizontalGradient(
-                                    listOf(palette.focusedCardContainer, palette.focusedCardContainerEnd)
-                                )
-                            } else {
-                                SolidColor(palette.container)
-                            }
-                        )
-                        .border(
-                            width = 1.5.dp,
-                            color = if (isPillFocused) palette.focusedCardBorder else palette.outline,
-                            shape = RoundedCornerShape(20.dp)
-                        )
-                        .clickable { onNavigateHome() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "— ♡ Return to Home ♡ —",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isPillFocused) palette.deepAccent else palette.textColor
-                    )
-                }
+                )
             }
         }
         // Bottom Clouds

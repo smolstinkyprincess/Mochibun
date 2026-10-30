@@ -63,6 +63,7 @@ import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.KaomojiRepository
+import com.crinklecodone.mochibun.ui.components.KeitaiLaceContainer
 import com.crinklecodone.mochibun.ui.components.curtainUnfurl
 import com.crinklecodone.mochibun.ui.performBoundaryHaptic
 import com.crinklecodone.mochibun.ui.theme.*
@@ -253,12 +254,12 @@ fun KaomojiWheelCard(
 
     fun copyAndDismiss() = onConfirm()
 
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBackground),
-        border = BorderStroke(1.5.dp, plumOutline.copy(alpha = 0.75f)),
+    KeitaiLaceContainer(
+        cardCornerRadius = 24.dp,
+        containerColor = cardBackground,
+        borderColor = plumOutline.copy(alpha = 0.75f),
         modifier = Modifier
-            .width(260.dp)
+            .width(268.dp)
             .wrapContentSize()
             .curtainUnfurl(visible = true)
             .padding(vertical = 8.dp)

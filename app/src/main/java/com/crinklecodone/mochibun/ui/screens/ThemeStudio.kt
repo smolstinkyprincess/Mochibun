@@ -1003,8 +1003,7 @@ fun ThemeStudioDialog(
                                         color = draft.fgTextColor
                                     )
 
-                                    KawaiiDialogPillButton(
-                                        text = "Close",
+                                    KawaiiClosePill(
                                         isFocused = selectedSwatchIndex == kawaiiSwatches.size,
                                         onClick = { editingColorField = null }
                                     )
@@ -1055,8 +1054,8 @@ fun ThemeStudioDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
-                    KawaiiDialogPillButton(
-                        text = "♥ Cancel (◄) ♥",
+                    KawaiiClosePill(
+                        label = "Cancel",
                         isFocused = editingColorField == null && focusRow == 13 && focusCol == 0,
                         onClick = onDismiss
                     )

@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.content.Context
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
@@ -347,8 +348,7 @@ fun IconPackSelectionDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    KawaiiDialogPillButton(
-                        text = "♥ Close ♥",
+                    KawaiiClosePill(
                         isFocused = focusedIndex == totalItems - 1,
                         onClick = onDismiss
                     )

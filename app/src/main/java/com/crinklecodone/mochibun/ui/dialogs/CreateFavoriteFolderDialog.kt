@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -488,8 +489,8 @@ fun CreateFavoriteFolderDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    KawaiiDialogPillButton(
-                        text = "♥ Cancel (◄) ♥",
+                    KawaiiClosePill(
+                        label = "Cancel",
                         isFocused = focusZone == 3 && buttonCol == 0,
                         onClick = onDismiss
                     )

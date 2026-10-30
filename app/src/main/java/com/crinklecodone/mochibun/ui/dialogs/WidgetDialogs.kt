@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.dialogs
 
+import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -428,7 +430,17 @@ fun WidgetOptionsDialog(
                         Spacer(modifier = Modifier.height(2.dp))
                         HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
                     }
-                    KawaiiDialogItem(
+                    if (isClose) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            KawaiiClosePill(
+                                isFocused = selectedIndex == idx,
+                                onClick = { confirmingRemove = false; selectedIndex = idx; action.run() }
+                            )
+                        }
+                    } else KawaiiDialogItem(
                         text = action.label,
                         isFocused = selectedIndex == idx,
                         enabled = action.enabled,
