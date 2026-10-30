@@ -4,7 +4,6 @@ import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.util.Log
 import androidx.annotation.VisibleForTesting
-import com.topjohnwu.superuser.Shell
 
 /**
  * Streams the AT-M120 hall switch as root.
@@ -33,13 +32,7 @@ internal class HallSwitchReader(
 
     private fun run() {
         if (!RootShell.isSuBinaryPresent()) return
-        val shell = try {
-            Shell.getShell()
-        } catch (e: Throwable) {
-            Log.w(TAG, "Root shell unavailable; lid state falls back to open", e)
-            return
-        }
-        if (!shell.isRoot) {
+        if (!RootShell.acquireBlocking()) {
             Log.i(TAG, "No root; lid state falls back to open")
             return
         }
@@ -85,7 +78,7 @@ internal class HallSwitchReader(
         }
         try {
             val target = "/proc/${Process.myPid()}/fd/${writeEnd.fd}"
-            val out = Shell.cmd(
+            val result = RootShell.executeBlocking(
                 "for p in \$(pidof getevent); do " +
                     "grep -q '$INPUT_DEVICE' /proc/\$p/cmdline 2>/dev/null && kill \$p; done",
                 "getevent -ql $INPUT_DEVICE < /dev/null > $target 2>/dev/null &",
@@ -93,9 +86,9 @@ internal class HallSwitchReader(
                 "while [ \$i -lt 50 ] && [ \"\$(readlink /proc/\$g/fd/1 2>/dev/null)\" != \"\$want\" ]; " +
                     "do sleep 0.02; i=\$((i+1)); done",
                 "[ \"\$(readlink /proc/\$g/fd/1 2>/dev/null)\" = \"\$want\" ] && echo hall-stream-ok"
-            ).exec().out
-            if (out.lastOrNull() == "hall-stream-ok") return readEnd
-            Log.w(TAG, "getevent did not attach to the hall pipe")
+            )
+            if (result.stdout.lastOrNull() == "hall-stream-ok") return readEnd
+            Log.w(TAG, "getevent did not attach to the hall pipe: ${result.errorString}")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to start hall stream", e)
         } finally {
@@ -144,7 +137,7 @@ internal class HallSwitchReader(
                     "[ \"\$v\" = \"$want\" ] && break; sleep 0.15; i=\$((i+1)); done; echo \$v"
             }
             return try {
-                when (Shell.cmd(cmd).exec().out.lastOrNull()?.trim()) {
+                when (RootShell.executeBlocking(cmd).stdout.lastOrNull()?.trim()) {
                     "1" -> true
                     "0" -> false
                     else -> null

@@ -1,7 +1,6 @@
 package com.crinklecodone.mochibun.core.system
 
 import android.util.Log
-import com.topjohnwu.superuser.Shell
 
 /**
  * High-performance, non-blocking touch injector for the Chinoe AT-M120 virtual mouse cursor.
@@ -24,9 +23,9 @@ object RootTouchInjector {
         if (!RootShell.isSuBinaryPresent()) return
 
         try {
-            Shell.cmd("input tap $x $y").submit { result ->
+            RootShell.submit("input tap $x $y") { result ->
                 if (!result.isSuccess) {
-                    Log.w(TAG, "Root tap at ($x, $y) exited with code ${result.code}")
+                    Log.w(TAG, "Root tap at ($x, $y) exited with code ${result.exitCode}")
                 }
             }
         } catch (e: Exception) {
@@ -42,9 +41,9 @@ object RootTouchInjector {
         if (!RootShell.isSuBinaryPresent()) return
 
         try {
-            Shell.cmd("input swipe $x1 $y1 $x2 $y2 $durationMs").submit { result ->
+            RootShell.submit("input swipe $x1 $y1 $x2 $y2 $durationMs") { result ->
                 if (!result.isSuccess) {
-                    Log.w(TAG, "Root swipe ($x1, $y1)->($x2, $y2) exited with code ${result.code}")
+                    Log.w(TAG, "Root swipe ($x1, $y1)->($x2, $y2) exited with code ${result.exitCode}")
                 }
             }
         } catch (e: Exception) {

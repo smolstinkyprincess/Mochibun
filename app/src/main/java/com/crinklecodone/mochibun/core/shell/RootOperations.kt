@@ -35,8 +35,20 @@ data class RootResult(
  */
 interface RootOperations {
     fun isSuBinaryPresent(): Boolean
+
+    /** Cached grant state without blocking: true/false once known, null while undetermined. */
+    fun isGranted(): Boolean?
+
+    /** Starts acquiring the privileged shell in the background so later calls are fast. */
+    fun warmUp()
+
+    /** Blocks until the privileged shell is up; true when it is running as root. Off the main thread only. */
+    fun acquireBlocking(): Boolean
+
     suspend fun requestRoot(): RootStatus
     suspend fun execute(command: String, timeoutMs: Long = 10_000L): RootResult
-    fun executeBlocking(command: String): RootResult
-    fun submit(command: String)
+
+    /** Runs [commands] in order in the same shell session. Off the main thread only. */
+    fun executeBlocking(vararg commands: String): RootResult
+    fun submit(command: String, onResult: ((RootResult) -> Unit)? = null)
 }

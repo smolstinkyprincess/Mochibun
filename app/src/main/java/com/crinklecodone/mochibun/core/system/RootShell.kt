@@ -47,6 +47,25 @@ object RootShell : RootOperations {
         return false
     }
 
+    override fun isGranted(): Boolean? = Shell.isAppGrantedRoot()
+
+    override fun warmUp() {
+        if (!isSuBinaryPresent()) return
+        try {
+            Shell.getShell { }
+        } catch (_: Throwable) {
+        }
+    }
+
+    override fun acquireBlocking(): Boolean {
+        if (!isSuBinaryPresent()) return false
+        return try {
+            Shell.getShell().isRoot
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     /**
      * Requests root privileges, triggering the Magisk/KernelSU prompt if not yet granted.
      * Dispatched to Dispatchers.IO with a timeout guard to prevent UI thread starvation.
@@ -111,12 +130,12 @@ object RootShell : RootOperations {
      * Synchronous blocking shell execution for non-coroutine contexts.
      * Callers must ensure they are already running off the main thread.
      */
-    override fun executeBlocking(command: String): RootResult {
+    override fun executeBlocking(vararg commands: String): RootResult {
         if (!isSuBinaryPresent()) {
             return RootResult.failure("su binary not found")
         }
         return try {
-            val res = Shell.cmd(command).exec()
+            val res = Shell.cmd(*commands).exec()
             RootResult(
                 exitCode = res.code,
                 stdout = res.out,
@@ -130,10 +149,16 @@ object RootShell : RootOperations {
     /**
      * Submits an asynchronous command to the persistent root daemon without blocking the caller.
      */
-    override fun submit(command: String) {
+    override fun submit(command: String, onResult: ((RootResult) -> Unit)?) {
         if (!isSuBinaryPresent()) return
         try {
-            Shell.cmd(command).submit { /* daemon execution, no-op callback */ }
+            if (onResult == null) {
+                Shell.cmd(command).submit()
+            } else {
+                Shell.cmd(command).submit { res ->
+                    onResult(RootResult(exitCode = res.code, stdout = res.out, stderr = res.err))
+                }
+            }
         } catch (_: Throwable) {
             // Ignored if daemon cannot be acquired
         }

@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.service
 
+import com.crinklecodone.mochibun.core.system.RootShell
 import android.accessibilityservice.AccessibilityService
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -32,7 +33,6 @@ import com.crinklecodone.mochibun.ui.dialogs.handleKaomojiWheelNavKey
 import com.crinklecodone.mochibun.ui.performBoundaryHaptic
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.loadSavedTheme
-import com.topjohnwu.superuser.Shell
 
 /**
  * Hosts the Kaomoji Wheel as a TYPE_ACCESSIBILITY_OVERLAY over any app.
@@ -178,10 +178,10 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
                 if (tryAction { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }) return
                 if (node.isEditable && trySetText(node, kaomoji)) return
             }
-            if (Shell.isAppGrantedRoot() == true) {
+            if (RootShell.isGranted() == true) {
                 // `input text` treats %s as space; quote everything else for the shell
                 val escaped = kaomoji.replace(" ", "%s").replace("'", "'\\''")
-                Shell.cmd("input text '$escaped'").submit()
+                RootShell.submit("input text '$escaped'")
             }
         } finally {
             node?.recycle()

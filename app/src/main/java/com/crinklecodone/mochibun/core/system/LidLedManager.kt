@@ -11,7 +11,6 @@ import androidx.annotation.VisibleForTesting
 import com.crinklecodone.mochibun.data.model.MochibunNotificationItem
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.NotificationTracker
-import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -523,7 +522,7 @@ object LidLedManager : ClamshellListener {
         // Unit tests have no context; never run LED programs in the host shell
         if (appContext == null) return
         try {
-            Shell.cmd(script).submit()
+            RootShell.submit(script)
         } catch (e: Throwable) {
             Log.w(TAG, "Lid LED write failed", e)
         }

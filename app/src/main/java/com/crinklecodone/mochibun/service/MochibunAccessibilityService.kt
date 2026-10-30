@@ -23,7 +23,6 @@ import com.crinklecodone.mochibun.data.model.ButtonActionConfig
 import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
-import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -546,20 +545,15 @@ class MochibunAccessibilityService : AccessibilityService() {
 
     /** True when a held-back '#' can be replayed. Never blocks: unknown root status counts as no. */
     private fun canReplayPoundTap(): Boolean {
-        if (Shell.isAppGrantedRoot() == true) return true
+        if (RootShell.isGranted() == true) return true
         // Root not confirmed yet in this process: let this press through and warm a shell for the next
-        if (RootShell.isSuBinaryPresent()) {
-            try {
-                Shell.getShell { }
-            } catch (_: Throwable) {
-            }
-        }
+        RootShell.warmUp()
         return false
     }
 
     private fun replayPoundTap() {
         try {
-            Shell.cmd("input keyevent ${KeyEvent.KEYCODE_POUND}").submit()
+            RootShell.submit("input keyevent ${KeyEvent.KEYCODE_POUND}")
         } catch (e: Throwable) {
             Log.w(TAG, "Failed to replay '#' tap", e)
         }

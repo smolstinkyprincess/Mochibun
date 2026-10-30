@@ -14,7 +14,6 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.VisibleForTesting
-import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -105,7 +104,7 @@ object ClamshellManager {
 
             // Without a live event stream, re-read the switch as root. A screen-off may be the lid
             // closing, so wait briefly for the vendor property to catch up before trusting "open".
-            if (hallReader?.isStreaming != true && Shell.isAppGrantedRoot() == true) {
+            if (hallReader?.isStreaming != true && RootShell.isGranted() == true) {
                 val pending = goAsync()
                 Thread({
                     val closed = HallSwitchReader.readHallProperty(expectClosed = !awake)
