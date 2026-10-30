@@ -14,6 +14,19 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.collections.emptyList
 
+enum class LidOpenAction(val id: String, val label: String) {
+    HOME("home", "Home Screen"),
+    RESUME_LAST_APP("resume_last", "Resume Last App"),
+    NOTIFICATIONS("notifications", "Notifications Screen");
+
+    companion object {
+        fun fromId(id: String?): LidOpenAction = entries.firstOrNull { it.id == id } ?: HOME
+    }
+
+    fun next(): LidOpenAction = entries[(ordinal + 1) % entries.size]
+    fun previous(): LidOpenAction = entries[(ordinal - 1 + entries.size) % entries.size]
+}
+
 /**
  * Centralized preferences manager for Mochibun launcher settings.
  * Exposes reactive StateFlows for Compose consumption without requiring launcher restarts.
@@ -72,6 +85,10 @@ object PreferencesManager {
 
     const val KEY_DPAD_BOUNDARY_HAPTICS = "pref_dpad_boundary_haptics"
     const val DEFAULT_DPAD_BOUNDARY_HAPTICS = true
+    const val KEY_LID_OPEN_ACTION = "pref_lid_open_action"
+    val DEFAULT_LID_OPEN_ACTION = LidOpenAction.HOME.id
+    const val KEY_LID_CLOSE_SNAP_SOUND = "pref_lid_close_snap_sound"
+    const val DEFAULT_LID_CLOSE_SNAP_SOUND = true
 
     const val KEY_KEYPAD_SOUND_MODE = "pref_keypad_sound_mode"
     const val DEFAULT_KEYPAD_SOUND_MODE = "kawaii" // "kawaii", "retro", "off"
@@ -136,6 +153,12 @@ object PreferencesManager {
 
     private val _isDpadBoundaryHaptics = MutableStateFlow(DEFAULT_DPAD_BOUNDARY_HAPTICS)
     val isDpadBoundaryHaptics: StateFlow<Boolean> = _isDpadBoundaryHaptics.asStateFlow()
+
+    private val _lidOpenAction = MutableStateFlow(LidOpenAction.HOME)
+    val lidOpenAction: StateFlow<LidOpenAction> = _lidOpenAction.asStateFlow()
+
+    private val _isLidCloseSnapSoundEnabled = MutableStateFlow(DEFAULT_LID_CLOSE_SNAP_SOUND)
+    val isLidCloseSnapSoundEnabled: StateFlow<Boolean> = _isLidCloseSnapSoundEnabled.asStateFlow()
 
     private val _keypadSoundMode = MutableStateFlow(DEFAULT_KEYPAD_SOUND_MODE)
     val keypadSoundMode: StateFlow<String> = _keypadSoundMode.asStateFlow()
@@ -220,6 +243,13 @@ object PreferencesManager {
             _isDpadWrapAround.value = prefs.getBoolean(
                 KEY_DPAD_WRAP_AROUND,
                 DEFAULT_DPAD_WRAP_AROUND
+            )
+            _lidOpenAction.value = LidOpenAction.fromId(
+                prefs.getString(KEY_LID_OPEN_ACTION, DEFAULT_LID_OPEN_ACTION)
+            )
+            _isLidCloseSnapSoundEnabled.value = prefs.getBoolean(
+                KEY_LID_CLOSE_SNAP_SOUND,
+                DEFAULT_LID_CLOSE_SNAP_SOUND
             )
             _isDpadBoundaryHaptics.value = prefs.getBoolean(
                 KEY_DPAD_BOUNDARY_HAPTICS,
@@ -435,6 +465,22 @@ object PreferencesManager {
             KEY_DPAD_BOUNDARY_HAPTICS,
             DEFAULT_DPAD_BOUNDARY_HAPTICS
         )
+    }
+
+    fun getLidOpenAction(context: Context): LidOpenAction =
+        LidOpenAction.fromId(getPrefs(context).getString(KEY_LID_OPEN_ACTION, DEFAULT_LID_OPEN_ACTION))
+
+    fun setLidOpenAction(context: Context, action: LidOpenAction) {
+        getPrefs(context).edit().putString(KEY_LID_OPEN_ACTION, action.id).apply()
+        _lidOpenAction.value = action
+    }
+
+    fun isLidCloseSnapSoundEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_LID_CLOSE_SNAP_SOUND, DEFAULT_LID_CLOSE_SNAP_SOUND)
+
+    fun setLidCloseSnapSoundEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_LID_CLOSE_SNAP_SOUND, enabled).apply()
+        _isLidCloseSnapSoundEnabled.value = enabled
     }
 
     fun setDpadBoundaryHaptics(context: Context, enabled: Boolean) {

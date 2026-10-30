@@ -21,7 +21,8 @@ enum class SoundEffect {
     CLICK,
     SELECT,
     BACK,
-    BOUNDARY
+    BOUNDARY,
+    SNAP
 }
 
 /**
@@ -194,6 +195,23 @@ object SoundEffectManager {
     }
 
     /**
+     * Plays the clamshell close snap. Unlike [play], it still sounds when keypad sounds are off,
+     * falling back to the "thock" theme.
+     */
+    fun playSnap(context: Context) {
+        if (!PreferencesManager.isLidCloseSnapSoundEnabled(context)) return
+        val streamPref = PreferencesManager.getLauncherAudioStream(context)
+        if (!isInitialized || soundPool == null || currentStreamSetting != streamPref) {
+            init(context.applicationContext)
+        }
+        val pool = soundPool ?: return
+        val mode = PreferencesManager.getKeypadSoundMode(context).let { if (it == "off") "thock" else it }
+        val soundId = soundMap[mode to SoundEffect.SNAP] ?: soundMap["thock" to SoundEffect.SNAP] ?: return
+        val volume = (PreferencesManager.getLauncherSoundVolume(context) / 100f).coerceIn(0f, 1f)
+        if (volume > 0f) pool.play(soundId, volume, volume, 1, 0, 1.0f)
+    }
+
+    /**
      * Synthesizes 16-bit PCM waveforms in memory.
      */
     internal fun synthesizePcm(theme: String, effect: SoundEffect): ShortArray {
@@ -276,6 +294,17 @@ object SoundEffectManager {
                     (s * 18000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
+
+            SoundEffect.SNAP -> {
+                // 30ms resonant chime pop with quick snap decay (2093 Hz + 1046 Hz)
+                val durationMs = 30
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s = (sin(2.0 * PI * 2093.0 * t) * 0.6 + sin(2.0 * PI * 1046.5 * t) * 0.4) * exp(-t * 170.0)
+                    (s * 22000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
         }
     }
 
@@ -338,6 +367,17 @@ object SoundEffectManager {
                     val envelope = exp(-t * 220.0)
                     val s = sin(2.0 * PI * 180.0 * t) * envelope
                     (s * 19000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.SNAP -> {
+                // 25ms plastic flip latch click (1500 Hz impulse + 300 Hz body)
+                val durationMs = 25
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s = (sin(2.0 * PI * 1500.0 * t) * exp(-t * 400.0) * 0.6 + sin(2.0 * PI * 300.0 * t) * exp(-t * 180.0) * 0.4)
+                    (s * 26000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
         }
@@ -416,6 +456,17 @@ object SoundEffectManager {
                     (s * 16000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
+
+            SoundEffect.SNAP -> {
+                // 30ms dual-pulse square snap (1320 Hz then 660 Hz)
+                val durationMs = 30
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s = (if (t < 0.012) pulseWave(t * 1320.0, 0.25) else pulseWave(t * 660.0, 0.5)) * exp(-t * 110.0)
+                    (s * 18000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
         }
     }
 
@@ -491,6 +542,17 @@ object SoundEffectManager {
                     (s * 17000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
+
+            SoundEffect.SNAP -> {
+                // 25ms crystal dual-tone click (2637 Hz + 3136 Hz)
+                val durationMs = 25
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s = (sin(2.0 * PI * 2637.0 * t) * 0.5 + sin(2.0 * PI * 3136.0 * t) * 0.5) * exp(-t * 220.0)
+                    (s * 21000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
         }
     }
 
@@ -562,6 +624,18 @@ object SoundEffectManager {
                     (s * 22000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
+
+            SoundEffect.SNAP -> {
+                // 35ms mechanical latch: 2400 Hz transient + damped 380 Hz casing resonance
+                val durationMs = 35
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val latch = if (t < 0.003) sin(2.0 * PI * 2400.0 * t) * 0.5 else 0.0
+                    val s = latch + sin(2.0 * PI * 380.0 * t) * exp(-t * 150.0) * 0.6
+                    (s * 26000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
         }
     }
 
@@ -631,6 +705,18 @@ object SoundEffectManager {
                     val envelope = exp(-t * 170.0)
                     val s = sin(2.0 * PI * 260.0 * t) * envelope
                     (s * 19000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.SNAP -> {
+                // 30ms deep droplet pop (520 Hz -> 260 Hz)
+                val durationMs = 30
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val freq = 520.0 - (i.toDouble() / samples * 260.0)
+                    val s = sin(2.0 * PI * freq * t) * exp(-t * 100.0)
+                    (s * 23000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
         }

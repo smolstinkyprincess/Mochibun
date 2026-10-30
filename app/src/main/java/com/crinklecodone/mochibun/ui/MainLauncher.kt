@@ -1,5 +1,7 @@
 package com.crinklecodone.mochibun.ui
 
+import com.crinklecodone.mochibun.service.VirtualCursorService
+import com.crinklecodone.mochibun.data.prefs.LidOpenAction
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
@@ -308,8 +310,14 @@ fun MainLauncher(
     val isModalActive = anyModalOpen
 
     // Flip physically closed (never a display timeout): dismiss transient modals, collapse folder/drawer, reset T9 state, and position on Home
+    // Set on a real close so the open action runs on a flip open, not on a display wake with the flip already open
+    var lidClosedSinceOpen by remember { mutableStateOf(false) }
+
     LaunchedEffect(lidClosedCount) {
         if (lidClosedCount > 0) {
+            lidClosedSinceOpen = true
+            SoundEffectManager.playSnap(context)
+            VirtualCursorService.hideCursor()
             activeModal = null
             drawerOpen = false
             centerKeyState = 0
@@ -334,9 +342,35 @@ fun MainLauncher(
     // physical D-pad contracts. A modal kept open across a display timeout keeps its own focus.
     LaunchedEffect(lidOpenCount) {
         if (lidOpenCount > 0 && !anyModalOpen) {
-            homeTracker.wasActive = true
-            homeTracker.settledTimestamp = SystemClock.uptimeMillis()
-            focusRequester.requestFocus()
+            val flipOpened = lidClosedSinceOpen
+            lidClosedSinceOpen = false
+            val action = if (flipOpened) PreferencesManager.getLidOpenAction(context) else null
+            val lastPkg = launcherVm.lastLaunchedPackage
+            val resumeIntent = if (action == LidOpenAction.RESUME_LAST_APP && !lastPkg.isNullOrEmpty() && lastPkg != context.packageName) {
+                context.packageManager.getLaunchIntentForPackage(lastPkg)
+            } else null
+            val resumed = resumeIntent != null && try {
+                context.startActivity(resumeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                true
+            } catch (e: Exception) {
+                false
+            }
+            if (!resumed) {
+                val targetPage = when (action) {
+                    LidOpenAction.NOTIFICATIONS -> 2
+                    null -> null
+                    else -> 1
+                }
+                if (targetPage != null) {
+                    pendingTargetPage = targetPage
+                    pagerState.scrollToPage(targetPage)
+                }
+                homeTracker.wasActive = true
+                homeTracker.settledTimestamp = SystemClock.uptimeMillis()
+                focusRequester.requestFocus()
+            }
+        } else if (lidOpenCount > 0) {
+            lidClosedSinceOpen = false
         }
     }
 

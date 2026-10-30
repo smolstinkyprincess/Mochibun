@@ -13,6 +13,12 @@ import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +30,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +71,7 @@ private const val TAG = "WidgetPage"
 private const val WIDGET_LONG_PRESS_MS = 400L
 
 enum class WidgetFocusSection {
+    HEADER,
     QUICK_SETTINGS,
     NOW_PLAYING,
     SYSTEM_MONITOR,
@@ -157,7 +165,10 @@ fun WidgetPage(
 
     // D-Pad Focus State Management
     fun defaultFocusSection(): WidgetFocusSection =
-        if (isQuickSettingsVisible) WidgetFocusSection.QUICK_SETTINGS else sectionBelowQuickSettings()
+        if (isQuickSettingsVisible) WidgetFocusSection.HEADER else sectionBelowQuickSettings()
+
+    // Quick Settings drawer under the header pill, collapsed by default
+    var isQuickSettingsExpanded by rememberSaveable { mutableStateOf(false) }
 
     var focusSection by remember { mutableStateOf(defaultFocusSection()) }
     var nowPlayingCol by remember { mutableIntStateOf(1) } // 0 = Prev, 1 = Play/Pause, 2 = Next
@@ -377,6 +388,7 @@ fun WidgetPage(
 
     val navigateHomeAndReset: () -> Unit = {
         endWidgetInteraction()
+        isQuickSettingsExpanded = false
         focusSection = defaultFocusSection()
         nowPlayingCol = 1
         quickSettingsIndex = 0
@@ -417,7 +429,7 @@ fun WidgetPage(
             if (!isVisible) {
                 listState.animateScrollToItem(targetIdx)
             }
-        } else if (focusSection == WidgetFocusSection.QUICK_SETTINGS) {
+        } else if (focusSection == WidgetFocusSection.HEADER || focusSection == WidgetFocusSection.QUICK_SETTINGS) {
             listState.animateScrollToItem(0)
         } else if (focusSection == WidgetFocusSection.NOW_PLAYING) {
             listState.animateScrollToItem(qsOffset)
@@ -443,6 +455,7 @@ fun WidgetPage(
             endWidgetInteraction()
             optionsWidgetId = null
             showWidgetPicker = false
+            isQuickSettingsExpanded = false
             focusSection = defaultFocusSection()
             nowPlayingCol = 1
             quickSettingsIndex = 0
@@ -465,6 +478,9 @@ fun WidgetPage(
                     if (event.type == KeyEventType.KeyUp) {
                         if (interactingWidgetId != null) {
                             endWidgetInteraction()
+                        } else if (isQuickSettingsExpanded) {
+                            isQuickSettingsExpanded = false
+                            focusSection = WidgetFocusSection.HEADER
                         } else {
                             navigateHomeAndReset()
                         }
@@ -495,6 +511,9 @@ fun WidgetPage(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         when (focusSection) {
+                            WidgetFocusSection.HEADER -> {
+                                if (isQuickSettingsVisible) isQuickSettingsExpanded = !isQuickSettingsExpanded
+                            }
                             WidgetFocusSection.QUICK_SETTINGS -> {
                                 performQuickSettingsAction(context, quickSettingsIndex)
                                 quickSettingsRefresh++
@@ -558,23 +577,31 @@ fun WidgetPage(
                 when (native.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         when (focusSection) {
+                            WidgetFocusSection.HEADER -> {
+                                HapticManager.performBoundaryHaptic(context)
+                            }
                             WidgetFocusSection.QUICK_SETTINGS -> {
                                 val move = QuickSettingsNav.up(quickSettingsIndex)
                                 if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
+                                else focusSection = WidgetFocusSection.HEADER
                             }
                             WidgetFocusSection.NOW_PLAYING -> {
-                                if (isQuickSettingsVisible) {
+                                if (isQuickSettingsVisible && isQuickSettingsExpanded) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
                                     quickSettingsIndex = if (nowPlayingCol > 1) 3 else 2
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
                                 }
                             }
                             WidgetFocusSection.SYSTEM_MONITOR -> {
                                 if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
-                                } else if (isQuickSettingsVisible) {
+                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
                                     quickSettingsIndex = 2
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
                                 }
                             }
                             WidgetFocusSection.USER_WIDGETS -> {
@@ -585,9 +612,11 @@ fun WidgetPage(
                                 } else if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
-                                } else if (isQuickSettingsVisible) {
+                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
                                     quickSettingsIndex = 2
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
                                 }
                             }
                             WidgetFocusSection.ADD_WIDGET -> {
@@ -599,9 +628,11 @@ fun WidgetPage(
                                 } else if (mediaState.isPlaying) {
                                     focusSection = WidgetFocusSection.NOW_PLAYING
                                     nowPlayingCol = 1
-                                } else if (isQuickSettingsVisible) {
+                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
                                     focusSection = WidgetFocusSection.QUICK_SETTINGS
                                     quickSettingsIndex = 2
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
                                 }
                             }
                             WidgetFocusSection.HOME_PILL -> {
@@ -612,6 +643,17 @@ fun WidgetPage(
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
                         when (focusSection) {
+                            WidgetFocusSection.HEADER -> {
+                                if (isQuickSettingsVisible && isQuickSettingsExpanded) {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = 0
+                                } else {
+                                    val next = sectionBelowQuickSettings()
+                                    if (next == WidgetFocusSection.NOW_PLAYING) nowPlayingCol = 1
+                                    if (next == WidgetFocusSection.USER_WIDGETS) focusedWidgetIdx = 0
+                                    focusSection = next
+                                }
+                            }
                             WidgetFocusSection.QUICK_SETTINGS -> {
                                 when (val move = QuickSettingsNav.down(quickSettingsIndex)) {
                                     is QuickSettingsNav.Move.To -> quickSettingsIndex = move.index
@@ -669,6 +711,9 @@ fun WidgetPage(
                             WidgetFocusSection.NOW_PLAYING -> {
                                 nowPlayingCol = (nowPlayingCol - 1).coerceAtLeast(0)
                             }
+                            WidgetFocusSection.HEADER -> {
+                                HapticManager.performBoundaryHaptic(context)
+                            }
                             else -> {}
                         }
                         true
@@ -722,17 +767,24 @@ fun WidgetPage(
                         .padding(top = 8.dp, bottom = 12.dp)
                 ) {
                     // Gradient pill card: — ♡ Widgets ♡ —
+                    val isHeaderFocused = focusSection == WidgetFocusSection.HEADER
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
+                            .graphicsLayer { clip = false }
+                            .softGlowFocus(isSelected = isHeaderFocused, cornerRadius = 32.dp)
                             .clip(RoundedCornerShape(32.dp))
                             .background(
                                 Brush.horizontalGradient(
                                     colors = listOf(Color(0xFFD5D4F5), Color(0xFFF7CAD8))
                                 )
                             )
-                            .border(1.5.dp, Color(0xFFB5A4CB), RoundedCornerShape(32.dp)),
+                            .border(1.5.dp, if (isHeaderFocused) Color.Transparent else Color(0xFFB5A4CB), RoundedCornerShape(32.dp))
+                            .clickable(enabled = isQuickSettingsVisible) {
+                                focusSection = WidgetFocusSection.HEADER
+                                isQuickSettingsExpanded = !isQuickSettingsExpanded
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -740,7 +792,11 @@ fun WidgetPage(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "— ♡ Widgets ♡ —",
+                                text = when {
+                                    !isQuickSettingsVisible -> "— ♡ Widgets ♡ —"
+                                    isQuickSettingsExpanded -> "— ♡ Widgets ▴ ♡ —"
+                                    else -> "— ♡ Widgets ▾ ♡ —"
+                                },
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ActiveTheme.accentDeep
@@ -793,18 +849,32 @@ fun WidgetPage(
 
             if (isQuickSettingsVisible) {
                 item(key = "quick_settings_card") {
-                    QuickSettingsCard(
-                        isActivePage = isActivePage,
-                        focusedIndex = if (focusSection == WidgetFocusSection.QUICK_SETTINGS) quickSettingsIndex else -1,
-                        onPillClick = { index ->
-                            focusSection = WidgetFocusSection.QUICK_SETTINGS
-                            quickSettingsIndex = index
-                            performQuickSettingsAction(context, index)
-                            quickSettingsRefresh++
-                        },
-                        refreshKey = quickSettingsRefresh,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    AnimatedVisibility(
+                        visible = isQuickSettingsExpanded,
+                        enter = expandVertically(animationSpec = tween(160), clip = false) + fadeIn(animationSpec = tween(120)),
+                        exit = shrinkVertically(animationSpec = tween(140), clip = false) + fadeOut(animationSpec = tween(100))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .curtainUnfurl(visible = isQuickSettingsExpanded)
+                                .graphicsLayer { clip = false }
+                        ) {
+                            QuickSettingsCard(
+                                // Polling only runs while the drawer is open
+                                isActivePage = isActivePage && isQuickSettingsExpanded,
+                                focusedIndex = if (focusSection == WidgetFocusSection.QUICK_SETTINGS) quickSettingsIndex else -1,
+                                onPillClick = { index ->
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = index
+                                    performQuickSettingsAction(context, index)
+                                    quickSettingsRefresh++
+                                },
+                                refreshKey = quickSettingsRefresh,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 }
             }
 

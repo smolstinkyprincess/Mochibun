@@ -48,6 +48,12 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         fun toggleCursor() {
             instance?.toggleCursorVisibility()
         }
+
+        fun hideCursor() {
+            val service = instance ?: return
+            if (!isCursorVisible) return
+            service.mainHandler.post { service.handleLidClosed() }
+        }
     }
 
     private lateinit var windowManager: WindowManager

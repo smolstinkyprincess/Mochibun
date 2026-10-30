@@ -203,7 +203,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         return nextMode
     }
 
+    var lastLaunchedPackage: String? by mutableStateOf(null)
+        private set
+
     fun recordAppLaunch(packageName: String) {
+        lastLaunchedPackage = packageName
         val currentCount = launchCounts[packageName] ?: 0
         val newMap = launchCounts.toMutableMap()
         newMap[packageName] = currentCount + 1

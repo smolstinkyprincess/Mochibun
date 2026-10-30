@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -46,6 +48,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -386,26 +389,29 @@ fun SpeechBubble(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.graphicsLayer { clip = false },
+        modifier = modifier
+            .widthIn(min = 48.dp, max = 260.dp)
+            .graphicsLayer { clip = false },
         horizontalAlignment = Alignment.End
     ) {
         Box(
             modifier = Modifier
                 .background(bgColor, RoundedCornerShape(12.dp))
                 .border(1.5.dp, borderColor, RoundedCornerShape(12.dp))
-                .padding(horizontal = 9.dp, vertical = 3.5.dp),
+                .padding(horizontal = 10.dp, vertical = 4.5.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
                 fontFamily = M3x6FontFamily,
                 fontSize = 18.sp,
-                lineHeight = 19.sp,
+                lineHeight = 21.sp,
                 fontWeight = FontWeight.Normal,
                 color = textColor,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                softWrap = true,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
@@ -543,6 +549,8 @@ fun MochibunnyWithSpeechBubble(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset(x = 10.dp, y = (-32).dp)
+                .wrapContentWidth(align = Alignment.End, unbounded = true)
+                .widthIn(max = 260.dp)
                 .zIndex(1f)
                 .graphicsLayer {
                     scaleX = popScale.value

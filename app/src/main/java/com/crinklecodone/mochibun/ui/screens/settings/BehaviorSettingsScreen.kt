@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.screens.settings
 
+import com.crinklecodone.mochibun.data.prefs.LidOpenAction
 import android.content.Intent
 import android.provider.Settings
 import android.view.KeyEvent
@@ -107,6 +108,8 @@ internal fun BehaviorSettingsSubScreen(
     val isLidLedEnabled by PreferencesManager.isLidLedEnabled.collectAsState()
     val isLidLedChargingEnabled by PreferencesManager.isLidLedChargingEnabled.collectAsState()
     val lidLedColor by PreferencesManager.lidLedColor.collectAsState()
+    val lidOpenAction by PreferencesManager.lidOpenAction.collectAsState()
+    val isLidCloseSnapSoundEnabled by PreferencesManager.isLidCloseSnapSoundEnabled.collectAsState()
     var showLidLedColorPicker by remember { mutableStateOf(false) }
     val isMediaVolumeLockEnabled by PreferencesManager.isMediaVolumeLockEnabled.collectAsState()
     val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
@@ -128,6 +131,8 @@ internal fun BehaviorSettingsSubScreen(
             add("audio_stream")
             add("sound_volume")
             add("media_volume_lock")
+            add("lid_open_action")
+            add("lid_close_snap")
             add("lid_led_notification")
             if (isLidLedEnabled) {
                 add("lid_led_color")
@@ -147,7 +152,7 @@ internal fun BehaviorSettingsSubScreen(
             "create_folder", "folder_grid" -> 0
             "t9_search", "hidden_apps" -> 1
             "keypad_remapper", "dpad_wrap", "boundary_haptics", "keypad_sound", "audio_stream", "sound_volume", "media_volume_lock" -> 2
-            "lid_led_notification", "lid_led_color", "lid_led_charging" -> 3
+            "lid_open_action", "lid_close_snap", "lid_led_notification", "lid_led_color", "lid_led_charging" -> 3
             "system_monitor", "monitor_interval" -> 4
             else -> 0
         }
@@ -216,6 +221,15 @@ internal fun BehaviorSettingsSubScreen(
                         SoundEffectManager.play(context, SoundEffect.NAV)
                     }
                 }
+            }
+            "lid_open_action" -> {
+                PreferencesManager.setLidOpenAction(context, lidOpenAction.next())
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "lid_close_snap" -> {
+                val next = !isLidCloseSnapSoundEnabled
+                PreferencesManager.setLidCloseSnapSoundEnabled(context, next)
+                if (next) SoundEffectManager.playSnap(context)
             }
             "lid_led_notification" -> {
                 val next = !isLidLedEnabled
@@ -331,6 +345,10 @@ internal fun BehaviorSettingsSubScreen(
                                         PreferencesManager.setLidLedColor(context, presets[nextIdx].id)
                                         SoundEffectManager.play(context, SoundEffect.NAV)
                                     }
+                                    "lid_open_action" -> {
+                                        PreferencesManager.setLidOpenAction(context, lidOpenAction.previous())
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
                                     "monitor_interval" -> {
                                         val nextInterval = when (systemMonitorInterval) {
                                             5 -> 3
@@ -373,6 +391,10 @@ internal fun BehaviorSettingsSubScreen(
                                         val curIdx = presets.indexOfFirst { it.id.equals(lidLedColor, ignoreCase = true) }
                                         val nextIdx = if (curIdx == -1 || curIdx >= presets.size - 1) 0 else curIdx + 1
                                         PreferencesManager.setLidLedColor(context, presets[nextIdx].id)
+                                        SoundEffectManager.play(context, SoundEffect.NAV)
+                                    }
+                                    "lid_open_action" -> {
+                                        PreferencesManager.setLidOpenAction(context, lidOpenAction.next())
                                         SoundEffectManager.play(context, SoundEffect.NAV)
                                     }
                                     "monitor_interval" -> {
@@ -612,6 +634,42 @@ internal fun BehaviorSettingsSubScreen(
 
             item {
                 SettingsCard(categoryTitle = "Clamshell & Exterior LED") {
+                    SettingsStepperRow(
+                        title = "Lid Open Action",
+                        subtitle = when (lidOpenAction) {
+                            LidOpenAction.HOME -> "Open flip directly to main home screen"
+                            LidOpenAction.RESUME_LAST_APP -> "Resume most recently launched application"
+                            LidOpenAction.NOTIFICATIONS -> "Open flip directly to notifications deck"
+                        },
+                        valueDisplay = lidOpenAction.label,
+                        isFocused = items.getOrNull(focusedIndex) == "lid_open_action",
+                        jumpNumber = jumpNum("lid_open_action"),
+                        onClick = {
+                            PreferencesManager.setLidOpenAction(context, lidOpenAction.next())
+                            SoundEffectManager.play(context, SoundEffect.SELECT)
+                        },
+                        onDecrement = {
+                            PreferencesManager.setLidOpenAction(context, lidOpenAction.previous())
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        },
+                        onIncrement = {
+                            PreferencesManager.setLidOpenAction(context, lidOpenAction.next())
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Lid Close Snap Sound",
+                        subtitle = if (isLidCloseSnapSoundEnabled) "Play mechanical snap sound on flip close" else "Lid close sound muted",
+                        checked = isLidCloseSnapSoundEnabled,
+                        isFocused = items.getOrNull(focusedIndex) == "lid_close_snap",
+                        jumpNumber = jumpNum("lid_close_snap"),
+                        onCheckedChange = {
+                            PreferencesManager.setLidCloseSnapSoundEnabled(context, it)
+                            if (it) SoundEffectManager.playSnap(context)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "Lid Notification LED",
                         subtitle = if (isLidLedEnabled) "Pulse exterior breathing LED when lid is closed" else "Exterior notification LED disabled",
