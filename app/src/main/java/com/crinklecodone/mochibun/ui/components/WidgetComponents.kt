@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.net.Uri
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
@@ -38,6 +39,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -53,28 +56,36 @@ import com.crinklecodone.mochibun.core.widget.MochibunWidgetHost
 import com.crinklecodone.mochibun.core.widget.NavDirection
 import com.crinklecodone.mochibun.core.widget.WidgetFrame
 import com.crinklecodone.mochibun.core.system.RootShell
+import com.crinklecodone.mochibun.core.util.loadDownsampledPhotoBitmap
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.WidgetRepository
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.data.repository.MediaSessionTracker
+import com.crinklecodone.mochibun.ui.dialogs.PhotoFrameActionDialog
 import com.crinklecodone.mochibun.ui.dialogs.WidgetOptionsDialog
 import com.crinklecodone.mochibun.ui.dialogs.WidgetPickerDialog
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TAG = "WidgetPage"
 
 /** Holding OK this long on a widget opens its options instead of using it. */
 private const val WIDGET_LONG_PRESS_MS = 400L
 
+/** Labels the photo frame's "Label" action cycles through. */
+private val PHOTO_FRAME_LABELS = listOf("Mochi ♡", "Kawaii ✨", "Memories 🌸")
+
 enum class WidgetFocusSection {
     HEADER,
     QUICK_SETTINGS,
     NOW_PLAYING,
     SYSTEM_MONITOR,
+    PHOTO_FRAME,
     USER_WIDGETS,
     ADD_WIDGET,
     HOME_PILL
@@ -109,6 +120,18 @@ fun WidgetPage(
     val scope = rememberCoroutineScope()
 
     val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
+    val isPhotoFrameEnabled by PreferencesManager.isPhotoFrameEnabled.collectAsState()
+    val photoFrameUri by PreferencesManager.photoFrameUri.collectAsState()
+    val photoFrameStyle by PreferencesManager.photoFrameStyle.collectAsState()
+    val photoFrameLabel by PreferencesManager.photoFrameLabel.collectAsState()
+
+    // Decoded here rather than in the card so scrolling the card off and back doesn't re-decode
+    val photoFrameBitmap by produceState<ImageBitmap?>(null, photoFrameUri, isPhotoFrameEnabled) {
+        val uri = photoFrameUri
+        value = if (uri == null || !isPhotoFrameEnabled) null else withContext(Dispatchers.IO) {
+            loadDownsampledPhotoBitmap(context, Uri.parse(uri))?.asImageBitmap()
+        }
+    }
 
     val appWidgetManager = remember { AppWidgetManager.getInstance(context) }
     val widgetHost = remember { MochibunWidgetHost.get(context) }
@@ -160,6 +183,7 @@ fun WidgetPage(
     fun sectionBelowQuickSettings(): WidgetFocusSection =
         if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
         else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
+        else if (isPhotoFrameEnabled) WidgetFocusSection.PHOTO_FRAME
         else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
         else WidgetFocusSection.ADD_WIDGET
 
@@ -184,7 +208,8 @@ fun WidgetPage(
     var interactingWidgetId by remember { mutableStateOf<Int?>(null) }
     var optionsWidgetId by remember { mutableStateOf<Int?>(null) }
     var showWidgetPicker by remember { mutableStateOf(false) }
-    val anyWidgetDialogOpen = optionsWidgetId != null || showWidgetPicker
+    var showPhotoFrameDialog by remember { mutableStateOf(false) }
+    val anyWidgetDialogOpen = optionsWidgetId != null || showWidgetPicker || showPhotoFrameDialog
 
     fun endWidgetInteraction() {
         interactingWidgetId?.let { widgetFrames[it]?.endInteraction() }
@@ -383,6 +408,36 @@ fun WidgetPage(
         }
     }
 
+    /** Drops our read grant on a photo the frame no longer shows, unless the wallpaper still uses it. */
+    fun releasePhotoFrameUri(uri: String?) {
+        if (uri == null || uri == PreferencesManager.getWallpaperUri(context)) return
+        try {
+            context.contentResolver.releasePersistableUriPermission(
+                Uri.parse(uri),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: Exception) {
+        }
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "No persistable permission for photo $uri", e)
+            }
+            val old = PreferencesManager.photoFrameUri.value
+            PreferencesManager.setPhotoFrameUri(context, uri.toString())
+            if (old != uri.toString()) releasePhotoFrameUri(old)
+        }
+    }
+
     val pageFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
@@ -397,13 +452,19 @@ fun WidgetPage(
         onNavigateHome()
     }
 
-    // Graceful D-pad focus fallback when active music playback stops or system monitor is toggled
-    LaunchedEffect(mediaState.isPlaying, isSystemMonitorEnabled) {
+    // Graceful D-pad focus fallback when active music playback stops or a card is toggled off
+    LaunchedEffect(mediaState.isPlaying, isSystemMonitorEnabled, isPhotoFrameEnabled) {
         if (!mediaState.isPlaying && focusSection == WidgetFocusSection.NOW_PLAYING) {
             focusSection = if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
+                else if (isPhotoFrameEnabled) WidgetFocusSection.PHOTO_FRAME
                 else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
                 else WidgetFocusSection.HOME_PILL
         } else if (!isSystemMonitorEnabled && focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
+            focusSection = if (isPhotoFrameEnabled) WidgetFocusSection.PHOTO_FRAME
+                else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+                else WidgetFocusSection.HOME_PILL
+        } else if (!isPhotoFrameEnabled && focusSection == WidgetFocusSection.PHOTO_FRAME) {
+            showPhotoFrameDialog = false
             focusSection = if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
                 else WidgetFocusSection.HOME_PILL
         }
@@ -423,7 +484,8 @@ fun WidgetPage(
     // Ensure focused item is visible in LazyColumn
     LaunchedEffect(focusSection, focusedWidgetIdx) {
         if (focusSection == WidgetFocusSection.USER_WIDGETS && widgetSlots.isNotEmpty()) {
-            val baseOffset = 1 + qsOffset + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
+            val baseOffset = 1 + qsOffset + (if (mediaState.isPlaying) 1 else 0) +
+                (if (isSystemMonitorEnabled) 1 else 0) + (if (isPhotoFrameEnabled) 1 else 0)
             val targetIdx = baseOffset + focusedWidgetIdx
             val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
             if (!isVisible) {
@@ -436,6 +498,17 @@ fun WidgetPage(
         } else if (focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
             val targetIdx = qsOffset + if (mediaState.isPlaying) 1 else 0
             listState.animateScrollToItem(targetIdx)
+        } else if (focusSection == WidgetFocusSection.PHOTO_FRAME) {
+            // The frame is tall, so scroll only when part of it is off screen
+            val targetIdx = 1 + qsOffset + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
+            val layout = listState.layoutInfo
+            val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
+            val fullyVisible = item != null &&
+                item.offset >= layout.viewportStartOffset &&
+                item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
+            if (!fullyVisible) {
+                listState.animateScrollToItem(targetIdx)
+            }
         }
     }
 
@@ -455,6 +528,7 @@ fun WidgetPage(
             endWidgetInteraction()
             optionsWidgetId = null
             showWidgetPicker = false
+            showPhotoFrameDialog = false
             isQuickSettingsExpanded = false
             focusSection = defaultFocusSection()
             nowPlayingCol = 1
@@ -527,6 +601,9 @@ fun WidgetPage(
                             }
                             WidgetFocusSection.SYSTEM_MONITOR -> {
                                 systemMonitorRefreshTrigger++
+                            }
+                            WidgetFocusSection.PHOTO_FRAME -> {
+                                showPhotoFrameDialog = true
                             }
                             WidgetFocusSection.USER_WIDGETS -> {
                                 val widgetId = widgetSlots.getOrNull(focusedWidgetIdx)?.appWidgetId
@@ -604,9 +681,24 @@ fun WidgetPage(
                                     focusSection = WidgetFocusSection.HEADER
                                 }
                             }
+                            WidgetFocusSection.PHOTO_FRAME -> {
+                                if (isSystemMonitorEnabled) {
+                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
+                                } else if (mediaState.isPlaying) {
+                                    focusSection = WidgetFocusSection.NOW_PLAYING
+                                    nowPlayingCol = 1
+                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = 2
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
+                                }
+                            }
                             WidgetFocusSection.USER_WIDGETS -> {
                                 if (focusedWidgetIdx > 0) {
                                     focusedWidgetIdx--
+                                } else if (isPhotoFrameEnabled) {
+                                    focusSection = WidgetFocusSection.PHOTO_FRAME
                                 } else if (isSystemMonitorEnabled) {
                                     focusSection = WidgetFocusSection.SYSTEM_MONITOR
                                 } else if (mediaState.isPlaying) {
@@ -623,6 +715,8 @@ fun WidgetPage(
                                 if (widgetSlots.isNotEmpty()) {
                                     focusSection = WidgetFocusSection.USER_WIDGETS
                                     focusedWidgetIdx = widgetSlots.size - 1
+                                } else if (isPhotoFrameEnabled) {
+                                    focusSection = WidgetFocusSection.PHOTO_FRAME
                                 } else if (isSystemMonitorEnabled) {
                                     focusSection = WidgetFocusSection.SYSTEM_MONITOR
                                 } else if (mediaState.isPlaying) {
@@ -670,6 +764,8 @@ fun WidgetPage(
                             WidgetFocusSection.NOW_PLAYING -> {
                                 if (isSystemMonitorEnabled) {
                                     focusSection = WidgetFocusSection.SYSTEM_MONITOR
+                                } else if (isPhotoFrameEnabled) {
+                                    focusSection = WidgetFocusSection.PHOTO_FRAME
                                 } else if (widgetSlots.isNotEmpty()) {
                                     focusSection = WidgetFocusSection.USER_WIDGETS
                                     focusedWidgetIdx = 0
@@ -678,6 +774,16 @@ fun WidgetPage(
                                 }
                             }
                             WidgetFocusSection.SYSTEM_MONITOR -> {
+                                if (isPhotoFrameEnabled) {
+                                    focusSection = WidgetFocusSection.PHOTO_FRAME
+                                } else if (widgetSlots.isNotEmpty()) {
+                                    focusSection = WidgetFocusSection.USER_WIDGETS
+                                    focusedWidgetIdx = 0
+                                } else {
+                                    focusSection = WidgetFocusSection.ADD_WIDGET
+                                }
+                            }
+                            WidgetFocusSection.PHOTO_FRAME -> {
                                 if (widgetSlots.isNotEmpty()) {
                                     focusSection = WidgetFocusSection.USER_WIDGETS
                                     focusedWidgetIdx = 0
@@ -909,6 +1015,25 @@ fun WidgetPage(
                 }
             }
 
+            // Photo frame card (Instax / Purikura / Pearl Lace)
+            if (isPhotoFrameEnabled) {
+                item(key = "photo_frame_card") {
+                    PhotoFrameCard(
+                        photo = photoFrameBitmap,
+                        frameStyle = photoFrameStyle,
+                        label = photoFrameLabel,
+                        isFocused = focusSection == WidgetFocusSection.PHOTO_FRAME,
+                        onClick = {
+                            focusSection = WidgetFocusSection.PHOTO_FRAME
+                            showPhotoFrameDialog = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    )
+                }
+            }
+
             // User-added Android App Widgets
             itemsIndexed(widgetSlots, key = { _, slot -> slot.appWidgetId }) { idx, slot ->
                 AppWidgetHostCard(
@@ -994,6 +1119,40 @@ fun WidgetPage(
                 availableWidthPx = cardWidthPx,
                 onPick = { info -> addWidget(info) },
                 onDismiss = { showWidgetPicker = false }
+            )
+        }
+
+        if (showPhotoFrameDialog) {
+            PhotoFrameActionDialog(
+                hasPhoto = photoFrameUri != null,
+                styleDisplayName = PhotoFrameStyle.fromId(photoFrameStyle).displayName,
+                label = photoFrameLabel,
+                onPickPhoto = {
+                    showPhotoFrameDialog = false
+                    try {
+                        photoPickerLauncher.launch(arrayOf("image/*"))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Photo picker failed", e)
+                        Toast.makeText(context, "Couldn't open the photo picker ♡", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onCycleStyle = {
+                    PreferencesManager.setPhotoFrameStyle(
+                        context,
+                        PhotoFrameStyle.fromId(photoFrameStyle).next().id
+                    )
+                },
+                onCycleLabel = {
+                    val next = PHOTO_FRAME_LABELS[(PHOTO_FRAME_LABELS.indexOf(photoFrameLabel) + 1) % PHOTO_FRAME_LABELS.size]
+                    PreferencesManager.setPhotoFrameLabel(context, next)
+                },
+                onRemovePhoto = {
+                    showPhotoFrameDialog = false
+                    val old = photoFrameUri
+                    PreferencesManager.setPhotoFrameUri(context, null)
+                    releasePhotoFrameUri(old)
+                },
+                onDismiss = { showPhotoFrameDialog = false }
             )
         }
 

@@ -127,6 +127,14 @@ object PreferencesManager {
     const val DEFAULT_ROOT_QUICK_SETTINGS_ENABLED = true
 
     const val KEY_WALLPAPER_URI = "wallpaper_uri"
+
+    const val KEY_PHOTO_FRAME_URI = "pref_photo_frame_uri"
+    const val KEY_PHOTO_FRAME_STYLE = "pref_photo_frame_style"
+    const val DEFAULT_PHOTO_FRAME_STYLE = "INSTAX" // "INSTAX", "PURIKURA", "PEARL_LACE"
+    const val KEY_PHOTO_FRAME_LABEL = "pref_photo_frame_label"
+    const val DEFAULT_PHOTO_FRAME_LABEL = "Mochi ♡"
+    const val KEY_PHOTO_FRAME_ENABLED = "pref_photo_frame_enabled"
+    const val DEFAULT_PHOTO_FRAME_ENABLED = true
     const val KEY_HIDDEN_APPS = "hidden_apps"
     const val KEY_FAVORITE_ITEMS_ORDERED = "favorite_items_ordered_v1"
     const val KEY_CUSTOM_ICON_PREFIX = "custom_icon_"
@@ -198,6 +206,18 @@ object PreferencesManager {
 
     private val _isRootQuickSettingsEnabled = MutableStateFlow(DEFAULT_ROOT_QUICK_SETTINGS_ENABLED)
     val isRootQuickSettingsEnabled: StateFlow<Boolean> = _isRootQuickSettingsEnabled.asStateFlow()
+
+    private val _photoFrameUri = MutableStateFlow<String?>(null)
+    val photoFrameUri: StateFlow<String?> = _photoFrameUri.asStateFlow()
+
+    private val _photoFrameStyle = MutableStateFlow(DEFAULT_PHOTO_FRAME_STYLE)
+    val photoFrameStyle: StateFlow<String> = _photoFrameStyle.asStateFlow()
+
+    private val _photoFrameLabel = MutableStateFlow(DEFAULT_PHOTO_FRAME_LABEL)
+    val photoFrameLabel: StateFlow<String> = _photoFrameLabel.asStateFlow()
+
+    private val _isPhotoFrameEnabled = MutableStateFlow(DEFAULT_PHOTO_FRAME_ENABLED)
+    val isPhotoFrameEnabled: StateFlow<Boolean> = _isPhotoFrameEnabled.asStateFlow()
 
     private var initialized = false
 
@@ -290,6 +310,19 @@ object PreferencesManager {
                 KEY_THEME_FONT_FAMILY,
                 DEFAULT_THEME_FONT_FAMILY
             ) ?: DEFAULT_THEME_FONT_FAMILY
+            _photoFrameUri.value = prefs.getString(KEY_PHOTO_FRAME_URI, null)
+            _photoFrameStyle.value = prefs.getString(
+                KEY_PHOTO_FRAME_STYLE,
+                DEFAULT_PHOTO_FRAME_STYLE
+            ) ?: DEFAULT_PHOTO_FRAME_STYLE
+            _photoFrameLabel.value = prefs.getString(
+                KEY_PHOTO_FRAME_LABEL,
+                DEFAULT_PHOTO_FRAME_LABEL
+            ) ?: DEFAULT_PHOTO_FRAME_LABEL
+            _isPhotoFrameEnabled.value = prefs.getBoolean(
+                KEY_PHOTO_FRAME_ENABLED,
+                DEFAULT_PHOTO_FRAME_ENABLED
+            )
             initialized = true
         }
     }
@@ -386,6 +419,30 @@ object PreferencesManager {
     fun setSystemMonitorEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SYSTEM_MONITOR_ENABLED, enabled).apply()
         _isSystemMonitorEnabled.value = enabled
+    }
+
+    fun setPhotoFrameUri(context: Context, uri: String?) {
+        if (uri == null) {
+            getPrefs(context).edit().remove(KEY_PHOTO_FRAME_URI).apply()
+        } else {
+            getPrefs(context).edit().putString(KEY_PHOTO_FRAME_URI, uri).apply()
+        }
+        _photoFrameUri.value = uri
+    }
+
+    fun setPhotoFrameStyle(context: Context, style: String) {
+        getPrefs(context).edit().putString(KEY_PHOTO_FRAME_STYLE, style).apply()
+        _photoFrameStyle.value = style
+    }
+
+    fun setPhotoFrameLabel(context: Context, label: String) {
+        getPrefs(context).edit().putString(KEY_PHOTO_FRAME_LABEL, label).apply()
+        _photoFrameLabel.value = label
+    }
+
+    fun setPhotoFrameEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_PHOTO_FRAME_ENABLED, enabled).apply()
+        _isPhotoFrameEnabled.value = enabled
     }
 
     fun isFolderGridMode(context: Context): Boolean {

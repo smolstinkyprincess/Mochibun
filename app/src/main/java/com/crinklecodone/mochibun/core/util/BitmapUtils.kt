@@ -159,3 +159,47 @@ fun loadWallpaperBitmap(
         null
     }
 }
+
+
+/**
+ * Decodes a photo-frame picture so neither side exceeds [targetDim] pixels, as RGB_565.
+ * At the default 300 px that caps the bitmap at ~180 KB (300 × 300 × 2 bytes).
+ */
+fun loadDownsampledPhotoBitmap(
+    context: Context,
+    uri: Uri,
+    targetDim: Int = 300
+): Bitmap? {
+    return try {
+        val resolver = context.contentResolver
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { rawStream ->
+            BufferedInputStream(rawStream).use { stream ->
+                BitmapFactory.decodeStream(stream, null, bounds)
+            }
+        } ?: return null
+
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            return null
+        }
+
+        var sampleSize = 1
+        while (bounds.outWidth / sampleSize > targetDim || bounds.outHeight / sampleSize > targetDim) {
+            sampleSize *= 2
+        }
+
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+
+        resolver.openInputStream(uri)?.use { rawStream ->
+            BufferedInputStream(rawStream).use { stream ->
+                BitmapFactory.decodeStream(stream, null, options)
+            }
+        }?.also { it.prepareToDraw() }
+    } catch (e: Exception) {
+        Log.e("BitmapUtils", "Failed to decode photo frame bitmap from $uri: ${e.message}")
+        null
+    }
+}
