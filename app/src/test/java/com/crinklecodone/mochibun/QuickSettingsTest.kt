@@ -1,9 +1,11 @@
 package com.crinklecodone.mochibun
 
 import android.media.AudioManager
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.ui.components.QuickSettingsNav
 import com.crinklecodone.mochibun.ui.components.QuickSettingsNav.Move
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QuickSettingsTest {
@@ -52,5 +54,12 @@ class QuickSettingsTest {
         assertEquals("🔔 Normal", QuickSettingsNav.ringerLabel(AudioManager.RINGER_MODE_NORMAL))
         assertEquals("📳 Vibrate", QuickSettingsNav.ringerLabel(AudioManager.RINGER_MODE_VIBRATE))
         assertEquals("🔇 Silent", QuickSettingsNav.ringerLabel(AudioManager.RINGER_MODE_SILENT))
+    }
+
+    @Test
+    fun rootQuickSettingsPrefDefaultsOn() {
+        assertEquals("pref_root_quick_settings_enabled", PreferencesManager.KEY_ROOT_QUICK_SETTINGS_ENABLED)
+        assertTrue(PreferencesManager.DEFAULT_ROOT_QUICK_SETTINGS_ENABLED)
+        assertTrue(PreferencesManager.isRootQuickSettingsEnabled.value)
     }
 }

@@ -22,12 +22,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.core.haptic.HapticManager
+import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.core.system.TorchManager
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.palette
 import kotlinx.coroutines.delay
 
 private const val QUICK_SETTINGS_POLL_MS = 2_500L
+
+/** Bumped after an in-place root toggle so the card re-samples quickly. */
+private val rootToggleCount = mutableIntStateOf(0)
 
 /** Pure 2x2 grid navigation + ringer label logic (unit-tested). Layout: 0 1 / 2 3. */
 object QuickSettingsNav {
@@ -114,11 +119,36 @@ private fun cycleRingerMode(context: Context) {
     }
 }
 
+private fun toggleWifiWithRoot(currentState: Boolean) {
+    RootShell.submit(if (currentState) "svc wifi disable" else "svc wifi enable")
+}
+
+private fun toggleBluetoothWithRoot(currentState: Boolean) {
+    // Android 12 cmd first, service call fallback
+    RootShell.submit(
+        if (currentState) "cmd bluetooth_manager disable || service call bluetooth_manager 8"
+        else "cmd bluetooth_manager enable || service call bluetooth_manager 6"
+    )
+}
+
 /** Runs the toggle/action for a grid index. Shared by D-pad OK and touch. */
 fun performQuickSettingsAction(context: Context, index: Int) {
+    val useRoot = PreferencesManager.isRootQuickSettingsEnabled(context) && RootShell.isRootAvailable()
     when (index) {
-        QuickSettingsNav.WIFI -> openPanel(context, Settings.Panel.ACTION_WIFI, Settings.ACTION_WIFI_SETTINGS)
-        QuickSettingsNav.BLUETOOTH -> openPanel(context, "android.settings.panel.action.BLUETOOTH", Settings.ACTION_BLUETOOTH_SETTINGS)
+        QuickSettingsNav.WIFI -> if (useRoot) {
+            toggleWifiWithRoot(sampleQuickSettings(context).wifiOn)
+            rootToggleCount.intValue++
+            HapticManager.performBoundaryHaptic(context)
+        } else {
+            openPanel(context, Settings.Panel.ACTION_WIFI, Settings.ACTION_WIFI_SETTINGS)
+        }
+        QuickSettingsNav.BLUETOOTH -> if (useRoot) {
+            toggleBluetoothWithRoot(sampleQuickSettings(context).bluetoothOn)
+            rootToggleCount.intValue++
+            HapticManager.performBoundaryHaptic(context)
+        } else {
+            openPanel(context, "android.settings.panel.action.BLUETOOTH", Settings.ACTION_BLUETOOTH_SETTINGS)
+        }
         QuickSettingsNav.TORCH -> {
             if (TorchManager.toggleTorch(context) == null) HapticManager.performBoundaryHaptic(context)
         }
@@ -147,6 +177,16 @@ fun QuickSettingsCard(
         while (true) {
             state = sampleQuickSettings(context)
             delay(QUICK_SETTINGS_POLL_MS)
+        }
+    }
+
+    // Fast re-sample after a root toggle so the pill flips without waiting for the poll
+    val rootToggles = rootToggleCount.intValue
+    LaunchedEffect(rootToggles) {
+        if (rootToggles == 0) return@LaunchedEffect
+        for (wait in longArrayOf(150L, 350L, 700L)) {
+            delay(wait)
+            state = sampleQuickSettings(context)
         }
     }
 

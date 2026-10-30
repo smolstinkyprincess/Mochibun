@@ -32,6 +32,9 @@ object RootShell : RootOperations {
      * Fast filesystem check to verify if a su binary exists in PATH or standard paths.
      * Non-blocking and never triggers Magisk/KernelSU authorization prompts.
      */
+    /** True when a su binary exists; root features may then be attempted. */
+    fun isRootAvailable(): Boolean = isSuBinaryPresent()
+
     override fun isSuBinaryPresent(): Boolean {
         for (path in SU_PATHS) {
             if (File(path).exists()) return true

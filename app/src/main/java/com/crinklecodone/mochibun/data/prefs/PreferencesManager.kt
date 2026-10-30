@@ -106,6 +106,8 @@ object PreferencesManager {
 
     const val KEY_ROOT_A11Y_WATCHDOG_ENABLED = "pref_root_a11y_watchdog_enabled"
     const val DEFAULT_ROOT_A11Y_WATCHDOG_ENABLED = true
+    const val KEY_ROOT_QUICK_SETTINGS_ENABLED = "pref_root_quick_settings_enabled"
+    const val DEFAULT_ROOT_QUICK_SETTINGS_ENABLED = true
 
     const val KEY_WALLPAPER_URI = "wallpaper_uri"
     const val KEY_HIDDEN_APPS = "hidden_apps"
@@ -171,11 +173,18 @@ object PreferencesManager {
     private val _themeFontFamily = MutableStateFlow(DEFAULT_THEME_FONT_FAMILY)
     val themeFontFamily: StateFlow<String> = _themeFontFamily.asStateFlow()
 
+    private val _isRootQuickSettingsEnabled = MutableStateFlow(DEFAULT_ROOT_QUICK_SETTINGS_ENABLED)
+    val isRootQuickSettingsEnabled: StateFlow<Boolean> = _isRootQuickSettingsEnabled.asStateFlow()
+
     private var initialized = false
 
     fun init(context: Context) {
         if (!initialized) {
             val prefs = getPrefs(context)
+            _isRootQuickSettingsEnabled.value = prefs.getBoolean(
+                KEY_ROOT_QUICK_SETTINGS_ENABLED,
+                DEFAULT_ROOT_QUICK_SETTINGS_ENABLED
+            )
             _isWallpaperOverlayEnabled.value = prefs.getBoolean(
                 KEY_WALLPAPER_OVERLAY_ENABLED,
                 DEFAULT_WALLPAPER_OVERLAY_ENABLED
@@ -710,6 +719,15 @@ object PreferencesManager {
             }
         }
         return map
+    }
+
+    fun isRootQuickSettingsEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_ROOT_QUICK_SETTINGS_ENABLED, DEFAULT_ROOT_QUICK_SETTINGS_ENABLED)
+    }
+
+    fun setRootQuickSettingsEnabled(context: Context, enabled: Boolean) {
+        _isRootQuickSettingsEnabled.value = enabled
+        getPrefs(context).edit().putBoolean(KEY_ROOT_QUICK_SETTINGS_ENABLED, enabled).apply()
     }
 
     fun isRootA11yWatchdogEnabled(context: Context): Boolean {

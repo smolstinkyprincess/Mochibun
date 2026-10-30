@@ -74,6 +74,9 @@ internal fun PermissionsRootSettingsSubScreen(
         mutableStateOf(PreferencesManager.isRootA11yWatchdogEnabled(context))
     }
     var isHealingServices by remember { mutableStateOf(false) }
+    var isRootQuickSettingsEnabled by remember {
+        mutableStateOf(PreferencesManager.isRootQuickSettingsEnabled(context))
+    }
 
     fun refreshPermissionsState() {
         isRemapA11yActive = HardwareRemapManager.isAccessibilityServiceEnabled(context)
@@ -87,6 +90,7 @@ internal fun PermissionsRootSettingsSubScreen(
         useRootRecentsFallback = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
         clickMethod = CursorPreferences.getClickMethod(context)
         isWatchdogEnabled = PreferencesManager.isRootA11yWatchdogEnabled(context)
+        isRootQuickSettingsEnabled = PreferencesManager.isRootQuickSettingsEnabled(context)
         if (!RootShell.isSuBinaryPresent()) {
             rootStatus = RootStatus.NotAvailable
         }
@@ -103,12 +107,12 @@ internal fun PermissionsRootSettingsSubScreen(
 
     LaunchedEffect(Unit) { refreshPermissionsState() }
 
-    val totalItems = 7 // 0: Remap A11y, 1: Cursor A11y, 2: Magisk Root, 3: Root Recents, 4: Root Click Dispatch, 5: Watchdog, 6: Self-Heal
+    val totalItems = 8 // 0: Remap A11y, 1: Cursor A11y, 2: Magisk Root, 3: Root Recents, 4: Root QS Toggles, 5: Root Click Dispatch, 6: Watchdog, 7: Self-Heal
 
     val targetCardIndex = remember(focusedIndex) {
         when (focusedIndex) {
             0, 1 -> 0
-            2, 3, 4, 5, 6 -> 1
+            2, 3, 4, 5, 6, 7 -> 1
             else -> 0
         }
     }
@@ -146,6 +150,12 @@ internal fun PermissionsRootSettingsSubScreen(
         }
     }
 
+    fun toggleRootQuickSettings() {
+        val next = !isRootQuickSettingsEnabled
+        PreferencesManager.setRootQuickSettingsEnabled(context, next)
+        isRootQuickSettingsEnabled = next
+    }
+
     fun toggleClickDispatchMethod() {
         val nextMethod = if (clickMethod == ClickMethod.ACCESSIBILITY_GESTURE) {
             ClickMethod.ROOT_INPUT_TAP
@@ -177,8 +187,9 @@ internal fun PermissionsRootSettingsSubScreen(
                 }
             }
             3 -> toggleRootRecents()
-            4 -> toggleClickDispatchMethod()
-            5 -> {
+            4 -> toggleRootQuickSettings()
+            5 -> toggleClickDispatchMethod()
+            6 -> {
                 val next = !isWatchdogEnabled
                 PreferencesManager.setRootA11yWatchdogEnabled(context, next)
                 isWatchdogEnabled = next
@@ -188,7 +199,7 @@ internal fun PermissionsRootSettingsSubScreen(
                     }
                 }
             }
-            6 -> {
+            7 -> {
                 if (!RootShell.isSuBinaryPresent()) {
                     Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
                 } else {
@@ -261,10 +272,10 @@ internal fun PermissionsRootSettingsSubScreen(
                 }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     if (event.type == KeyEventType.KeyDown) {
-                        if (focusedIndex == 4) {
+                        if (focusedIndex == 5) {
                             toggleClickDispatchMethod()
                             SoundEffectManager.play(context, SoundEffect.NAV)
-                        } else if (focusedIndex == 5) {
+                        } else if (focusedIndex == 6) {
                             val next = !isWatchdogEnabled
                             PreferencesManager.setRootA11yWatchdogEnabled(context, next)
                             isWatchdogEnabled = next
@@ -369,6 +380,19 @@ internal fun PermissionsRootSettingsSubScreen(
                         onCheckedChange = { toggleRootRecents() }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Root Quick Settings Toggles",
+                        subtitle = if (isRootQuickSettingsEnabled) {
+                            "Toggle Wi-Fi and Bluetooth instantly in-place via root shell"
+                        } else {
+                            "Opening system dialog panels (standard non-root)"
+                        },
+                        checked = isRootQuickSettingsEnabled,
+                        isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
+                        onCheckedChange = { toggleRootQuickSettings() }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
                         title = "Cursor Click Dispatch",
                         subtitle = if (clickMethod == ClickMethod.ACCESSIBILITY_GESTURE) {
@@ -377,8 +401,8 @@ internal fun PermissionsRootSettingsSubScreen(
                             "Root Shell Injection (libsu daemon)"
                         },
                         valueDisplay = if (clickMethod == ClickMethod.ROOT_INPUT_TAP) "Root Tap" else "Gesture",
-                        isFocused = focusedIndex == 4,
-                        jumpNumber = 5,
+                        isFocused = focusedIndex == 5,
+                        jumpNumber = 6,
                         onDecrement = {
                             toggleClickDispatchMethod()
                             SoundEffectManager.play(context, SoundEffect.NAV)
@@ -397,8 +421,8 @@ internal fun PermissionsRootSettingsSubScreen(
                             "Watchdog disabled • manual service restart"
                         },
                         checked = isWatchdogEnabled,
-                        isFocused = focusedIndex == 5,
-                        jumpNumber = 6,
+                        isFocused = focusedIndex == 6,
+                        jumpNumber = 7,
                         onCheckedChange = { enabled ->
                             PreferencesManager.setRootA11yWatchdogEnabled(context, enabled)
                             isWatchdogEnabled = enabled
@@ -418,8 +442,8 @@ internal fun PermissionsRootSettingsSubScreen(
                             "Force-restores A11y permissions & re-binds daemons"
                         },
                         icon = if (isHealingServices) "⏳" else "♡",
-                        isFocused = focusedIndex == 6,
-                        jumpNumber = 7,
+                        isFocused = focusedIndex == 7,
+                        jumpNumber = 8,
                         onClick = {
                             if (!RootShell.isSuBinaryPresent()) {
                                 Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
