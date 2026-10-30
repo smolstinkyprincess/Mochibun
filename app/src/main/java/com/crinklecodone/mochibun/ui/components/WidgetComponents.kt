@@ -63,6 +63,7 @@ import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.data.repository.MediaSessionTracker
 import com.crinklecodone.mochibun.ui.dialogs.PhotoFrameActionDialog
+import com.crinklecodone.mochibun.ui.dialogs.PhotoFrameLabelDialog
 import com.crinklecodone.mochibun.ui.dialogs.WidgetOptionsDialog
 import com.crinklecodone.mochibun.ui.dialogs.WidgetPickerDialog
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
@@ -76,9 +77,6 @@ private const val TAG = "WidgetPage"
 
 /** Holding OK this long on a widget opens its options instead of using it. */
 private const val WIDGET_LONG_PRESS_MS = 400L
-
-/** Labels the photo frame's "Label" action cycles through. */
-private val PHOTO_FRAME_LABELS = listOf("Mochi ♡", "Kawaii ✨", "Memories 🌸")
 
 enum class WidgetFocusSection {
     HEADER,
@@ -209,7 +207,9 @@ fun WidgetPage(
     var optionsWidgetId by remember { mutableStateOf<Int?>(null) }
     var showWidgetPicker by remember { mutableStateOf(false) }
     var showPhotoFrameDialog by remember { mutableStateOf(false) }
-    val anyWidgetDialogOpen = optionsWidgetId != null || showWidgetPicker || showPhotoFrameDialog
+    var showPhotoLabelDialog by remember { mutableStateOf(false) }
+    val anyWidgetDialogOpen = optionsWidgetId != null || showWidgetPicker ||
+        showPhotoFrameDialog || showPhotoLabelDialog
 
     fun endWidgetInteraction() {
         interactingWidgetId?.let { widgetFrames[it]?.endInteraction() }
@@ -465,6 +465,7 @@ fun WidgetPage(
                 else WidgetFocusSection.HOME_PILL
         } else if (!isPhotoFrameEnabled && focusSection == WidgetFocusSection.PHOTO_FRAME) {
             showPhotoFrameDialog = false
+            showPhotoLabelDialog = false
             focusSection = if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
                 else WidgetFocusSection.HOME_PILL
         }
@@ -529,6 +530,7 @@ fun WidgetPage(
             optionsWidgetId = null
             showWidgetPicker = false
             showPhotoFrameDialog = false
+            showPhotoLabelDialog = false
             isQuickSettingsExpanded = false
             focusSection = defaultFocusSection()
             nowPlayingCol = 1
@@ -1142,9 +1144,9 @@ fun WidgetPage(
                         PhotoFrameStyle.fromId(photoFrameStyle).next().id
                     )
                 },
-                onCycleLabel = {
-                    val next = PHOTO_FRAME_LABELS[(PHOTO_FRAME_LABELS.indexOf(photoFrameLabel) + 1) % PHOTO_FRAME_LABELS.size]
-                    PreferencesManager.setPhotoFrameLabel(context, next)
+                onEditLabel = {
+                    showPhotoFrameDialog = false
+                    showPhotoLabelDialog = true
                 },
                 onRemovePhoto = {
                     showPhotoFrameDialog = false
@@ -1153,6 +1155,17 @@ fun WidgetPage(
                     releasePhotoFrameUri(old)
                 },
                 onDismiss = { showPhotoFrameDialog = false }
+            )
+        }
+
+        if (showPhotoLabelDialog) {
+            PhotoFrameLabelDialog(
+                initialLabel = photoFrameLabel,
+                onSave = { newLabel ->
+                    PreferencesManager.setPhotoFrameLabel(context, newLabel)
+                    showPhotoLabelDialog = false
+                },
+                onDismiss = { showPhotoLabelDialog = false }
             )
         }
 

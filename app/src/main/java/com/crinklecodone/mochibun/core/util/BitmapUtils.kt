@@ -173,11 +173,12 @@ fun loadDownsampledPhotoBitmap(
     return try {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        // A bounds-only decode always returns null; the size lands in bounds.outWidth/outHeight
         resolver.openInputStream(uri)?.use { rawStream ->
             BufferedInputStream(rawStream).use { stream ->
                 BitmapFactory.decodeStream(stream, null, bounds)
             }
-        } ?: return null
+        }
 
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
             return null

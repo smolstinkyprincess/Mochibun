@@ -114,6 +114,7 @@ internal fun BehaviorSettingsSubScreen(
     val isMediaVolumeLockEnabled by PreferencesManager.isMediaVolumeLockEnabled.collectAsState()
     val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
     val systemMonitorInterval by PreferencesManager.systemMonitorInterval.collectAsState()
+    val isPhotoFrameEnabled by PreferencesManager.isPhotoFrameEnabled.collectAsState()
 
     // Dynamic item list matching LazyColumn visual card order
     val items = remember(onCreateFolderClick, isSystemMonitorEnabled, isLidLedEnabled) {
@@ -142,6 +143,7 @@ internal fun BehaviorSettingsSubScreen(
             if (isSystemMonitorEnabled) {
                 add("monitor_interval")
             }
+            add("photo_frame")
         }
     }
 
@@ -154,6 +156,7 @@ internal fun BehaviorSettingsSubScreen(
             "keypad_remapper", "dpad_wrap", "boundary_haptics", "keypad_sound", "audio_stream", "sound_volume", "media_volume_lock" -> 2
             "lid_open_action", "lid_close_snap", "lid_led_notification", "lid_led_color", "lid_led_charging" -> 3
             "system_monitor", "monitor_interval" -> 4
+            "photo_frame" -> 5
             else -> 0
         }
     }
@@ -247,6 +250,7 @@ internal fun BehaviorSettingsSubScreen(
             }
             "hidden_apps" -> onOpenHiddenApps?.invoke()
             "system_monitor" -> PreferencesManager.setSystemMonitorEnabled(context, !isSystemMonitorEnabled)
+            "photo_frame" -> PreferencesManager.setPhotoFrameEnabled(context, !isPhotoFrameEnabled)
             "monitor_interval" -> {
                 val nextInterval = when (systemMonitorInterval) {
                     1 -> 2
@@ -763,6 +767,19 @@ internal fun BehaviorSettingsSubScreen(
                             }
                         )
                     }
+                }
+            }
+
+            item {
+                SettingsCard(categoryTitle = "Photo Frame Card") {
+                    SettingsToggleRow(
+                        title = "Photo Frame",
+                        subtitle = "Show your framed photo on the Widgets page",
+                        checked = isPhotoFrameEnabled,
+                        isFocused = items.getOrNull(focusedIndex) == "photo_frame",
+                        jumpNumber = jumpNum("photo_frame"),
+                        onCheckedChange = { PreferencesManager.setPhotoFrameEnabled(context, it) }
+                    )
                 }
             }
         }
