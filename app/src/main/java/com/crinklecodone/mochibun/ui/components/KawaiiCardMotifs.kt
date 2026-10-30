@@ -822,7 +822,7 @@ fun BottomLavenderClouds(
     }
 }
 
-private const val CLOUD_DRIFT_PX = 2f
+private const val CLOUD_DRIFT_PX = 4f
 private const val CLOUD_DRIFT_PERIOD_MS = 4000L
 private const val CLOUD_DRIFT_STEP_MS = 100L
 

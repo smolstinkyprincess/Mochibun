@@ -673,6 +673,7 @@ fun FavoriteFolderDialog(
                 Box(
                     modifier = Modifier
                         .width(308.dp)
+                        .curtainUnfurl(visible = true)
                         .graphicsLayer { clip = false }
                         .background(ActiveTheme.surface, cardShape)
                         .border(1.5.dp, ActiveTheme.cardBorder, cardShape)

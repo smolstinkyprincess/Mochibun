@@ -28,6 +28,7 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 
 private const val TAG = "LauncherViewModel"
+private const val PREF_PREFIX_APP_LAUNCH_COUNT = "app_launch_count_"
 
 /**
  * ViewModel managing launcher state, data loading, preferences synchronization,
@@ -208,16 +209,17 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         newMap[packageName] = currentCount + 1
         launchCounts = newMap
         val prefs = PreferencesManager.getPrefs(context)
-        prefs.edit().putInt("app_launch_count_", currentCount + 1).apply()
+        prefs.edit().putInt("$PREF_PREFIX_APP_LAUNCH_COUNT$packageName", currentCount + 1).apply()
     }
 
     private fun loadLaunchCounts() {
         val prefs = PreferencesManager.getPrefs(context)
         val map = mutableMapOf<String, Int>()
         for ((key, value) in prefs.all) {
-            if (key.startsWith("app_launch_count_") && value is Int) {
-                val pkg = key.removePrefix("app_launch_count_")
-                map[pkg] = value
+            if (key.startsWith(PREF_PREFIX_APP_LAUNCH_COUNT) && value is Int) {
+                val pkg = key.removePrefix(PREF_PREFIX_APP_LAUNCH_COUNT)
+                // Skip the empty-package key left behind by the old prefix-only write.
+                if (pkg.isNotEmpty()) map[pkg] = value
             }
         }
         launchCounts = map
