@@ -1,0 +1,4 @@
+• New: Mochibun Keitai IME, a system-wide T9 keypad keyboard
+• New: Quick settings toolbar
+• New: Directional home pills
+• Docs page restyled with all 7 screenshots

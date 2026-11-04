@@ -174,12 +174,12 @@ private fun SettingsHubRootScreen(
                         SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (focusedIndex) {
                             0 -> onNavigate(SettingsDestination.Appearance)
-                            1 -> onNavigate(SettingsDestination.CursorHardware)
-                            2 -> onNavigate(SettingsDestination.Behavior)
-                            3 -> onNavigate(SettingsDestination.PermissionsRoot)
-                            4 -> onNavigate(SettingsDestination.BackupRestore)
-                            5 -> onNavigate(SettingsDestination.About)
-                            6 -> onNavigate(SettingsDestination.Keyboard)
+                            1 -> onNavigate(SettingsDestination.Keyboard)
+                            2 -> onNavigate(SettingsDestination.CursorHardware)
+                            3 -> onNavigate(SettingsDestination.Behavior)
+                            4 -> onNavigate(SettingsDestination.PermissionsRoot)
+                            5 -> onNavigate(SettingsDestination.BackupRestore)
+                            6 -> onNavigate(SettingsDestination.About)
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -192,12 +192,12 @@ private fun SettingsHubRootScreen(
                         SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (targetIndex) {
                             0 -> onNavigate(SettingsDestination.Appearance)
-                            1 -> onNavigate(SettingsDestination.CursorHardware)
-                            2 -> onNavigate(SettingsDestination.Behavior)
-                            3 -> onNavigate(SettingsDestination.PermissionsRoot)
-                            4 -> onNavigate(SettingsDestination.BackupRestore)
-                            5 -> onNavigate(SettingsDestination.About)
-                            6 -> onNavigate(SettingsDestination.Keyboard)
+                            1 -> onNavigate(SettingsDestination.Keyboard)
+                            2 -> onNavigate(SettingsDestination.CursorHardware)
+                            3 -> onNavigate(SettingsDestination.Behavior)
+                            4 -> onNavigate(SettingsDestination.PermissionsRoot)
+                            5 -> onNavigate(SettingsDestination.BackupRestore)
+                            6 -> onNavigate(SettingsDestination.About)
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -236,13 +236,26 @@ private fun SettingsHubRootScreen(
             }
 
             item {
+                SettingsCard(categoryTitle = "Typing") {
+                    SettingsNavigationRow(
+                        title = "Keyboard",
+                        subtitle = "Keitai multi-tap keyboard, hold-for-digit & key guide",
+                        icon = "⌨",
+                        isFocused = focusedIndex == 1,
+                        jumpNumber = 2,
+                        onClick = { onNavigate(SettingsDestination.Keyboard) }
+                    )
+                }
+            }
+
+            item {
                 SettingsCard(categoryTitle = "Pointer & Controls") {
                     SettingsNavigationRow(
                         title = "Virtual Cursor",
                         subtitle = "Virtual mouse speed, acceleration, scroll step & sprite",
                         icon = "🖱️",
-                        isFocused = focusedIndex == 1,
-                        jumpNumber = 2,
+                        isFocused = focusedIndex == 2,
+                        jumpNumber = 3,
                         onClick = { onNavigate(SettingsDestination.CursorHardware) }
                     )
                 }
@@ -254,8 +267,8 @@ private fun SettingsHubRootScreen(
                         title = "Behavior",
                         subtitle = "Folders, app drawer, keypad remapper & system monitor",
                         icon = "📁",
-                        isFocused = focusedIndex == 2,
-                        jumpNumber = 3,
+                        isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
                         onClick = { onNavigate(SettingsDestination.Behavior) }
                     )
                 }
@@ -267,8 +280,8 @@ private fun SettingsHubRootScreen(
                         title = "Permissions & Root",
                         subtitle = "Accessibility services, Magisk root status & root features",
                         icon = "🛡️",
-                        isFocused = focusedIndex == 3,
-                        jumpNumber = 4,
+                        isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
                         onClick = { onNavigate(SettingsDestination.PermissionsRoot) }
                     )
                 }
@@ -280,8 +293,8 @@ private fun SettingsHubRootScreen(
                         title = "Backup & Restore",
                         subtitle = "Export or restore layout, themes, folders & key remaps",
                         icon = "💾",
-                        isFocused = focusedIndex == 4,
-                        jumpNumber = 5,
+                        isFocused = focusedIndex == 5,
+                        jumpNumber = 6,
                         onClick = { onNavigate(SettingsDestination.BackupRestore) }
                     )
                 }
@@ -293,22 +306,9 @@ private fun SettingsHubRootScreen(
                         title = "About Mochibun",
                         subtitle = "Version, hardware specs & credits",
                         icon = "♡",
-                        isFocused = focusedIndex == 5,
-                        jumpNumber = 6,
-                        onClick = { onNavigate(SettingsDestination.About) }
-                    )
-                }
-            }
-
-            item {
-                SettingsCard(categoryTitle = "Typing") {
-                    SettingsNavigationRow(
-                        title = "Keyboard",
-                        subtitle = "Keitai multi-tap keyboard, hold-for-digit & key guide",
-                        icon = "⌨",
                         isFocused = focusedIndex == 6,
                         jumpNumber = 7,
-                        onClick = { onNavigate(SettingsDestination.Keyboard) }
+                        onClick = { onNavigate(SettingsDestination.About) }
                     )
                 }
             }

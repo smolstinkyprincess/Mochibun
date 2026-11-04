@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.overlay
 
+import com.crinklecodone.mochibun.BuildConfig
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
@@ -130,7 +131,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     fun resumeAnimation() {
         isOverlayVisible = true
         val anim = currentDrawable as? Animatable
-        Log.d(TAG, "resumeAnimation: anim=$anim, isRunning=${anim?.isRunning}")
+        if (BuildConfig.DEBUG) Log.d(TAG, "resumeAnimation: anim=$anim, isRunning=${anim?.isRunning}")
         anim?.start()
     }
 
@@ -185,7 +186,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     }
 
     private fun applyCursorDrawable(drawable: Drawable) {
-        Log.d(TAG, "applyCursorDrawable: loaded ${drawable::class.java.name}, isAnimatable=${drawable is Animatable}, isOverlayVisible=$isOverlayVisible")
+        if (BuildConfig.DEBUG) Log.d(TAG, "applyCursorDrawable: loaded ${drawable::class.java.name}, isAnimatable=${drawable is Animatable}, isOverlayVisible=$isOverlayVisible")
         (currentDrawable as? Animatable)?.stop()
 
         var inner: Drawable? = drawable
