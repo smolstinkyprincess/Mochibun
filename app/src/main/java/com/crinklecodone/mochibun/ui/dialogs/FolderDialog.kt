@@ -610,6 +610,7 @@ fun FavoriteFolderDialog(
                 }
             }
     ) {
+        ResizeWithKeyboard()
         val pickerListState = rememberLazyListState()
         val appListState = rememberLazyListState()
 

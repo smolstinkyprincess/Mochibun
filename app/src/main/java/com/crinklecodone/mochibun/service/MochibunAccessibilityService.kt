@@ -36,7 +36,6 @@ class MochibunAccessibilityService : AccessibilityService() {
         private const val TAG = "MochibunAccessibility"
         const val PREFS_NAME = "hardware_remap_preferences"
         private const val POUND_HOLD_MS = 400L
-        private const val TT9_PACKAGE = "org.sspanak.tt9"
 
         @Volatile
         var isServiceRunning = false
@@ -179,9 +178,13 @@ class MochibunAccessibilityService : AccessibilityService() {
             }
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 val pkg = event.packageName?.toString()
-                // An IME window (TT9's status bar) only appears for a focused field. It is not the
-                // foreground app: tracking it would mark the launcher as backgrounded mid-typing.
-                if (pkg == TT9_PACKAGE || event.className?.contains("InputMethod") == true) {
+                // An IME window (our MochibunImeService strip) only appears for a focused field. It
+                // is not the foreground app: since the IME shares the launcher's package, tracking
+                // it would mark the launcher as foregrounded over another app.
+                val cls = event.className
+                if (cls?.contains("InputMethod") == true ||
+                    cls?.contains("SoftInputWindow") == true || cls?.contains("MochibunImeService") == true
+                ) {
                     InputArbiter.isInputActive = true
                     return
                 }
@@ -290,11 +293,13 @@ class MochibunAccessibilityService : AccessibilityService() {
 
     /** Offers [event] to each stage in priority order and returns the one that consumed it. */
     private fun dispatchToStages(event: KeyEvent, isNewPress: Boolean): InputLayer {
-        // A focused text field owns digits and '*' outright: no launcher T9 search, no speed dial,
-        // no digit remaps, so TT9 gets every press exactly once. '#' still goes through the hold
-        // logic below (tap replays '#' for TT9's mode switch, hold opens the wheel).
+        // A focused text field owns digits, '*' and DEL outright: no launcher T9 search, no speed
+        // dial, no digit remaps, so the IME gets every press exactly once. '#' still goes through
+        // the hold logic below (tap replays '#' for the IME, hold opens the wheel).
         val typingIntoField = InputArbiter.isInputActive && InputArbiter.isTypingKey(event.keyCode)
-        if (typingIntoField && event.keyCode != KeyEvent.KEYCODE_POUND && keyCaptureListener == null &&
+        val editingKey = (typingIntoField && event.keyCode != KeyEvent.KEYCODE_POUND) ||
+            (InputArbiter.isInputActive && event.keyCode == KeyEvent.KEYCODE_DEL)
+        if (editingKey && keyCaptureListener == null &&
             kaomojiOverlay?.isShowing != true
         ) {
             return InputLayer.NONE
@@ -493,7 +498,7 @@ class MochibunAccessibilityService : AccessibilityService() {
      *
      * Accessibility key filters only ever see a press's DOWN and UP. Android synthesizes the
      * auto-repeats afterwards and sends them straight to the app, so once a DOWN passes through,
-     * nothing here can stop the IME (TT9) from getting its repeats and long-press. So with root the
+     * nothing here can stop the IME from getting its repeats and long-press. So with root the
      * DOWN is held back: a release before [POUND_HOLD_MS] replays a real '#' tap through `input
      * keyevent` (injected events skip accessibility filters, so it isn't caught again), and a hold
      * opens the wheel with the app never having seen the key.

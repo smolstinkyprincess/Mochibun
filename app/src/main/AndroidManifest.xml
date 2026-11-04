@@ -146,6 +146,25 @@
         </service>
 
         <!-- Mochibun Media Session Notification Listener Service -->
+        <!-- Keyboard settings entry (method.xml): MainActivity opens the Settings Hub when started through this alias -->
+        <activity-alias
+            android:name=".ui.ImeSettingsActivity"
+            android:targetActivity=".ui.MainActivity"
+            android:exported="true" />
+
+        <service
+            android:name=".service.MochibunImeService"
+            android:label="@string/ime_service_label"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+
         <service
             android:name=".service.MochibunNotificationListenerService"
             android:label="Mochibun Media Session Listener"

@@ -121,7 +121,7 @@ internal class LauncherKeyHandler(
             }
         }
 
-        // A focused text field gets typing keys for TT9; D-pad navigation is handled as usual
+        // A focused text field gets typing keys for the IME; D-pad navigation is handled as usual
         if (state.isModalActive || (state.isInputActive && InputArbiter.isTypingKey(nativeEvent.keyCode))) {
             poundHoldJob?.cancel()
             poundHoldJob = null

@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.screens
 
+import com.crinklecodone.mochibun.ui.dialogs.ResizeWithKeyboard
 import android.content.Context
 import android.content.SharedPreferences
 import android.view.KeyEvent
@@ -475,6 +476,7 @@ fun ThemeStudioDialog(
                 }
             }
     ) {
+        ResizeWithKeyboard()
         val shape = RoundedCornerShape(22.dp)
         Box(
             modifier = Modifier
@@ -1154,6 +1156,7 @@ fun ThemeStudioDialog(
                     }
                 }
         ) {
+            ResizeWithKeyboard()
             val shape = RoundedCornerShape(22.dp)
             Surface(
                 modifier = Modifier

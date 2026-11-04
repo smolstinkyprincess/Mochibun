@@ -19,6 +19,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -33,6 +34,7 @@ import com.crinklecodone.mochibun.data.prefs.ClickMethod
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
+import com.crinklecodone.mochibun.service.MochibunImeStatus
 import com.crinklecodone.mochibun.service.VirtualCursorService
 import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
@@ -77,6 +79,7 @@ internal fun PermissionsRootSettingsSubScreen(
     var isRootQuickSettingsEnabled by remember {
         mutableStateOf(PreferencesManager.isRootQuickSettingsEnabled(context))
     }
+    var imeState by remember { mutableStateOf(MochibunImeStatus.state(context)) }
 
     fun refreshPermissionsState() {
         isRemapA11yActive = HardwareRemapManager.isAccessibilityServiceEnabled(context)
@@ -91,6 +94,7 @@ internal fun PermissionsRootSettingsSubScreen(
         clickMethod = CursorPreferences.getClickMethod(context)
         isWatchdogEnabled = PreferencesManager.isRootA11yWatchdogEnabled(context)
         isRootQuickSettingsEnabled = PreferencesManager.isRootQuickSettingsEnabled(context)
+        imeState = MochibunImeStatus.state(context)
         if (!RootShell.isSuBinaryPresent()) {
             rootStatus = RootStatus.NotAvailable
         }
@@ -107,12 +111,21 @@ internal fun PermissionsRootSettingsSubScreen(
 
     LaunchedEffect(Unit) { refreshPermissionsState() }
 
-    val totalItems = 8 // 0: Remap A11y, 1: Cursor A11y, 2: Magisk Root, 3: Root Recents, 4: Root QS Toggles, 5: Root Click Dispatch, 6: Watchdog, 7: Self-Heal
+    // Closing the system keyboard picker returns focus without an ON_RESUME
+    val windowInfo = LocalWindowInfo.current
+    LaunchedEffect(windowInfo) {
+        snapshotFlow { windowInfo.isWindowFocused }.collect { focused ->
+            if (focused) imeState = MochibunImeStatus.state(context)
+        }
+    }
+
+    val totalItems = 9 // 0: Remap A11y, 1: Cursor A11y, 2: Magisk Root, 3: Root Recents, 4: Root QS Toggles, 5: Root Click Dispatch, 6: Watchdog, 7: Self-Heal, 8: Keyboard
 
     val targetCardIndex = remember(focusedIndex) {
         when (focusedIndex) {
             0, 1 -> 0
             2, 3, 4, 5, 6, 7 -> 1
+            8 -> 2
             else -> 0
         }
     }
@@ -186,6 +199,7 @@ internal fun PermissionsRootSettingsSubScreen(
                     }
                 }
             }
+            8 -> activateMochibunKeyboard(context, scope, imeState) { refreshPermissionsState() }
             3 -> toggleRootRecents()
             4 -> toggleRootQuickSettings()
             5 -> toggleClickDispatchMethod()
@@ -462,6 +476,19 @@ internal fun PermissionsRootSettingsSubScreen(
                                 }
                             }
                         }
+                    )
+                }
+            }
+
+            item {
+                SettingsCard(categoryTitle = "Input Method") {
+                    SettingsNavigationRow(
+                        title = "Mochibun Keyboard (IME)",
+                        subtitle = keyboardStatusSubtitle(imeState),
+                        icon = if (imeState == MochibunImeStatus.State.DEFAULT) "✓" else "!",
+                        isFocused = focusedIndex == 8,
+                        jumpNumber = 9,
+                        onClick = { activateMochibunKeyboard(context, scope, imeState) { refreshPermissionsState() } }
                     )
                 }
             }

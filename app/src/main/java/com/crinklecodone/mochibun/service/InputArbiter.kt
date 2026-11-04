@@ -46,7 +46,7 @@ object InputArbiter {
     /**
      * True while an editable field has input focus (any app, including ours). Set by
      * MochibunAccessibilityService from focus and window events. Keypad digits, '*' and '#'
-     * then belong to the field and its IME (TT9), not to the cursor or the launcher.
+     * then belong to the field and its IME (MochibunImeService), not to the cursor or the launcher.
      */
     @Volatile
     var isInputActive = false

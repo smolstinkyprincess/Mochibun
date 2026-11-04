@@ -78,6 +78,7 @@ fun ExportBundleDialog(
             usePlatformDefaultWidth = false
         )
     ) {
+        ResizeWithKeyboard()
         Box(
             modifier = Modifier
                 .width(280.dp)
@@ -282,6 +283,7 @@ fun PresetPreviewDialog(
             usePlatformDefaultWidth = false
         )
     ) {
+        ResizeWithKeyboard()
         Box(
             modifier = Modifier
                 .width(280.dp)

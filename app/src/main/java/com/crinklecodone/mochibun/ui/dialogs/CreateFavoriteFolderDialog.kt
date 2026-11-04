@@ -335,6 +335,7 @@ fun CreateFavoriteFolderDialog(
                 }
             }
     ) {
+        ResizeWithKeyboard()
         val shape = RoundedCornerShape(22.dp)
 
         Surface(

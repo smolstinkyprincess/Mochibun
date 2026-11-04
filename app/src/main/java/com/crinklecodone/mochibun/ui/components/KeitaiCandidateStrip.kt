@@ -65,7 +65,8 @@ object KeitaiCandidatePools {
  */
 class KeitaiCandidateState(
     private val timeoutMs: Long = DEFAULT_TIMEOUT_MS,
-    private val clock: () -> Long = { SystemClock.uptimeMillis() }
+    private val clock: () -> Long = { SystemClock.uptimeMillis() },
+    private val poolProvider: (Int) -> Array<String>? = KeitaiCandidatePools::forKey
 ) {
     var isActive by mutableStateOf(false)
         private set
@@ -80,7 +81,7 @@ class KeitaiCandidateState(
 
     /** Returns true if [keyCode] is a multi-tap key (and was consumed). */
     fun handleKey(keyCode: Int, onCommit: (String) -> Unit): Boolean {
-        val pool = KeitaiCandidatePools.forKey(keyCode) ?: return false
+        val pool = poolProvider(keyCode) ?: return false
         val now = clock()
         // `1` and `*` share a pool, but are still different keys.
         if (isActive && keyCode == lastKeyCode && now - lastPressTime <= timeoutMs) {
@@ -106,6 +107,15 @@ class KeitaiCandidateState(
     fun navigateRight() {
         if (!isActive) return
         selectedIndex = (selectedIndex + 1) % candidates.size
+    }
+
+    /**
+     * Swaps the pending pool for an equally sized one (e.g. the same key in another letter case),
+     * keeping the selection. Ignored when nothing is pending or the sizes differ.
+     */
+    fun replaceCandidates(pool: Array<String>) {
+        if (!isActive || pool.size != candidates.size) return
+        candidates = pool
     }
 
     fun commitActive(onCommit: (String) -> Unit) {
@@ -186,7 +196,8 @@ fun TextFieldValue.insertAtCursor(insert: String, maxLength: Int = Int.MAX_VALUE
 @Composable
 fun KeitaiCandidateStrip(
     state: KeitaiCandidateState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    leadingLabel: String? = null
 ) {
     val shape = RoundedCornerShape(14.dp)
     val scrollState = rememberScrollState()
@@ -199,7 +210,16 @@ fun KeitaiCandidateStrip(
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = "♡", color = ActiveTheme.accentDeep, fontSize = 12.sp)
+        if (leadingLabel != null) {
+            Text(
+                text = leadingLabel,
+                color = ActiveTheme.accentDeep,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        } else {
+            Text(text = "♡", color = ActiveTheme.accentDeep, fontSize = 12.sp)
+        }
         // Padding inside the scroll container keeps the focus halo from being clipped.
         Row(
             modifier = Modifier

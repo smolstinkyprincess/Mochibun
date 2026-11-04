@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui
 
+import androidx.compose.foundation.layout.imePadding
 import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -79,6 +80,13 @@ class MainActivity : ComponentActivity() {
     // Keyguard dismissed (ACTION_USER_PRESENT): MainLauncher closes the drawer so unlocking lands on Home
     var unlockCount by mutableIntStateOf(0)
         private set
+
+    /** Bumped when the keyboard's settings entry (ImeSettingsActivity alias) starts us. */
+    var settingsRequestCount by mutableIntStateOf(0)
+        private set
+
+    private fun isImeSettingsIntent(intent: Intent?): Boolean =
+        intent?.component?.className?.endsWith(".ImeSettingsActivity") == true
 
     // Display wake or keyguard dismissal. A Home intent right after it is the wake/unlock press,
     // not a second press on a visible Home screen, so it must not open the drawer.
@@ -193,6 +201,8 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
 
+        if (isImeSettingsIntent(intent)) settingsRequestCount++
+
         if (intent.hasExtra("OPEN_PAGE")) {
             val page = intent.getIntExtra("OPEN_PAGE", 1)
             requestedPage = page.coerceIn(0, 2)
@@ -227,6 +237,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (savedInstanceState == null && isImeSettingsIntent(intent)) settingsRequestCount++
 
         if (intent?.hasExtra("OPEN_PAGE") == true) {
             val page = intent.getIntExtra("OPEN_PAGE", 1)
@@ -274,7 +286,7 @@ class MainActivity : ComponentActivity() {
                     containerColor = ThemeBackground
                 ) { innerPadding ->
                     MainLauncher(
-                        modifier = Modifier.padding(innerPadding),
+                        modifier = Modifier.padding(innerPadding).imePadding(),
                         viewModel = launcherViewModel,
                         homePressCount = homePressCount,
                         homePressedWhileVisible = homePressedWhileVisible,
@@ -282,6 +294,7 @@ class MainActivity : ComponentActivity() {
                         lidOpenCount = lidOpenCount,
                         lidClosedCount = lidClosedCount,
                         unlockCount = unlockCount,
+                        settingsRequestCount = settingsRequestCount,
                         requestedPage = requestedPage,
                         onPageConsumed = ::consumeRequestedPage,
                         incomingBundleUri = pendingThemeBundleUri,

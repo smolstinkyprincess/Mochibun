@@ -92,6 +92,7 @@ fun LidLedColorPickerDialog(
         },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        ResizeWithKeyboard()
         Card(
             modifier = Modifier
                 .widthIn(max = 320.dp)

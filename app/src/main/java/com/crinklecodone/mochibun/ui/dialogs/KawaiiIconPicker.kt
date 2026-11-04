@@ -227,6 +227,7 @@ fun KawaiiIconPicker(
                 }
             }
     ) {
+        ResizeWithKeyboard()
         val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
         Surface(
             modifier = Modifier

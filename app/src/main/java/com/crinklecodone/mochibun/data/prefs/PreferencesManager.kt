@@ -126,6 +126,13 @@ object PreferencesManager {
     const val KEY_ROOT_QUICK_SETTINGS_ENABLED = "pref_root_quick_settings_enabled"
     const val DEFAULT_ROOT_QUICK_SETTINGS_ENABLED = true
 
+    const val KEY_IME_HOLD_DELAY_MS = "pref_ime_hold_delay_ms"
+    const val DEFAULT_IME_HOLD_DELAY_MS = 400
+    const val MIN_IME_HOLD_DELAY_MS = 250
+    const val MAX_IME_HOLD_DELAY_MS = 800
+    const val KEY_IME_HOLD_VIBRATION = "pref_ime_hold_vibration"
+    const val DEFAULT_IME_HOLD_VIBRATION = true
+
     const val KEY_WALLPAPER_URI = "wallpaper_uri"
 
     const val KEY_PHOTO_FRAME_URI = "pref_photo_frame_uri"
@@ -839,5 +846,24 @@ object PreferencesManager {
 
     fun setRootA11yWatchdogEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_ROOT_A11Y_WATCHDOG_ENABLED, enabled).apply()
+    }
+
+    /** How long a keypad key must be held in MochibunImeService to type its digit. */
+    fun getImeHoldDelayMs(context: Context): Int =
+        getPrefs(context).getInt(KEY_IME_HOLD_DELAY_MS, DEFAULT_IME_HOLD_DELAY_MS)
+            .coerceIn(MIN_IME_HOLD_DELAY_MS, MAX_IME_HOLD_DELAY_MS)
+
+    fun setImeHoldDelayMs(context: Context, delayMs: Int) {
+        getPrefs(context).edit()
+            .putInt(KEY_IME_HOLD_DELAY_MS, delayMs.coerceIn(MIN_IME_HOLD_DELAY_MS, MAX_IME_HOLD_DELAY_MS))
+            .apply()
+    }
+
+    /** Short vibration when a held key in MochibunImeService types its digit. */
+    fun isImeHoldVibrationEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_IME_HOLD_VIBRATION, DEFAULT_IME_HOLD_VIBRATION)
+
+    fun setImeHoldVibrationEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_IME_HOLD_VIBRATION, enabled).apply()
     }
 }

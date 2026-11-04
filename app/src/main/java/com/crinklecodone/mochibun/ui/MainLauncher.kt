@@ -78,6 +78,7 @@ import com.crinklecodone.mochibun.ui.dialogs.dialogWidth
 import com.crinklecodone.mochibun.ui.screens.AppDrawerScreen
 import com.crinklecodone.mochibun.ui.screens.HomeScreen
 import com.crinklecodone.mochibun.ui.screens.NotificationsScreen
+import com.crinklecodone.mochibun.ui.screens.SettingsDestination
 import com.crinklecodone.mochibun.ui.screens.SettingsHubDialog
 import com.crinklecodone.mochibun.ui.screens.ThemeStudioDialog
 import com.crinklecodone.mochibun.ui.screens.firstLetterOf
@@ -112,6 +113,7 @@ sealed interface ActiveModal {
         val uri: Uri
     ) : ActiveModal
     data object SettingsHub : ActiveModal
+    data object KeyboardSettings : ActiveModal
     data object ThemeStudio : ActiveModal
     data object IconPackSelection : ActiveModal
     data object HiddenApps : ActiveModal
@@ -129,6 +131,7 @@ fun MainLauncher(
     lidOpenCount: Int = 0,
     lidClosedCount: Int = 0,
     unlockCount: Int = 0,
+    settingsRequestCount: Int = 0,
     requestedPage: Int? = null,
     onPageConsumed: () -> Unit = {},
     incomingBundleUri: Uri? = null,
@@ -140,6 +143,9 @@ fun MainLauncher(
     }
 
     var activeModal by remember { mutableStateOf<ActiveModal?>(null) }
+    LaunchedEffect(settingsRequestCount) {
+        if (settingsRequestCount > 0) activeModal = ActiveModal.KeyboardSettings
+    }
 
     // Initialize PreferencesManager and ExternalThemeManager synchronously in remember
     // before any StateFlow collection to prevent initial-composition race conditions.
@@ -1015,8 +1021,13 @@ fun MainLauncher(
 
             // Modal dialog dispatcher rendering
             when (val modal = activeModal) {
-                is ActiveModal.SettingsHub -> {
+                is ActiveModal.SettingsHub, is ActiveModal.KeyboardSettings -> {
                     SettingsHubDialog(
+                        initialDestination = if (activeModal is ActiveModal.KeyboardSettings) {
+                            SettingsDestination.Keyboard
+                        } else {
+                            SettingsDestination.Hub
+                        },
                         onDismiss = dismissActiveModal,
                         onOpenThemeStudio = onOpenThemeStudio,
                         onOpenIconPackDialog = onOpenIconPackDialog,

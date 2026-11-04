@@ -140,6 +140,7 @@ fun PhotoFrameActionDialog(
                 }
             }
     ) {
+        ResizeWithKeyboard()
         KeitaiLaceContainer(
             cardCornerRadius = 22.dp,
             modifier = Modifier
@@ -299,6 +300,7 @@ fun PhotoFrameLabelDialog(
                 }
             }
     ) {
+        ResizeWithKeyboard()
         KeitaiLaceContainer(
             cardCornerRadius = 22.dp,
             modifier = Modifier

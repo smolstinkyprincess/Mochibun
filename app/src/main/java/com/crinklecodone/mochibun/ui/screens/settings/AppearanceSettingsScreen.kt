@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.ui.screens.settings
 
+import com.crinklecodone.mochibun.ui.dialogs.ResizeWithKeyboard
 import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -334,6 +335,7 @@ internal fun AppearanceSettingsSubScreen(
                 onDismissRequest = { isEditingName = false },
                 properties = DialogProperties(usePlatformDefaultWidth = false)
             ) {
+                ResizeWithKeyboard()
                 Column(
                     modifier = Modifier
                         .fillMaxWidth(0.85f)

@@ -37,6 +37,7 @@ sealed class SettingsDestination {
     object PermissionsRoot : SettingsDestination()
     object BackupRestore : SettingsDestination()
     object About : SettingsDestination()
+    object Keyboard : SettingsDestination()
 }
 
 /**
@@ -56,9 +57,10 @@ fun SettingsHubScreen(
     onPickWallpaperClick: (() -> Unit)? = null,
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false,
-    onSettingsRestored: (() -> Unit)? = null
+    onSettingsRestored: (() -> Unit)? = null,
+    initialDestination: SettingsDestination = SettingsDestination.Hub
 ) {
-    var currentDestination by remember { mutableStateOf<SettingsDestination>(SettingsDestination.Hub) }
+    var currentDestination by remember { mutableStateOf(initialDestination) }
 
     when (currentDestination) {
         SettingsDestination.Hub -> {
@@ -113,6 +115,12 @@ fun SettingsHubScreen(
                 modifier = modifier
             )
         }
+        SettingsDestination.Keyboard -> {
+            KeyboardSettingsSubScreen(
+                onBack = { currentDestination = SettingsDestination.Hub },
+                modifier = modifier
+            )
+        }
     }
 }
 
@@ -131,7 +139,7 @@ private fun SettingsHubRootScreen(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val totalItems = 6 // 6 primary navigation cards
+    val totalItems = 7 // 7 primary navigation cards
 
     LaunchedEffect(focusedIndex) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
@@ -171,6 +179,7 @@ private fun SettingsHubRootScreen(
                             3 -> onNavigate(SettingsDestination.PermissionsRoot)
                             4 -> onNavigate(SettingsDestination.BackupRestore)
                             5 -> onNavigate(SettingsDestination.About)
+                            6 -> onNavigate(SettingsDestination.Keyboard)
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -188,6 +197,7 @@ private fun SettingsHubRootScreen(
                             3 -> onNavigate(SettingsDestination.PermissionsRoot)
                             4 -> onNavigate(SettingsDestination.BackupRestore)
                             5 -> onNavigate(SettingsDestination.About)
+                            6 -> onNavigate(SettingsDestination.Keyboard)
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -289,6 +299,19 @@ private fun SettingsHubRootScreen(
                     )
                 }
             }
+
+            item {
+                SettingsCard(categoryTitle = "Typing") {
+                    SettingsNavigationRow(
+                        title = "Keyboard",
+                        subtitle = "Keitai multi-tap keyboard, hold-for-digit & key guide",
+                        icon = "⌨",
+                        isFocused = focusedIndex == 6,
+                        jumpNumber = 7,
+                        onClick = { onNavigate(SettingsDestination.Keyboard) }
+                    )
+                }
+            }
         }
     }
 }
@@ -308,7 +331,8 @@ fun SettingsHubDialog(
     onPickWallpaperClick: (() -> Unit)? = null,
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false,
-    onSettingsRestored: (() -> Unit)? = null
+    onSettingsRestored: (() -> Unit)? = null,
+    initialDestination: SettingsDestination = SettingsDestination.Hub
 ) {
     BasicAlertDialog(
         onDismissRequest = onDismiss,
@@ -332,7 +356,8 @@ fun SettingsHubDialog(
             onPickWallpaperClick = onPickWallpaperClick,
             onResetWallpaperClick = onResetWallpaperClick,
             hasCustomWallpaper = hasCustomWallpaper,
-            onSettingsRestored = onSettingsRestored
+            onSettingsRestored = onSettingsRestored,
+            initialDestination = initialDestination
         )
     }
 }

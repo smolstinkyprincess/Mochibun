@@ -163,6 +163,8 @@ object BackupRestoreManager {
         behaviorObj.put("t9_search_enabled", PreferencesManager.isT9SearchEnabled(context))
         behaviorObj.put("system_monitor_enabled", PreferencesManager.isSystemMonitorEnabled(context))
         behaviorObj.put("system_monitor_interval_sec", PreferencesManager.getSystemMonitorInterval(context))
+        behaviorObj.put("ime_hold_delay_ms", PreferencesManager.getImeHoldDelayMs(context))
+        behaviorObj.put("ime_hold_vibration", PreferencesManager.isImeHoldVibrationEnabled(context))
         root.put("behavior", behaviorObj)
 
         // ── 5. Virtual Cursor Physics & Pointer ──────────────────────
@@ -412,6 +414,18 @@ object BackupRestoreManager {
                 }
                 if (behaviorObj.has("t9_search_enabled")) {
                     PreferencesManager.setT9SearchEnabled(context, behaviorObj.optBoolean("t9_search_enabled", true))
+                }
+                if (behaviorObj.has("ime_hold_delay_ms")) {
+                    PreferencesManager.setImeHoldDelayMs(
+                        context,
+                        behaviorObj.optInt("ime_hold_delay_ms", PreferencesManager.DEFAULT_IME_HOLD_DELAY_MS)
+                    )
+                }
+                if (behaviorObj.has("ime_hold_vibration")) {
+                    PreferencesManager.setImeHoldVibrationEnabled(
+                        context,
+                        behaviorObj.optBoolean("ime_hold_vibration", PreferencesManager.DEFAULT_IME_HOLD_VIBRATION)
+                    )
                 }
                 if (behaviorObj.has("system_monitor_enabled")) {
                     PreferencesManager.setSystemMonitorEnabled(context, behaviorObj.optBoolean("system_monitor_enabled", true))
