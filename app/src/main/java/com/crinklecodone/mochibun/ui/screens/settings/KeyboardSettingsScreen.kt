@@ -88,6 +88,7 @@ internal fun KeyboardSettingsSubScreen(
 
     var imeState by remember { mutableStateOf(MochibunImeStatus.state(context)) }
     var holdDelayMs by remember { mutableIntStateOf(PreferencesManager.getImeHoldDelayMs(context)) }
+    var idleCommitMs by remember { mutableIntStateOf(PreferencesManager.getImeIdleCommitMs(context)) }
     var holdVibration by remember { mutableStateOf(PreferencesManager.isImeHoldVibrationEnabled(context)) }
 
     fun toggleHoldVibration() {
@@ -115,7 +116,7 @@ internal fun KeyboardSettingsSubScreen(
         snapshotFlow { windowInfo.isWindowFocused }.collect { focused -> if (focused) refresh() }
     }
 
-    val totalItems = 4 // 0: Keyboard status, 1: Switch keyboard, 2: Hold delay, 3: Hold vibration
+    val totalItems = 5 // 0: Keyboard status, 1: Switch keyboard, 2: Hold delay, 3: Auto-commit, 4: Hold vibration
 
     LaunchedEffect(focusedIndex) {
         val target = if (focusedIndex <= 1) 0 else 1
@@ -135,11 +136,22 @@ internal fun KeyboardSettingsSubScreen(
         SoundEffectManager.play(context, SoundEffect.NAV)
     }
 
+    fun stepIdleCommit(delta: Int) {
+        val next = (idleCommitMs + delta).coerceIn(
+            PreferencesManager.MIN_IME_IDLE_COMMIT_MS,
+            PreferencesManager.MAX_IME_IDLE_COMMIT_MS
+        )
+        if (next == idleCommitMs) return
+        idleCommitMs = next
+        PreferencesManager.setImeIdleCommitMs(context, next)
+        SoundEffectManager.play(context, SoundEffect.NAV)
+    }
+
     fun activate(index: Int) {
         when (index) {
             0 -> activateMochibunKeyboard(context, scope, imeState, ::refresh)
             1 -> MochibunImeStatus.showPicker(context)
-            3 -> toggleHoldVibration()
+            4 -> toggleHoldVibration()
         }
     }
 
@@ -196,6 +208,8 @@ internal fun KeyboardSettingsSubScreen(
                     if (event.type == KeyEventType.KeyDown && focusedIndex == 2) {
                         stepHoldDelay(if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -HOLD_STEP_MS else HOLD_STEP_MS)
                     } else if (event.type == KeyEventType.KeyDown && focusedIndex == 3) {
+                        stepIdleCommit(if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -IDLE_STEP_MS else IDLE_STEP_MS)
+                    } else if (event.type == KeyEventType.KeyDown && focusedIndex == 4) {
                         toggleHoldVibration()
                         SoundEffectManager.play(context, SoundEffect.NAV)
                     }
@@ -243,12 +257,22 @@ internal fun KeyboardSettingsSubScreen(
                         onIncrement = { stepHoldDelay(HOLD_STEP_MS) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Letter Auto-commit",
+                        subtitle = "Pause before a letter is kept",
+                        valueDisplay = "%.2f s".format(idleCommitMs / 1000f),
+                        isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
+                        onDecrement = { stepIdleCommit(-IDLE_STEP_MS) },
+                        onIncrement = { stepIdleCommit(IDLE_STEP_MS) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "Hold Vibration",
                         subtitle = "Buzz when a hold types a number",
                         checked = holdVibration,
-                        isFocused = focusedIndex == 3,
-                        jumpNumber = 4,
+                        isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
                         onCheckedChange = { toggleHoldVibration() }
                     )
                 }
@@ -274,3 +298,4 @@ internal fun KeyboardSettingsSubScreen(
 }
 
 private const val HOLD_STEP_MS = 50
+private const val IDLE_STEP_MS = 250

@@ -165,6 +165,7 @@ object BackupRestoreManager {
         behaviorObj.put("system_monitor_interval_sec", PreferencesManager.getSystemMonitorInterval(context))
         behaviorObj.put("ime_hold_delay_ms", PreferencesManager.getImeHoldDelayMs(context))
         behaviorObj.put("ime_hold_vibration", PreferencesManager.isImeHoldVibrationEnabled(context))
+        behaviorObj.put("ime_idle_commit_ms", PreferencesManager.getImeIdleCommitMs(context))
         root.put("behavior", behaviorObj)
 
         // ── 5. Virtual Cursor Physics & Pointer ──────────────────────
@@ -419,6 +420,12 @@ object BackupRestoreManager {
                     PreferencesManager.setImeHoldDelayMs(
                         context,
                         behaviorObj.optInt("ime_hold_delay_ms", PreferencesManager.DEFAULT_IME_HOLD_DELAY_MS)
+                    )
+                }
+                if (behaviorObj.has("ime_idle_commit_ms")) {
+                    PreferencesManager.setImeIdleCommitMs(
+                        context,
+                        behaviorObj.optInt("ime_idle_commit_ms", PreferencesManager.DEFAULT_IME_IDLE_COMMIT_MS)
                     )
                 }
                 if (behaviorObj.has("ime_hold_vibration")) {

@@ -16,6 +16,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Made for Real Buttons**: Feels like your old 2000s keitai, all clicks and no taps. Glide through cards, folders, and drawers with the physical arrows, pick things with the center key, and follow the gentle pastel glow wherever you go.
 - **Snug on Small Screens**: Fitted specifically for 480 × 800 flip-phone displays, so there's no squished text or cut-off buttons.
 - **Physical T9 App Search**: Just start typing numbers on the keypad to filter your apps and launch one in a blink. No tiny search bars to poke at!
+- **Mochibun Keitai Keyboard**: A system-wide multi-tap keypad keyboard, just like the old flip phones. Tap a number key to cycle its letters in a cute candidate strip, hold it to type the digit, and use **`*`** for shift and **`#`** for space. Works in every app, with a handy *Keyboard* card in settings to set it up.
 - **Global Kaomoji Wheel**: Long-press **`#`** anywhere on the phone, even inside your messaging apps, to pop up the radial mood wheel and paste cute text faces straight into your chat `( ˶ˆᗜˆ˵ ) ♡`
 - **Virtual Mouse Pointer**: Press the side key to toggle a little mouse cursor for those apps that were only ever made for touchscreens. Dress it up with your own `.png` or animated `.gif` sprite, scroll with `2` & `8` (and sideways with `4` & `6`), and set the speed just how you like it.
 - **Nostalgic Keitai Click Sounds**: Retro tactile sound effects that are generated right on your phone, so the app stays tiny. Pick a sound profile in settings (*Kawaii Pop*, *Retro Keitai* 2000s clicks, *8-Bit Chiptune*, *Cyber Pager*, *Soft Thock*, *Water Drop*, or mute).
@@ -54,11 +55,36 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 | **`*` (Star)** | Context actions | Toggle silent / vibrate |
 | **`0`** | Jump to top / input | **Flashlight 🔦** |
 | **`2`–`9`** | T9 search (in drawer) | **Speed dial** |
+| *(while typing)* | See the [Keitai Keyboard](#-mochibun-keitai-keyboard) keys | — |
 | **Side Key (F4)** | Mouse pointer on / off | Dismiss popup / dialog |
 | **Call Key** | Phone dialer | — |
 | **Back** | Close dialogs, folders, or drawer & return Home | — |
 | **Home** | Return Home from anywhere; on Home, open the app drawer | — |
 | **Recents (LSK)** | On Home, go to the Stats page | On Home, open Recents |
+
+---
+
+## 🔤 Mochibun Keitai Keyboard
+
+Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai, in any app on the phone:
+
+| Key | Tap | Hold |
+| :--- | :--- | :--- |
+| **`2`–`9`** | Cycle through the key's letters | Type the digit |
+| **`*`** | Shift: `abc` → `Abc` → `ABC` | — |
+| **`#`** | Space | **Kaomoji Wheel 🌸** |
+| **Left / Right** | Pick a different letter in the candidate strip | — |
+| **Center** | Commit the current letter (or send / go when nothing is pending) | — |
+| **Up / Down** | Commit the letter and move on | — |
+| **Back / Delete** | Cancel the pending letter, or delete | — |
+
+- A pending letter commits on its own after a short pause (1.5 s by default, adjustable from 0.5 to 3 s), so you can just keep typing.
+- Sentences auto-capitalize.
+- Number, phone, and date fields get plain digits, so dialing works the way you'd expect.
+- Works in terminals like **Termux** too. Delete and Enter go straight to the terminal as plain keys.
+- Tune the **hold delay** (250–800 ms), **letter auto-commit** timer, and **hold vibration** under **Settings > Keyboard**. Both are saved in your backups.
+
+**Setup**: Open **Settings > Keyboard** and follow the steps there, or go to *Settings > System > Languages & input > On-screen keyboard* and enable **Mochibun Keitai IME**. Rooted? **Settings > Permissions & Root** can switch it on in one step.
 
 ---
 
@@ -139,8 +165,9 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 1. **Default Home**: Set Mochibun as your home app in *Settings > Apps > Default Apps > Home app*.
 2. **Now Playing Card**: Enable notification access in *Settings > Apps > Special app access > Notification access* so the media widget can show your currently playing song and album art.
 3. **Mouse Pointer, Kaomoji Wheel & Key Remapper**: Turn on **Mochibun Virtual Cursor** and **Mochibun Button Remapper** in *Settings > Accessibility*, and allow *Display over other apps* when asked.
-4. **Root Access (Optional)**: If you're rooted with Magisk, granting superuser access lets the cursor click through privileged shell taps and hooks into custom recents providers.
-5. **QuickSwitch (Optional)**: If you use QuickSwitch for hardware multitasking, set Mochibun as your provider:
+4. **Keitai Keyboard**: Enable **Mochibun Keitai IME** as your keyboard (see [Mochibun Keitai Keyboard](#-mochibun-keitai-keyboard)), or let *Settings > Keyboard* walk you through it.
+5. **Root Access (Optional)**: If you're rooted with Magisk, granting superuser access lets the cursor click through privileged shell taps and hooks into custom recents providers.
+6. **QuickSwitch (Optional)**: If you use QuickSwitch for hardware multitasking, set Mochibun as your provider:
    ```bash
    su -c "/data/adb/modules/quickswitch/quickswitch --ch=com.crinklecodone.mochibun"
    ```

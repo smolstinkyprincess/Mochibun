@@ -45,7 +45,11 @@ import com.crinklecodone.mochibun.ui.theme.loadSavedTheme
  *
  * Multi-tap candidates show in [KeitaiCandidateStrip] and as underlined composing text in the
  * editor. It commits on an action (another keypad key, center / Enter, '#' (space), up / down
- * navigation, the input view closing) or after [IDLE_COMMIT_MS] without a key press.
+ * navigation, the input view closing) or after the configurable idle delay without a key press.
+ *
+ * TYPE_NULL editors (terminals like Termux) get the keyboard too once they ask for it (an explicit
+ * show request), so windows without any text field still get raw keys. In those editors, DEL and
+ * Enter with nothing pending go to the app as raw keys, since they handle text only via commits.
  *
  * A keypad key acts on release: a tap cycles its candidates, while holding it past the hold delay
  * types the key's own digit (or '*') straight into the editor. Tapping '*' is shift:
@@ -90,6 +94,10 @@ class MochibunImeService : InputMethodService() {
     private var holdDelayMs = PreferencesManager.DEFAULT_IME_HOLD_DELAY_MS.toLong()
     private var holdVibrates = PreferencesManager.DEFAULT_IME_HOLD_VIBRATION
     private val holdRunnable = Runnable { fireHold() }
+    private var idleCommitMs = PreferencesManager.DEFAULT_IME_IDLE_COMMIT_MS.toLong()
+
+    // A TYPE_NULL editor (terminal) that asked for the keyboard: it gets multi-tap like any field
+    private var nullEditorEngaged = false
 
     // Idle timeout: keeps the typed letter and clears the strip
     private val idleCommitRunnable = Runnable {
@@ -118,11 +126,30 @@ class MochibunImeService : InputMethodService() {
 
     /**
      * False for the placeholder connection Android hands us when a window has focus but no text
-     * field (and for TYPE_NULL editors like terminals, which want raw key events).
+     * field. TYPE_NULL editors (terminals) count only after they requested the keyboard.
      */
     private fun hasTextEditor(): Boolean {
         val info = currentInputEditorInfo ?: return false
-        return currentInputConnection != null && info.inputType != InputType.TYPE_NULL
+        if (currentInputConnection == null) return false
+        return info.inputType != InputType.TYPE_NULL || nullEditorEngaged
+    }
+
+    private fun isNullEditor(): Boolean = currentInputEditorInfo?.inputType == InputType.TYPE_NULL
+
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        if (!restarting) nullEditorEngaged = false
+    }
+
+    override fun onShowInputRequested(flags: Int, configChange: Boolean): Boolean {
+        val info = currentInputEditorInfo
+        // Mochibun's own windows keep their raw-key handling (T9 search, speed dial)
+        if (info != null && info.inputType == InputType.TYPE_NULL && info.packageName != packageName &&
+            currentInputConnection != null
+        ) {
+            nullEditorEngaged = true
+        }
+        return super.onShowInputRequested(flags, configChange)
     }
 
     override fun onEvaluateFullscreenMode(): Boolean = false
@@ -159,6 +186,7 @@ class MochibunImeService : InputMethodService() {
         consumedDown.fill(false)
         holdDelayMs = PreferencesManager.getImeHoldDelayMs(this).toLong()
         holdVibrates = PreferencesManager.isImeHoldVibrationEnabled(this)
+        idleCommitMs = PreferencesManager.getImeIdleCommitMs(this).toLong()
         isNumericField = when ((info?.inputType ?: 0) and InputType.TYPE_MASK_CLASS) {
             InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> true
             else -> false
@@ -275,6 +303,8 @@ class MochibunImeService : InputMethodService() {
                 return performEditorActionIfAny()
             }
             KeyEvent.KEYCODE_DEL -> {
+                // Terminals delete on the raw key (their editable is always empty)
+                if (!active && isNullEditor()) return false
                 if (active) {
                     candidateState.handleBackspace()
                     syncComposing()
@@ -416,7 +446,7 @@ class MochibunImeService : InputMethodService() {
         handler.removeCallbacks(idleCommitRunnable)
         val ic = currentInputConnection ?: return
         if (candidateState.isActive) {
-            handler.postDelayed(idleCommitRunnable, IDLE_COMMIT_MS)
+            handler.postDelayed(idleCommitRunnable, idleCommitMs)
             ic.setComposingText(candidateState.candidates[candidateState.selectedIndex], 1)
             composingShown = true
         } else if (composingShown) {
@@ -498,7 +528,6 @@ class MochibunImeService : InputMethodService() {
         // Covers every Android keycode (288 on API 31), same as InputArbiter's table
         const val KEYCODE_TABLE_SIZE = 512
         const val STRIP_HEIGHT_DP = 44
-        const val IDLE_COMMIT_MS = 1_500L
 
         const val CAP_FLAGS = InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
             InputType.TYPE_TEXT_FLAG_CAP_WORDS or

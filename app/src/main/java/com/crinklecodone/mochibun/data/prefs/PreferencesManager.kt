@@ -131,6 +131,10 @@ object PreferencesManager {
     const val MIN_IME_HOLD_DELAY_MS = 250
     const val MAX_IME_HOLD_DELAY_MS = 800
     const val KEY_IME_HOLD_VIBRATION = "pref_ime_hold_vibration"
+    const val KEY_IME_IDLE_COMMIT_MS = "pref_ime_idle_commit_ms"
+    const val DEFAULT_IME_IDLE_COMMIT_MS = 1500
+    const val MIN_IME_IDLE_COMMIT_MS = 500
+    const val MAX_IME_IDLE_COMMIT_MS = 3000
     const val DEFAULT_IME_HOLD_VIBRATION = true
 
     const val KEY_WALLPAPER_URI = "wallpaper_uri"
@@ -856,6 +860,17 @@ object PreferencesManager {
     fun setImeHoldDelayMs(context: Context, delayMs: Int) {
         getPrefs(context).edit()
             .putInt(KEY_IME_HOLD_DELAY_MS, delayMs.coerceIn(MIN_IME_HOLD_DELAY_MS, MAX_IME_HOLD_DELAY_MS))
+            .apply()
+    }
+
+    /** Idle time after which MochibunImeService commits a pending multi-tap letter. */
+    fun getImeIdleCommitMs(context: Context): Int =
+        getPrefs(context).getInt(KEY_IME_IDLE_COMMIT_MS, DEFAULT_IME_IDLE_COMMIT_MS)
+            .coerceIn(MIN_IME_IDLE_COMMIT_MS, MAX_IME_IDLE_COMMIT_MS)
+
+    fun setImeIdleCommitMs(context: Context, delayMs: Int) {
+        getPrefs(context).edit()
+            .putInt(KEY_IME_IDLE_COMMIT_MS, delayMs.coerceIn(MIN_IME_IDLE_COMMIT_MS, MAX_IME_IDLE_COMMIT_MS))
             .apply()
     }
 
