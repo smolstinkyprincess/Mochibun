@@ -35,6 +35,27 @@ class MochibunApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         ClamshellManager.init(this)
+        val userManager = getSystemService(android.os.UserManager::class.java)
+        if (userManager != null && !userManager.isUserUnlocked) {
+            registerReceiver(
+                object : android.content.BroadcastReceiver() {
+                    override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                        if (android.content.Intent.ACTION_USER_UNLOCKED == intent?.action) {
+                            try {
+                                unregisterReceiver(this)
+                            } catch (_: Exception) {}
+                            initUnlockedServices()
+                        }
+                    }
+                },
+                android.content.IntentFilter(android.content.Intent.ACTION_USER_UNLOCKED)
+            )
+        } else {
+            initUnlockedServices()
+        }
+    }
+
+    private fun initUnlockedServices() {
         PreferencesManager.init(this)
         ExternalThemeManager.init(this)
         TypographyManager.scanFonts(this)

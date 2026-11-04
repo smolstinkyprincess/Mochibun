@@ -58,6 +58,7 @@ private val T9_LETTERS_NONE = CharArray(0)
  * D-Pad navigation, and dismissal keys.
  */
 private const val APP_SWITCH_HOLD_MS = 400L
+private const val POUND_HOLD_MS = 400L
 
 internal class LauncherKeyHandler(
     private val context: Context,
@@ -75,6 +76,7 @@ internal class LauncherKeyHandler(
     // first (a short press, which is the LSK move to Stats). Timed rather than repeat-based, like
     // the Center and '#' holds.
     private var appSwitchHoldJob: Job? = null
+    private var poundHoldJob: Job? = null
 
     fun handleKeyEvent(
         event: ComposeKeyEvent,
@@ -121,6 +123,8 @@ internal class LauncherKeyHandler(
 
         // A focused text field gets typing keys for TT9; D-pad navigation is handled as usual
         if (state.isModalActive || (state.isInputActive && InputArbiter.isTypingKey(nativeEvent.keyCode))) {
+            poundHoldJob?.cancel()
+            poundHoldJob = null
             return false
         }
 
@@ -170,11 +174,11 @@ internal class LauncherKeyHandler(
         }
 
         if (nativeEvent.action == KeyEvent.ACTION_UP) {
-            val isSoftKeyOrBack = nativeEvent.scanCode == 59 || nativeEvent.keyCode == KeyEvent.KEYCODE_F1 ||
-                nativeEvent.scanCode == 212 || nativeEvent.keyCode == KeyEvent.KEYCODE_CAMERA ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH || nativeEvent.scanCode == 580 ||
+            val isSoftKeyOrBack = nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
+                nativeEvent.scanCode == 580 ||
                 nativeEvent.keyCode == KeyEvent.KEYCODE_MENU ||
-                nativeEvent.keyCode == KeyEvent.KEYCODE_BACK || nativeEvent.keyCode == KeyEvent.KEYCODE_ESCAPE ||
+                nativeEvent.keyCode == KeyEvent.KEYCODE_BACK ||
+                nativeEvent.keyCode == KeyEvent.KEYCODE_ESCAPE ||
                 nativeEvent.keyCode == KeyEvent.KEYCODE_F4
 
             if (isSoftKeyOrBack) {
@@ -182,34 +186,41 @@ internal class LauncherKeyHandler(
             }
 
             if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode, nativeEvent.scanCode, context)) {
-                val wasShortPress = state.poundKeyState == 1
-                actions.setPoundKeyState(0)
-                if (wasShortPress) {
-                    when (nativeEvent.keyCode) {
-                        KeyEvent.KEYCODE_POUND -> {
-                            SoundEffectManager.play(context, SoundEffect.SELECT)
-                            actions.openLauncherMenu()
-                        }
-                        KeyEvent.KEYCODE_STAR,
-                        KeyEvent.KEYCODE_MENU -> {
-                            SoundEffectManager.play(context, SoundEffect.SELECT)
-                            actions.openContextActionForCurrentFocus()
-                        }
-                        KeyEvent.KEYCODE_F4 -> {
-                            if (state.drawerOpen) {
-                                SoundEffectManager.play(context, SoundEffect.BACK)
-                                if (state.isDrawerRailFocused) {
-                                    actions.setDrawerRailFocused(false)
-                                } else {
-                                    actions.setDrawerOpen(false)
+                val pendingHold = poundHoldJob
+                if (pendingHold != null) {
+                    pendingHold.cancel()
+                    poundHoldJob = null
+                    val wasShortPress = state.poundKeyState == 1
+                    actions.setPoundKeyState(0)
+                    if (wasShortPress) {
+                        when (nativeEvent.keyCode) {
+                            KeyEvent.KEYCODE_POUND -> {
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                                actions.openLauncherMenu()
+                            }
+                            KeyEvent.KEYCODE_STAR,
+                            KeyEvent.KEYCODE_MENU -> {
+                                SoundEffectManager.play(context, SoundEffect.SELECT)
+                                actions.openContextActionForCurrentFocus()
+                            }
+                            KeyEvent.KEYCODE_F4 -> {
+                                if (state.drawerOpen) {
+                                    SoundEffectManager.play(context, SoundEffect.BACK)
+                                    if (state.isDrawerRailFocused) {
+                                        actions.setDrawerRailFocused(false)
+                                    } else {
+                                        actions.setDrawerOpen(false)
+                                    }
                                 }
                             }
-                        }
-                        in KeyEvent.KEYCODE_1..KeyEvent.KEYCODE_9,
-                        in KeyEvent.KEYCODE_NUMPAD_1..KeyEvent.KEYCODE_NUMPAD_9 -> {
-                            handleNumericKey(nativeEvent, state)
+                            in KeyEvent.KEYCODE_1..KeyEvent.KEYCODE_9,
+                            in KeyEvent.KEYCODE_NUMPAD_1..KeyEvent.KEYCODE_NUMPAD_9 -> {
+                                handleNumericKey(nativeEvent, state)
+                            }
                         }
                     }
+                } else if (state.poundKeyState == 2) {
+                    actions.setPoundKeyState(0)
                 }
                 return true
             }
@@ -324,9 +335,7 @@ internal class LauncherKeyHandler(
         nativeEvent: KeyEvent,
         state: LauncherKeypadState
     ): Boolean? {
-        val isLeftSoftKey = nativeEvent.scanCode == 59 ||
-            nativeEvent.keyCode == KeyEvent.KEYCODE_F1 ||
-            nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
+        val isLeftSoftKey = nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
             nativeEvent.scanCode == 580 ||
             nativeEvent.keyCode == KeyEvent.KEYCODE_MENU
 
@@ -385,9 +394,7 @@ internal class LauncherKeyHandler(
 
         val isRightSoftKey = nativeEvent.keyCode == KeyEvent.KEYCODE_BACK ||
             nativeEvent.keyCode == KeyEvent.KEYCODE_ESCAPE ||
-            nativeEvent.keyCode == KeyEvent.KEYCODE_F4 ||
-            nativeEvent.scanCode == 212 ||
-            nativeEvent.keyCode == KeyEvent.KEYCODE_CAMERA
+            nativeEvent.keyCode == KeyEvent.KEYCODE_F4
 
         if (isRightSoftKey) {
             if (state.isDrawerActive) {
@@ -433,11 +440,15 @@ internal class LauncherKeyHandler(
             if (nativeEvent.repeatCount == 0) {
                 SoundEffectManager.play(context, SoundEffect.CLICK)
                 actions.setPoundKeyState(1)
-            } else if (state.poundKeyState == 1 || nativeEvent.isLongPress) {
-                actions.setPoundKeyState(2)
-                performBoundaryHaptic(context)
-                SoundEffectManager.play(context, SoundEffect.CLICK)
-                actions.openKaomojiWheel()
+                poundHoldJob?.cancel()
+                poundHoldJob = scope.launch {
+                    delay(POUND_HOLD_MS)
+                    poundHoldJob = null
+                    actions.setPoundKeyState(2)
+                    performBoundaryHaptic(context)
+                    SoundEffectManager.play(context, SoundEffect.CLICK)
+                    actions.openKaomojiWheel()
+                }
             }
             return true
         }

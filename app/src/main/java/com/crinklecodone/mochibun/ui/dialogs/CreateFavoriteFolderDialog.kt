@@ -2,6 +2,7 @@ package com.crinklecodone.mochibun.ui.dialogs
 
 import com.crinklecodone.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,14 +47,19 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
 import com.crinklecodone.mochibun.data.model.LauncherApp
+import com.crinklecodone.mochibun.ui.components.KeitaiCandidateState
+import com.crinklecodone.mochibun.ui.components.KeitaiCandidateStrip
 import com.crinklecodone.mochibun.ui.components.MochibunSectionHeader
+import com.crinklecodone.mochibun.ui.components.insertAtCursor
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.destructiveColor
@@ -83,6 +89,21 @@ fun CreateFavoriteFolderDialog(
     val initialPackage = initialApp?.packageName
 
     var folderName by remember { mutableStateOf("") }
+    // Cursor for folderName; only valid while it was recorded against the same text, so
+    // programmatic changes (suggestions) put the cursor at the end.
+    var nameCursor by remember { mutableStateOf("" to TextRange.Zero) }
+    val currentNameValue: () -> TextFieldValue = {
+        TextFieldValue(
+            folderName,
+            if (nameCursor.first == folderName) nameCursor.second else TextRange(folderName.length)
+        )
+    }
+    val setNameFieldValue: (TextFieldValue) -> Unit = {
+        folderName = it.text.take(32)
+        nameCursor = folderName to it.selection
+    }
+    val candidateState = remember { KeitaiCandidateState() }
+    val commitCandidate: (String) -> Unit = { setNameFieldValue(currentNameValue().insertAtCursor(it, 32)) }
     var selectedPackages by remember(initialPackage) {
         mutableStateOf(if (initialPackage != null) setOf(initialPackage) else emptySet())
     }
@@ -136,6 +157,7 @@ fun CreateFavoriteFolderDialog(
         if (focusZone == 0) {
             nameFieldFocusRequester.awaitFocusSafely(attempts = 6)
         } else {
+            candidateState.commitActive(commitCandidate)
             keyboardController?.hide()
             dialogFocusRequester.awaitFocusSafely(attempts = 6)
         }
@@ -162,6 +184,17 @@ fun CreateFavoriteFolderDialog(
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
 
+                if (focusZone == 0 && isBackDismissKey(native.keyCode) &&
+                    candidateState.handleFieldKeyEvent(
+                        native.keyCode,
+                        isDown = event.type == KeyEventType.KeyDown,
+                        repeatCount = native.repeatCount,
+                        onCommit = commitCandidate
+                    )
+                ) {
+                    return@onPreviewKeyEvent true
+                }
+
                 if (isBackDismissKey(native.keyCode)) {
                     if (event.type == KeyEventType.KeyUp) {
                         keyboardController?.hide()
@@ -170,8 +203,18 @@ fun CreateFavoriteFolderDialog(
                     return@onPreviewKeyEvent true
                 }
 
-                // When Folder Name field has focus, allow normal typing; only intercept UP/DOWN/ENTER
+                // When Folder Name field has focus, keypad digits go through multi-tap
+                // candidates; otherwise only intercept UP/DOWN/ENTER
                 if (focusZone == 0) {
+                    if (candidateState.handleFieldKeyEvent(
+                            native.keyCode,
+                            isDown = event.type == KeyEventType.KeyDown,
+                            repeatCount = native.repeatCount,
+                            onCommit = commitCandidate
+                        )
+                    ) {
+                        return@onPreviewKeyEvent true
+                    }
                     if (event.type == KeyEventType.KeyDown) {
                         when (native.keyCode) {
                             KeyEvent.KEYCODE_DPAD_DOWN -> {
@@ -320,8 +363,8 @@ fun CreateFavoriteFolderDialog(
                 Spacer(Modifier.height(8.dp))
 
                 OutlinedTextField(
-                    value = folderName,
-                    onValueChange = { folderName = it.take(32) },
+                    value = currentNameValue(),
+                    onValueChange = setNameFieldValue,
                     label = { Text("Folder name") },
                     placeholder = { Text("e.g. Cute Apps") },
                     singleLine = true,
@@ -338,6 +381,13 @@ fun CreateFavoriteFolderDialog(
                         .fillMaxWidth()
                         .focusRequester(nameFieldFocusRequester)
                 )
+
+                AnimatedVisibility(visible = candidateState.isActive) {
+                    KeitaiCandidateStrip(
+                        state = candidateState,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
 
                 Spacer(Modifier.height(6.dp))
 

@@ -125,7 +125,7 @@ object RootAccessibilityWatchdog : ClamshellListener {
             if (needKick) {
                 val intermediate = currentServices.filter { it != SERVICE_A11Y && it != SERVICE_CURSOR }.joinToString(":")
                 cmds.add("settings put secure enabled_accessibility_services '$intermediate'")
-                cmds.add("sleep 0.1")
+                cmds.add("sleep 0.5")
             }
 
             cmds.add("settings put secure enabled_accessibility_services '$mergedServices'")

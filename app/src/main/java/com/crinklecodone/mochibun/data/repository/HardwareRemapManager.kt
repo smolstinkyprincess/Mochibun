@@ -82,8 +82,6 @@ object HardwareRemapManager {
     fun getButtonActionConfig(context: Context, key: PhysicalKey): ButtonActionConfig {
         val prefs = getPrefs(context)
         val defaultSingle = when (key) {
-            PhysicalKey.F1 -> ActionType.OpenWidgetsPage
-            PhysicalKey.CAMERA -> ActionType.OpenNotificationsPage
             PhysicalKey.APP_SWITCH -> ActionType.GlobalRecents
             else -> ActionType.None
         }
@@ -138,8 +136,6 @@ object HardwareRemapManager {
         val physicalKey = PhysicalKey.fromKeyCode(norm)
             ?: if (scanCode > 0) PhysicalKey.fromScancode(scanCode) else null
         return when {
-            physicalKey == PhysicalKey.F1 -> ButtonActionConfig(singlePressAction = ActionType.OpenWidgetsPage)
-            physicalKey == PhysicalKey.CAMERA -> ButtonActionConfig(singlePressAction = ActionType.OpenNotificationsPage)
             physicalKey == PhysicalKey.APP_SWITCH -> ButtonActionConfig(singlePressAction = ActionType.GlobalRecents)
             norm == KeyEvent.KEYCODE_0 -> ButtonActionConfig(longPressAction = ActionType.ToggleFlashlight)
             else -> ButtonActionConfig()

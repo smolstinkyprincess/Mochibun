@@ -406,12 +406,8 @@ class MochibunAccessibilityService : AccessibilityService() {
 
         if (config == null || !config.hasAnyAction()) {
             if (isHardwareFunctionKey) {
-                // If Mochibun launcher is in the foreground and softkeys are unmapped, allow them
-                // to pass through so LauncherKeyHandler can handle in-launcher softkey navigation!
-                if (isLauncherForeground && (normalizedCode == KeyEvent.KEYCODE_F1 || normalizedCode == KeyEvent.KEYCODE_CAMERA || event.scanCode == 59 || event.scanCode == 212)) {
-                    return false
-                }
-                // Consume the key event so stock ROM cannot launch deleted/disabled apps
+                // Consume unmapped hardware function keys so they do not trigger stock ROM apps
+                // or unwanted page switches on Home.
                 return true
             }
             return false

@@ -146,4 +146,27 @@ class HardwareRemapUnitTest {
         assertEquals("DPAD_DOWN", BASELINE_MTK_KPD_MAPPINGS[108])
         assertEquals("ENTER", BASELINE_MTK_KPD_MAPPINGS[28])
     }
+
+    @Test
+    fun testFunctionKeysDefaultToNone() {
+        val f1Config = com.crinklecodone.mochibun.data.repository.HardwareRemapManager.getDefaultActionConfigForKey(
+            android.view.KeyEvent.KEYCODE_F1, 59
+        )
+        assertEquals(ActionType.None, f1Config.singlePressAction)
+
+        val f2Config = com.crinklecodone.mochibun.data.repository.HardwareRemapManager.getDefaultActionConfigForKey(
+            android.view.KeyEvent.KEYCODE_F2, 60
+        )
+        assertEquals(ActionType.None, f2Config.singlePressAction)
+
+        val f3Config = com.crinklecodone.mochibun.data.repository.HardwareRemapManager.getDefaultActionConfigForKey(
+            android.view.KeyEvent.KEYCODE_F3, 61
+        )
+        assertEquals(ActionType.None, f3Config.singlePressAction)
+
+        val cameraConfig = com.crinklecodone.mochibun.data.repository.HardwareRemapManager.getDefaultActionConfigForKey(
+            android.view.KeyEvent.KEYCODE_CAMERA, 212
+        )
+        assertEquals(ActionType.None, cameraConfig.singlePressAction)
+    }
 }

@@ -7,6 +7,7 @@ package com.crinklecodone.mochibun.ui.dialogs
 
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -43,7 +44,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -170,6 +173,21 @@ fun FavoriteFolderDialog(
 
     var editingName by remember(folder.id) { mutableStateOf(initialEditingName) }
     var newName by remember(folder.id, folder.name) { mutableStateOf(folder.name) }
+    // Cursor for newName; only valid while it was recorded against the same text, so
+    // programmatic changes (reset, suggestions) put the cursor at the end.
+    var newNameCursor by remember(folder.id) { mutableStateOf("" to TextRange.Zero) }
+    val currentNameValue: () -> TextFieldValue = {
+        TextFieldValue(
+            newName,
+            if (newNameCursor.first == newName) newNameCursor.second else TextRange(newName.length)
+        )
+    }
+    val setNameFieldValue: (TextFieldValue) -> Unit = {
+        newName = it.text.take(32)
+        newNameCursor = newName to it.selection
+    }
+    val candidateState = remember(folder.id) { KeitaiCandidateState() }
+    val commitCandidate: (String) -> Unit = { setNameFieldValue(currentNameValue().insertAtCursor(it, 32)) }
     var managing by remember(folder.id) { mutableStateOf(false) }
     var pickingApps by remember(folder.id) { mutableStateOf(initialPickingApps) }
     var confirmingDelete by remember(folder.id) { mutableStateOf(false) }
@@ -232,6 +250,7 @@ fun FavoriteFolderDialog(
         if (editingName && renameFocusZone == 0 && isEditingRenameField) {
             renameFieldFocusRequester.awaitFocusSafely(attempts = 6)
         } else {
+            if (editingName) candidateState.commitActive(commitCandidate) else candidateState.reset()
             focusManager.clearFocus(force = true)
             keyboardController?.hide()
             delay(16)
@@ -279,6 +298,19 @@ fun FavoriteFolderDialog(
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
+                val renameFieldActive = editingName && renameFocusZone == 0 && isEditingRenameField
+
+                // Keypad multi-tap candidates for the rename field (also lets BACK cancel a
+                // pending candidate before it can leave the field).
+                if (renameFieldActive && candidateState.handleFieldKeyEvent(
+                        native.keyCode,
+                        isDown = event.type == KeyEventType.KeyDown,
+                        repeatCount = native.repeatCount,
+                        onCommit = commitCandidate
+                    )
+                ) {
+                    return@onPreviewKeyEvent true
+                }
 
                 // Intercept KEYCODE_F4 (OEM side key) alongside standard back keys so the physical
                 // shortcut button consistently returns the user to the launcher home state.
@@ -824,8 +856,8 @@ fun FavoriteFolderDialog(
                                 )
 
                                 OutlinedTextField(
-                                    value = newName,
-                                    onValueChange = { newName = it.take(32) },
+                                    value = currentNameValue(),
+                                    onValueChange = setNameFieldValue,
                                     label = { Text("Folder name") },
                                     singleLine = true,
                                     shape = RoundedCornerShape(14.dp),
@@ -841,6 +873,10 @@ fun FavoriteFolderDialog(
                                         .fillMaxWidth()
                                         .focusRequester(renameFieldFocusRequester)
                                 )
+
+                                AnimatedVisibility(visible = candidateState.isActive) {
+                                    KeitaiCandidateStrip(state = candidateState)
+                                }
 
                                 if (duplicateRename) {
                                     Text(
