@@ -1,24 +1,34 @@
 package com.crinklecodone.mochibun.service
 
+import android.graphics.Color
+import android.graphics.Rect
+import android.graphics.drawable.ColorDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
+import android.view.Window
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -65,6 +75,9 @@ class MochibunImeService : InputMethodService() {
 
     // Keys whose DOWN this IME consumed: their repeats and UP are swallowed too
     private val consumedDown = BooleanArray(KEYCODE_TABLE_SIZE)
+
+    // Bounding box of the floating candidate pill in window coordinates for touch routing
+    private val pillBoundsInWindow = Rect()
 
     // Letter case. Read by the strip label, so Compose state.
     private var shiftMode by mutableStateOf(ShiftMode.LOWER)
@@ -154,24 +167,88 @@ class MochibunImeService : InputMethodService() {
 
     override fun onEvaluateFullscreenMode(): Boolean = false
 
+    override fun onConfigureWindow(win: Window, isFullscreen: Boolean, isCandidatesOnly: Boolean) {
+        super.onConfigureWindow(win, isFullscreen, isCandidatesOnly)
+        applyFloatingWindowStyle(win)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyFloatingWindowStyle(win: Window) {
+        win.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        win.navigationBarColor = Color.TRANSPARENT
+        win.statusBarColor = Color.TRANSPARENT
+        win.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        win.setDimAmount(0f)
+        win.decorView.setBackgroundColor(Color.TRANSPARENT)
+    }
+
+    override fun onComputeInsets(outInsets: Insets) {
+        super.onComputeInsets(outInsets)
+        if (!isInputViewShown) return
+
+        val decorHeight = window?.window?.decorView?.height ?: 0
+        if (decorHeight > 0) {
+            // Keep underlying app content at full height without resizing or panning
+            outInsets.contentTopInsets = decorHeight
+            outInsets.visibleTopInsets = decorHeight
+        }
+        if (!pillBoundsInWindow.isEmpty) {
+            outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
+            outInsets.touchableRegion.set(pillBoundsInWindow)
+        }
+    }
+
     override fun onCreateInputView(): View {
         // Compose resolves its owners from the root view, so the IME window's decor needs them too
         window?.window?.decorView?.let { attachOwners(it) }
+        window?.window?.let { applyFloatingWindowStyle(it) }
         val theme = loadSavedTheme(PreferencesManager.getPrefs(this))
         return ComposeView(this).apply {
             attachOwners(this)
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             clipChildren = false
+            addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) {
+                    var parent = v.parent as? View
+                    while (parent != null) {
+                        parent.setBackgroundColor(Color.TRANSPARENT)
+                        parent = parent.parent as? View
+                    }
+                }
+                override fun onViewDetachedFromWindow(v: View) {}
+            })
             setContent {
+                val density = LocalDensity.current.density
                 CompositionLocalProvider(LocalLauncherTheme provides theme) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(STRIP_HEIGHT_DP.dp)
-                            .padding(horizontal = 14.dp, vertical = 3.dp),
-                        contentAlignment = Alignment.Center
+                            .height(FLOATING_STRIP_CONTAINER_HEIGHT_DP.dp)
+                            .padding(start = 14.dp, end = 14.dp, bottom = 10.dp, top = 2.dp),
+                        contentAlignment = Alignment.BottomCenter
                     ) {
-                        KeitaiCandidateStrip(state = candidateState, leadingLabel = modeLabel())
+                        KeitaiCandidateStrip(
+                            state = candidateState,
+                            leadingLabel = modeLabel(),
+                            modifier = Modifier
+                                .shadow(elevation = 4.dp, shape = CircleShape)
+                                .onGloballyPositioned { coords ->
+                                    val pos = coords.positionInWindow()
+                                    val size = coords.size
+                                    val touchMargin = (4 * density).toInt()
+                                    val left = (pos.x.toInt() - touchMargin).coerceAtLeast(0)
+                                    val top = (pos.y.toInt() - touchMargin).coerceAtLeast(0)
+                                    val right = (pos.x + size.width).toInt() + touchMargin
+                                    val bottom = (pos.y + size.height).toInt() + touchMargin
+                                    val newBounds = Rect(left, top, right, bottom)
+                                    if (newBounds != pillBoundsInWindow) {
+                                        pillBoundsInWindow.set(newBounds)
+                                        window?.window?.decorView?.let { decor ->
+                                            decor.post { decor.requestLayout() }
+                                        }
+                                    }
+                                }
+                        )
                     }
                 }
             }
@@ -200,6 +277,7 @@ class MochibunImeService : InputMethodService() {
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        pillBoundsInWindow.setEmpty()
         resolvePendingTap()
         candidateState.commitActive(commit)
         InputArbiter.isInputActive = false
@@ -530,7 +608,7 @@ class MochibunImeService : InputMethodService() {
     private companion object {
         // Covers every Android keycode (288 on API 31), same as InputArbiter's table
         const val KEYCODE_TABLE_SIZE = 512
-        const val STRIP_HEIGHT_DP = 44
+        const val FLOATING_STRIP_CONTAINER_HEIGHT_DP = 52
 
         const val CAP_FLAGS = InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
             InputType.TYPE_TEXT_FLAG_CAP_WORDS or
