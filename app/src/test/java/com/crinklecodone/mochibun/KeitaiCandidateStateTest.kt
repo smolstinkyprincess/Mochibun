@@ -87,12 +87,11 @@ class KeitaiCandidateStateTest {
     fun horizontalNavigationWrapsAtBoundaries() {
         press(KeyEvent.KEYCODE_0)
         state.navigateLeft()
+        assertEquals(KeitaiCandidatePools.POOL_0.last(), current)
+        state.navigateRight()
+        assertEquals(" ", current)
+        state.navigateRight()
         assertEquals("0", current)
-        state.navigateRight()
-        assertEquals(" ", current)
-        state.navigateRight()
-        state.navigateRight()
-        assertEquals(" ", current)
     }
 
     @Test

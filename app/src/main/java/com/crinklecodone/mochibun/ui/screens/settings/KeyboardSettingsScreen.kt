@@ -281,8 +281,8 @@ internal fun KeyboardSettingsSubScreen(
             item {
                 SettingsCard(categoryTitle = "Key Guide") {
                     SettingsInfoRow(label = "Tap 2–9", value = "cycle letters")
-                    SettingsInfoRow(label = "Tap 1", value = "symbols  ♡ ★ ♪")
-                    SettingsInfoRow(label = "Tap 0", value = "space")
+                    SettingsInfoRow(label = "Tap 1", value = "symbols  . , ? ! ♡ ★")
+                    SettingsInfoRow(label = "Tap 0", value = "space  / _ ~ $ | [ ]")
                     SettingsInfoRow(label = "Tap *", value = "shift  abc › Abc › ABC")
                     SettingsInfoRow(label = "Hold 0–9 / *", value = "type the number / *")
                     SettingsInfoRow(label = "◀ ▶", value = "pick a candidate")

@@ -4,25 +4,27 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -30,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 
-/** Multi-tap pools for the keypad. `1` and `*` both open the symbol pool. */
+/** Multi-tap pools for the keypad. */
 object KeitaiCandidatePools {
     val POOL_2 = arrayOf("a", "b", "c", "A", "B", "C", "2")
     val POOL_3 = arrayOf("d", "e", "f", "D", "E", "F", "3")
@@ -40,10 +42,22 @@ object KeitaiCandidatePools {
     val POOL_7 = arrayOf("p", "q", "r", "s", "P", "Q", "R", "S", "7")
     val POOL_8 = arrayOf("t", "u", "v", "T", "U", "V", "8")
     val POOL_9 = arrayOf("w", "x", "y", "z", "W", "X", "Y", "Z", "9")
-    val POOL_0 = arrayOf(" ", "0")
-    val POOL_SYMBOLS = arrayOf(".", ",", "?", "!", "-", "@", "/", ":", "♡", "★", "♥", "♪")
+    val POOL_1 = arrayOf(
+        ".", ",", "?", "!", "-", "'", "\"", ":", ";",
+        "♡", "★", "♥", "♪"
+    )
+    val POOL_0 = arrayOf(
+        " ", "0",
+        "/", "\\", "_", "@", "#", "$", "%", "^", "&", "*", "+", "=", "~",
+        "|", "<", ">",
+        "(", ")", "[", "]", "{", "}", "`"
+    )
+
+    // Backward compatibility for any external references
+    val POOL_SYMBOLS = POOL_1
 
     fun forKey(keyCode: Int): Array<String>? = when (keyCode) {
+        KeyEvent.KEYCODE_1 -> POOL_1
         KeyEvent.KEYCODE_2 -> POOL_2
         KeyEvent.KEYCODE_3 -> POOL_3
         KeyEvent.KEYCODE_4 -> POOL_4
@@ -53,7 +67,7 @@ object KeitaiCandidatePools {
         KeyEvent.KEYCODE_8 -> POOL_8
         KeyEvent.KEYCODE_9 -> POOL_9
         KeyEvent.KEYCODE_0 -> POOL_0
-        KeyEvent.KEYCODE_1, KeyEvent.KEYCODE_STAR -> POOL_SYMBOLS
+        KeyEvent.KEYCODE_STAR -> POOL_1
         else -> null
     }
 }
@@ -199,57 +213,102 @@ fun KeitaiCandidateStrip(
     modifier: Modifier = Modifier,
     leadingLabel: String? = null
 ) {
-    val shape = RoundedCornerShape(14.dp)
-    val scrollState = rememberScrollState()
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(42.dp)
+    val shape = CircleShape
+    val listState = rememberLazyListState()
+    val candidates = state.candidates
+    val selected = state.selectedIndex
+    val isActive = state.isActive
+
+    // Instantly keep the selected candidate in view without measure/onPlaced overhead
+    LaunchedEffect(candidates, selected) {
+        if (candidates.isNotEmpty() && selected in candidates.indices) {
+            listState.scrollToItem(selected)
+        }
+    }
+
+    val containerModifier = if (isActive) {
+        modifier
+            .wrapContentWidth()
+            .widthIn(max = 440.dp)
+            .height(38.dp)
             .background(ActiveTheme.surface.copy(alpha = 0.95f), shape)
             .border(1.5.dp, ActiveTheme.cardBorder, shape)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(start = 6.dp, end = 10.dp)
+    } else {
+        modifier
+            .wrapContentWidth()
+            .height(36.dp)
+            .background(ActiveTheme.surface.copy(alpha = 0.95f), shape)
+            .border(1.5.dp, ActiveTheme.cardBorder, shape)
+            .padding(horizontal = 10.dp)
+    }
+
+    Row(
+        modifier = containerModifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
     ) {
         if (leadingLabel != null) {
-            Text(
-                text = leadingLabel,
-                color = ActiveTheme.accentDeep,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Box(
+                modifier = Modifier
+                    .background(ActiveTheme.primary.copy(alpha = 0.22f), CircleShape)
+                    .border(1.dp, ActiveTheme.primary.copy(alpha = 0.45f), CircleShape)
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = leadingLabel,
+                    color = ActiveTheme.accentDeep,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         } else {
             Text(text = "♡", color = ActiveTheme.accentDeep, fontSize = 12.sp)
         }
-        // Padding inside the scroll container keeps the focus halo from being clipped.
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .horizontalScroll(scrollState)
-                .padding(horizontal = 6.dp, vertical = 5.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val candidates = state.candidates
-            val selected = state.selectedIndex
-            candidates.forEachIndexed { index, candidate ->
-                val isSelected = index == selected
-                Box(
-                    modifier = Modifier
-                        .graphicsLayer { clip = false }
-                        .softGlowFocus(isSelected = isSelected, cornerRadius = 10.dp)
-                        .defaultMinSize(minWidth = 26.dp)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (candidate == " ") "␣" else candidate,
-                        color = if (isSelected) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                    )
+
+        if (isActive) {
+            LazyRow(
+                state = listState,
+                modifier = Modifier
+                    .wrapContentWidth()
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                itemsIndexed(candidates) { index, candidate ->
+                    val isSelected = index == selected
+                    val chipModifier = if (isSelected) {
+                        Modifier
+                            .background(ActiveTheme.primary.copy(alpha = 0.35f), CircleShape)
+                            .border(1.2.dp, ActiveTheme.accentDeep, CircleShape)
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    } else {
+                        Modifier
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    }
+
+                    Box(
+                        modifier = chipModifier.defaultMinSize(minWidth = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (candidate == " ") "␣" else candidate,
+                            color = if (isSelected) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
                 }
             }
+            Text(text = "♡", color = ActiveTheme.accentDeep, fontSize = 12.sp)
+        } else if (leadingLabel != null) {
+            Text(
+                text = "♡",
+                color = ActiveTheme.accentDeep,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(start = 6.dp)
+            )
         }
-        Text(text = "♡", color = ActiveTheme.accentDeep, fontSize = 12.sp)
     }
 }

@@ -188,7 +188,7 @@ class MochibunAccessibilityService : AccessibilityService() {
                     InputArbiter.isInputActive = true
                     return
                 }
-                if (!pkg.isNullOrEmpty()) {
+                if (!pkg.isNullOrEmpty() && pkg != "com.android.systemui" && pkg != "android") {
                     currentForegroundPackage = pkg
                     isLauncherForeground = (pkg == "com.crinklecodone.mochibun")
                 }

@@ -168,7 +168,7 @@ class MochibunImeService : InputMethodService() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(STRIP_HEIGHT_DP.dp)
-                            .padding(horizontal = 2.dp),
+                            .padding(horizontal = 14.dp, vertical = 3.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         KeitaiCandidateStrip(state = candidateState, leadingLabel = modeLabel())
@@ -325,9 +325,12 @@ class MochibunImeService : InputMethodService() {
         if (keyCode == KeyEvent.KEYCODE_STAR || KeitaiCandidatePools.forKey(keyCode) != null) {
             // Typing after the strip was hidden (e.g. BACK) would leave candidates invisible
             if (!isInputViewShown) requestShowSelf(0)
+            handler.removeCallbacks(holdRunnable)
             holdKeyCode = keyCode
             holdFired = false
             handler.postDelayed(holdRunnable, holdDelayMs)
+            if (keyCode == KeyEvent.KEYCODE_STAR) cycleShift() else candidateState.handleKey(keyCode, commit)
+            syncComposing()
             return true
         }
         return false
@@ -338,7 +341,7 @@ class MochibunImeService : InputMethodService() {
         // A repeat already past the hold delay (or flagged long-press) is a hold, even if the timer
         // hasn't run yet: injected and some hardware long-presses arrive faster than real time
         if (keyCode == holdKeyCode && !holdFired &&
-            (event.isLongPress || event.eventTime - event.downTime >= holdDelayMs)
+            (event.isLongPress || (event.repeatCount >= 2 && event.eventTime - event.downTime >= holdDelayMs))
         ) {
             handler.removeCallbacks(holdRunnable)
             fireHold()
@@ -352,32 +355,32 @@ class MochibunImeService : InputMethodService() {
         }
     }
 
-    /** Hold timer: type the held key's digit (or '*'), committing any pending letter first. */
+    /** Hold timer: type the held key's digit (or '*'), replacing the pending letter typed on DOWN. */
     private fun fireHold() {
         val keyCode = holdKeyCode
         if (keyCode == KeyEvent.KEYCODE_UNKNOWN || holdFired) return
         holdFired = true
         batchEdit {
-            candidateState.commitActive(commit)
-            literalFor(keyCode)?.let(commit)
+            if (keyCode == KeyEvent.KEYCODE_STAR) {
+                // Tapping STAR cycled shift on DOWN; held STAR is typing a literal '*'
+                shiftMode = ShiftMode.LOWER
+                autoCapSuppressed = false
+                candidateState.reset()
+                commit("*")
+            } else {
+                candidateState.reset()
+                literalFor(keyCode)?.let(commit)
+            }
             syncComposing()
         }
         if (holdVibrates) HapticManager.vibrateTick(this)
     }
 
-    /** Ends the pending keypad press: a tap unless the hold timer already typed the digit. */
+    /** Ends the pending keypad press: key already acted on DOWN, so just clear hold timer state. */
     private fun resolvePendingTap() {
-        val keyCode = holdKeyCode
-        if (keyCode == KeyEvent.KEYCODE_UNKNOWN) return
         handler.removeCallbacks(holdRunnable)
         holdKeyCode = KeyEvent.KEYCODE_UNKNOWN
-        val wasHold = holdFired
         holdFired = false
-        if (wasHold) return
-        batchEdit {
-            if (keyCode == KeyEvent.KEYCODE_STAR) cycleShift() else candidateState.handleKey(keyCode, commit)
-            syncComposing()
-        }
     }
 
     private fun cancelHold() {
