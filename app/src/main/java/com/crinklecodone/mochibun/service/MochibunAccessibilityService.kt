@@ -17,6 +17,7 @@ import com.crinklecodone.mochibun.BuildConfig
 import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.core.system.RootShell
+import com.crinklecodone.mochibun.core.system.RootTouchInjector
 import com.crinklecodone.mochibun.core.system.TorchManager
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.ButtonActionConfig
@@ -554,7 +555,9 @@ class MochibunAccessibilityService : AccessibilityService() {
 
     private fun replayPoundTap() {
         try {
-            RootShell.submit("input keyevent ${KeyEvent.KEYCODE_POUND}")
+            RootTouchInjector.attach(applicationContext)
+            // Linux KEY_NUMERIC_POUND is 523, KEY_POUND is 228
+            RootTouchInjector.keyAsync(523, holdMs = 25)
         } catch (e: Throwable) {
             Log.w(TAG, "Failed to replay '#' tap", e)
         }

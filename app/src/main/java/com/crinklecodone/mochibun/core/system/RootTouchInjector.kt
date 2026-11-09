@@ -52,6 +52,8 @@ object RootTouchInjector {
     private const val OP_SWIPE = 5
     private const val OP_RESET = 6
     private const val OP_QUIT = 8
+    private const val OP_KEY = 10
+    private const val OP_PASTE = 11
 
     private const val TAP_HOLD_MS = 20         // finger-on-glass time; DOWN itself lands instantly
     private const val MAX_LAUNCH_FAILURES = 3
@@ -155,6 +157,42 @@ object RootTouchInjector {
             moveSlot.set(NO_MOVE)
             val ok = nativeSend(OP_MOVE, px(x), px(y)) && nativeSend(OP_UP)
             if (!ok) legacyUp(x, y)
+        }
+    }
+
+    /** Injects a Linux evdev key code (e.g. 523 for KEY_NUMERIC_POUND, 28 for KEY_ENTER). */
+    fun keyAsync(linuxCode: Int, holdMs: Int = 20) {
+        io.execute {
+            if (!nativeSend(OP_KEY, linuxCode, holdMs)) {
+                val bin = appCtx?.let { installHelper(it) }
+                if (bin != null && RootShell.isSuBinaryPresent()) {
+                    RootShell.submit("exec ${q(bin.path)} key $linuxCode $holdMs")
+                } else {
+                    // Fallback to input keyevent if known
+                    val androidKey = when (linuxCode) {
+                        523, 228 -> 18 // KEYCODE_POUND
+                        522 -> 17 // KEYCODE_STAR
+                        28 -> 66 // KEYCODE_ENTER
+                        158 -> 4 // KEYCODE_BACK
+                        else -> linuxCode
+                    }
+                    RootShell.submit("input keyevent $androidKey")
+                }
+            }
+        }
+    }
+
+    /** Injects KEY_PASTE (135) to paste current clipboard contents. */
+    fun pasteAsync() {
+        io.execute {
+            if (!nativeSend(OP_PASTE)) {
+                val bin = appCtx?.let { installHelper(it) }
+                if (bin != null && RootShell.isSuBinaryPresent()) {
+                    RootShell.submit("exec ${q(bin.path)} paste")
+                } else {
+                    RootShell.submit("input keyevent 279") // KEYCODE_PASTE
+                }
+            }
         }
     }
 

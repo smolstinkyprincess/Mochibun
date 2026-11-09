@@ -54,6 +54,7 @@
 enum {
     OP_DOWN = 1, OP_MOVE = 2, OP_UP = 3, OP_TAP = 4, OP_SWIPE = 5,
     OP_RESET = 6, OP_SCREEN = 7, OP_QUIT = 8, OP_PING = 9,
+    OP_KEY = 10, OP_PASTE = 11,
 };
 
 struct evi_pkt {
@@ -390,7 +391,89 @@ static void do_swipe(struct touch_dev *d, int x1, int y1, int x2, int y2, int du
     touch_up(d, 0);
 }
 
-static void handle_pkt(struct touch_dev *d, const struct evi_pkt *p)
+// ------------------------------------------------------------- key frames ---
+
+static int pick_key_device(const char *override_path)
+{
+    if (override_path) {
+        int fd = open(override_path, O_RDWR | O_CLOEXEC);
+        return fd >= 0 ? fd : -1;
+    }
+    // Prefer /dev/input/event0 ("mtk-kpd" on AT-M120)
+    int fd = open("/dev/input/event0", O_RDWR | O_CLOEXEC);
+    if (fd >= 0) return fd;
+
+    // Fallback: search for a device that has EV_KEY support
+    DIR *dir = opendir("/dev/input");
+    if (!dir) return -1;
+    struct dirent *de;
+    int best_fd = -1;
+    while ((de = readdir(dir))) {
+        if (strncmp(de->d_name, "event", 5) != 0) continue;
+        char path[64];
+        snprintf(path, sizeof path, "/dev/input/%s", de->d_name);
+        int cur = open(path, O_RDWR | O_CLOEXEC);
+        if (cur < 0) continue;
+        unsigned char evbits[(EV_MAX + 7) / 8] = {0};
+        if (ioctl(cur, EVIOCGBIT(0, sizeof evbits), evbits) >= 0 && bit_set(evbits, EV_KEY)) {
+            best_fd = cur;
+            break;
+        }
+        close(cur);
+    }
+    closedir(dir);
+    return best_fd;
+}
+
+static void write_all_ev(int fd, const struct input_event *ev, size_t n_ev)
+{
+    size_t len = n_ev * sizeof(struct input_event);
+    const char *p = (const char *)ev;
+    while (len > 0) {
+        ssize_t w = write(fd, p, len);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        p += w;
+        len -= (size_t)w;
+    }
+}
+
+static void do_key(int kfd, int code, int hold_ms)
+{
+    if (kfd < 0 || code <= 0) return;
+    if (hold_ms < 1) hold_ms = 20;
+    if (hold_ms > 1000) hold_ms = 1000;
+
+    struct input_event ev[2];
+    memset(ev, 0, sizeof ev);
+
+    // Key down
+    ev[0].type = EV_KEY;
+    ev[0].code = (uint16_t)code;
+    ev[0].value = 1;
+    ev[1].type = EV_SYN;
+    ev[1].code = SYN_REPORT;
+    ev[1].value = 0;
+    write_all_ev(kfd, ev, 2);
+
+    sleep_until(now_ns() + hold_ms * 1000000LL);
+
+    // Key up
+    ev[0].value = 0;
+    write_all_ev(kfd, ev, 2);
+}
+
+static void do_paste(int kfd)
+{
+    if (kfd < 0) return;
+    // Android supports KEY_PASTE (135), or Ctrl+V (KEY_LEFTCTRL 29 + KEY_V 47)
+    // Try KEY_PASTE first
+    do_key(kfd, 135 /* KEY_PASTE */, 25);
+}
+
+static void handle_pkt(struct touch_dev *d, int kfd, const struct evi_pkt *p)
 {
     switch (p->op) {
     case OP_DOWN:   touch_down(d, p->a, p->b); break;
@@ -398,6 +481,8 @@ static void handle_pkt(struct touch_dev *d, const struct evi_pkt *p)
     case OP_UP:     touch_up(d, 0); break;
     case OP_TAP:    do_tap(d, p->a, p->b, p->c); break;
     case OP_SWIPE:  do_swipe(d, p->a, p->b, p->c, p->d, p->e); break;
+    case OP_KEY:    do_key(kfd, p->a, p->b); break;
+    case OP_PASTE:  do_paste(kfd); break;
     case OP_RESET:  touch_up(d, 1); break;
     case OP_SCREEN: if (p->a > 1 && p->b > 1) { d->scr_w = p->a; d->scr_h = p->b; } break;
     case OP_QUIT:   g_quit = 1; break;
@@ -407,7 +492,7 @@ static void handle_pkt(struct touch_dev *d, const struct evi_pkt *p)
 
 // ----------------------------------------------------------------- daemon ---
 
-static int run_daemon(struct touch_dev *d)
+static int run_daemon(struct touch_dev *d, int kfd)
 {
     printf("evi-ok node=%s name=\"%s\" proto=%s x=%d..%d y=%d..%d slots=%d pressure=%d\n",
            d->path, d->name, proto_name(d->proto), d->xmin, d->xmax, d->ymin, d->ymax,
@@ -449,21 +534,39 @@ static int run_daemon(struct touch_dev *d)
             memcpy(&p, buf + off, sizeof p);
             if (p.magic != EVI_MAGIC) { off++; continue; }          // resync a byte at a time
             off += sizeof p;
-            handle_pkt(d, &p);
+            handle_pkt(d, kfd, &p);
         }
         memmove(buf, buf + off, have - off);
         have -= off;
     }
     touch_up(d, 0);
+    if (kfd >= 0) close(kfd);
     return 0;
 }
 
 // ------------------------------------------------------------------- main ---
 
+static int parse_key_code(const char *s)
+{
+    if (isdigit((unsigned char)s[0])) return atoi(s);
+    if (!strcasecmp(s, "POUND") || !strcasecmp(s, "HASH")) return 523; // KEY_NUMERIC_POUND
+    if (!strcasecmp(s, "STAR") || !strcasecmp(s, "ASTERISK")) return 522; // KEY_NUMERIC_STAR
+    if (!strcasecmp(s, "ENTER")) return 28; // KEY_ENTER
+    if (!strcasecmp(s, "BACK")) return 158; // KEY_BACK
+    if (!strcasecmp(s, "F4")) return 62; // KEY_F4
+    if (!strcasecmp(s, "UP")) return 103;
+    if (!strcasecmp(s, "DOWN")) return 108;
+    if (!strcasecmp(s, "LEFT")) return 105;
+    if (!strcasecmp(s, "RIGHT")) return 106;
+    if (!strcasecmp(s, "PASTE")) return 135; // KEY_PASTE
+    return atoi(s);
+}
+
 static int usage(void)
 {
     fprintf(stderr, "usage: evinject info | tap X Y [ms] | swipe X1 Y1 X2 Y2 [ms] | daemon --stdin\n"
-                    "       common: [--screen WxH] [--device PATH] [--slot N]\n");
+                    "       evinject key CODE [ms] | evinject paste\n"
+                    "       common: [--screen WxH] [--device PATH] [--kdevice PATH] [--slot N]\n");
     return 64;
 }
 
@@ -472,6 +575,7 @@ int main(int argc, char **argv)
     if (argc < 2) return usage();
     const char *mode = argv[1];
     const char *dev_override = NULL;
+    const char *kdev_override = NULL;
     int scr_w = 480, scr_h = 800, slot = 0, npos = 0, pos[8] = {0};
     int use_stdin = 0;
 
@@ -479,12 +583,45 @@ int main(int argc, char **argv)
         const char *a = argv[i];
         int has_val = i + 1 < argc;
         if (!strcmp(a, "--device") && has_val)        dev_override = argv[++i];
+        else if (!strcmp(a, "--kdevice") && has_val)   kdev_override = argv[++i];
         else if (!strcmp(a, "--stdin"))               use_stdin = 1;
         else if (!strcmp(a, "--slot") && has_val)     slot = atoi(argv[++i]);
         else if (!strcmp(a, "--screen") && has_val) {
             if (sscanf(argv[++i], "%dx%d", &scr_w, &scr_h) != 2) return usage();
         } else if (strncmp(a, "--", 2) != 0 && npos < 8) pos[npos++] = atoi(a);
         else return usage();
+    }
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = on_signal;
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+
+    // Standalone key / paste subcommands do not need touchscreen probing
+    if (!strcmp(mode, "key")) {
+        if (argc < 3) return usage();
+        int code = parse_key_code(argv[2]);
+        int hold = (npos >= 1 && pos[0] > 0) ? pos[0] : 20;
+        int kfd = pick_key_device(kdev_override);
+        if (kfd < 0) {
+            fprintf(stderr, "evi-err no-key-node (are we root?)\n");
+            return 11;
+        }
+        do_key(kfd, code, hold);
+        close(kfd);
+        return 0;
+    }
+
+    if (!strcmp(mode, "paste")) {
+        int kfd = pick_key_device(kdev_override);
+        if (kfd < 0) {
+            fprintf(stderr, "evi-err no-key-node (are we root?)\n");
+            return 11;
+        }
+        do_paste(kfd);
+        close(kfd);
+        return 0;
     }
 
     struct touch_dev d;
@@ -500,12 +637,6 @@ int main(int argc, char **argv)
     d.scr_h = scr_h > 1 ? scr_h : 800;
     d.slot = d.proto == PROTO_B ? (slot < 0 ? 0 : slot >= d.nslots ? d.nslots - 1 : slot) : 0;
 
-    struct sigaction sa;
-    memset(&sa, 0, sizeof sa);
-    sa.sa_handler = on_signal;
-    sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGINT, &sa, NULL);
-
     if (!strcmp(mode, "tap") && npos >= 2) {
         do_tap(&d, pos[0], pos[1], npos >= 3 ? pos[2] : 20);
         return 0;
@@ -516,7 +647,8 @@ int main(int argc, char **argv)
     }
     if (!strcmp(mode, "daemon")) {
         if (!use_stdin) return usage();
-        return run_daemon(&d);
+        int kfd = pick_key_device(kdev_override);
+        return run_daemon(&d, kfd);
     }
     return usage();
 }

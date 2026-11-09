@@ -1,6 +1,7 @@
 package com.crinklecodone.mochibun.service
 
 import com.crinklecodone.mochibun.core.system.RootShell
+import com.crinklecodone.mochibun.core.system.RootTouchInjector
 import android.accessibilityservice.AccessibilityService
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -179,9 +180,10 @@ class KaomojiOverlayController(private val service: AccessibilityService) {
                 if (node.isEditable && trySetText(node, kaomoji)) return
             }
             if (RootShell.isGranted() == true) {
-                // `input text` treats %s as space; quote everything else for the shell
-                val escaped = kaomoji.replace(" ", "%s").replace("'", "'\\''")
-                RootShell.submit("input text '$escaped'")
+                // Since the kaomoji is already in the system clipboard, paste it natively first.
+                // RootTouchInjector.pasteAsync emits KEY_PASTE (135) to the input driver in < 1 ms.
+                RootTouchInjector.attach(service.applicationContext)
+                RootTouchInjector.pasteAsync()
             }
         } finally {
             node?.recycle()
