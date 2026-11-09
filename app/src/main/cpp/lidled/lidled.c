@@ -9,8 +9,8 @@
 //
 // Usage (requires root):
 //   lidled off
-//   lidled solid <hex_rgb>
-//   lidled pattern <channels_mask> <hex_rgb>
+//   lidled solid <hex_rgb> [-f|--foreground]
+//   lidled pattern <channels_mask> <hex_rgb> [-f|--foreground]
 //   lidled shimmer <hex_rgb> <frame_seconds> <cycles> <settle_mode> [-f|--foreground]
 
 #define _GNU_SOURCE
@@ -31,6 +31,10 @@
 
 #define PID_FILE            "/data/local/tmp/lidled.pid"
 #define LOCK_FILE           "/data/local/tmp/lidled.lock"
+
+#define WAKE_LOCK_PATH      "/sys/power/wake_lock"
+#define WAKE_UNLOCK_PATH    "/sys/power/wake_unlock"
+#define WAKE_LOCK_NAME      "lidled_shimmer"
 
 // Physical exterior lid windows mapped to AW22127 channels:
 // Window 1: Channel 0
@@ -166,7 +170,25 @@ static uint32_t parse_channels_mask(const char *str) {
     return 0;
 }
 
-static void stop_previous_shimmer(void) {
+static void acquire_kernel_wake_lock(void) {
+    int fd = open(WAKE_LOCK_PATH, O_WRONLY);
+    if (fd >= 0) {
+        ssize_t ret = write(fd, WAKE_LOCK_NAME, strlen(WAKE_LOCK_NAME));
+        (void)ret;
+        close(fd);
+    }
+}
+
+static void release_kernel_wake_lock(void) {
+    int fd = open(WAKE_UNLOCK_PATH, O_WRONLY);
+    if (fd >= 0) {
+        ssize_t ret = write(fd, WAKE_LOCK_NAME, strlen(WAKE_LOCK_NAME));
+        (void)ret;
+        close(fd);
+    }
+}
+
+static void stop_previous_daemon(void) {
     FILE *fp = fopen(PID_FILE, "r");
     if (!fp) return;
     pid_t pid = 0;
@@ -196,6 +218,7 @@ static void stop_previous_shimmer(void) {
                 usleep(2000);
             }
         }
+        release_kernel_wake_lock();
         unlink(PID_FILE);
     } else {
         fclose(fp);
@@ -231,8 +254,7 @@ static void remove_pid_if_ours(pid_t my_pid) {
     }
 }
 
-static void run_shimmer_loop(int reg_fd, uint8_t r, uint8_t g, uint8_t b,
-                             double frame_seconds, int cycles, const char *settle_mode) {
+static void setup_signal_handlers(void) {
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
 
@@ -241,6 +263,24 @@ static void run_shimmer_loop(int reg_fd, uint8_t r, uint8_t g, uint8_t b,
     sa.sa_handler = sig_handler;
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
+}
+
+static void run_static_hold(int reg_fd, uint32_t active_channels_mask, uint8_t r, uint8_t g, uint8_t b) {
+    setup_signal_handlers();
+    write_channel_pattern(reg_fd, active_channels_mask, r, g, b);
+
+    struct timespec hold_ts = { .tv_sec = 1, .tv_nsec = 0 };
+    while (!g_stop) {
+        interruptible_sleep(&hold_ts);
+    }
+
+    remove_pid_if_ours(getpid());
+}
+
+static void run_shimmer_loop(int reg_fd, uint8_t r, uint8_t g, uint8_t b,
+                             double frame_seconds, int cycles, const char *settle_mode) {
+    setup_signal_handlers();
+    acquire_kernel_wake_lock();
 
     struct timespec ts;
     ts.tv_sec = (time_t)frame_seconds;
@@ -255,20 +295,91 @@ static void run_shimmer_loop(int reg_fd, uint8_t r, uint8_t g, uint8_t b,
         if (interruptible_sleep(&ts) != 0) break;
     }
 
+    // Release kernel wake lock once active shimmer cycles complete,
+    // allowing the SoC to enter deep sleep while holding the static frame.
+    release_kernel_wake_lock();
+
     if (!g_stop) {
         if (strcmp(settle_mode, "off") == 0) {
             write_off(reg_fd);
-        } else if (strcmp(settle_mode, "solid") == 0 || strcmp(settle_mode, "all") == 0 || strcmp(settle_mode, "11111") == 0) {
-            write_channel_pattern(reg_fd, MASK_ALL, r, g, b);
-        } else if (strcmp(settle_mode, "10101") == 0 || strcmp(settle_mode, "glyph") == 0) {
-            write_channel_pattern(reg_fd, MASK_10101, r, g, b);
         } else {
-            uint32_t mask = parse_channels_mask(settle_mode);
-            write_channel_pattern(reg_fd, mask ? mask : MASK_ALL, r, g, b);
+            uint32_t mask = 0;
+            if (strcmp(settle_mode, "solid") == 0 || strcmp(settle_mode, "all") == 0 || strcmp(settle_mode, "11111") == 0) {
+                mask = MASK_ALL;
+            } else if (strcmp(settle_mode, "10101") == 0 || strcmp(settle_mode, "glyph") == 0) {
+                mask = MASK_10101;
+            } else {
+                mask = parse_channels_mask(settle_mode);
+                if (!mask) mask = MASK_ALL;
+            }
+            write_channel_pattern(reg_fd, mask, r, g, b);
+
+            struct timespec hold_ts = { .tv_sec = 1, .tv_nsec = 0 };
+            while (!g_stop) {
+                interruptible_sleep(&hold_ts);
+            }
         }
     }
 
     remove_pid_if_ours(getpid());
+}
+
+static int spawn_daemon_or_run(int lock_fd, int foreground) {
+    if (foreground) {
+        FILE *pfp = fopen(PID_FILE, "w");
+        if (pfp) {
+            fprintf(pfp, "%d\n", getpid());
+            fclose(pfp);
+        }
+        if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
+
+        int reg_fd = open(LED_PATH_REG, O_WRONLY);
+        if (reg_fd < 0) {
+            fprintf(stderr, "lidled: failed to open %s: %s\n", LED_PATH_REG, strerror(errno));
+            remove_pid_if_ours(getpid());
+            return -1;
+        }
+        return reg_fd;
+    }
+
+    pid_t child = fork();
+    if (child < 0) {
+        fprintf(stderr, "lidled: fork failed: %s\n", strerror(errno));
+        if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
+        return -1;
+    }
+    if (child > 0) {
+        // Parent: record child PID, release lock, exit cleanly
+        FILE *pfp = fopen(PID_FILE, "w");
+        if (pfp) {
+            fprintf(pfp, "%d\n", child);
+            fclose(pfp);
+        }
+        if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
+        exit(0);
+    }
+
+    // Child process:
+    if (lock_fd >= 0) { close(lock_fd); }
+    setsid();
+
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
+
+    int devnull = open("/dev/null", O_RDWR);
+    if (devnull >= 0) {
+        dup2(devnull, STDIN_FILENO);
+        dup2(devnull, STDOUT_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        if (devnull > 2) close(devnull);
+    }
+
+    int reg_fd = open(LED_PATH_REG, O_WRONLY);
+    if (reg_fd < 0) {
+        remove_pid_if_ours(getpid());
+        exit(1);
+    }
+    return reg_fd;
 }
 
 static void print_usage(const char *prog) {
@@ -276,8 +387,9 @@ static void print_usage(const char *prog) {
         "Usage: %s <command> [args...]\n"
         "Commands:\n"
         "  off                                        Shut down all channels and effects\n"
-        "  solid <hex_rgb>                            Light all 5 windows in solid RGB\n"
-        "  pattern <channels_mask> <hex_rgb>          Light selected windows (e.g. 10101, 01010, all)\n"
+        "  solid <hex_rgb> [-f|--foreground]          Light all 5 windows in solid RGB\n"
+        "  pattern <channels_mask> <hex_rgb> [-f|--foreground]\n"
+        "                                             Light selected windows (e.g. 10101, 01010, all)\n"
         "  shimmer <hex_rgb> <frame_sec> <cycles> <settle_mode> [-f|--foreground]\n"
         "                                             Alternating 10101 <-> 01010 shimmer\n",
         prog);
@@ -301,8 +413,8 @@ int main(int argc, char **argv) {
         flock(lock_fd, LOCK_EX);
     }
 
-    // Stop any running shimmer before applying any new state
-    stop_previous_shimmer();
+    // Stop any running daemon (shimmer or static) before applying any new state
+    stop_previous_daemon();
 
     if (strcmp(cmd, "off") == 0 || strcmp(cmd, "stop") == 0) {
         int reg_fd = open(LED_PATH_REG, O_WRONLY);
@@ -319,7 +431,7 @@ int main(int argc, char **argv) {
 
     if (strcmp(cmd, "solid") == 0) {
         if (argc < 3) {
-            fprintf(stderr, "Usage: %s solid <hex_rgb>\n", argv[0]);
+            fprintf(stderr, "Usage: %s solid <hex_rgb> [-f|--foreground]\n", argv[0]);
             if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
             return 1;
         }
@@ -330,21 +442,20 @@ int main(int argc, char **argv) {
             if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
             return 1;
         }
-        int reg_fd = open(LED_PATH_REG, O_WRONLY);
-        if (reg_fd < 0) {
-            fprintf(stderr, "lidled: failed to open %s: %s\n", LED_PATH_REG, strerror(errno));
-            if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
-            return 1;
+        int foreground = 0;
+        if (argc >= 4 && (strcmp(argv[3], "-f") == 0 || strcmp(argv[3], "--foreground") == 0)) {
+            foreground = 1;
         }
-        write_channel_pattern(reg_fd, mask, r, g, b);
+        int reg_fd = spawn_daemon_or_run(lock_fd, foreground);
+        if (reg_fd < 0) return 1;
+        run_static_hold(reg_fd, mask, r, g, b);
         close(reg_fd);
-        if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
         return 0;
     }
 
     if (strcmp(cmd, "pattern") == 0) {
         if (argc < 4) {
-            fprintf(stderr, "Usage: %s pattern <channels_mask> <hex_rgb>\n", argv[0]);
+            fprintf(stderr, "Usage: %s pattern <channels_mask> <hex_rgb> [-f|--foreground]\n", argv[0]);
             if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
             return 1;
         }
@@ -355,15 +466,14 @@ int main(int argc, char **argv) {
             if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
             return 1;
         }
-        int reg_fd = open(LED_PATH_REG, O_WRONLY);
-        if (reg_fd < 0) {
-            fprintf(stderr, "lidled: failed to open %s: %s\n", LED_PATH_REG, strerror(errno));
-            if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
-            return 1;
+        int foreground = 0;
+        if (argc >= 5 && (strcmp(argv[4], "-f") == 0 || strcmp(argv[4], "--foreground") == 0)) {
+            foreground = 1;
         }
-        write_channel_pattern(reg_fd, mask, r, g, b);
+        int reg_fd = spawn_daemon_or_run(lock_fd, foreground);
+        if (reg_fd < 0) return 1;
+        run_static_hold(reg_fd, mask, r, g, b);
         close(reg_fd);
-        if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
         return 0;
     }
 
@@ -386,73 +496,15 @@ int main(int argc, char **argv) {
         const char *settle_mode = argv[5];
 
         int foreground = 0;
-        if (argc >= 7) {
-            if (strcmp(argv[6], "-f") == 0 || strcmp(argv[6], "--foreground") == 0) {
-                foreground = 1;
-            }
+        if (argc >= 7 && (strcmp(argv[6], "-f") == 0 || strcmp(argv[6], "--foreground") == 0)) {
+            foreground = 1;
         }
 
-        if (foreground) {
-            // Write our own PID
-            FILE *pfp = fopen(PID_FILE, "w");
-            if (pfp) {
-                fprintf(pfp, "%d\n", getpid());
-                fclose(pfp);
-            }
-            if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
-
-            int reg_fd = open(LED_PATH_REG, O_WRONLY);
-            if (reg_fd < 0) {
-                fprintf(stderr, "lidled: failed to open %s: %s\n", LED_PATH_REG, strerror(errno));
-                remove_pid_if_ours(getpid());
-                return 1;
-            }
-            run_shimmer_loop(reg_fd, r, g, b, frame_sec, cycles, settle_mode);
-            close(reg_fd);
-            return 0;
-        } else {
-            // Fork into background daemon
-            pid_t child = fork();
-            if (child < 0) {
-                fprintf(stderr, "lidled: fork failed: %s\n", strerror(errno));
-                if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
-                return 1;
-            }
-            if (child > 0) {
-                // Parent: save child PID, unlock, and exit immediately
-                FILE *pfp = fopen(PID_FILE, "w");
-                if (pfp) {
-                    fprintf(pfp, "%d\n", child);
-                    fclose(pfp);
-                }
-                if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
-                return 0;
-            }
-
-            // Child process:
-            if (lock_fd >= 0) { close(lock_fd); }
-            setsid();
-
-            signal(SIGHUP, SIG_IGN);
-            signal(SIGPIPE, SIG_IGN);
-
-            int devnull = open("/dev/null", O_RDWR);
-            if (devnull >= 0) {
-                dup2(devnull, STDIN_FILENO);
-                dup2(devnull, STDOUT_FILENO);
-                dup2(devnull, STDERR_FILENO);
-                if (devnull > 2) close(devnull);
-            }
-
-            int reg_fd = open(LED_PATH_REG, O_WRONLY);
-            if (reg_fd < 0) {
-                remove_pid_if_ours(getpid());
-                return 1;
-            }
-            run_shimmer_loop(reg_fd, r, g, b, frame_sec, cycles, settle_mode);
-            close(reg_fd);
-            return 0;
-        }
+        int reg_fd = spawn_daemon_or_run(lock_fd, foreground);
+        if (reg_fd < 0) return 1;
+        run_shimmer_loop(reg_fd, r, g, b, frame_sec, cycles, settle_mode);
+        close(reg_fd);
+        return 0;
     }
 
     fprintf(stderr, "lidled: unknown command '%s'\n", cmd);

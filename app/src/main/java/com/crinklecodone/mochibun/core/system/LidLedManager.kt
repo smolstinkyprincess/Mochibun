@@ -101,7 +101,7 @@ object LidLedManager : ClamshellListener {
 
     // Shimmer timing. One cycle shows both frames.
     private const val NOTIFICATION_FRAME_SECONDS = "0.8"
-    private const val NOTIFICATION_SHIMMER_CYCLES = 6 // ~10 s, matching the old pulse timeout
+    private const val NOTIFICATION_SHIMMER_CYCLES = 38 // ~60 s (38 * 1.6 s = 60.8 s)
     private const val CALL_FRAME_SECONDS = "0.4"
     private const val CALL_SHIMMER_CYCLES = 56 // ~45 s, longer than a typical ring
     const val SHIMMER_DEBOUNCE_MS = 1_500L
