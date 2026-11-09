@@ -7,6 +7,7 @@ package com.crinklecodone.mochibun.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Path
@@ -135,6 +136,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         if (isCursorVisible) {
             isCursorVisible = false
             overlayView?.visibility = View.GONE
+            RootTouchInjector.release()
         }
     }
 
@@ -171,7 +173,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         }
         overlayView = null
 
-        RootTouchInjector.shutdown()
+        RootTouchInjector.release()
         super.onDestroy()
     }
 
@@ -184,6 +186,12 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     override fun onInterrupt() {
         stopMovementTicker()
         overlayView?.pauseAnimation()
+        RootTouchInjector.release()
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        RootTouchInjector.release()
+        return super.onUnbind(intent)
     }
 
     private fun reloadConfig() {
@@ -193,6 +201,13 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         physics.accelRate = CursorPhysics.accelRateForRampMs(CursorPreferences.getAccelRampMs(this))
         scrollStepPx = CursorPreferences.getScrollStepPx(this)
         clickMethod = CursorPreferences.getClickMethod(this)
+        if (isCursorVisible) {
+            if (clickMethod == ClickMethod.ROOT_INPUT_TAP) {
+                RootTouchInjector.attach(applicationContext)
+            } else {
+                RootTouchInjector.release()
+            }
+        }
         InputArbiter.cursorToggleKeyCode = toggleKeyCode
         overlayView?.reloadConfiguration()
     }
@@ -202,6 +217,9 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         val view = overlayView ?: return
 
         if (isCursorVisible) {
+            if (clickMethod == ClickMethod.ROOT_INPUT_TAP) {
+                RootTouchInjector.attach(applicationContext)
+            }
             if (!isOverlayAttached) {
                 try {
                     windowManager.addView(view, view.windowLayoutParams)
@@ -220,6 +238,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
             stopMovementTicker()
             view.pauseAnimation()
             view.visibility = View.GONE
+            RootTouchInjector.release()
             Log.d(TAG, "Virtual cursor hidden")
         }
     }
