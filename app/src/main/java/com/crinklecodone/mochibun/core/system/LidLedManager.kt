@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.Build
 import android.os.PowerManager
+import android.system.Os
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.crinklecodone.mochibun.data.model.MochibunNotificationItem
@@ -17,6 +19,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.io.File
+import java.util.zip.ZipFile
 
 /** What the closed lid is showing, highest priority first. */
 enum class LidLedMode { CALL, NOTIFICATION, CHARGING, OFF }
@@ -25,7 +29,8 @@ enum class LidLedMode { CALL, NOTIFICATION, CHARGING, OFF }
  * Exterior Clamshell Notification & Charging LED Manager for the Chinoe AT-M120 (Awinic AW22xxx driver).
  *
  * Coordinates external lid LED illumination, alternating shimmer animations, and custom 24-bit RGB colors:
- * - Direct register programming via `/sys/class/leds/aw22xxx_led/reg`.
+ * - High-performance native register programming via `lidled` helper (`liblidled.so`).
+ * - Direct register programming to `/sys/class/leds/aw22xxx_led/reg`.
  * - Bypasses the vendor `effect` / `task0` path: on this unit `task0` loads the `cfg[effect]` firmware
  *   blob with its colors baked in and ignores the `rgb` buffer (verified on device).
  * - Controls the 5 physical lid windows mapped to AW22127 channels:
@@ -39,9 +44,9 @@ enum class LidLedMode { CALL, NOTIFICATION, CHARGING, OFF }
  *
  * Priority ladder while the flip is physically closed: incoming call > unread notification >
  * charging > off. The chip has no usable autonomous animation here (the breath program stays steady
- * when written through `reg`), so a shimmer is a bounded loop that runs inside the root shell (no
- * per-frame work in this process) and always ends on a static frame. The chip holds a static frame
- * through SoC suspend with zero CPU:
+ * when written through `reg`), so a shimmer is a bounded loop that runs inside the native helper daemon
+ * using nanosleep (no per-frame work in this process) and always ends on a static frame. The chip holds
+ * a static frame through SoC suspend with zero CPU:
  *  - Call: fast shimmer for up to [CALL_SHIMMER_CYCLES], then all windows solid.
  *  - Notification: shimmer on each new post, then a steady `1 0 1 0 1` glyph.
  *  - Charging: all windows solid.
@@ -99,6 +104,7 @@ object LidLedManager : ClamshellListener {
     private const val NOTIFICATION_SHIMMER_CYCLES = 6 // ~10 s, matching the old pulse timeout
     private const val CALL_FRAME_SECONDS = "0.4"
     private const val CALL_SHIMMER_CYCLES = 56 // ~45 s, longer than a typical ring
+    const val SHIMMER_DEBOUNCE_MS = 1_500L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var notificationJob: Job? = null
@@ -107,11 +113,19 @@ object LidLedManager : ClamshellListener {
     private var appContext: Context? = null
     private var isInitialized = false
     private var shimmerWakeLock: PowerManager.WakeLock? = null
+    private var helperBinaryPath: String? = null
 
     // Last program written by the ladder; manual writes (picker preview, tests) clear it
     private var appliedMode = LidLedMode.OFF
     private var appliedColorHex: String? = null
     private var lastShimmeredPostTime = 0L
+
+    @Volatile
+    private var shimmerStartTime = 0L
+    @Volatile
+    private var shimmerActiveUntilMs = 0L
+    @Volatile
+    private var shimmerPostTime = 0L
 
     @Volatile
     var isChargingState: Boolean = false
@@ -199,118 +213,112 @@ object LidLedManager : ClamshellListener {
     }
 
     /**
-     * Generates a direct register programming script to light up specific channels in RGB.
-     * All non-active channels are explicitly set to 0x00 (off).
+     * Installs or retrieves the native `lidled` binary from APK assets/lib folder.
      */
-    @VisibleForTesting
-    internal fun buildWindowPatternScript(activeChannels: Set<Int>, r: Int, g: Int, b: Int): String {
-        return buildString {
-            append("echo \"0xff 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x05 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x04 0x01\" > $LED_PATH_REG\n")
-            append("echo \"0x02 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x02 0x01\" > $LED_PATH_REG\n")
-            append("echo \"0x04 0x01\" > $LED_PATH_REG\n")
-            append("echo \"0x0c 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0xff 0x01\" > $LED_PATH_REG\n")
-            append("echo \"0x00 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x01 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x02 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x03 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x04 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x05 0x03\" > $LED_PATH_REG\n")
-            append("echo \"0x06 0x09\" > $LED_PATH_REG\n")
-            append("echo \"0x0b 0x00\" > $LED_PATH_REG\n")
+    internal fun ensureHelperInstalled(ctx: Context): File? {
+        val devBin = File("/data/local/tmp/lidled")
+        if (devBin.isFile && devBin.canExecute()) {
+            helperBinaryPath = devBin.absolutePath
+            return devBin
+        }
 
-            for (ch in 0..8) {
-                val rReg = 0x10 + ch * 3
-                val gReg = rReg + 1
-                val bReg = rReg + 2
-                if (ch in activeChannels) {
-                    append("echo \"0x%02x 0x%02x\" > $LED_PATH_REG\n".format(rReg, r))
-                    append("echo \"0x%02x 0x%02x\" > $LED_PATH_REG\n".format(gReg, g))
-                    append("echo \"0x%02x 0x%02x\" > $LED_PATH_REG\n".format(bReg, b))
-                } else {
-                    append("echo \"0x%02x 0x00\" > $LED_PATH_REG\n".format(rReg))
-                    append("echo \"0x%02x 0x00\" > $LED_PATH_REG\n".format(gReg))
-                    append("echo \"0x%02x 0x00\" > $LED_PATH_REG\n".format(bReg))
+        val dir = File(ctx.filesDir, "lidled").apply { mkdirs() }
+        val stamp = try {
+            ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime
+        } catch (_: Exception) {
+            0L
+        }
+        val bin = File(dir, "lidled-$stamp")
+        if (bin.isFile && bin.length() > 0 && bin.canExecute()) {
+            helperBinaryPath = bin.absolutePath
+            return bin
+        }
+
+        val info = ctx.applicationInfo
+        val apks = listOf(info.sourceDir) + (info.splitSourceDirs?.toList() ?: emptyList())
+        for (abi in Build.SUPPORTED_ABIS) {
+            for (apk in apks) {
+                try {
+                    ZipFile(apk).use { zip ->
+                        val entry = zip.getEntry("lib/$abi/liblidled.so") ?: return@use
+                        val tmp = File(dir, "lidled.tmp")
+                        zip.getInputStream(entry).use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                        try {
+                            Os.chmod(tmp.path, 0b111_101_101) // 0755
+                        } catch (e: Exception) {
+                            Log.w(TAG, "chmod failed on ${tmp.path}", e)
+                        }
+                        dir.listFiles { f -> f.name.startsWith("lidled-") }?.forEach { it.delete() }
+                        if (tmp.renameTo(bin)) {
+                            bin.setExecutable(true, false)
+                            helperBinaryPath = bin.absolutePath
+                            return bin
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed reading $apk for native lidled helper", e)
                 }
             }
-
-            append("echo \"0x2b 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x2c 0xff\" > $LED_PATH_REG\n")
-            append("echo \"0xff 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x05 0x02\" > $LED_PATH_REG\n")
-            append("echo \"0x04 0x03\" > $LED_PATH_REG\n")
         }
+
+        Log.w(TAG, "liblidled.so could not be found or extracted for ABIs: ${Build.SUPPORTED_ABIS.joinToString()}")
+        return null
     }
 
     /**
-     * Builds the script to illuminate all 5 physical exterior windows solid in custom RGB.
+     * Resolves the path to the native helper binary.
      */
-    @VisibleForTesting
-    internal fun buildSolidScript(r: Int, g: Int, b: Int): String {
-        return buildWindowPatternScript(ALL_WINDOW_CHANNELS, r, g, b)
-    }
-
-    /**
-     * Builds the clean hardware shutoff script via register writes without waking vendor workqueues.
-     */
-    @VisibleForTesting
-    internal fun buildOffScript(): String {
-        return buildString {
-            append("echo \"0xff 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x05 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x04 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x02 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x01 0x55\" > $LED_PATH_REG\n")
-            append("echo \"0xff 0x01\" > $LED_PATH_REG\n")
-            for (r in 0x10..0x2a) {
-                append("echo \"0x%02x 0x00\" > $LED_PATH_REG\n".format(r))
-            }
-            append("echo \"0xff 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x05 0x00\" > $LED_PATH_REG\n")
-            append("echo \"0x04 0x00\" > $LED_PATH_REG\n")
-            append("echo 0 > $LED_PATH_EFFECT\n")
-            append("echo 0 > $LED_PATH_BRIGHTNESS\n")
+    fun getHelperPath(): String {
+        helperBinaryPath?.let { return it }
+        val ctx = appContext
+        if (ctx != null) {
+            ensureHelperInstalled(ctx)?.let { return it.absolutePath }
         }
+        return "lidled"
+    }
+
+    @VisibleForTesting
+    internal fun setMockHelperPath(path: String?) {
+        helperBinaryPath = path
     }
 
     /**
-     * Builds a bounded shimmer that runs as a background job of the root shell: [cycles] rounds of
-     * [frameA] / [frameB], then [settleScript]. The script is sent once, so a running shimmer costs
-     * this process no per-frame allocations or root round trips. The job's PID goes to [pidFile] so
-     * the next program can stop it.
+     * Builds the command to cleanly shut down all lid channels and effects.
      */
     @VisibleForTesting
-    internal fun buildShimmerLoopScript(
-        frameA: String,
-        frameB: String,
+    internal fun buildOffCommand(helperPath: String = getHelperPath()): String =
+        "'$helperPath' off"
+
+    /**
+     * Builds the command to illuminate all 5 physical exterior windows solid in custom RGB.
+     */
+    @VisibleForTesting
+    internal fun buildSolidCommand(hexColor: String, helperPath: String = getHelperPath()): String =
+        "'$helperPath' pattern 11111 $hexColor"
+
+    /**
+     * Builds the command to illuminate selected channels in custom RGB.
+     */
+    @VisibleForTesting
+    internal fun buildPatternCommand(
+        channelsMask: String,
+        hexColor: String,
+        helperPath: String = getHelperPath()
+    ): String =
+        "'$helperPath' pattern $channelsMask $hexColor"
+
+    /**
+     * Builds the command to execute a bounded alternating shimmer and settle on a final frame.
+     */
+    @VisibleForTesting
+    internal fun buildShimmerCommand(
+        hexColor: String,
         frameSeconds: String,
         cycles: Int,
-        settleScript: String,
-        pidFile: String
-    ): String = buildString {
-        append(buildStopLoopScript(pidFile))
-        append("(\n")
-        append("i=0\n")
-        append("while [ \$i -lt $cycles ]; do\n")
-        append(frameA)
-        append("sleep $frameSeconds\n")
-        append(frameB)
-        append("sleep $frameSeconds\n")
-        append("i=\$((i+1))\n")
-        append("done\n")
-        append(settleScript)
-        append("rm -f '$pidFile'\n")
-        append(") </dev/null >/dev/null 2>&1 &\n")
-        append("echo \$! > '$pidFile'\n")
-    }
-
-    /** Stops a running root-side shimmer. Prefixed to every program so the newest write wins. */
-    @VisibleForTesting
-    internal fun buildStopLoopScript(pidFile: String): String =
-        "p=\$(cat '$pidFile' 2>/dev/null); [ -n \"\$p\" ] && kill \$p 2>/dev/null; rm -f '$pidFile'\n"
+        settleMode: String,
+        helperPath: String = getHelperPath()
+    ): String =
+        "'$helperPath' shimmer $hexColor $frameSeconds $cycles $settleMode"
 
     @VisibleForTesting
     internal fun shimmerDurationMs(frameSeconds: String, cycles: Int): Long =
@@ -340,10 +348,10 @@ object LidLedManager : ClamshellListener {
     @Synchronized
     fun setSolidColor(colorHex: String) {
         invalidateApplied()
-        val (r, g, b) = parseRgb(colorHex)
+        val hex = getHexColor(colorHex)
         releaseShimmerWakeLock()
-        runProgram(buildStopLoopScript(pidFilePath()) + buildSolidScript(r, g, b))
-        Log.d(TAG, "Activated solid lid color ($colorHex)")
+        runCommand(buildSolidCommand(hex))
+        Log.d(TAG, "Activated solid lid color ($hex)")
     }
 
     /**
@@ -355,8 +363,8 @@ object LidLedManager : ClamshellListener {
         notificationLedActive = false
         chargingLedActive = false
         releaseShimmerWakeLock()
-        runProgram(buildStopLoopScript(pidFilePath()) + buildOffScript())
-        Log.d(TAG, "Stopped all exterior LEDs cleanly via reg")
+        runCommand(buildOffCommand())
+        Log.d(TAG, "Stopped all exterior LEDs cleanly via native helper")
     }
 
     /**
@@ -376,6 +384,7 @@ object LidLedManager : ClamshellListener {
         val app = context.applicationContext
         appContext = app
 
+        ensureHelperInstalled(app)
         ClamshellManager.addListener(this)
 
         // Query initial charging state
@@ -443,6 +452,27 @@ object LidLedManager : ClamshellListener {
      * except that a newly posted notification restarts the shimmer.
      */
     @Synchronized
+    @VisibleForTesting
+    internal fun shouldSkipShimmer(
+        mode: LidLedMode,
+        hex: String,
+        newestPostTime: Long,
+        now: Long = System.currentTimeMillis()
+    ): Boolean {
+        if (mode != LidLedMode.NOTIFICATION) return false
+        if (mode != appliedMode || hex != appliedColorHex) return false
+        val isShimmerActive = now < shimmerActiveUntilMs &&
+            (newestPostTime <= shimmerPostTime || (now - shimmerStartTime < SHIMMER_DEBOUNCE_MS))
+        val isNewPost = newestPostTime > lastShimmeredPostTime
+        return !isNewPost || isShimmerActive
+    }
+
+    /**
+     * Evaluates the priority ladder (lid closed, incoming call, notifications, charging) and writes
+     * the matching program through the root shell. Does nothing when the outcome is unchanged,
+     * except that a newly posted notification restarts the shimmer.
+     */
+    @Synchronized
     fun updateLedState() {
         val context = appContext ?: return
         val items = NotificationTracker.notifications.value
@@ -456,75 +486,107 @@ object LidLedManager : ClamshellListener {
         )
         val hex = getHexColor(PreferencesManager.getLidLedColor(context))
         val newestPostTime = items.maxOfOrNull { it.postTime } ?: 0L
-        val isNewPost = mode == LidLedMode.NOTIFICATION && newestPostTime > lastShimmeredPostTime
 
+        if (shouldSkipShimmer(mode, hex, newestPostTime)) return
+
+        val isNewPost = mode == LidLedMode.NOTIFICATION && newestPostTime > lastShimmeredPostTime
         if (mode == appliedMode && hex == appliedColorHex && !isNewPost) return
-        applyMode(mode, hex)
+
+        applyMode(mode, hex, newestPostTime)
         if (mode == LidLedMode.NOTIFICATION) lastShimmeredPostTime = newestPostTime
     }
 
-    private fun applyMode(mode: LidLedMode, hex: String) {
+    private fun applyMode(mode: LidLedMode, hex: String, postTime: Long = 0L) {
         appliedMode = mode
         appliedColorHex = hex
         notificationLedActive = mode == LidLedMode.CALL || mode == LidLedMode.NOTIFICATION
         chargingLedActive = mode == LidLedMode.CHARGING
-        val (r, g, b) = parseRgb(hex)
-        val stop = buildStopLoopScript(pidFilePath())
         when (mode) {
             LidLedMode.OFF -> {
+                shimmerStartTime = 0L
+                shimmerActiveUntilMs = 0L
+                shimmerPostTime = 0L
                 releaseShimmerWakeLock()
-                runProgram(stop + buildOffScript())
+                runCommand(buildOffCommand())
             }
             LidLedMode.CHARGING -> {
+                shimmerStartTime = 0L
+                shimmerActiveUntilMs = 0L
+                shimmerPostTime = 0L
                 releaseShimmerWakeLock()
-                runProgram(stop + buildSolidScript(r, g, b))
+                runCommand(buildSolidCommand(hex))
             }
             LidLedMode.NOTIFICATION -> startShimmer(
-                r, g, b,
+                hexColor = hex,
                 frameSeconds = NOTIFICATION_FRAME_SECONDS,
                 cycles = NOTIFICATION_SHIMMER_CYCLES,
-                settleScript = buildWindowPatternScript(CHANNELS_10101, r, g, b)
+                settleMode = "10101",
+                postTime = postTime
             )
             LidLedMode.CALL -> startShimmer(
-                r, g, b,
+                hexColor = hex,
                 frameSeconds = CALL_FRAME_SECONDS,
                 cycles = CALL_SHIMMER_CYCLES,
-                settleScript = buildSolidScript(r, g, b)
+                settleMode = "solid",
+                postTime = postTime
             )
         }
         Log.d(TAG, "Lid LED mode -> $mode ($hex)")
     }
 
-    private fun startShimmer(r: Int, g: Int, b: Int, frameSeconds: String, cycles: Int, settleScript: String) {
-        val script = buildShimmerLoopScript(
-            frameA = buildWindowPatternScript(CHANNELS_10101, r, g, b),
-            frameB = buildWindowPatternScript(CHANNELS_01010, r, g, b),
+    private fun startShimmer(
+        hexColor: String,
+        frameSeconds: String,
+        cycles: Int,
+        settleMode: String,
+        postTime: Long = 0L
+    ) {
+        val now = System.currentTimeMillis()
+        val durationMs = shimmerDurationMs(frameSeconds, cycles)
+        shimmerStartTime = now
+        shimmerActiveUntilMs = now + durationMs
+        shimmerPostTime = postTime
+        val cmd = buildShimmerCommand(
+            hexColor = hexColor,
             frameSeconds = frameSeconds,
             cycles = cycles,
-            settleScript = settleScript,
-            pidFile = pidFilePath()
+            settleMode = settleMode
         )
         // Keep the SoC up just long enough for the loop to reach its static frame; with the flip
-        // closed the display is off and the loop's `sleep` would otherwise stall mid-pattern
-        holdShimmerWakeLock(shimmerDurationMs(frameSeconds, cycles) + 1_000L)
-        runProgram(script)
+        // closed the display is off and the loop's nanosleep would otherwise stall mid-pattern
+        holdShimmerWakeLock(durationMs + 1_000L)
+        runCommand(cmd)
     }
 
     private fun invalidateApplied() {
         appliedMode = LidLedMode.OFF
         appliedColorHex = null
+        shimmerStartTime = 0L
+        shimmerActiveUntilMs = 0L
+        shimmerPostTime = 0L
     }
 
-    private fun pidFilePath(): String =
-        appContext?.cacheDir?.let { "${it.absolutePath}/lid_led.pid" } ?: "/data/local/tmp/mochibun_lid_led.pid"
+    @VisibleForTesting
+    internal fun setMockShimmerState(startTime: Long, activeUntilMs: Long, postTime: Long) {
+        shimmerStartTime = startTime
+        shimmerActiveUntilMs = activeUntilMs
+        shimmerPostTime = postTime
+    }
 
-    private fun runProgram(script: String) {
+    @VisibleForTesting
+    internal fun setMockAppliedState(mode: LidLedMode, hex: String?, lastPostTime: Long) {
+        appliedMode = mode
+        appliedColorHex = hex
+        lastShimmeredPostTime = lastPostTime
+    }
+
+    private fun runCommand(cmd: String) {
         // Unit tests have no context; never run LED programs in the host shell
-        if (appContext == null) return
+        if (appContext == null && helperBinaryPath == null) return
         try {
-            RootShell.submit(script)
+            RootShell.submit(cmd)
         } catch (e: Throwable) {
-            Log.w(TAG, "Lid LED write failed", e)
+            Log.w(TAG, "Lid LED command execution failed: $cmd", e)
         }
     }
 

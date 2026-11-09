@@ -45,49 +45,45 @@ class LidLedManagerTest {
     }
 
     @Test
-    fun testBuildWindowPatternScriptSetsActiveChannelsAndZerosOthers() {
-        val script = LidLedManager.buildWindowPatternScript(
-            activeChannels = setOf(0, 3, 6),
-            r = 0xff, g = 0x14, b = 0x93
+    fun testBuildOffCommand() {
+        val cmd = LidLedManager.buildOffCommand("/mock/lidled")
+        assertEquals("'/mock/lidled' off", cmd)
+    }
+
+    @Test
+    fun testBuildSolidCommand() {
+        val cmd = LidLedManager.buildSolidCommand("0xff1493", "/mock/lidled")
+        assertEquals("'/mock/lidled' pattern 11111 0xff1493", cmd)
+    }
+
+    @Test
+    fun testBuildPatternCommand() {
+        val cmd10101 = LidLedManager.buildPatternCommand("10101", "0xff1493", "/mock/lidled")
+        assertEquals("'/mock/lidled' pattern 10101 0xff1493", cmd10101)
+
+        val cmd01010 = LidLedManager.buildPatternCommand("01010", "0x00ced1", "/mock/lidled")
+        assertEquals("'/mock/lidled' pattern 01010 0x00ced1", cmd01010)
+    }
+
+    @Test
+    fun testBuildShimmerCommand() {
+        val notifCmd = LidLedManager.buildShimmerCommand(
+            hexColor = "0xff1493",
+            frameSeconds = "0.8",
+            cycles = 6,
+            settleMode = "10101",
+            helperPath = "/mock/lidled"
         )
-        // Ch 0 active: 0x10=0xff, 0x11=0x14, 0x12=0x93
-        assertTrue(script.contains("echo \"0x10 0xff\" > /sys/class/leds/aw22xxx_led/reg"))
-        assertTrue(script.contains("echo \"0x11 0x14\" > /sys/class/leds/aw22xxx_led/reg"))
-        assertTrue(script.contains("echo \"0x12 0x93\" > /sys/class/leds/aw22xxx_led/reg"))
+        assertEquals("'/mock/lidled' shimmer 0xff1493 0.8 6 10101", notifCmd)
 
-        // Ch 1 inactive: 0x13=0x00, 0x14=0x00, 0x15=0x00
-        assertTrue(script.contains("echo \"0x13 0x00\" > /sys/class/leds/aw22xxx_led/reg"))
-        assertTrue(script.contains("echo \"0x14 0x00\" > /sys/class/leds/aw22xxx_led/reg"))
-        assertTrue(script.contains("echo \"0x15 0x00\" > /sys/class/leds/aw22xxx_led/reg"))
-
-        // Latch at end
-        assertTrue(script.contains("echo \"0x05 0x02\" > /sys/class/leds/aw22xxx_led/reg"))
-        assertTrue(script.contains("echo \"0x04 0x03\" > /sys/class/leds/aw22xxx_led/reg"))
-    }
-
-    @Test
-    fun testBuildSolidScriptContainsAllFiveWindowChannels() {
-        val script = LidLedManager.buildSolidScript(r = 0xb7, g = 0xf4, b = 0xd8)
-        // Check all 5 active windows (0, 1, 3, 4, 6)
-        val activeWindowRegs = listOf(0x10, 0x13, 0x19, 0x1c, 0x22)
-        for (reg in activeWindowRegs) {
-            assertTrue("Should contain red component for reg 0x%02x".format(reg),
-                script.contains("echo \"0x%02x 0xb7\" > /sys/class/leds/aw22xxx_led/reg".format(reg)))
-        }
-    }
-
-    @Test
-    fun testBuildOffScriptZerosAllRegistersAndDisarmsChip() {
-        val script = LidLedManager.buildOffScript()
-        assertTrue(script.contains("echo \"0x05 0x00\" > /sys/class/leds/aw22xxx_led/reg"))
-        assertTrue(script.contains("echo \"0x04 0x00\" > /sys/class/leds/aw22xxx_led/reg"))
-        assertTrue(script.contains("echo \"0x01 0x55\" > /sys/class/leds/aw22xxx_led/reg"))
-        for (reg in 0x10..0x2a) {
-            assertTrue("Should zero PWM register 0x%02x".format(reg),
-                script.contains("echo \"0x%02x 0x00\" > /sys/class/leds/aw22xxx_led/reg".format(reg)))
-        }
-        assertTrue(script.contains("echo 0 > /sys/class/leds/aw22xxx_led/effect"))
-        assertTrue(script.contains("echo 0 > /sys/class/leds/aw22xxx_led/brightness"))
+        val callCmd = LidLedManager.buildShimmerCommand(
+            hexColor = "0xff1493",
+            frameSeconds = "0.4",
+            cycles = 56,
+            settleMode = "solid",
+            helperPath = "/mock/lidled"
+        )
+        assertEquals("'/mock/lidled' shimmer 0xff1493 0.4 56 solid", callCmd)
     }
 
     @Test
@@ -140,34 +136,6 @@ class LidLedManagerTest {
     }
 
     @Test
-    fun testShimmerLoopRunsBoundedInRootShellAndSettles() {
-        val pid = "/cache/lid_led.pid"
-        val script = LidLedManager.buildShimmerLoopScript(
-            frameA = "FRAME_A\n",
-            frameB = "FRAME_B\n",
-            frameSeconds = "0.8",
-            cycles = 6,
-            settleScript = "SETTLE\n",
-            pidFile = pid
-        )
-        // Stops any earlier loop first, so the newest program wins
-        assertTrue(script.startsWith(LidLedManager.buildStopLoopScript(pid)))
-        assertTrue(script.contains("while [ \$i -lt 6 ]; do\nFRAME_A\nsleep 0.8\nFRAME_B\nsleep 0.8\n"))
-        // Settles on a static frame after the loop, then runs detached and records its PID
-        assertTrue(script.indexOf("SETTLE") > script.indexOf("done"))
-        assertTrue(script.contains(") </dev/null >/dev/null 2>&1 &\n"))
-        assertTrue(script.endsWith("echo \$! > '$pid'\n"))
-    }
-
-    @Test
-    fun testStopLoopScriptKillsRecordedPid() {
-        val script = LidLedManager.buildStopLoopScript("/cache/lid_led.pid")
-        assertTrue(script.contains("cat '/cache/lid_led.pid'"))
-        assertTrue(script.contains("kill \$p"))
-        assertTrue(script.contains("rm -f '/cache/lid_led.pid'"))
-    }
-
-    @Test
     fun testShimmerDuration() {
         assertEquals(9_600L, LidLedManager.shimmerDurationMs("0.8", 6))
         assertEquals(44_800L, LidLedManager.shimmerDurationMs("0.4", 56))
@@ -190,5 +158,70 @@ class LidLedManagerTest {
         assertEquals("0xb7f4d8", LidLedManager.getHexColor("mint"))
         // Fallback
         assertEquals("0xff1493", LidLedManager.getHexColor("unknown"))
+    }
+
+    @Test
+    fun testShimmerActiveGuardSkipsRetriggerForSameNotification() {
+        val colorHex = "0xff1493"
+        val postTime = 1000L
+        val startTime = 5000L
+        val activeUntil = startTime + 9600L
+
+        LidLedManager.setMockAppliedState(LidLedMode.NOTIFICATION, colorHex, postTime)
+        LidLedManager.setMockShimmerState(startTime, activeUntil, postTime)
+
+        // Same postTime during active shimmer: must skip
+        assertTrue(
+            LidLedManager.shouldSkipShimmer(
+                mode = LidLedMode.NOTIFICATION,
+                hex = colorHex,
+                newestPostTime = postTime,
+                now = startTime + 200L
+            )
+        )
+    }
+
+    @Test
+    fun testShimmerDebounceWindowSkipsRetriggerDuringScreenOffCascade() {
+        val colorHex = "0xff1493"
+        val initialPostTime = 1000L
+        val startTime = 5000L
+        val activeUntil = startTime + 9600L
+
+        LidLedManager.setMockAppliedState(LidLedMode.NOTIFICATION, colorHex, initialPostTime)
+        LidLedManager.setMockShimmerState(startTime, activeUntil, initialPostTime)
+
+        // Screen-off cascade ~200ms later with slightly bumped postTime: must skip within debounce window
+        val bumpedPostTime = 1050L
+        assertTrue(
+            LidLedManager.shouldSkipShimmer(
+                mode = LidLedMode.NOTIFICATION,
+                hex = colorHex,
+                newestPostTime = bumpedPostTime,
+                now = startTime + 200L
+            )
+        )
+    }
+
+    @Test
+    fun testShimmerAllowsNewNotificationAfterDebounce() {
+        val colorHex = "0xff1493"
+        val initialPostTime = 1000L
+        val startTime = 5000L
+        val activeUntil = startTime + 9600L
+
+        LidLedManager.setMockAppliedState(LidLedMode.NOTIFICATION, colorHex, initialPostTime)
+        LidLedManager.setMockShimmerState(startTime, activeUntil, initialPostTime)
+
+        // Truly new notification arriving after debounce window: must NOT skip
+        val newPostTime = 2000L
+        assertFalse(
+            LidLedManager.shouldSkipShimmer(
+                mode = LidLedMode.NOTIFICATION,
+                hex = colorHex,
+                newestPostTime = newPostTime,
+                now = startTime + 2500L
+            )
+        )
     }
 }
