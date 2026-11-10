@@ -1,25 +1,33 @@
 package com.crinklecodone.mochibun.data.repository
 
-import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
-import android.provider.Settings
-import android.text.TextUtils
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import android.view.KeyEvent
-import com.crinklecodone.mochibun.service.MochibunAccessibilityService
+import com.android.quickstep.RecentsActivity
+import com.crinklecodone.mochibun.BuildConfig
 import com.crinklecodone.mochibun.core.system.RootShell
+import com.crinklecodone.mochibun.core.system.TorchManager
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.BASELINE_MTK_KPD_MAPPINGS
 import com.crinklecodone.mochibun.data.model.ButtonActionConfig
 import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.model.StaticModuleStatus
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 object HardwareRemapManager {
 
+    private const val TAG = "HardwareRemapManager"
     const val PREFS_NAME = "hardware_remap_preferences"
 
     const val MODULE_ID = "mochibun_keys"
@@ -34,6 +42,301 @@ object HardwareRemapManager {
     const val LIVE_KL_NAME = "/system/usr/keylayout/mtk-kpd.kl"
 
     const val KEY_USE_ROOT_RECENTS_FALLBACK = "use_root_recents_fallback"
+
+    /**
+     * Real-time hardware key capture callback.
+     * When active (e.g. inside Keypad Remapper dialog or Kaomoji Trigger key picker),
+     * this listener intercepts raw KeyEvent before window dispatch.
+     * Returning `true` consumes the event.
+     */
+    @Volatile
+    var keyCaptureListener: ((KeyEvent) -> Boolean)? = null
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // In-memory mapping of Android KeyCode -> Action Configuration
+    private val activeMappings = mutableMapOf<Int, ButtonActionConfig>()
+
+    // State tracking for double-tap and long-press per keycode
+    private var lastTapTime = 0L
+    private var lastTapKeyCode = -1
+    private var pendingSinglePressRunnable: Runnable? = null
+    private var pendingLongPressRunnable: Runnable? = null
+    private var longPressFired = false
+
+    private var isInitialized = false
+
+    private val hardwareKeyReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (context == null || intent == null) return
+            if (intent.action == com.crinklecodone.mochibun.xposed.MochibunKeyHook.ACTION_HARDWARE_KEY_TRIGGER) {
+                @Suppress("DEPRECATION")
+                val rawEvent = intent.getParcelableExtra<KeyEvent>(com.crinklecodone.mochibun.xposed.MochibunKeyHook.EXTRA_KEY_EVENT)
+                val event = rawEvent ?: run {
+                    val keyCode = intent.getIntExtra(com.crinklecodone.mochibun.xposed.MochibunKeyHook.EXTRA_KEY_CODE, KeyEvent.KEYCODE_UNKNOWN)
+                    val action = intent.getIntExtra(com.crinklecodone.mochibun.xposed.MochibunKeyHook.EXTRA_ACTION, KeyEvent.ACTION_DOWN)
+                    val repeatCount = intent.getIntExtra(com.crinklecodone.mochibun.xposed.MochibunKeyHook.EXTRA_REPEAT_COUNT, 0)
+                    KeyEvent(SystemClock.uptimeMillis(), SystemClock.uptimeMillis(), action, keyCode, repeatCount)
+                }
+                onKeyEvent(context, event)
+            }
+        }
+    }
+
+    fun init(context: Context) {
+        if (isInitialized) return
+        isInitialized = true
+        val appContext = context.applicationContext
+        reloadActiveConfig(appContext)
+        getPrefs(appContext).registerOnSharedPreferenceChangeListener { _, _ ->
+            reloadActiveConfig(appContext)
+        }
+        val filter = android.content.IntentFilter(com.crinklecodone.mochibun.xposed.MochibunKeyHook.ACTION_HARDWARE_KEY_TRIGGER)
+        androidx.core.content.ContextCompat.registerReceiver(
+            appContext,
+            hardwareKeyReceiver,
+            filter,
+            androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
+    }
+
+    fun reloadActiveConfig(context: Context) {
+        activeMappings.clear()
+        for (key in PhysicalKey.entries) {
+            val config = getButtonActionConfig(context, key)
+            if (config.hasAnyAction()) {
+                activeMappings[key.defaultKeyCode] = config
+                if (key == PhysicalKey.KEY_ENTER) {
+                    activeMappings[KeyEvent.KEYCODE_DPAD_CENTER] = config
+                }
+            }
+        }
+        for ((kc, config) in getAllArbitraryKeyActionConfigs(context)) {
+            val isNumericDigit = kc in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9
+            val hasTapOverride = config.singlePressAction !is ActionType.None || config.doublePressAction !is ActionType.None
+            if (!isNumericDigit || hasTapOverride) {
+                activeMappings[kc] = config
+            }
+        }
+        // Always ensure APP_SWITCH has a valid default mapping if not present
+        if (!activeMappings.containsKey(KeyEvent.KEYCODE_APP_SWITCH)) {
+            val appSwitchConfig = getButtonActionConfig(context, PhysicalKey.APP_SWITCH)
+            activeMappings[KeyEvent.KEYCODE_APP_SWITCH] = appSwitchConfig
+        }
+    }
+
+    /**
+     * Dispatches intercepted hardware key events from system hook or UI.
+     * Handles single-tap, double-tap, and 500 ms long-press gestures.
+     * Returns true if consumed.
+     */
+    fun onKeyEvent(context: Context, event: KeyEvent): Boolean {
+        keyCaptureListener?.let { listener ->
+            if (listener(event)) return true
+        }
+
+        val normalizedCode = normalizeKeyCode(event.keyCode, event.scanCode)
+        var config = activeMappings[normalizedCode] ?: activeMappings[event.keyCode]
+        if (config == null && event.scanCode > 0) {
+            val key = PhysicalKey.fromScancode(event.scanCode)
+            if (key != null) {
+                config = activeMappings[key.defaultKeyCode]
+            }
+        }
+
+        if (config == null || !config.hasAnyAction()) {
+            return false
+        }
+
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "HardwareRemapManager onKeyEvent: code=${event.keyCode} (norm=$normalizedCode), action=${event.action}")
+        }
+
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (event.repeatCount == 0) {
+                    longPressFired = false
+                    if (config.longPressAction !is ActionType.None) {
+                        pendingLongPressRunnable?.let { mainHandler.removeCallbacks(it) }
+                        val runnable = Runnable {
+                            longPressFired = true
+                            executeAction(context, config.longPressAction)
+                        }
+                        pendingLongPressRunnable = runnable
+                        mainHandler.postDelayed(runnable, 500L)
+                    }
+                }
+                return true
+            }
+
+            KeyEvent.ACTION_UP -> {
+                pendingLongPressRunnable?.let {
+                    mainHandler.removeCallbacks(it)
+                    pendingLongPressRunnable = null
+                }
+
+                if (longPressFired) {
+                    longPressFired = false
+                    return true
+                }
+
+                val now = SystemClock.uptimeMillis()
+
+                if (config.doublePressAction !is ActionType.None) {
+                    if (lastTapKeyCode == event.keyCode && (now - lastTapTime) < 350L) {
+                        pendingSinglePressRunnable?.let {
+                            mainHandler.removeCallbacks(it)
+                            pendingSinglePressRunnable = null
+                        }
+                        lastTapTime = 0L
+                        lastTapKeyCode = -1
+                        executeAction(context, config.doublePressAction)
+                    } else {
+                        lastTapTime = now
+                        lastTapKeyCode = event.keyCode
+                        pendingSinglePressRunnable?.let { mainHandler.removeCallbacks(it) }
+
+                        val runnable = Runnable {
+                            lastTapTime = 0L
+                            lastTapKeyCode = -1
+                            if (config.singlePressAction !is ActionType.None) {
+                                executeAction(context, config.singlePressAction)
+                            }
+                        }
+                        pendingSinglePressRunnable = runnable
+                        mainHandler.postDelayed(runnable, 350L)
+                    }
+                } else {
+                    if (config.singlePressAction !is ActionType.None) {
+                        executeAction(context, config.singlePressAction)
+                    }
+                }
+                return true
+            }
+        }
+
+        return false
+    }
+
+    /**
+     * Executes the target action directly from the manager.
+     */
+    fun executeAction(context: Context, action: ActionType) {
+        when (action) {
+            is ActionType.None -> {}
+            is ActionType.LaunchApp -> {
+                try {
+                    context.packageManager.getLaunchIntentForPackage(action.packageName)?.let { intent ->
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to launch app ${action.packageName}", e)
+                }
+            }
+            is ActionType.OpenWidgetsPage -> {
+                try {
+                    val intent = Intent(context, com.crinklecodone.mochibun.ui.MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("OPEN_PAGE", 0)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to open widgets page", e)
+                }
+            }
+            is ActionType.OpenNotificationsPage -> {
+                try {
+                    val intent = Intent(context, com.crinklecodone.mochibun.ui.MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("OPEN_PAGE", 2)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to open notifications page", e)
+                }
+            }
+            is ActionType.GlobalBack -> {
+                // Sent via root touch injector if available
+                com.crinklecodone.mochibun.core.system.RootTouchInjector.keyAsync(KeyEvent.KEYCODE_BACK)
+            }
+            is ActionType.GlobalRecents -> {
+                handleRecentsAction(context)
+            }
+            is ActionType.OpenRecentsSystem -> {
+                executeRootRecents(context)
+            }
+            is ActionType.GlobalNotifications -> {
+                // Sent via root or status bar expansion
+                try {
+                    val sbs = context.getSystemService("statusbar")
+                    val method = sbs?.javaClass?.getMethod("expandNotificationsPanel")
+                    method?.invoke(sbs)
+                } catch (_: Exception) {}
+            }
+            is ActionType.ToggleFlashlight -> {
+                TorchManager.toggleTorch(context)
+            }
+        }
+    }
+
+    private fun handleRecentsAction(context: Context) {
+        val useFallback = isRootRecentsFallbackEnabled(context)
+        if (useFallback) {
+            Log.d(TAG, "Recents action: attempting root-shell fallback")
+            executeRootRecents(context)
+        } else {
+            Log.d(TAG, "Recents action: using native implementation")
+            executeNativeRecents(context)
+        }
+    }
+
+    private fun executeNativeRecents(context: Context) {
+        if (RecentsActivity.shouldThrottleLaunch()) {
+            Log.d(TAG, "Throttling duplicate native Recents launch")
+            return
+        }
+        try {
+            val intent = Intent(context, RecentsActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            context.startActivity(intent)
+            Log.d(TAG, "Successfully started native RecentsActivity")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch native RecentsActivity", e)
+        }
+    }
+
+    private fun executeRootRecents(context: Context) {
+        if (RecentsActivity.shouldThrottleLaunch()) {
+            Log.d(TAG, "Throttling duplicate root Recents launch")
+            return
+        }
+        scope.launch {
+            var succeeded = false
+            if (RootShell.isSuBinaryPresent()) {
+                val result = RootShell.execute("am start -n com.crinklecodone.mochibun/com.android.quickstep.RecentsActivity")
+                val hasError = !result.isSuccess ||
+                        result.stdout.any { it.startsWith("Error:") } ||
+                        result.stderr.any { it.startsWith("Error:") }
+                if (!hasError) {
+                    succeeded = true
+                    Log.d(TAG, "Successfully started RecentsActivity via root shell")
+                } else {
+                    val errDetails = (result.stderr + result.stdout).joinToString("; ").ifBlank { "Exit code ${result.exitCode}" }
+                    Log.w(TAG, "Failed to launch RecentsActivity via root shell: $errDetails")
+                }
+            } else {
+                Log.w(TAG, "su binary not available for root recents")
+            }
+            if (!succeeded) {
+                withContext(Dispatchers.Main) {
+                    executeNativeRecents(context)
+                }
+            }
+        }
+    }
 
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -52,28 +355,13 @@ object HardwareRemapManager {
      */
     fun setRootRecentsFallbackEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_USE_ROOT_RECENTS_FALLBACK, enabled).apply()
-        MochibunAccessibilityService.reloadActiveConfig(context)
+        reloadActiveConfig(context)
     }
 
     /**
-     * Checks whether MochibunAccessibilityService is enabled in Android Settings.
+     * Checks whether hardware remapping is active (always true when initialized).
      */
-    fun isAccessibilityServiceEnabled(context: Context): Boolean {
-        if (MochibunAccessibilityService.isServiceRunning) return true
-        val expected = ComponentName(context, MochibunAccessibilityService::class.java).flattenToString()
-        val enabledServices = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
-        val splitter = TextUtils.SimpleStringSplitter(':')
-        splitter.setString(enabledServices)
-        while (splitter.hasNext()) {
-            if (splitter.next().equals(expected, ignoreCase = true)) {
-                return true
-            }
-        }
-        return false
-    }
+    fun isAccessibilityServiceEnabled(context: Context): Boolean = true
 
     /**
      * Reads configured High-Level Action for a physical key.
@@ -94,7 +382,6 @@ object HardwareRemapManager {
 
     /**
      * Saves High-Level Action configuration for a physical key.
-     * Instantly refreshes in-memory mapping in MochibunAccessibilityService.
      */
     fun saveButtonActionConfig(context: Context, key: PhysicalKey, config: ButtonActionConfig) {
         getPrefs(context).edit()
@@ -103,7 +390,7 @@ object HardwareRemapManager {
             .putString("action_long_${key.scancode}", config.longPressAction.serialize())
             .apply()
 
-        MochibunAccessibilityService.reloadActiveConfig(context)
+        reloadActiveConfig(context)
     }
 
     /**
@@ -153,8 +440,7 @@ object HardwareRemapManager {
     }
 
     /**
-     * Reads the configured [ButtonActionConfig] for ANY physical button (including [PhysicalKey]s,
-     * number pad keys 0–9 / Speed Dial, or arbitrary hardware keycodes/scancodes).
+     * Reads the configured [ButtonActionConfig] for ANY physical button.
      */
     fun getButtonActionConfigForKey(context: Context, keyCode: Int, scanCode: Int): ButtonActionConfig {
         val norm = normalizeKeyCode(keyCode, scanCode)
@@ -222,7 +508,7 @@ object HardwareRemapManager {
             PreferencesManager.setSpeedDialPackage(context, digit, launchPkg)
         }
 
-        MochibunAccessibilityService.reloadActiveConfig(context)
+        reloadActiveConfig(context)
     }
 
     /**
@@ -255,7 +541,7 @@ object HardwareRemapManager {
             }
         }
 
-        MochibunAccessibilityService.reloadActiveConfig(context)
+        reloadActiveConfig(context)
         return defaultConfig
     }
 
@@ -274,7 +560,7 @@ object HardwareRemapManager {
         for (digit in 2..9) {
             PreferencesManager.setSpeedDialPackage(context, digit, null)
         }
-        MochibunAccessibilityService.reloadActiveConfig(context)
+        reloadActiveConfig(context)
     }
 
     /**
@@ -349,30 +635,25 @@ object HardwareRemapManager {
         return mappings
     }
 
-
     /**
      * Reconciles the actual state of the Magisk module by inspecting filesystem evidence.
      */
     suspend fun reconcileModuleStatus(): StaticModuleStatus = withContext(Dispatchers.IO) {
         try {
-            // Check if disable file exists
             val disableCheck = RootShell.execute("[ -f $MODULE_DISABLE_FILE ] && echo 'DISABLED'")
             if (disableCheck.stdout.any { it.contains("DISABLED") }) {
                 return@withContext StaticModuleStatus.Disabled
             }
 
-            // Check if module directory exists
             val moduleCheck = RootShell.execute("[ -f $TARGET_KL_VENDOR ] && echo 'STAGED'")
             val isStaged = moduleCheck.stdout.any { it.contains("STAGED") }
             if (!isStaged) {
                 return@withContext StaticModuleStatus.NotInstalled
             }
 
-            // Check if live system has the file mounted
             val liveCheck = RootShell.execute("[ -f $LIVE_KL_VENDOR ] && echo 'ACTIVE'")
             val isActive = liveCheck.stdout.any { it.contains("ACTIVE") }
 
-            // Read the deployed mappings from the module file
             val catResult = RootShell.execute("cat $TARGET_KL_VENDOR")
             val deployed = parseMappingsFromKl(catResult.stdout)
 

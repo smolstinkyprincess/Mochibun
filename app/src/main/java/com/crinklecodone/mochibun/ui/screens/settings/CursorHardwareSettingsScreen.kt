@@ -2,6 +2,7 @@ package com.crinklecodone.mochibun.ui.screens.settings
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import android.view.KeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,11 +21,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
+import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
+import com.crinklecodone.mochibun.service.VirtualCursorService
 import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
+import com.crinklecodone.mochibun.xposed.MochibunKeyHook
 import java.util.Locale
 
 /**
@@ -48,6 +52,10 @@ internal fun CursorHardwareSettingsSubScreen(
     var scrollStepPx by remember { mutableIntStateOf(CursorPreferences.getScrollStepPx(context)) }
     var customUri by remember { mutableStateOf(CursorPreferences.getCustomCursorUri(context)) }
 
+    val hasOverlayPermission = remember { Settings.canDrawOverlays(context) }
+    val isRootAvailable = remember { RootShell.isRootAvailable() }
+    val isLsposedActive = MochibunKeyHook.isCursorActive || VirtualCursorService.isServiceRunning
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -66,8 +74,9 @@ internal fun CursorHardwareSettingsSubScreen(
 
     val targetCardIndex = remember(focusedIndex) {
         when (focusedIndex) {
-            0, 1, 2, 3, 4 -> 0
-            5, 6 -> 1
+            0 -> 0
+            1, 2, 3, 4 -> 1
+            5, 6 -> 2
             else -> 0
         }
     }
@@ -202,6 +211,25 @@ internal fun CursorHardwareSettingsSubScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            item {
+                SettingsCard(categoryTitle = "System Integration") {
+                    SettingsInfoRow(
+                        label = "Overlay Permission",
+                        value = if (hasOverlayPermission) "✔ Granted" else "✖ Missing"
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    SettingsInfoRow(
+                        label = "Root Shell (libsu / evinput)",
+                        value = if (isRootAvailable) "✔ Available" else "✖ Not Detected"
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    SettingsInfoRow(
+                        label = "LSPosed Key Hook",
+                        value = if (isLsposedActive) "✔ Active" else "Ready (F4)"
+                    )
+                }
+            }
+
             item {
                 SettingsCard(categoryTitle = "Movement & Physics") {
                     SettingsStepperRow(

@@ -278,7 +278,7 @@ private fun SettingsHubRootScreen(
                 SettingsCard(categoryTitle = "Permissions & Superuser") {
                     SettingsNavigationRow(
                         title = "Permissions & Root",
-                        subtitle = "Accessibility services, Magisk root status & root features",
+                        subtitle = "Overlay permission, Magisk root status & LSPosed features",
                         icon = "🛡️",
                         isFocused = focusedIndex == 4,
                         jumpNumber = 5,

@@ -140,3 +140,6 @@ tools/docomo_overlay/output/
 tools/docomo_overlay/assets/
 tools/mochibun_bootanim/output/
 CLAUDE.md
+mtksystemui/
+mtksystemui/mtksystemui-decomp/
+mtksystemui/MtkSystemUI.apk

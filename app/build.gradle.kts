@@ -112,4 +112,6 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    compileOnly(libs.xposed.api)
 }

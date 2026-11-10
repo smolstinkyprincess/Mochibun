@@ -65,7 +65,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
         private set
 
     val windowLayoutParams: WindowManager.LayoutParams = WindowManager.LayoutParams().apply {
-        type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or

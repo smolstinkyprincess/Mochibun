@@ -1,11 +1,9 @@
 package com.crinklecodone.mochibun.ui.screens.settings
 
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import android.view.KeyEvent
-import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
@@ -59,10 +57,12 @@ internal fun PermissionsRootSettingsSubScreen(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    var isRemapA11yActive by remember {
-        mutableStateOf(HardwareRemapManager.isAccessibilityServiceEnabled(context))
+    var hasOverlayPermission by remember {
+        mutableStateOf(Settings.canDrawOverlays(context))
     }
-    var isCursorA11yActive by remember { mutableStateOf(false) }
+    var isCursorServiceActive by remember {
+        mutableStateOf(VirtualCursorService.isServiceRunning)
+    }
     var rootStatus by remember {
         mutableStateOf<RootStatus>(
             if (!RootShell.isSuBinaryPresent()) RootStatus.NotAvailable else RootStatus.Unknown
@@ -82,14 +82,8 @@ internal fun PermissionsRootSettingsSubScreen(
     var imeState by remember { mutableStateOf(MochibunImeStatus.state(context)) }
 
     fun refreshPermissionsState() {
-        isRemapA11yActive = HardwareRemapManager.isAccessibilityServiceEnabled(context)
-        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
-        val enabledServices = am?.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-        val cursorEnabled = enabledServices?.any {
-            it.resolveInfo.serviceInfo.packageName == context.packageName &&
-                it.resolveInfo.serviceInfo.name.contains("VirtualCursorService")
-        } == true
-        isCursorA11yActive = cursorEnabled || VirtualCursorService.isServiceRunning
+        hasOverlayPermission = Settings.canDrawOverlays(context)
+        isCursorServiceActive = VirtualCursorService.isServiceRunning
         useRootRecentsFallback = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
         clickMethod = CursorPreferences.getClickMethod(context)
         isWatchdogEnabled = PreferencesManager.isRootA11yWatchdogEnabled(context)
@@ -181,12 +175,29 @@ internal fun PermissionsRootSettingsSubScreen(
 
     fun activatePermissionItem(index: Int) {
         when (index) {
-            0, 1 -> {
+            0 -> {
                 try {
                     context.startActivity(
-                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:${context.packageName}")
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     )
-                } catch (_: Exception) {}
+                } catch (_: Exception) {
+                    try {
+                        context.startActivity(
+                            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    } catch (_: Exception) {}
+                }
+            }
+            1 -> {
+                if (!VirtualCursorService.isServiceRunning) {
+                    VirtualCursorService.start(context)
+                } else {
+                    VirtualCursorService.toggleCursor()
+                }
+                refreshPermissionsState()
             }
             2 -> {
                 if (!RootShell.isSuBinaryPresent()) {
@@ -313,43 +324,31 @@ internal fun PermissionsRootSettingsSubScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item {
-                SettingsCard(categoryTitle = "Accessibility Services") {
+                SettingsCard(categoryTitle = "System Overlay & LSPosed") {
                     SettingsNavigationRow(
-                        title = "Key Remapper & Actions",
-                        subtitle = if (isRemapA11yActive) {
-                            "✔ Active • Listening for remapped hardware keys"
+                        title = "Overlay Window Permission",
+                        subtitle = if (hasOverlayPermission) {
+                            "✔ Granted • SYSTEM_ALERT_WINDOW active"
                         } else {
-                            "✖ Inactive • Press OK to enable in Android Settings"
+                            "✖ Missing • Press OK to grant in Android Settings"
                         },
-                        icon = if (isRemapA11yActive) "✓" else "!",
+                        icon = if (hasOverlayPermission) "✓" else "!",
                         isFocused = focusedIndex == 0,
                         jumpNumber = 1,
-                        onClick = {
-                            try {
-                                context.startActivity(
-                                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
-                            } catch (_: Exception) {}
-                        }
+                        onClick = { activatePermissionItem(0) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Virtual Cursor Service",
-                        subtitle = if (isCursorA11yActive) {
-                            "✔ Active • Press Side Key/F4 to toggle pointer"
+                        title = "Virtual Cursor Foreground Service",
+                        subtitle = if (isCursorServiceActive) {
+                            "✔ Running • F4 & D-pad hooked in system_server"
                         } else {
-                            "✖ Inactive • Press OK to enable in Android Settings"
+                            "✖ Inactive • Press OK to start foreground service"
                         },
-                        icon = if (isCursorA11yActive) "✓" else "!",
+                        icon = if (isCursorServiceActive) "✓" else "⚡",
                         isFocused = focusedIndex == 1,
                         jumpNumber = 2,
-                        onClick = {
-                            try {
-                                context.startActivity(
-                                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
-                            } catch (_: Exception) {}
-                        }
+                        onClick = { activatePermissionItem(1) }
                     )
                 }
             }

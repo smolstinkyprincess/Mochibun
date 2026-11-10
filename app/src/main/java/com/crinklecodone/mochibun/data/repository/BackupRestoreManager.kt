@@ -10,7 +10,6 @@ import com.crinklecodone.mochibun.data.prefs.ClickMethod
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
 import com.crinklecodone.mochibun.data.prefs.HotspotAlignment
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
-import com.crinklecodone.mochibun.service.MochibunAccessibilityService
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.InputStream
@@ -395,7 +394,7 @@ object BackupRestoreManager {
                     )
                 }
                 remapEditor.apply()
-                MochibunAccessibilityService.reloadActiveConfig(context)
+                HardwareRemapManager.reloadActiveConfig(context)
             }
 
             // ── 4. Restore Behavior ──────────────────────────────────────
@@ -511,6 +510,6 @@ object BackupRestoreManager {
         CursorPreferences.getPrefs(context).edit().clear().apply()
 
         PreferencesManager.init(context)
-        MochibunAccessibilityService.reloadActiveConfig(context)
+        HardwareRemapManager.reloadActiveConfig(context)
     }
 }

@@ -1,17 +1,22 @@
 /**
- * System-wide virtual mouse cursor service for the Chinoe AT-M120 (Android 12).
- * Intercepts physical keypad and OEM side-key events to drive an on-screen pointer overlay,
- * translating discrete D-pad presses into continuous, fluid hardware-accelerated cursor motion.
+ * System-wide virtual mouse cursor foreground service for the Chinoe AT-M120 (Android 12).
+ * Driven via system-level broadcast events (LSPosed MochibunKeyHook), translating discrete
+ * D-pad presses into continuous, fluid hardware-accelerated cursor motion.
  */
 package com.crinklecodone.mochibun.service
 
-import android.accessibilityservice.AccessibilityService
-import android.accessibilityservice.GestureDescription
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.res.Configuration
-import android.graphics.Path
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
@@ -19,22 +24,33 @@ import android.view.Choreographer
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
-import android.view.accessibility.AccessibilityEvent
+import com.crinklecodone.mochibun.R
 import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.core.system.RootTouchInjector
 import com.crinklecodone.mochibun.core.util.CursorPhysics
-import com.crinklecodone.mochibun.data.prefs.ClickMethod
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
 import com.crinklecodone.mochibun.ui.overlay.CursorOverlayView
 import kotlin.math.abs
 
-class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback {
+class VirtualCursorService : Service(), Choreographer.FrameCallback {
 
     companion object {
         private const val TAG = "VirtualCursorService"
         private const val SCROLL_SWIPE_DURATION_MS = 200L
         private const val SCROLL_DEBOUNCE_MS = 220L
+
+        private const val NOTIFICATION_CHANNEL_ID = "virtual_cursor_service"
+        private const val NOTIFICATION_ID = 4801
+
+        const val ACTION_TOGGLE_CURSOR = "com.crinklecodone.mochibun.ACTION_TOGGLE_CURSOR"
+        const val ACTION_CURSOR_KEY = "com.crinklecodone.mochibun.ACTION_CURSOR_KEY"
+
+        const val EXTRA_KEY_EVENT = "key_event"
+        const val EXTRA_KEY_CODE = "keyCode"
+        const val EXTRA_ACTION = "action"
+        const val EXTRA_REPEAT_COUNT = "repeatCount"
+        const val EXTRA_CURSOR_ACTIVE = "isCursorActive"
 
         @Volatile
         var isServiceRunning = false
@@ -55,6 +71,16 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
             if (!isCursorVisible) return
             service.mainHandler.post { service.handleLidClosed() }
         }
+
+        fun start(context: Context) {
+            val intent = Intent(context, VirtualCursorService::class.java)
+            context.startForegroundService(intent)
+        }
+
+        fun stop(context: Context) {
+            val intent = Intent(context, VirtualCursorService::class.java)
+            context.stopService(intent)
+        }
     }
 
     private lateinit var windowManager: WindowManager
@@ -67,14 +93,12 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     // Configurable settings cache
     private var toggleKeyCode = CursorPreferences.DEFAULT_TOGGLE_KEYCODE
     private var scrollStepPx = CursorPreferences.DEFAULT_SCROLL_STEP_PX
-    private var clickMethod = ClickMethod.ACCESSIBILITY_GESTURE
 
     // Zero-allocation continuous physics engine
     private val physics = CursorPhysics()
     private var isMovementTickerActive = false
 
-    // Key event deduplication & scroll cadence debounce
-    private var isToggleKeyDown = false
+    // Scroll cadence debounce
     private var lastScrollTimeMs = 0L
 
     // Preallocated so the toggle key doesn't allocate a lambda per press
@@ -94,10 +118,38 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         }
     }
 
-    override fun onServiceConnected() {
-        super.onServiceConnected()
+    private val cursorReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent == null) return
+            when (intent.action) {
+                ACTION_TOGGLE_CURSOR -> {
+                    val active = if (intent.hasExtra(EXTRA_CURSOR_ACTIVE)) {
+                        intent.getBooleanExtra(EXTRA_CURSOR_ACTIVE, !isCursorVisible)
+                    } else {
+                        !isCursorVisible
+                    }
+                    setCursorVisibility(active)
+                }
+                ACTION_CURSOR_KEY -> {
+                    @Suppress("DEPRECATION")
+                    val keyEvent = intent.getParcelableExtra<KeyEvent>(EXTRA_KEY_EVENT)
+                    val keyCode = intent.getIntExtra(EXTRA_KEY_CODE, keyEvent?.keyCode ?: KeyEvent.KEYCODE_UNKNOWN)
+                    val action = intent.getIntExtra(EXTRA_ACTION, keyEvent?.action ?: KeyEvent.ACTION_DOWN)
+                    val repeatCount = intent.getIntExtra(EXTRA_REPEAT_COUNT, keyEvent?.repeatCount ?: 0)
+                    handleCursorKey(keyCode, action, repeatCount)
+                }
+            }
+        }
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
         instance = this
         isServiceRunning = true
+
+        startInForeground()
 
         ClamshellManager.init(this)
         ClamshellManager.addListener(clamshellListener)
@@ -108,7 +160,7 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         val height = metrics.heightPixels.toFloat().coerceAtLeast(800f)
 
         physics.setBounds(width, height)
-        physics.setPosition(width / 2f, height / 2f)
+        physics.setPosition((width / 2f).coerceIn(0f, 480f), (height / 2f).coerceIn(0f, 800f))
 
         prefs = CursorPreferences.getPrefs(this)
         prefs.registerOnSharedPreferenceChangeListener(prefChangeListener)
@@ -116,9 +168,44 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
 
         overlayView = CursorOverlayView(this).apply {
             visibility = View.GONE
+            windowLayoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         }
 
-        Log.d(TAG, "VirtualCursorService connected on display ${physics.screenWidth}x${physics.screenHeight}")
+        val filter = IntentFilter().apply {
+            addAction(ACTION_TOGGLE_CURSOR)
+            addAction(ACTION_CURSOR_KEY)
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            cursorReceiver,
+            filter,
+            androidx.core.content.ContextCompat.RECEIVER_EXPORTED,
+        )
+
+        Log.d(TAG, "VirtualCursorService started as foreground Service on display ${physics.screenWidth}x${physics.screenHeight}")
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startInForeground()
+        when (intent?.action) {
+            ACTION_TOGGLE_CURSOR -> {
+                val active = if (intent.hasExtra(EXTRA_CURSOR_ACTIVE)) {
+                    intent.getBooleanExtra(EXTRA_CURSOR_ACTIVE, !isCursorVisible)
+                } else {
+                    !isCursorVisible
+                }
+                setCursorVisibility(active)
+            }
+            ACTION_CURSOR_KEY -> {
+                @Suppress("DEPRECATION")
+                val keyEvent = intent.getParcelableExtra<KeyEvent>(EXTRA_KEY_EVENT)
+                val keyCode = intent.getIntExtra(EXTRA_KEY_CODE, keyEvent?.keyCode ?: KeyEvent.KEYCODE_UNKNOWN)
+                val action = intent.getIntExtra(EXTRA_ACTION, keyEvent?.action ?: KeyEvent.ACTION_DOWN)
+                val repeatCount = intent.getIntExtra(EXTRA_REPEAT_COUNT, keyEvent?.repeatCount ?: 0)
+                handleCursorKey(keyCode, action, repeatCount)
+            }
+        }
+        return START_STICKY
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -127,6 +214,32 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         val width = metrics.widthPixels.toFloat().coerceAtLeast(480f)
         val height = metrics.heightPixels.toFloat().coerceAtLeast(800f)
         physics.setBounds(width, height)
+    }
+
+    private fun startInForeground() {
+        try {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Virtual Cursor",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = "Mochibun Virtual Cursor Overlay Service"
+                setShowBadge(false)
+            }
+            val nm = getSystemService(NotificationManager::class.java)
+            nm?.createNotificationChannel(channel)
+
+            val notification = Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
+                .setContentTitle("Mochibun Virtual Cursor")
+                .setContentText("Virtual mouse cursor active")
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setOngoing(true)
+                .build()
+
+            startForeground(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start VirtualCursorService in foreground: ${e.message}")
+        }
     }
 
     private fun handleLidClosed() {
@@ -155,6 +268,10 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         InputArbiter.cursorToggleKeyCode = KeyEvent.KEYCODE_UNKNOWN
         mainHandler.removeCallbacks(toggleRunnable)
 
+        try {
+            unregisterReceiver(cursorReceiver)
+        } catch (_: Exception) {}
+
         ClamshellManager.removeListener(clamshellListener)
         stopMovementTicker()
 
@@ -174,24 +291,8 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         overlayView = null
 
         RootTouchInjector.release()
+        stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
-    }
-
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Zero-overhead: We deliberately ignore accessibility event streams.
-        // On the low-end MediaTek MT6761, parsing window content changes or text events
-        // would burn precious CPU cycles and cause noticeable cursor jank.
-    }
-
-    override fun onInterrupt() {
-        stopMovementTicker()
-        overlayView?.pauseAnimation()
-        RootTouchInjector.release()
-    }
-
-    override fun onUnbind(intent: Intent?): Boolean {
-        RootTouchInjector.release()
-        return super.onUnbind(intent)
     }
 
     private fun reloadConfig() {
@@ -200,26 +301,20 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         physics.maxSpeed = CursorPreferences.getMaxSpeed(this).toFloat()
         physics.accelRate = CursorPhysics.accelRateForRampMs(CursorPreferences.getAccelRampMs(this))
         scrollStepPx = CursorPreferences.getScrollStepPx(this)
-        clickMethod = CursorPreferences.getClickMethod(this)
         if (isCursorVisible) {
-            if (clickMethod == ClickMethod.ROOT_INPUT_TAP) {
-                RootTouchInjector.attach(applicationContext)
-            } else {
-                RootTouchInjector.release()
-            }
+            RootTouchInjector.attach(applicationContext)
         }
         InputArbiter.cursorToggleKeyCode = toggleKeyCode
         overlayView?.reloadConfiguration()
     }
 
-    fun toggleCursorVisibility() {
-        isCursorVisible = !isCursorVisible
+    fun setCursorVisibility(visible: Boolean) {
+        if (isCursorVisible == visible) return
+        isCursorVisible = visible
         val view = overlayView ?: return
 
         if (isCursorVisible) {
-            if (clickMethod == ClickMethod.ROOT_INPUT_TAP) {
-                RootTouchInjector.attach(applicationContext)
-            }
+            RootTouchInjector.attach(applicationContext)
             if (!isOverlayAttached) {
                 try {
                     windowManager.addView(view, view.windowLayoutParams)
@@ -243,68 +338,35 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         }
     }
 
-    override fun onKeyEvent(event: KeyEvent?): Boolean {
-        if (event == null) return false
-        val keyCode = event.keyCode
-
-        if (InputArbiter.isNewPress(event)) {
-            // Same rule MochibunAccessibilityService applies, so only one of us claims the press
-            if (!InputArbiter.cursorTakesPress(event)) {
-                if (InputArbiter.ownerOf(keyCode) == InputLayer.CURSOR_OVERLAY) {
-                    InputArbiter.setOwner(keyCode, InputLayer.NONE)
-                }
-                return false
-            }
-            InputArbiter.setOwner(keyCode, InputLayer.CURSOR_OVERLAY)
-        } else if (InputArbiter.ownerOf(keyCode) != InputLayer.CURSOR_OVERLAY) {
-            // Repeat or release of a press someone else took (or that predates the cursor)
-            return false
-        }
-
-        // From here on the press is ours: consume every event of it, even if the cursor was
-        // hidden mid-press, so a stray release never leaks to the app underneath.
-        handleOwnedKey(event)
-        return true
+    fun toggleCursorVisibility() {
+        setCursorVisibility(!isCursorVisible)
     }
 
-    private fun handleOwnedKey(event: KeyEvent) {
-        val keyCode = event.keyCode
-        val action = event.action
-
-        // The AT-M120 physical side key maps to KEYCODE_F4 (raw scan code 62).
-        // We deduplicate repeat events so holding the key doesn't strobe the cursor on and off.
-        val isToggle = keyCode == toggleKeyCode ||
-                (event.scanCode == 62 && toggleKeyCode == KeyEvent.KEYCODE_F4)
+    private fun handleCursorKey(keyCode: Int, action: Int, repeatCount: Int) {
+        val isToggle = (keyCode == toggleKeyCode) || (keyCode == KeyEvent.KEYCODE_F4)
 
         if (isToggle) {
-            when (action) {
-                KeyEvent.ACTION_DOWN -> {
-                    if (!isToggleKeyDown && event.repeatCount == 0) {
-                        isToggleKeyDown = true
-                        mainHandler.post(toggleRunnable)
-                    }
-                }
-                KeyEvent.ACTION_UP -> isToggleKeyDown = false
+            if ((action == KeyEvent.ACTION_DOWN) && (repeatCount == 0)) {
+                toggleCursorVisibility()
             }
             return
         }
 
-        // A press that started while visible: still swallow its tail after the cursor hides
         if (!isCursorVisible) return
 
         when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> handleDirectionKey(event, dx = 0, dy = -1)
-            KeyEvent.KEYCODE_DPAD_DOWN -> handleDirectionKey(event, dx = 0, dy = 1)
-            KeyEvent.KEYCODE_DPAD_LEFT -> handleDirectionKey(event, dx = -1, dy = 0)
-            KeyEvent.KEYCODE_DPAD_RIGHT -> handleDirectionKey(event, dx = 1, dy = 0)
+            KeyEvent.KEYCODE_DPAD_UP -> handleDirectionKey(action, repeatCount, dx = 0, dy = -1)
+            KeyEvent.KEYCODE_DPAD_DOWN -> handleDirectionKey(action, repeatCount, dx = 0, dy = 1)
+            KeyEvent.KEYCODE_DPAD_LEFT -> handleDirectionKey(action, repeatCount, dx = -1, dy = 0)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> handleDirectionKey(action, repeatCount, dx = 1, dy = 0)
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                if (action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                if (action == KeyEvent.ACTION_DOWN && repeatCount == 0) {
                     performTapDispatch()
                 }
             }
-            // Scroll keys drag the finger opposite to the scroll direction, like a touch swipe
+            // Scroll keys drag opposite to scroll direction
             KeyEvent.KEYCODE_2,
             KeyEvent.KEYCODE_NUMPAD_2 -> {
                 if (action == KeyEvent.ACTION_DOWN) handleScrollKey(dragX = 0, dragY = 1) // scroll up
@@ -332,21 +394,16 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         }
     }
 
-    private fun handleDirectionKey(event: KeyEvent, dx: Int, dy: Int) {
-        when (event.action) {
+    private fun handleDirectionKey(action: Int, repeatCount: Int, dx: Int, dy: Int) {
+        when (action) {
             KeyEvent.ACTION_DOWN -> {
-                // Auto-repeats are still consumed (the press is ours) but add no motion:
-                // the frame loop already drives a held key.
-                if (event.repeatCount != 0) return
+                if (repeatCount != 0) return
                 physics.pressDirection(dx, dy)
-                // Show the tap micro-step right away instead of waiting for the next frame
                 overlayView?.updatePosition(physics.posX, physics.posY)
                 startMovementTickerIfNeeded()
             }
             KeyEvent.ACTION_UP -> {
                 physics.releaseDirection(dx, dy)
-
-                // Dead-stop immediately when all directional keys are released
                 if (!physics.hasActiveInput) {
                     stopMovementTicker()
                 }
@@ -357,7 +414,6 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     private fun startMovementTickerIfNeeded() {
         if (!isMovementTickerActive && isCursorVisible) {
             isMovementTickerActive = true
-            // Lock directly to display VSYNC frames
             Choreographer.getInstance().postFrameCallback(this)
         }
     }
@@ -391,54 +447,23 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
     }
 
     /**
-     * Dispatches a tap at current cursor coordinates.
-     *
-     * We use AccessibilityService.dispatchGesture() as the primary low-latency, unprivileged path.
-     * However, certain overlays, system permission dialogs, or secure windows cancel or reject
-     * accessibility gestures. If dispatch fails or gets cancelled, we gracefully fall back to
-     * RootTouchInjector (interactive 'su' session running 'input tap') so clicks never silently fail.
+     * Dispatches a tap at current cursor coordinates using RootTouchInjector (evinput/native tap).
      */
     private fun performTapDispatch() {
         val view = overlayView ?: return
         view.showClickFeedback()
 
-        val tapX = view.getHotspotX().coerceIn(0f, physics.screenWidth - 1f)
-        val tapY = view.getHotspotY().coerceIn(0f, physics.screenHeight - 1f)
+        val tapX = view.getHotspotX().coerceIn(0f, (physics.screenWidth - 1f).coerceAtLeast(1f))
+        val tapY = view.getHotspotY().coerceIn(0f, (physics.screenHeight - 1f).coerceAtLeast(1f))
 
-        if (clickMethod == ClickMethod.ROOT_INPUT_TAP) {
-            RootTouchInjector.tapAsync(tapX.toInt(), tapY.toInt())
-            return
-        }
-
-        // Accessibility Gesture dispatch (primary path: fast, no root required)
-        val path = Path().apply {
-            moveTo(tapX, tapY)
-        }
-        val stroke = GestureDescription.StrokeDescription(path, 0, 50L)
-        val gesture = GestureDescription.Builder().addStroke(stroke).build()
-
-        val dispatched = dispatchGesture(gesture, object : GestureResultCallback() {
-            override fun onCancelled(gestureDescription: GestureDescription?) {
-                super.onCancelled(gestureDescription)
-                Log.w(TAG, "Accessibility gesture cancelled at ($tapX, $tapY), falling back to root tap")
-                RootTouchInjector.tapAsync(tapX.toInt(), tapY.toInt())
-            }
-        }, null)
-
-        if (!dispatched) {
-            Log.w(TAG, "dispatchGesture() returned false at ($tapX, $tapY), falling back to root tap")
-            RootTouchInjector.tapAsync(tapX.toInt(), tapY.toInt())
-        }
+        RootTouchInjector.tapAsync(tapX.toInt(), tapY.toInt())
     }
 
     /**
-     * Dispatches a one-step scroll swipe from the current pointer coordinates. The finger drags in
-     * direction ([dragX], [dragY]), one of them ±1, which scrolls the content the opposite way:
-     *
-     * - Key 2 (0, +1): downward drag to scroll UP.      Key 8 (0, -1): upward drag to scroll DOWN.
-     * - Key 4 (+1, 0): rightward drag to scroll LEFT.   Key 6 (-1, 0): leftward drag to scroll RIGHT.
-     *
-     * Clamps start and end coordinates to screen bounds (0f..480f, 0f..800f) so swipes remain on-screen.
+     * Dispatches a one-step scroll swipe from the current pointer coordinates.
+     * The finger drags in direction ([dragX], [dragY]), which scrolls the content the opposite way:
+     * - Key 2 (0, +1): downward drag to scroll UP.
+     * - Key 8 (0, -1): upward drag to scroll DOWN.
      */
     private fun performScrollDispatch(dragX: Int, dragY: Int) {
         val view = overlayView ?: return
@@ -456,8 +481,6 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         val endX = (startX + dragX * distance).coerceIn(0f, maxX)
         val endY = (startY + dragY * distance).coerceIn(0f, maxY)
 
-        // If cursor is parked against the screen edge in the swipe direction,
-        // shift the stroke start inward so the swipe still has travel distance.
         if (dragX != 0 && abs(endX - startX) < 16f) {
             startX = (endX - dragX * distance).coerceIn(0f, maxX)
         }
@@ -472,29 +495,6 @@ class VirtualCursorService : AccessibilityService(), Choreographer.FrameCallback
         val x2Int = endX.toInt()
         val y2Int = endY.toInt()
 
-        if (clickMethod == ClickMethod.ROOT_INPUT_TAP) {
-            RootTouchInjector.swipeAsync(x1Int, y1Int, x2Int, y2Int, SCROLL_SWIPE_DURATION_MS)
-            return
-        }
-
-        val path = Path().apply {
-            moveTo(startX, startY)
-            lineTo(endX, endY)
-        }
-        val stroke = GestureDescription.StrokeDescription(path, 0L, SCROLL_SWIPE_DURATION_MS)
-        val gesture = GestureDescription.Builder().addStroke(stroke).build()
-
-        val dispatched = dispatchGesture(gesture, object : GestureResultCallback() {
-            override fun onCancelled(gestureDescription: GestureDescription?) {
-                super.onCancelled(gestureDescription)
-                Log.w(TAG, "Accessibility scroll gesture cancelled at ($startX, $startY)->($endX, $endY), falling back to root swipe")
-                RootTouchInjector.swipeAsync(x1Int, y1Int, x2Int, y2Int, SCROLL_SWIPE_DURATION_MS)
-            }
-        }, null)
-
-        if (!dispatched) {
-            Log.w(TAG, "dispatchGesture() scroll returned false at ($startX, $startY)->($endX, $endY), falling back to root swipe")
-            RootTouchInjector.swipeAsync(x1Int, y1Int, x2Int, y2Int, SCROLL_SWIPE_DURATION_MS)
-        }
+        RootTouchInjector.swipeAsync(x1Int, y1Int, x2Int, y2Int, SCROLL_SWIPE_DURATION_MS)
     }
 }

@@ -629,21 +629,17 @@ fun MainLauncher(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 MainActivity.keyEventInterceptor = listener
-                com.crinklecodone.mochibun.service.MochibunAccessibilityService.launcherKeyListener = listener
             } else if (event == Lifecycle.Event.ON_PAUSE) {
                 MainActivity.keyEventInterceptor = null
-                com.crinklecodone.mochibun.service.MochibunAccessibilityService.launcherKeyListener = null
             }
         }
         if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
             MainActivity.keyEventInterceptor = listener
-            com.crinklecodone.mochibun.service.MochibunAccessibilityService.launcherKeyListener = listener
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             MainActivity.keyEventInterceptor = null
-            com.crinklecodone.mochibun.service.MochibunAccessibilityService.launcherKeyListener = null
         }
     }
 

@@ -32,11 +32,12 @@ import com.crinklecodone.mochibun.ui.theme.ThemeBackground
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
 import com.crinklecodone.mochibun.data.repository.IconPackManager
 import com.crinklecodone.mochibun.data.repository.WidgetRepository
 import com.crinklecodone.mochibun.service.InputArbiter
 import com.crinklecodone.mochibun.service.InputLayer
-import com.crinklecodone.mochibun.service.MochibunAccessibilityService
+import com.crinklecodone.mochibun.xposed.MochibunKeyHook
 
 class MainActivity : ComponentActivity() {
     private val launcherViewModel: LauncherViewModel by viewModels()
@@ -126,6 +127,41 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val softKeyReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent == null) return
+            val action = intent.action
+            if (action == MochibunKeyHook.ACTION_LSK_TRIGGER || action == MochibunKeyHook.ACTION_BACK_TRIGGER) {
+                @Suppress("DEPRECATION")
+                val rawEvent = intent.getParcelableExtra<KeyEvent>(MochibunKeyHook.EXTRA_KEY_EVENT)
+                val targetKeyCode = if (action == MochibunKeyHook.ACTION_LSK_TRIGGER) KeyEvent.KEYCODE_APP_SWITCH else KeyEvent.KEYCODE_BACK
+                val event = if (rawEvent != null) {
+                    if (rawEvent.keyCode == KeyEvent.KEYCODE_UNKNOWN) {
+                        KeyEvent(
+                            rawEvent.downTime,
+                            rawEvent.eventTime,
+                            rawEvent.action,
+                            targetKeyCode,
+                            rawEvent.repeatCount,
+                            rawEvent.metaState,
+                            rawEvent.deviceId,
+                            if (action == MochibunKeyHook.ACTION_LSK_TRIGGER) 580 else rawEvent.scanCode,
+                            rawEvent.flags,
+                            rawEvent.source
+                        )
+                    } else {
+                        rawEvent
+                    }
+                } else {
+                    val keyAction = intent.getIntExtra(MochibunKeyHook.EXTRA_ACTION, KeyEvent.ACTION_DOWN)
+                    val repeatCount = intent.getIntExtra(MochibunKeyHook.EXTRA_REPEAT_COUNT, 0)
+                    KeyEvent(SystemClock.uptimeMillis(), SystemClock.uptimeMillis(), keyAction, targetKeyCode, repeatCount)
+                }
+                dispatchKeyEvent(event)
+            }
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         widgetHost.startListeningFor(this)
@@ -134,7 +170,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        val launcherVisible = MochibunAccessibilityService.isLauncherForeground
+        val launcherVisible = isForeground
         if (memoryTrimTier(level, launcherVisible) == MemoryTrimTier.RELEASE_DRAWER) {
             launcherViewModel.releaseDrawerForMemory()
         }
@@ -147,16 +183,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        MochibunAccessibilityService.isLauncherForeground = true
+        isForeground = true
         com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog.checkAsync(this, force = false)
     }
 
     override fun onPause() {
         super.onPause()
-        MochibunAccessibilityService.isLauncherForeground = false
+        isForeground = false
     }
 
     companion object {
+        @Volatile
+        var isForeground = false
+            private set
+
         @Volatile
         var keyEventInterceptor: ((KeyEvent) -> Boolean)? = null
 
@@ -165,8 +205,7 @@ class MainActivity : ComponentActivity() {
 
     @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Already handled by MochibunAccessibilityService; don't run it through the launcher again
-        if (MochibunAccessibilityService.wasConsumedByService(event)) return true
+        if (HardwareRemapManager.keyCaptureListener?.invoke(event) == true) return true
         val interceptor = keyEventInterceptor
         if (InputArbiter.isNewPress(event)) {
             val consumed = interceptor != null && interceptor(event)
@@ -187,13 +226,16 @@ class MainActivity : ComponentActivity() {
         // Drop the host's references to widget views, which hold this activity
         widgetHost.releaseViews(this)
         keyEventInterceptor = null
-        MochibunAccessibilityService.isLauncherForeground = false
+        isForeground = false
         ClamshellManager.removeListener(clamshellListener)
         try {
             unregisterReceiver(packageChangeReceiver)
         } catch (_: IllegalArgumentException) {}
         try {
             unregisterReceiver(userPresentReceiver)
+        } catch (_: IllegalArgumentException) {}
+        try {
+            unregisterReceiver(softKeyReceiver)
         } catch (_: IllegalArgumentException) {}
         super.onDestroy()
     }
@@ -268,6 +310,18 @@ class MainActivity : ComponentActivity() {
 
         registerReceiver(packageChangeReceiver, packageFilter)
         registerReceiver(userPresentReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
+
+        val softKeyFilter = IntentFilter().apply {
+            addAction(MochibunKeyHook.ACTION_LSK_TRIGGER)
+            addAction(MochibunKeyHook.ACTION_BACK_TRIGGER)
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            softKeyReceiver,
+            softKeyFilter,
+            androidx.core.content.ContextCompat.RECEIVER_EXPORTED,
+        )
+
         ClamshellManager.init(this)
         ClamshellManager.addListener(clamshellListener)
 

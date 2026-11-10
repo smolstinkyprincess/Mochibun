@@ -44,7 +44,6 @@ import com.crinklecodone.mochibun.core.system.LidLedManager
 import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
-import com.crinklecodone.mochibun.service.MochibunAccessibilityService
 import com.crinklecodone.mochibun.ui.components.MascotMood
 import com.crinklecodone.mochibun.ui.components.MochibunMascot
 import com.crinklecodone.mochibun.ui.components.mascotTintColor

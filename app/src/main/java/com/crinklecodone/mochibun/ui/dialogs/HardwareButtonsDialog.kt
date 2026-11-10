@@ -49,7 +49,6 @@ import com.crinklecodone.mochibun.data.model.ButtonActionConfig
 import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
-import com.crinklecodone.mochibun.service.MochibunAccessibilityService
 import com.crinklecodone.mochibun.ui.components.MascotMood
 import com.crinklecodone.mochibun.ui.components.MochibunMascot
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
@@ -190,7 +189,7 @@ fun HardwareButtonsDialog(
     // never fires stock apps/services (and prevents F3 hold crash loops)
     DisposableEffect(isListening) {
         if (isListening) {
-            MochibunAccessibilityService.keyCaptureListener = { event ->
+            HardwareRemapManager.keyCaptureListener = { event ->
                 val native = event
                 val isNav = native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
                     native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
@@ -229,10 +228,10 @@ fun HardwareButtonsDialog(
                 }
             }
         } else {
-            MochibunAccessibilityService.keyCaptureListener = null
+            HardwareRemapManager.keyCaptureListener = null
         }
         onDispose {
-            MochibunAccessibilityService.keyCaptureListener = null
+            HardwareRemapManager.keyCaptureListener = null
         }
     }
 
@@ -349,7 +348,7 @@ fun HardwareButtonsDialog(
                                     longPressAction = longAction
                                 )
                                 HardwareRemapManager.saveButtonActionConfigForKey(context, capturedKeyCode, capturedScanCode, newConfig)
-                                MochibunAccessibilityService.reloadActiveConfig(context)
+                                HardwareRemapManager.reloadActiveConfig(context)
                                 configuredBadges = HardwareRemapManager.getConfiguredKeyBadges(context)
                                 SoundEffectManager.play(context, SoundEffect.SELECT)
                                 onDismiss()
@@ -363,7 +362,7 @@ fun HardwareButtonsDialog(
                                 doubleAction = ActionType.None
                                 longAction = ActionType.None
                                 HardwareRemapManager.resetButtonActionConfigForKey(context, capturedKeyCode, capturedScanCode)
-                                MochibunAccessibilityService.reloadActiveConfig(context)
+                                HardwareRemapManager.reloadActiveConfig(context)
                                 configuredBadges = HardwareRemapManager.getConfiguredKeyBadges(context)
                                 SoundEffectManager.play(context, SoundEffect.SELECT)
                                 isListening = true

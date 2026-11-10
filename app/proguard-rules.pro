@@ -16,7 +16,7 @@
 
 # Keep Mochibun's Virtual Cursor & Core Services intact
 -keep class com.crinklecodone.mochibun.service.VirtualCursorService { *; }
--keep class com.crinklecodone.mochibun.service.MochibunAccessibilityService { *; }
+-keep class com.crinklecodone.mochibun.xposed.MochibunKeyHook { *; }
 
 # Quickstep Recents & SystemUI interfaces
 -keep class com.android.quickstep.** { *; }

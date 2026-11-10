@@ -55,6 +55,20 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.M120Launcher" >
 
+        <!-- Xposed / LSPosed Module Configuration -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="Hardware Key Interceptor &amp; Virtual Cursor Bridge for Mochibun" />
+        <meta-data
+            android:name="xposedminversion"
+            android:value="54" />
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/xposed_scope" />
+
         <activity
             android:name=".ui.MainActivity"
             android:launchMode="singleTask"
@@ -119,33 +133,11 @@
             android:resumeWhilePausing="true"
             android:taskAffinity="" />
 
-        <!-- Mochibun Hardware Button Accessibility Service -->
-        <service
-            android:name=".service.MochibunAccessibilityService"
-            android:label="@string/accessibility_service_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
-
-        <!-- Mochibun Virtual Mouse Accessibility Service -->
+        <!-- Mochibun Virtual Mouse Foreground Service -->
         <service
             android:name=".service.VirtualCursorService"
-            android:label="@string/virtual_cursor_service_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/virtual_cursor_config" />
-        </service>
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
 
         <!-- Mochibun Media Session Notification Listener Service -->
         <!-- Keyboard settings entry (method.xml): MainActivity opens the Settings Hub when started through this alias -->
