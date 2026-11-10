@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
  * Falls back to privileged persistent daemon via libsu when reflection fails.
  */
 fun expandQuickSettingsPanel(context: Context) {
+    LauncherKeyHandler.isQuickSettingsExpanded = true
     try {
         val sbm = context.getSystemService("statusbar")
         if (sbm != null) {
@@ -59,6 +60,34 @@ fun expandQuickSettingsPanel(context: Context) {
     } catch (_: Throwable) {}
     // Fallback to privileged persistent daemon via libsu
     RootShell.submit("cmd statusbar expand-settings")
+}
+
+/**
+ * Programmatically collapses all expanded status bar and Quick Settings panels.
+ */
+fun collapsePanels(context: Context) {
+    LauncherKeyHandler.isQuickSettingsExpanded = false
+    try {
+        val sbm = context.getSystemService("statusbar")
+        if (sbm != null) {
+            val method = sbm.javaClass.getMethod("collapsePanels")
+            method.invoke(sbm)
+            return
+        }
+    } catch (_: Throwable) {}
+    RootShell.submit("cmd statusbar collapse")
+}
+
+/**
+ * Toggles the Quick Settings panel state (expands if closed, collapses if open).
+ */
+fun toggleQuickSettingsPanel(context: Context) {
+    val isShadeOpen = LauncherKeyHandler.isQuickSettingsExpanded || (context as? android.app.Activity)?.hasWindowFocus() == false
+    if (isShadeOpen) {
+        collapsePanels(context)
+    } else {
+        expandQuickSettingsPanel(context)
+    }
 }
 
 /**
@@ -96,6 +125,11 @@ internal class LauncherKeyHandler(
     private val t9State: T9InputState,
     private val actions: LauncherKeypadActions
 ) {
+    companion object {
+        @Volatile
+        var isQuickSettingsExpanded: Boolean = false
+    }
+
     private var lastConsumedDownKeyCode: Int? = null
     private var lastConsumedDownScanCode: Int? = null
 
@@ -143,13 +177,18 @@ internal class LauncherKeyHandler(
         if (nativeEvent.action == KeyEvent.ACTION_UP && nativeEvent.keyCode == KeyEvent.KEYCODE_HOME) {
             val pendingHold = homeHoldJob
             if (pendingHold != null) {
-                // Released before the 400ms hold threshold: short press on Home Screen
+                // Released before the 400ms hold threshold: short press
                 pendingHold.cancel()
                 homeHoldJob = null
-                // Pressed again while already sitting on Home: opens the app drawer
-                SoundEffectManager.play(context, SoundEffect.SELECT)
-                actions.setSelectedDrawerIndex(0)
-                actions.setDrawerOpen(true)
+                val isShadeOpen = isQuickSettingsExpanded || (context as? android.app.Activity)?.hasWindowFocus() == false
+                if (isShadeOpen) {
+                    collapsePanels(context)
+                } else {
+                    // Pressed again while already sitting on Home: opens the app drawer
+                    SoundEffectManager.play(context, SoundEffect.SELECT)
+                    actions.setSelectedDrawerIndex(0)
+                    actions.setDrawerOpen(true)
+                }
             } else if (homeLongPressTriggered) {
                 homeLongPressTriggered = false
             }
@@ -178,7 +217,7 @@ internal class LauncherKeyHandler(
                             homeLongPressTriggered = true
                             performBoundaryHaptic(context)
                             SoundEffectManager.play(context, SoundEffect.SELECT)
-                            expandQuickSettingsPanel(context)
+                            toggleQuickSettingsPanel(context)
                         }
                         return true
                     }
@@ -193,6 +232,10 @@ internal class LauncherKeyHandler(
                 // Not on Home Screen: standard short press behavior brings user back to Home Screen
                 if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
                     if (nativeEvent.repeatCount == 0) {
+                        val isShadeOpen = isQuickSettingsExpanded || (context as? android.app.Activity)?.hasWindowFocus() == false
+                        if (isShadeOpen) {
+                            collapsePanels(context)
+                        }
                         actions.dismissModal()
                         actions.setDrawerOpen(false)
                         actions.setPendingTargetPage(1)
@@ -991,7 +1034,7 @@ internal class LauncherKeyHandler(
             homeLongPressTriggered = true
             performBoundaryHaptic(context)
             SoundEffectManager.play(context, SoundEffect.SELECT)
-            expandQuickSettingsPanel(context)
+            toggleQuickSettingsPanel(context)
         }
     }
 

@@ -49,6 +49,10 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         // Volatile internal cursor state tracked across key events in system_server
         @Volatile
         var isCursorActive: Boolean = false
+
+        // Volatile internal Home key press state tracked across key events in system_server
+        @Volatile
+        var isHomePressedOnMochibun: Boolean = false
     }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
@@ -112,12 +116,46 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             return
         }
 
-        // 3. Launcher LSK, RSK, and HOME handling when Mochibun is in foreground
+        // 3. Launcher HOME handling with press-state tracking and Quick Settings toggle
+        val isHome = keyCode == KeyEvent.KEYCODE_HOME || event.scanCode == 172 || event.scanCode == 102
+        if (isHome) {
+            if (isDown) {
+                val topActivity = getTopActivity(phoneWindowManager, context)
+                val isMochibunForeground = topActivity?.packageName == PACKAGE_MOCHIBUN
+                val isMochibunHome = isMochibunForeground && (
+                    topActivity?.className?.isEmpty() == true ||
+                    topActivity?.className == ACTIVITY_MAIN ||
+                    topActivity?.className?.endsWith("MainActivity") == true
+                )
+                val isShadeOverMochibun = if (!isMochibunHome) {
+                    isNotificationShadeOverMochibun(phoneWindowManager, context)
+                } else false
+
+                if (isMochibunHome || isShadeOverMochibun) {
+                    isHomePressedOnMochibun = true
+                    broadcastHomeTrigger(context, event)
+                    // Swallow KEYCODE_HOME so OS default Home intent / assistant launch is suppressed
+                    param.result = 0
+                    return
+                }
+            } else {
+                // ACTION_UP or non-down action: swallow release if the press began on Mochibun or shade
+                if (isHomePressedOnMochibun) {
+                    isHomePressedOnMochibun = false
+                    broadcastHomeTrigger(context, event)
+                    // CRITICAL: Swallow ACTION_UP from the OS so PhoneWindowManager never invokes
+                    // closeSystemDialogs() / collapsePanels() on Home key release!
+                    param.result = 0
+                    return
+                }
+            }
+        }
+
+        // Launcher LSK & RSK (Recents & Back) handling when Mochibun is in foreground
         val isAppSwitch = keyCode == KeyEvent.KEYCODE_APP_SWITCH || event.scanCode == SCANCODE_APP_SWITCH
         val isBack = keyCode == KeyEvent.KEYCODE_BACK
-        val isHome = keyCode == KeyEvent.KEYCODE_HOME || event.scanCode == 172 || event.scanCode == 102
 
-        if (isAppSwitch || isBack || isHome) {
+        if (isAppSwitch || isBack) {
             val topActivity = getTopActivity(phoneWindowManager, context)
             val isMochibunForeground = topActivity?.packageName == PACKAGE_MOCHIBUN
 
@@ -127,7 +165,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                     // Swallow KEYCODE_APP_SWITCH so OS Recents overview is never triggered
                     param.result = 0
                     return
-                } else if (isBack) {
+                } else {
                     val isMochibunHome = topActivity.className.isEmpty() ||
                             topActivity.className == ACTIVITY_MAIN ||
                             topActivity.className.endsWith("MainActivity")
@@ -135,17 +173,6 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                     if (isMochibunHome) {
                         broadcastBackTrigger(context, event)
                         // Swallow KEYCODE_BACK on Home to prevent OS minimization
-                        param.result = 0
-                        return
-                    }
-                } else {
-                    val isMochibunHome = topActivity.className.isEmpty() ||
-                            topActivity.className == ACTIVITY_MAIN ||
-                            topActivity.className.endsWith("MainActivity")
-
-                    if (isMochibunHome) {
-                        broadcastHomeTrigger(context, event)
-                        // Swallow KEYCODE_HOME on Home to prevent OS default Home launch / assistant launch
                         param.result = 0
                         return
                     }
@@ -345,5 +372,55 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         } catch (_: Throwable) {}
 
         return null
+    }
+
+    private fun isNotificationShadeOverMochibun(phoneWindowManager: Any, context: Context?): Boolean {
+        try {
+            val displayPolicy = XposedHelpers.getObjectField(phoneWindowManager, "mDefaultDisplayPolicy") ?: return false
+            var focusedWindow = try {
+                XposedHelpers.getObjectField(displayPolicy, "mFocusedWindow")
+            } catch (_: Throwable) { null }
+            if (focusedWindow == null) {
+                val displayContent = try {
+                    XposedHelpers.getObjectField(displayPolicy, "mDisplayContent")
+                } catch (_: Throwable) { null }
+                if (displayContent != null) {
+                    focusedWindow = try {
+                        XposedHelpers.getObjectField(displayContent, "mCurrentFocus")
+                    } catch (_: Throwable) { null }
+                }
+            }
+            if (focusedWindow != null) {
+                val owningPackage = try {
+                    XposedHelpers.callMethod(focusedWindow, "getOwningPackage") as? String
+                } catch (_: Throwable) {
+                    try {
+                        XposedHelpers.getObjectField(focusedWindow, "mOwningPackage") as? String
+                    } catch (_: Throwable) { null }
+                }
+                if (owningPackage == "com.android.systemui") {
+                    val displayContent = try {
+                        XposedHelpers.getObjectField(displayPolicy, "mDisplayContent")
+                    } catch (_: Throwable) { null }
+                    if (displayContent != null) {
+                        val focusedApp = try {
+                            XposedHelpers.getObjectField(displayContent, "mFocusedApp")
+                        } catch (_: Throwable) { null }
+                        if (focusedApp != null) {
+                            val comp = try {
+                                XposedHelpers.getObjectField(focusedApp, "mActivityComponent") as? ComponentName
+                            } catch (_: Throwable) { null }
+                            if (comp?.packageName == PACKAGE_MOCHIBUN) return true
+                        }
+                    }
+                    if (context != null) {
+                        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                        val top = am?.getRunningTasks(1)?.firstOrNull()?.topActivity
+                        if (top?.packageName == PACKAGE_MOCHIBUN) return true
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+        return false
     }
 }

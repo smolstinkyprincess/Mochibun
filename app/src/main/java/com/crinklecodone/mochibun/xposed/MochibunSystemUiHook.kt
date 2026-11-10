@@ -2,18 +2,20 @@ package com.crinklecodone.mochibun.xposed
 
 import android.app.Dialog
 import android.content.res.ColorStateList
+import android.graphics.PorterDuff
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.DrawableWrapper
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.RippleDrawable
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.TextView
-import android.graphics.drawable.DrawableWrapper
-import android.graphics.drawable.RippleDrawable
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -113,6 +115,29 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
                 setStroke(strokeWidth, COLOR_QS_TILE_STROKE)
                 setColor(COLOR_QS_TILE_INACTIVE_BG)
+            }
+        }
+
+        // Quick Settings footer action button styling (Edit, Power, Settings)
+        internal const val COLOR_QS_FOOTER_BTN_BG = 0xFFFFF9FB.toInt()         // Soft Cream #FFF9FB
+        internal const val COLOR_QS_FOOTER_BTN_STROKE = 0x4D4A2E56.toInt()     // Deep Plum #4A2E56 at 30% alpha
+        internal const val COLOR_QS_FOOTER_BTN_ICON = 0xFF4A2E56.toInt()       // Deep Plum #4A2E56
+        internal val QS_FOOTER_BTN_ICON_TINT_LIST = ColorStateList.valueOf(COLOR_QS_FOOTER_BTN_ICON)
+
+        /**
+         * Creates a squircle GradientDrawable for QS footer action buttons:
+         * - Shape: Rectangle
+         * - Corner radius: 12dp * density
+         * - Stroke: 1.2dp * density with color #4A2E56 at 30% alpha (0x4D4A2E56)
+         * - Fill: Soft Cream #FFF9FB
+         */
+        internal fun createFooterButtonDrawable(density: Float): GradientDrawable {
+            return GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 12f * density
+                val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
+                setStroke(strokeWidth, COLOR_QS_FOOTER_BTN_STROKE)
+                setColor(COLOR_QS_FOOTER_BTN_BG)
             }
         }
 
@@ -1077,11 +1102,13 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
      * - Scrim & Blur Suppression (BlurUtils, NotificationShadeDepthController, ScrimController)
      * - Kawaii Squircle Tiles (QSTileViewImpl, QSIconViewImpl)
      * - Brightness Slider Tinting (BrightnessSliderView, BrightnessSlider)
+     * - Footer Action Buttons (QSFooterView / QSFooterViewController)
      */
     private fun hookQuickSettings(classLoader: ClassLoader) {
         hookQuickSettingsBlurAndScrim(classLoader)
         hookQuickSettingsTiles(classLoader)
         hookQuickSettingsBrightness(classLoader)
+        hookQuickSettingsFooter(classLoader)
     }
 
     /**
@@ -1534,6 +1561,199 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             Log.d(TAG, "Installed hook: BrightnessSlider.onViewAttached")
         } catch (t: Throwable) {
             Log.d(TAG, "Failed to hook BrightnessSlider.onViewAttached", t)
+        }
+    }
+
+    /**
+     * Stage D4: Quick Settings Footer Action Buttons (Edit, Power, Settings).
+     * Restyles the bottom action buttons in the expanded Quick Settings shade to match
+     * Mochibun's pastel kawaii squircle design language:
+     * - Background: Soft Cream #FFF9FB (12dp squircle)
+     * - Border: 1.2dp stroke in Deep Plum #4A2E56 at 30% alpha (0x4D4A2E56)
+     * - Icon Tint: Deep Plum #4A2E56
+     */
+    @android.annotation.SuppressLint("DiscouragedApi")
+    private fun hookQuickSettingsFooter(classLoader: ClassLoader) {
+        fun styleFooterView(footerView: View) {
+            val context = footerView.context
+            val res = context.resources
+            val density = res.displayMetrics.density
+
+            fun styleButton(view: View) {
+                view.background = createFooterButtonDrawable(density)
+                view.clipToOutline = true
+                if (view is ImageView) {
+                    view.imageTintList = QS_FOOTER_BTN_ICON_TINT_LIST
+                    view.setColorFilter(COLOR_QS_FOOTER_BTN_ICON, PorterDuff.Mode.SRC_IN)
+                }
+                if (view is ViewGroup) {
+                    for (i in 0 until view.childCount) {
+                        val child = view.getChildAt(i)
+                        if (child is ImageView) {
+                            child.imageTintList = QS_FOOTER_BTN_ICON_TINT_LIST
+                            child.setColorFilter(COLOR_QS_FOOTER_BTN_ICON, PorterDuff.Mode.SRC_IN)
+                        }
+                    }
+                }
+            }
+
+            // 1. Edit Quick Settings button (pencil)
+            var editView: View? = footerView.findViewById(android.R.id.edit)
+            if (editView == null) {
+                val editId = res.getIdentifier("edit", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                    ?: res.getIdentifier("qs_edit", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                    ?: 0
+                if (editId != 0) {
+                    editView = footerView.findViewById(editId)
+                }
+            }
+            if (editView == null) {
+                editView = try {
+                    XposedHelpers.getObjectField(footerView, "mEdit") as? View
+                } catch (_: Throwable) { null }
+            }
+            if (editView != null) {
+                styleButton(editView)
+            } else {
+                Log.d(TAG, "QSFooterView: edit button view ID ('edit' / 'qs_edit') not found")
+            }
+
+            // 2. Power Menu button
+            val powerId = res.getIdentifier("pm_lite", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                ?: res.getIdentifier("power_button", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                ?: res.getIdentifier("power_group", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                ?: 0
+            var powerView: View? = if (powerId != 0) footerView.findViewById(powerId) else null
+            if (powerView == null) {
+                powerView = try {
+                    XposedHelpers.getObjectField(footerView, "mPowerMenuLite") as? View
+                } catch (_: Throwable) { null }
+            }
+            if (powerView != null) {
+                styleButton(powerView)
+            } else {
+                Log.d(TAG, "QSFooterView: power button view ID ('pm_lite' / 'power_button' / 'power_group') not found")
+            }
+
+            // 3. Settings button (gear)
+            val settingsId = res.getIdentifier("settings_button", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                ?: res.getIdentifier("settings", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                ?: 0
+            var settingsView: View? = if (settingsId != 0) footerView.findViewById(settingsId) else null
+            if (settingsView == null) {
+                settingsView = try {
+                    XposedHelpers.getObjectField(footerView, "mSettingsButton") as? View
+                } catch (_: Throwable) { null }
+            }
+            if (settingsView != null) {
+                styleButton(settingsView)
+            } else {
+                Log.d(TAG, "QSFooterView: settings button view ID ('settings_button') not found")
+            }
+
+            // Settings button container: clear stock dark chip background so it doesn't bleed behind squircle
+            val containerId = res.getIdentifier("settings_button_container", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                ?: res.getIdentifier("settings_container", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                ?: 0
+            val settingsContainer = (if (containerId != 0) footerView.findViewById<View>(containerId) else null)
+                ?: (try { XposedHelpers.getObjectField(footerView, "mSettingsContainer") as? View } catch (_: Throwable) { null })
+            settingsContainer?.background = ColorDrawable(0)
+
+            // Tuner icon inside settings button container: tint to Deep Plum
+            val tunerId = res.getIdentifier("tuner_icon", "id", TARGET_PACKAGE)
+            val tunerIcon = (if (tunerId != 0) footerView.findViewById<View>(tunerId) else null)
+                ?: (try { XposedHelpers.getObjectField(footerView, "mTunerIcon") as? View } catch (_: Throwable) { null })
+            if (tunerIcon is ImageView) {
+                tunerIcon.imageTintList = QS_FOOTER_BTN_ICON_TINT_LIST
+                tunerIcon.setColorFilter(COLOR_QS_FOOTER_BTN_ICON, PorterDuff.Mode.SRC_IN)
+            }
+
+            // Multi-user switch (if present)
+            val multiUserId = res.getIdentifier("multi_user_switch", "id", TARGET_PACKAGE)
+            val multiUserSwitch = (if (multiUserId != 0) footerView.findViewById<View>(multiUserId) else null)
+                ?: (try { XposedHelpers.getObjectField(footerView, "mMultiUserSwitch") as? View } catch (_: Throwable) { null })
+            if (multiUserSwitch != null) {
+                styleButton(multiUserSwitch)
+            }
+        }
+
+        val footerClassNames = listOf(
+            "com.android.systemui.qs.QSFooterView",
+            "com.android.systemui.qs.FooterActionsView"
+        )
+
+        for (className in footerClassNames) {
+            val footerClass = try {
+                XposedHelpers.findClass(className, classLoader)
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+
+            try {
+                XposedHelpers.findAndHookMethod(
+                    footerClass,
+                    "onFinishInflate",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val view = param.thisObject as? View ?: return
+                                styleFooterView(view)
+                                Log.d(TAG, "Applied Mochibun squircle styling to $className")
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Error in $className.onFinishInflate hook", t)
+                            }
+                        }
+                    }
+                )
+                Log.d(TAG, "Installed hook: $className.onFinishInflate")
+            } catch (t: Throwable) {
+                Log.d(TAG, "Failed to hook $className.onFinishInflate", t)
+            }
+
+            try {
+                XposedHelpers.findAndHookMethod(
+                    footerClass,
+                    "onConfigurationChanged",
+                    android.content.res.Configuration::class.java,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val view = param.thisObject as? View ?: return
+                                styleFooterView(view)
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Error in $className.onConfigurationChanged hook", t)
+                            }
+                        }
+                    }
+                )
+                Log.d(TAG, "Installed hook: $className.onConfigurationChanged")
+            } catch (_: Throwable) {}
+        }
+
+        // Also hook QSFooterViewController.onViewAttached as safeguard
+        try {
+            val controllerClass = XposedHelpers.findClass(
+                "com.android.systemui.qs.QSFooterViewController",
+                classLoader
+            )
+            XposedHelpers.findAndHookMethod(
+                controllerClass,
+                "onViewAttached",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val view = XposedHelpers.getObjectField(param.thisObject, "mView") as? View ?: return
+                            styleFooterView(view)
+                            Log.d(TAG, "Applied Mochibun squircle styling in QSFooterViewController.onViewAttached")
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in QSFooterViewController.onViewAttached hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: QSFooterViewController.onViewAttached")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook QSFooterViewController.onViewAttached", t)
         }
     }
 }

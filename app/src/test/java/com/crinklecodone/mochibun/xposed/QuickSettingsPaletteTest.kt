@@ -57,4 +57,16 @@ class QuickSettingsPaletteTest {
         // Sun icon: Deep Plum #4A2E56
         assertEquals(0xFF4A2E56.toInt(), MochibunSystemUiHook.COLOR_BRIGHTNESS_ICON)
     }
+
+    @Test
+    fun testFooterActionButtonsPalette() {
+        // Background fill: Soft Cream #FFF9FB
+        assertEquals(0xFFFFF9FB.toInt(), MochibunSystemUiHook.COLOR_QS_FOOTER_BTN_BG)
+
+        // Border stroke: Deep Plum #4A2E56 at 30% alpha (0x4D4A2E56)
+        assertEquals(0x4D4A2E56.toInt(), MochibunSystemUiHook.COLOR_QS_FOOTER_BTN_STROKE)
+
+        // Icon tint: Deep Plum #4A2E56
+        assertEquals(0xFF4A2E56.toInt(), MochibunSystemUiHook.COLOR_QS_FOOTER_BTN_ICON)
+    }
 }

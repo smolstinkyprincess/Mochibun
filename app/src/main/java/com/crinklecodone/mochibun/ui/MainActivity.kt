@@ -210,6 +210,13 @@ class MainActivity : ComponentActivity() {
         private const val WAKE_SETTLE_MS = 1000L
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            LauncherKeyHandler.isQuickSettingsExpanded = false
+        }
+    }
+
     @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (HardwareRemapManager.keyCaptureListener?.invoke(event) == true) return true
