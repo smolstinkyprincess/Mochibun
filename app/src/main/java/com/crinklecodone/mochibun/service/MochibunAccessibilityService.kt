@@ -104,6 +104,9 @@ class MochibunAccessibilityService : AccessibilityService() {
     private var poundHoldFired = false
     // A '#' press whose DOWN was held back from the app; a release before the hold replays a tap
     private var poundPressPending = false
+    // Set while replaying '#' through RootTouchInjector so this service doesn't catch its own replay
+    private var isReplayingPound = false
+    private val resetReplayPoundRunnable = Runnable { isReplayingPound = false }
 
     // activeMappings is read on the main thread in onKeyEvent; never mutate it from a worker.
     // Bursts of pref writes (each fires the listener, plus explicit reloads) collapse into one load.
@@ -254,6 +257,16 @@ class MochibunAccessibilityService : AccessibilityService() {
 
     private fun handleKeyEvent(event: KeyEvent): Boolean {
         val keyCode = event.keyCode
+        // Replayed '#' tap arriving from RootTouchInjector: bypass accessibility filtering so the
+        // focused window / IME receives the key event directly without creating an infinite loop.
+        if (isReplayingPound && keyCode == KeyEvent.KEYCODE_POUND) {
+            if (event.action == KeyEvent.ACTION_UP) {
+                isReplayingPound = false
+                mainHandler.removeCallbacks(resetReplayPoundRunnable)
+            }
+            return false
+        }
+
         if (InputArbiter.isNewPress(event)) {
             // The virtual cursor outranks every stage below and consumes this press itself
             if (InputArbiter.cursorTakesPress(event)) return false
@@ -555,10 +568,15 @@ class MochibunAccessibilityService : AccessibilityService() {
 
     private fun replayPoundTap() {
         try {
+            isReplayingPound = true
+            mainHandler.removeCallbacks(resetReplayPoundRunnable)
+            mainHandler.postDelayed(resetReplayPoundRunnable, 500L)
             RootTouchInjector.attach(applicationContext)
             // Linux KEY_NUMERIC_POUND is 523, KEY_POUND is 228
             RootTouchInjector.keyAsync(523, holdMs = 25)
         } catch (e: Throwable) {
+            isReplayingPound = false
+            mainHandler.removeCallbacks(resetReplayPoundRunnable)
             Log.w(TAG, "Failed to replay '#' tap", e)
         }
     }

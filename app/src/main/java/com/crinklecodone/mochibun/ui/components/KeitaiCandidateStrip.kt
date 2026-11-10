@@ -166,6 +166,12 @@ class KeitaiCandidateState(
             if (isDown && repeatCount == 0) handleKey(keyCode, onCommit)
             return true
         }
+        if (keyCode == KeyEvent.KEYCODE_POUND) {
+            if (isDown && repeatCount == 0 && isActive) {
+                commitActive(onCommit)
+            }
+            return false
+        }
         if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
             if (isDown && isActive) {
                 reset()

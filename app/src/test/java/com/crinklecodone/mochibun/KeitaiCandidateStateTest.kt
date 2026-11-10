@@ -145,6 +145,14 @@ class KeitaiCandidateStateTest {
     }
 
     @Test
+    fun poundKeyCommitsActiveCandidateButIsNotConsumed() {
+        press(KeyEvent.KEYCODE_5)
+        assertFalse(state.handleFieldKeyEvent(KeyEvent.KEYCODE_POUND, isDown = true, repeatCount = 0, onCommit))
+        assertEquals(listOf("j"), committed)
+        assertFalse(state.isActive)
+    }
+
+    @Test
     fun insertAtCursorReplacesSelectionAndRespectsMaxLength() {
         val value = TextFieldValue("Mochi", TextRange(2))
         assertEquals(TextFieldValue("Moxchi", TextRange(3)), value.insertAtCursor("x"))
