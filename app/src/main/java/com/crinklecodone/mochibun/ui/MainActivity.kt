@@ -131,10 +131,17 @@ class MainActivity : ComponentActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent == null) return
             val action = intent.action
-            if (action == MochibunKeyHook.ACTION_LSK_TRIGGER || action == MochibunKeyHook.ACTION_BACK_TRIGGER) {
+            if (action == MochibunKeyHook.ACTION_LSK_TRIGGER ||
+                action == MochibunKeyHook.ACTION_BACK_TRIGGER ||
+                action == MochibunKeyHook.ACTION_HOME_TRIGGER
+            ) {
                 @Suppress("DEPRECATION")
                 val rawEvent = intent.getParcelableExtra<KeyEvent>(MochibunKeyHook.EXTRA_KEY_EVENT)
-                val targetKeyCode = if (action == MochibunKeyHook.ACTION_LSK_TRIGGER) KeyEvent.KEYCODE_APP_SWITCH else KeyEvent.KEYCODE_BACK
+                val targetKeyCode = when (action) {
+                    MochibunKeyHook.ACTION_LSK_TRIGGER -> KeyEvent.KEYCODE_APP_SWITCH
+                    MochibunKeyHook.ACTION_BACK_TRIGGER -> KeyEvent.KEYCODE_BACK
+                    else -> KeyEvent.KEYCODE_HOME
+                }
                 val event = if (rawEvent != null) {
                     if (rawEvent.keyCode == KeyEvent.KEYCODE_UNKNOWN) {
                         KeyEvent(
@@ -314,6 +321,7 @@ class MainActivity : ComponentActivity() {
         val softKeyFilter = IntentFilter().apply {
             addAction(MochibunKeyHook.ACTION_LSK_TRIGGER)
             addAction(MochibunKeyHook.ACTION_BACK_TRIGGER)
+            addAction(MochibunKeyHook.ACTION_HOME_TRIGGER)
         }
         androidx.core.content.ContextCompat.registerReceiver(
             this,

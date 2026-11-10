@@ -32,6 +32,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         const val ACTION_CURSOR_KEY = "com.crinklecodone.mochibun.ACTION_CURSOR_KEY"
         const val ACTION_LSK_TRIGGER = "com.crinklecodone.mochibun.ACTION_LSK_TRIGGER"
         const val ACTION_BACK_TRIGGER = "com.crinklecodone.mochibun.ACTION_BACK_TRIGGER"
+        const val ACTION_HOME_TRIGGER = "com.crinklecodone.mochibun.ACTION_HOME_TRIGGER"
         const val ACTION_HARDWARE_KEY_TRIGGER = "com.crinklecodone.mochibun.ACTION_HARDWARE_KEY_TRIGGER"
 
         // Intent extras
@@ -111,11 +112,12 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             return
         }
 
-        // 3. Launcher LSK & RSK (Recents & Back) handling when Mochibun is in foreground
+        // 3. Launcher LSK, RSK, and HOME handling when Mochibun is in foreground
         val isAppSwitch = keyCode == KeyEvent.KEYCODE_APP_SWITCH || event.scanCode == SCANCODE_APP_SWITCH
         val isBack = keyCode == KeyEvent.KEYCODE_BACK
+        val isHome = keyCode == KeyEvent.KEYCODE_HOME || event.scanCode == 172 || event.scanCode == 102
 
-        if (isAppSwitch || isBack) {
+        if (isAppSwitch || isBack || isHome) {
             val topActivity = getTopActivity(phoneWindowManager, context)
             val isMochibunForeground = topActivity?.packageName == PACKAGE_MOCHIBUN
 
@@ -125,7 +127,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                     // Swallow KEYCODE_APP_SWITCH so OS Recents overview is never triggered
                     param.result = 0
                     return
-                } else {
+                } else if (isBack) {
                     val isMochibunHome = topActivity.className.isEmpty() ||
                             topActivity.className == ACTIVITY_MAIN ||
                             topActivity.className.endsWith("MainActivity")
@@ -133,6 +135,17 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                     if (isMochibunHome) {
                         broadcastBackTrigger(context, event)
                         // Swallow KEYCODE_BACK on Home to prevent OS minimization
+                        param.result = 0
+                        return
+                    }
+                } else {
+                    val isMochibunHome = topActivity.className.isEmpty() ||
+                            topActivity.className == ACTIVITY_MAIN ||
+                            topActivity.className.endsWith("MainActivity")
+
+                    if (isMochibunHome) {
+                        broadcastHomeTrigger(context, event)
+                        // Swallow KEYCODE_HOME on Home to prevent OS default Home launch / assistant launch
                         param.result = 0
                         return
                     }
@@ -178,7 +191,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             setPackage(PACKAGE_MOCHIBUN)
             putExtra(EXTRA_CURSOR_ACTIVE, active)
         }
-        context.sendBroadcast(intent)
+        sendBroadcastSafe(context, intent)
     }
 
     private fun forwardCursorKey(context: Context?, event: KeyEvent) {
@@ -190,7 +203,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
         }
-        context.sendBroadcast(intent)
+        sendBroadcastSafe(context, intent)
     }
 
     private fun broadcastLskTrigger(context: Context?, event: KeyEvent) {
@@ -203,7 +216,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
         }
-        context.sendBroadcast(intent)
+        sendBroadcastSafe(context, intent)
     }
 
     private fun broadcastBackTrigger(context: Context?, event: KeyEvent) {
@@ -216,7 +229,20 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
         }
-        context.sendBroadcast(intent)
+        sendBroadcastSafe(context, intent)
+    }
+
+    private fun broadcastHomeTrigger(context: Context?, event: KeyEvent) {
+        if (context == null) return
+        val keyCode = if (event.keyCode != KeyEvent.KEYCODE_UNKNOWN) event.keyCode else KeyEvent.KEYCODE_HOME
+        val intent = Intent(ACTION_HOME_TRIGGER).apply {
+            setPackage(PACKAGE_MOCHIBUN)
+            putExtra(EXTRA_KEY_EVENT, event)
+            putExtra(EXTRA_KEY_CODE, keyCode)
+            putExtra(EXTRA_ACTION, event.action)
+            putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
+        }
+        sendBroadcastSafe(context, intent)
     }
 
     private fun broadcastHardwareKey(context: Context?, event: KeyEvent) {
@@ -228,7 +254,16 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
         }
-        context.sendBroadcast(intent)
+        sendBroadcastSafe(context, intent)
+    }
+
+    private fun sendBroadcastSafe(context: Context, intent: Intent) {
+        try {
+            val userAll = XposedHelpers.getStaticObjectField(android.os.UserHandle::class.java, "ALL")
+            XposedHelpers.callMethod(context, "sendBroadcastAsUser", intent, userAll)
+        } catch (_: Throwable) {
+            context.sendBroadcast(intent)
+        }
     }
 
     @Suppress("DEPRECATION")

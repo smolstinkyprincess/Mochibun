@@ -112,4 +112,30 @@ class SoftKeyRemapUnitTest {
         mode = mode.next()
         assertEquals(AppDrawerSortMode.ALPHABETICAL, mode)
     }
+
+    @Test
+    fun testActionHomeTriggerConstant() {
+        assertEquals("com.crinklecodone.mochibun.ACTION_HOME_TRIGGER", com.crinklecodone.mochibun.xposed.MochibunKeyHook.ACTION_HOME_TRIGGER)
+    }
+
+    @Test
+    fun testLauncherKeypadActionsDismissModalDefault() {
+        var dismissed = false
+        val actions = object : com.crinklecodone.mochibun.core.keypad.LauncherKeypadActions {
+            override fun setDrawerOpen(open: Boolean) {}
+            override fun setSelectedDrawerIndex(index: Int) {}
+            override fun setHomeFocusArea(area: Int) {}
+            override fun setSelectedFavoriteIndex(index: Int) {}
+            override fun setSavedFavoriteIndexOnHome(index: Int) {}
+            override fun setPendingTargetPage(page: Int?) {}
+            override fun setCenterKeyState(state: Int) {}
+            override fun openContextActionForCurrentFocus() {}
+            override fun openFolder(folderId: String) {}
+            override fun openLauncherMenu() {}
+            override fun openSpeedDial(digit: Int) {}
+            override fun dismissModal() { dismissed = true }
+        }
+        actions.dismissModal()
+        assertTrue(dismissed)
+    }
 }

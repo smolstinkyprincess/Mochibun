@@ -20,6 +20,7 @@ import com.crinklecodone.mochibun.core.keypad.LauncherKeypadState
 import com.crinklecodone.mochibun.core.keypad.T9InputState
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
+import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.core.system.TorchManager
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.FavoriteSlotItem
@@ -34,6 +35,31 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/**
+ * Programmatically expands the Android notification and Quick Settings shade.
+ * Falls back to privileged persistent daemon via libsu when reflection fails.
+ */
+fun expandQuickSettingsPanel(context: Context) {
+    try {
+        val sbm = context.getSystemService("statusbar")
+        if (sbm != null) {
+            val method = try {
+                sbm.javaClass.getMethod("expandSettingsPanel")
+            } catch (_: NoSuchMethodException) {
+                sbm.javaClass.getMethod("expandSettingsPanel", String::class.java)
+            }
+            if (method.parameterCount == 0) {
+                method.invoke(sbm)
+            } else {
+                method.invoke(sbm, null as String?)
+            }
+            return
+        }
+    } catch (_: Throwable) {}
+    // Fallback to privileged persistent daemon via libsu
+    RootShell.submit("cmd statusbar expand-settings")
+}
 
 /**
  * Triggers a subtle tactile boundary haptic buzz (14ms) when hitting edge limits of lists/carousels.
@@ -59,6 +85,7 @@ private val T9_LETTERS_NONE = CharArray(0)
  */
 private const val APP_SWITCH_HOLD_MS = 400L
 private const val POUND_HOLD_MS = 400L
+private const val HOME_HOLD_MS = 400L
 
 internal class LauncherKeyHandler(
     private val context: Context,
@@ -77,6 +104,8 @@ internal class LauncherKeyHandler(
     // the Center and '#' holds.
     private var appSwitchHoldJob: Job? = null
     private var poundHoldJob: Job? = null
+    private var homeHoldJob: Job? = null
+    private var homeLongPressTriggered = false
 
     fun handleKeyEvent(
         event: ComposeKeyEvent,
@@ -111,6 +140,24 @@ internal class LauncherKeyHandler(
             }
         }
 
+        if (nativeEvent.action == KeyEvent.ACTION_UP && nativeEvent.keyCode == KeyEvent.KEYCODE_HOME) {
+            val pendingHold = homeHoldJob
+            if (pendingHold != null) {
+                // Released before the 400ms hold threshold: short press on Home Screen
+                pendingHold.cancel()
+                homeHoldJob = null
+                // Pressed again while already sitting on Home: opens the app drawer
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                actions.setSelectedDrawerIndex(0)
+                actions.setDrawerOpen(true)
+            } else if (homeLongPressTriggered) {
+                homeLongPressTriggered = false
+            }
+            lastConsumedDownKeyCode = null
+            lastConsumedDownScanCode = null
+            return true
+        }
+
         if (nativeEvent.action == KeyEvent.ACTION_UP) {
             val matchesDown = (lastConsumedDownKeyCode != null && nativeEvent.keyCode == lastConsumedDownKeyCode) ||
                 (lastConsumedDownScanCode != null && nativeEvent.scanCode > 0 && nativeEvent.scanCode == lastConsumedDownScanCode)
@@ -121,10 +168,51 @@ internal class LauncherKeyHandler(
             }
         }
 
+        if (nativeEvent.keyCode == KeyEvent.KEYCODE_HOME) {
+            if (state.isHomeScreenActive) {
+                if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (nativeEvent.isLongPress || nativeEvent.repeatCount > 0) {
+                        if (!homeLongPressTriggered) {
+                            homeHoldJob?.cancel()
+                            homeHoldJob = null
+                            homeLongPressTriggered = true
+                            performBoundaryHaptic(context)
+                            SoundEffectManager.play(context, SoundEffect.SELECT)
+                            expandQuickSettingsPanel(context)
+                        }
+                        return true
+                    }
+                    if (nativeEvent.repeatCount == 0) {
+                        startHomeHold()
+                        lastConsumedDownKeyCode = nativeEvent.keyCode
+                        lastConsumedDownScanCode = nativeEvent.scanCode
+                        return true
+                    }
+                }
+            } else {
+                // Not on Home Screen: standard short press behavior brings user back to Home Screen
+                if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (nativeEvent.repeatCount == 0) {
+                        actions.dismissModal()
+                        actions.setDrawerOpen(false)
+                        actions.setPendingTargetPage(1)
+                        scope.launch { pagerState.animateScrollToPage(1) }
+                        lastConsumedDownKeyCode = nativeEvent.keyCode
+                        lastConsumedDownScanCode = nativeEvent.scanCode
+                        return true
+                    }
+                    return true
+                }
+            }
+        }
+
         // A focused text field gets typing keys for the IME; D-pad navigation is handled as usual
         if (state.isModalActive || (state.isInputActive && InputArbiter.isTypingKey(nativeEvent.keyCode))) {
             poundHoldJob?.cancel()
             poundHoldJob = null
+            homeHoldJob?.cancel()
+            homeHoldJob = null
+            homeLongPressTriggered = false
             return false
         }
 
@@ -139,6 +227,8 @@ internal class LauncherKeyHandler(
 
         if (state.isPageTransitioning) {
             homeTracker.wasActive = false
+            homeHoldJob?.cancel()
+            homeHoldJob = null
             return isDpadOrActionKey(nativeEvent.keyCode)
         }
 
@@ -889,6 +979,19 @@ internal class LauncherKeyHandler(
             performBoundaryHaptic(context)
             SoundEffectManager.play(context, SoundEffect.SELECT)
             openRecents()
+        }
+    }
+
+    private fun startHomeHold() {
+        homeHoldJob?.cancel()
+        homeLongPressTriggered = false
+        homeHoldJob = scope.launch {
+            delay(HOME_HOLD_MS)
+            homeHoldJob = null
+            homeLongPressTriggered = true
+            performBoundaryHaptic(context)
+            SoundEffectManager.play(context, SoundEffect.SELECT)
+            expandQuickSettingsPanel(context)
         }
     }
 

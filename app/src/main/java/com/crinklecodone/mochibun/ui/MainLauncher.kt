@@ -568,6 +568,7 @@ fun MainLauncher(
                 launcherVm.recordAppLaunch(packageName)
             }
             override fun boopMascot() { mascotBoopRequest++ }
+            override fun dismissModal() { activeModal = null }
         }
     }
 

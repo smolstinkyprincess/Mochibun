@@ -80,4 +80,5 @@ interface LauncherKeypadActions {
     fun cycleDrawerSortMode() {}
     fun recordAppLaunch(packageName: String) {}
     fun boopMascot() {}
+    fun dismissModal() {}
 }

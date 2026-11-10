@@ -12,6 +12,8 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.TextView
+import android.graphics.drawable.DrawableWrapper
+import android.graphics.drawable.RippleDrawable
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -30,6 +32,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  * - Stage C: Squircle volume dialog in VolumeDialogImpl (content views styled with #F6F0FC fill,
  *            20dp corner radius, 1.5dp #4A2E56 40% stroke; sliders tinted #FFB7D5 progress,
  *            #EADDF8 track, and #4A2E56 icons).
+ * - Stage D: Kawaii Quick Settings & shade restyle (scrim & blur suppression, squircle tiles
+ *            in 3 pastel states, and pastel brightness slider tinting).
  */
 class MochibunSystemUiHook : IXposedHookLoadPackage {
 
@@ -57,8 +61,30 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
         private val VOLUME_TRACK_TINT_LIST = ColorStateList.valueOf(0xFFEADDF8.toInt())
         private val VOLUME_ICON_TINT_LIST = ColorStateList.valueOf(0xFF4A2E56.toInt())
 
+        // Stage D palette colors (Quick Settings & Shade)
+        // Soft translucent lavender / frosted ivory backdrop: #F6F0FC at ~92% (ARGB: 0xEB, 0xF6, 0xF0, 0xFC)
+        internal const val COLOR_QS_BACKDROP_TINT = 0xEBF6F0FC.toInt()
+
+        // Tile stroke: 1.2dp with #4A2E56 at 30% alpha (0x4D4A2E56)
+        internal const val COLOR_QS_TILE_STROKE = 0x4D4A2E56.toInt()
+
+        // Tile fill colors
+        internal const val COLOR_QS_TILE_ACTIVE_BG = 0xFFFFB7D5.toInt()        // Sakura Pink #FFB7D5
+        internal const val COLOR_QS_TILE_INACTIVE_BG = 0xFFFFF9FB.toInt()      // Cream / Soft Surface #FFF9FB
+        internal const val COLOR_QS_TILE_UNAVAILABLE_BG = 0x66EADDF8.toInt()   // Muted Soft Lilac #EADDF8 at 40%
+
+        // Tile text / icon / chevron colors
+        internal const val COLOR_QS_TILE_ACTIVE_FG = 0xFF4A2E56.toInt()        // Deep Plum #4A2E56
+        internal const val COLOR_QS_TILE_INACTIVE_FG = 0x994A2E56.toInt()      // Deep Plum at 60% alpha
+        internal const val COLOR_QS_TILE_UNAVAILABLE_FG = 0x4D4A2E56.toInt()   // Deep Plum at 30% alpha
+
+        // Brightness slider tints
+        internal const val COLOR_BRIGHTNESS_PROGRESS = 0xFFFFB7D5.toInt()      // Sakura Pink #FFB7D5
+        internal const val COLOR_BRIGHTNESS_TRACK = 0xFFEADDF8.toInt()         // Soft Lilac #EADDF8
+        internal const val COLOR_BRIGHTNESS_ICON = 0xFF4A2E56.toInt()          // Deep Plum #4A2E56
+
         /**
-         * Creates a squircle GradientDrawable:
+         * Creates a squircle GradientDrawable for Volume dialog:
          * - Corner radius: 20dp * density
          * - Fill: #F6F0FC
          * - Stroke: 1.5dp * density of #4A2E56 at 40% alpha
@@ -70,6 +96,23 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 setColor(COLOR_VOLUME_BG_FILL)
                 val strokeWidth = (1.5f * density).toInt().coerceAtLeast(1)
                 setStroke(strokeWidth, COLOR_VOLUME_STROKE)
+            }
+        }
+
+        /**
+         * Creates a squircle GradientDrawable for QS tiles:
+         * - Shape: Rectangle
+         * - Corner radius: 14dp * density
+         * - Stroke: 1.2dp * density with color #4A2E56 at 30% alpha (0x4D4A2E56)
+         * - Default color: Cream / Soft Surface #FFF9FB
+         */
+        internal fun createTileSquircleDrawable(density: Float): GradientDrawable {
+            return GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 14f * density
+                val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
+                setStroke(strokeWidth, COLOR_QS_TILE_STROKE)
+                setColor(COLOR_QS_TILE_INACTIVE_BG)
             }
         }
 
@@ -95,6 +138,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
         hookStatusBar(lpparam.classLoader)
         hookBattery(lpparam.classLoader)
         hookVolume(lpparam.classLoader)
+        hookQuickSettings(lpparam.classLoader)
     }
 
     /**
@@ -1024,6 +1068,472 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             Log.d(TAG, "Installed hook: VolumeDialogImpl.hideRingerDrawer")
         } catch (t: Throwable) {
             Log.d(TAG, "Failed to hook VolumeDialogImpl.hideRingerDrawer", t)
+        }
+    }
+
+    /**
+     * Stage D: Kawaii SystemUI Quick Settings Hook.
+     * Restyles Android 12's stock Quick Settings pull-down shade and its tiles into Mochibun's pastel keitai design language:
+     * - Scrim & Blur Suppression (BlurUtils, NotificationShadeDepthController, ScrimController)
+     * - Kawaii Squircle Tiles (QSTileViewImpl, QSIconViewImpl)
+     * - Brightness Slider Tinting (BrightnessSliderView, BrightnessSlider)
+     */
+    private fun hookQuickSettings(classLoader: ClassLoader) {
+        hookQuickSettingsBlurAndScrim(classLoader)
+        hookQuickSettingsTiles(classLoader)
+        hookQuickSettingsBrightness(classLoader)
+    }
+
+    /**
+     * Stage D1: Scrim & Blur Suppression.
+     * Disables GPU surface blur on MT6761 hardware and replaces stock black shade backdrop with
+     * soft translucent lavender / frosted ivory #F6F0FC at ~92% opacity (0xEBF6F0FC).
+     */
+    private fun hookQuickSettingsBlurAndScrim(classLoader: ClassLoader) {
+        // 1. Disable window/surface blur via BlurUtils
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.statusbar.BlurUtils",
+                classLoader,
+                "supportsBlursOnWindows",
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        param.result = false
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: BlurUtils.supportsBlursOnWindows")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook BlurUtils.supportsBlursOnWindows", t)
+        }
+
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.statusbar.BlurUtils",
+                classLoader,
+                "blurRadiusOfRatio",
+                Float::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        param.result = 0
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: BlurUtils.blurRadiusOfRatio")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook BlurUtils.blurRadiusOfRatio", t)
+        }
+
+        // 2. Disable shade blur in NotificationShadeDepthController
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.statusbar.NotificationShadeDepthController",
+                classLoader,
+                "shouldApplyShadeBlur",
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        param.result = false
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: NotificationShadeDepthController.shouldApplyShadeBlur")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook NotificationShadeDepthController.shouldApplyShadeBlur", t)
+        }
+
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.statusbar.NotificationShadeDepthController",
+                classLoader,
+                "setWakeAndUnlockBlurRadius",
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        param.args[0] = 0
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: NotificationShadeDepthController.setWakeAndUnlockBlurRadius")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook NotificationShadeDepthController.setWakeAndUnlockBlurRadius", t)
+        }
+
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.statusbar.NotificationShadeDepthController",
+                classLoader,
+                "setBlursDisabledForAppLaunch",
+                Boolean::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        param.args[0] = true
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: NotificationShadeDepthController.setBlursDisabledForAppLaunch")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook NotificationShadeDepthController.setBlursDisabledForAppLaunch", t)
+        }
+
+        // 3. Override ScrimController backdrop tint to translucent lavender #F6F0FC at ~92%
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.statusbar.phone.ScrimController",
+                classLoader,
+                "updateScrimColor",
+                View::class.java,
+                Float::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        try {
+                            val view = param.args[0] as? View ?: return
+                            val scrimBehind = XposedHelpers.getObjectField(param.thisObject, "mScrimBehind") as? View
+                            val notifScrim = XposedHelpers.getObjectField(param.thisObject, "mNotificationsScrim") as? View
+                            if (view === scrimBehind || view === notifScrim) {
+                                val currentTint = param.args[2] as? Int ?: 0
+                                if (currentTint != 0) {
+                                    param.args[2] = COLOR_QS_BACKDROP_TINT
+                                }
+                            }
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in ScrimController.updateScrimColor hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: ScrimController.updateScrimColor")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook ScrimController.updateScrimColor", t)
+        }
+    }
+
+    /**
+     * Stage D2: Kawaii Squircle Tiles.
+     * Restyles QSTileViewImpl container background to a 14dp squircle with 1.2dp border,
+     * and maps active/inactive/unavailable states to Mochibun's pastel palette.
+     */
+    @android.annotation.SuppressLint("DiscouragedApi")
+    private fun hookQuickSettingsTiles(classLoader: ClassLoader) {
+        val tileViewClassName = "com.android.systemui.qs.tileimpl.QSTileViewImpl"
+
+        // 1. Hook getBackgroundColorForState to return Mochibun fills for all 3 states
+        try {
+            XposedHelpers.findAndHookMethod(
+                tileViewClassName,
+                classLoader,
+                "getBackgroundColorForState",
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val state = param.args[0] as? Int ?: return
+                        param.result = when (state) {
+                            2 -> COLOR_QS_TILE_ACTIVE_BG
+                            1 -> COLOR_QS_TILE_INACTIVE_BG
+                            0 -> COLOR_QS_TILE_UNAVAILABLE_BG
+                            else -> COLOR_QS_TILE_INACTIVE_BG
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: QSTileViewImpl.getBackgroundColorForState")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook QSTileViewImpl.getBackgroundColorForState", t)
+        }
+
+        // 2. Hook getLabelColorForState
+        try {
+            XposedHelpers.findAndHookMethod(
+                tileViewClassName,
+                classLoader,
+                "getLabelColorForState",
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val state = param.args[0] as? Int ?: return
+                        param.result = when (state) {
+                            2 -> COLOR_QS_TILE_ACTIVE_FG
+                            1 -> COLOR_QS_TILE_INACTIVE_FG
+                            0 -> COLOR_QS_TILE_UNAVAILABLE_FG
+                            else -> COLOR_QS_TILE_INACTIVE_FG
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: QSTileViewImpl.getLabelColorForState")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook QSTileViewImpl.getLabelColorForState", t)
+        }
+
+        // 3. Hook getSecondaryLabelColorForState
+        try {
+            XposedHelpers.findAndHookMethod(
+                tileViewClassName,
+                classLoader,
+                "getSecondaryLabelColorForState",
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val state = param.args[0] as? Int ?: return
+                        param.result = when (state) {
+                            2 -> COLOR_QS_TILE_ACTIVE_FG
+                            1 -> COLOR_QS_TILE_INACTIVE_FG
+                            0 -> COLOR_QS_TILE_UNAVAILABLE_FG
+                            else -> COLOR_QS_TILE_INACTIVE_FG
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: QSTileViewImpl.getSecondaryLabelColorForState")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook QSTileViewImpl.getSecondaryLabelColorForState", t)
+        }
+
+        // 4. Hook getChevronColorForState
+        try {
+            XposedHelpers.findAndHookMethod(
+                tileViewClassName,
+                classLoader,
+                "getChevronColorForState",
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val state = param.args[0] as? Int ?: return
+                        param.result = when (state) {
+                            2 -> COLOR_QS_TILE_ACTIVE_FG
+                            1 -> COLOR_QS_TILE_INACTIVE_FG
+                            0 -> COLOR_QS_TILE_UNAVAILABLE_FG
+                            else -> COLOR_QS_TILE_INACTIVE_FG
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: QSTileViewImpl.getChevronColorForState")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook QSTileViewImpl.getChevronColorForState", t)
+        }
+
+        // 5. Hook QSIconViewImpl.getIconColorForState
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.qs.tileimpl.QSIconViewImpl",
+                classLoader,
+                "getIconColorForState",
+                android.content.Context::class.java,
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val state = param.args[1] as? Int ?: return
+                        param.result = when (state) {
+                            2 -> COLOR_QS_TILE_ACTIVE_FG
+                            1 -> COLOR_QS_TILE_INACTIVE_FG
+                            0 -> COLOR_QS_TILE_UNAVAILABLE_FG
+                            else -> COLOR_QS_TILE_INACTIVE_FG
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: QSIconViewImpl.getIconColorForState")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook QSIconViewImpl.getIconColorForState", t)
+        }
+
+        // 6. Hook createTileBackground to inject programmatic squircle GradientDrawable
+        try {
+            XposedHelpers.findAndHookMethod(
+                tileViewClassName,
+                classLoader,
+                "createTileBackground",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val tileView = param.thisObject as? View ?: return
+                            val density = tileView.context.resources.displayMetrics.density
+                            val squircle = createTileSquircleDrawable(density)
+                            XposedHelpers.setObjectField(param.thisObject, "colorBackgroundDrawable", squircle)
+                            val ripple = XposedHelpers.getObjectField(param.thisObject, "ripple") as? RippleDrawable
+                            if (ripple != null) {
+                                val bgId = tileView.context.resources.getIdentifier("background", "id", TARGET_PACKAGE)
+                                if (bgId != 0) {
+                                    try {
+                                        ripple.setDrawableByLayerId(bgId, squircle)
+                                    } catch (_: Throwable) {}
+                                }
+                            }
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in QSTileViewImpl.createTileBackground hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: QSTileViewImpl.createTileBackground")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook QSTileViewImpl.createTileBackground", t)
+        }
+
+        // 7. Hook handleStateChanged to enforce squircle stroke, fill, and icon tints across state updates
+        try {
+            val stateClass = XposedHelpers.findClass("com.android.systemui.plugins.qs.QSTile\$State", classLoader)
+            XposedHelpers.findAndHookMethod(
+                tileViewClassName,
+                classLoader,
+                "handleStateChanged",
+                stateClass,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val state = param.args[0] ?: return
+                            val stateInt = XposedHelpers.getIntField(state, "state")
+                            val tileView = param.thisObject as? View ?: return
+                            val density = tileView.context.resources.displayMetrics.density
+
+                            var bgDrawable = XposedHelpers.getObjectField(param.thisObject, "colorBackgroundDrawable") as? GradientDrawable
+                            if (bgDrawable == null) {
+                                bgDrawable = createTileSquircleDrawable(density)
+                                XposedHelpers.setObjectField(param.thisObject, "colorBackgroundDrawable", bgDrawable)
+                                val ripple = XposedHelpers.getObjectField(param.thisObject, "ripple") as? RippleDrawable
+                                val bgId = tileView.context.resources.getIdentifier("background", "id", TARGET_PACKAGE)
+                                if (bgId != 0 && ripple != null) {
+                                    try {
+                                        ripple.setDrawableByLayerId(bgId, bgDrawable)
+                                    } catch (_: Throwable) {}
+                                }
+                            }
+
+                            val fillColor = when (stateInt) {
+                                2 -> COLOR_QS_TILE_ACTIVE_BG
+                                1 -> COLOR_QS_TILE_INACTIVE_BG
+                                0 -> COLOR_QS_TILE_UNAVAILABLE_BG
+                                else -> COLOR_QS_TILE_INACTIVE_BG
+                            }
+                            val fgColor = when (stateInt) {
+                                2 -> COLOR_QS_TILE_ACTIVE_FG
+                                1 -> COLOR_QS_TILE_INACTIVE_FG
+                                0 -> COLOR_QS_TILE_UNAVAILABLE_FG
+                                else -> COLOR_QS_TILE_INACTIVE_FG
+                            }
+
+                            bgDrawable.setColor(fillColor)
+                            val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
+                            bgDrawable.setStroke(strokeWidth, COLOR_QS_TILE_STROKE)
+
+                            val label = XposedHelpers.getObjectField(param.thisObject, "label") as? TextView
+                            label?.setTextColor(fgColor)
+
+                            val secondaryLabel = try {
+                                XposedHelpers.callMethod(param.thisObject, "getSecondaryLabel") as? TextView
+                            } catch (_: Throwable) { null }
+                            secondaryLabel?.setTextColor(fgColor)
+
+                            val chevron = XposedHelpers.getObjectField(param.thisObject, "chevronView") as? ImageView
+                            chevron?.imageTintList = ColorStateList.valueOf(fgColor)
+
+                            val iconView = try {
+                                XposedHelpers.callMethod(param.thisObject, "getIcon")
+                            } catch (_: Throwable) { null }
+                            if (iconView != null) {
+                                val iconIv = try {
+                                    XposedHelpers.callMethod(iconView, "getIconView") as? ImageView
+                                } catch (_: Throwable) { null }
+                                iconIv?.imageTintList = ColorStateList.valueOf(fgColor)
+                            }
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in QSTileViewImpl.handleStateChanged hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: QSTileViewImpl.handleStateChanged")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook QSTileViewImpl.handleStateChanged", t)
+        }
+    }
+
+    @android.annotation.SuppressLint("DiscouragedApi")
+    private fun hookQuickSettingsBrightness(classLoader: ClassLoader) {
+        fun styleBrightnessSlider(sliderView: View) {
+            val context = sliderView.context
+            val res = context.resources
+            val sliderId = res.getIdentifier("slider", "id", TARGET_PACKAGE)
+            val slider = (if (sliderId != 0) sliderView.findViewById<SeekBar>(sliderId) else null)
+                ?: (try { XposedHelpers.getObjectField(sliderView, "mSlider") as? SeekBar } catch (_: Throwable) { null })
+                ?: return
+
+            // Active progress track tint: Sakura Pink #FFB7D5
+            slider.progressTintList = ColorStateList.valueOf(COLOR_BRIGHTNESS_PROGRESS)
+
+            // Inactive / background track tint: Soft Lilac #EADDF8
+            slider.progressBackgroundTintList = ColorStateList.valueOf(COLOR_BRIGHTNESS_TRACK)
+
+            val progressDrawable = slider.progressDrawable as? LayerDrawable
+            if (progressDrawable != null) {
+                // Background track layer
+                val bgDrawable = progressDrawable.findDrawableByLayerId(android.R.id.background)
+                bgDrawable?.setTint(COLOR_BRIGHTNESS_TRACK)
+
+                // Progress layer (inside DrawableWrapper -> LayerDrawable)
+                val progressLayer = progressDrawable.findDrawableByLayerId(android.R.id.progress)
+                val fullLayer = when (progressLayer) {
+                    is LayerDrawable -> progressLayer
+                    is DrawableWrapper -> progressLayer.drawable as? LayerDrawable
+                    else -> null
+                }
+                if (fullLayer != null) {
+                    val fgId = res.getIdentifier("slider_foreground", "id", TARGET_PACKAGE)
+                    if (fgId != 0) {
+                        val fgDrawable = fullLayer.findDrawableByLayerId(fgId)
+                        fgDrawable?.setTint(COLOR_BRIGHTNESS_PROGRESS)
+                    }
+                    val iconId = res.getIdentifier("slider_icon", "id", TARGET_PACKAGE)
+                    if (iconId != 0) {
+                        val iconDrawable = fullLayer.findDrawableByLayerId(iconId)
+                        iconDrawable?.setTint(COLOR_BRIGHTNESS_ICON)
+                        iconDrawable?.setTintList(ColorStateList.valueOf(COLOR_BRIGHTNESS_ICON))
+                    }
+                }
+            }
+        }
+
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.settings.brightness.BrightnessSliderView",
+                classLoader,
+                "onFinishInflate",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val view = param.thisObject as? View ?: return
+                            styleBrightnessSlider(view)
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in BrightnessSliderView.onFinishInflate hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: BrightnessSliderView.onFinishInflate")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook BrightnessSliderView.onFinishInflate", t)
+        }
+
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.settings.brightness.BrightnessSlider",
+                classLoader,
+                "onViewAttached",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val view = XposedHelpers.getObjectField(param.thisObject, "mView") as? View ?: return
+                            styleBrightnessSlider(view)
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in BrightnessSlider.onViewAttached hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: BrightnessSlider.onViewAttached")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook BrightnessSlider.onViewAttached", t)
         }
     }
 }
