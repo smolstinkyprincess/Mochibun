@@ -1006,27 +1006,12 @@ fun BottomDrawerHandle(
  */
 @Composable
 private fun AnimatedMenuIndicator(isAnimating: Boolean, color: Color) {
-    val lifecycleOwner = LocalLifecycleOwner.current
-    // 8 steps x 250ms = 2000ms full period
-    var step by remember { mutableIntStateOf(0) }
+    val step = rememberKeitaiStep(isAnimating)
+    val heart by remember { derivedStateOf { if (step.intValue >= 4) "♥" else "♡" } }
 
-    LaunchedEffect(isAnimating, lifecycleOwner) {
-        if (!isAnimating) {
-            step = 0
-            return@LaunchedEffect
-        }
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (true) {
-                delay(250)
-                step = (step + 1) % 8
-            }
-        }
-    }
-
-    val heart by remember { derivedStateOf { if (step >= 4) "♥" else "♡" } }
     // Integer dp bob: 0,1,2,1 repeating each second
     val bobModifier = Modifier.offset {
-        val bobDp = when (step % 4) { 1, 3 -> 1; 2 -> 2; else -> 0 }
+        val bobDp = when (step.intValue % 4) { 1, 3 -> 1; 2 -> 2; else -> 0 }
         IntOffset(0, bobDp.dp.roundToPx())
     }
 

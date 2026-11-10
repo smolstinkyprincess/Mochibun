@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.IntState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -21,6 +22,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 
 /**
@@ -44,6 +48,34 @@ fun Modifier.keitaiMascotBob(enabled: Boolean = true): Modifier {
     return this.offset {
         IntOffset(x = 0, y = bobOffsets[stepIndex])
     }
+}
+
+/**
+ * Shared 250ms 8-step keitai rhythm (2000ms full period).
+ * Automatically pauses on [Lifecycle.State.RESUMED] boundary to avoid CPU cycles when backgrounded.
+ * Resets to step 0 when [active] is false.
+ */
+@Composable
+fun rememberKeitaiStep(
+    active: Boolean = true,
+    totalSteps: Int = 8,
+    stepDurationMs: Long = 250L
+): IntState {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val step = remember { mutableIntStateOf(0) }
+    LaunchedEffect(active, lifecycleOwner) {
+        if (!active) {
+            step.intValue = 0
+            return@LaunchedEffect
+        }
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(stepDurationMs)
+                step.intValue = (step.intValue + 1) % totalSteps
+            }
+        }
+    }
+    return step
 }
 
 /**

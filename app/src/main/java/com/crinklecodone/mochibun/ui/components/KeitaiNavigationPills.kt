@@ -35,30 +35,6 @@ import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.focusedContainerColor
 import kotlinx.coroutines.delay
 
-/**
- * 8-step x 250ms ticker (2000ms period), same rhythm as the Home "♡ ▼ menu ▼ ♡" prompt.
- * Runs only while [active] and the activity is RESUMED; resets to step 0 when inactive.
- * Read the returned state in a layout-phase lambda so a tick never forces a measure pass.
- */
-@Composable
-private fun rememberKeitaiStep(active: Boolean): IntState {
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val step = remember { mutableIntStateOf(0) }
-    LaunchedEffect(active, lifecycleOwner) {
-        if (!active) {
-            step.intValue = 0
-            return@LaunchedEffect
-        }
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (true) {
-                delay(250)
-                step.intValue = (step.intValue + 1) % 8
-            }
-        }
-    }
-    return step
-}
-
 // Integer dp bob: 0,1,2,1 repeating each second
 private fun bobDpFor(step: Int): Int = when (step % 4) { 1, 3 -> 1; 2 -> 2; else -> 0 }
 
