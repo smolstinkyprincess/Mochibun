@@ -1,7 +1,16 @@
 package com.crinklecodone.mochibun.xposed
 
+import android.app.Dialog
+import android.content.res.ColorStateList
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.util.Log
 import android.view.View
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.SeekBar
 import android.widget.TextView
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
@@ -18,8 +27,9 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  * - Stage A: Status bar cellular suppression (A1), carrier text suppression (A2), and icon tint (A3).
  * - Stage B: 4-heart battery display in BatteryMeterView (percent forced on, stock icon hidden,
  *            hearts ♥/♡ with optional charging ✦, low-battery rose tint #F06292).
- *
- * Stub is in place for Stage C (squircle volume dialog).
+ * - Stage C: Squircle volume dialog in VolumeDialogImpl (content views styled with #F6F0FC fill,
+ *            20dp corner radius, 1.5dp #4A2E56 40% stroke; sliders tinted #FFB7D5 progress,
+ *            #EADDF8 track, and #4A2E56 icons).
  */
 class MochibunSystemUiHook : IXposedHookLoadPackage {
 
@@ -36,6 +46,32 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
         // Stage B palette colors
         // Rose for low battery (level <= 15 and not charging): #F06292
         private const val COLOR_ROSE_LOW_BATTERY = 0xFFF06292.toInt()
+
+        // Stage C palette colors & pre-allocated tints
+        // Dialog background fill #F6F0FC, 1.5dp stroke #4A2E56 at 40% alpha (0x664A2E56)
+        private const val COLOR_VOLUME_BG_FILL = 0xFFF6F0FC.toInt()
+        private const val COLOR_VOLUME_STROKE = 0x664A2E56.toInt()
+
+        // Volume row tints
+        private val VOLUME_PROGRESS_TINT_LIST = ColorStateList.valueOf(0xFFFFB7D5.toInt())
+        private val VOLUME_TRACK_TINT_LIST = ColorStateList.valueOf(0xFFEADDF8.toInt())
+        private val VOLUME_ICON_TINT_LIST = ColorStateList.valueOf(0xFF4A2E56.toInt())
+
+        /**
+         * Creates a squircle GradientDrawable:
+         * - Corner radius: 20dp * density
+         * - Fill: #F6F0FC
+         * - Stroke: 1.5dp * density of #4A2E56 at 40% alpha
+         */
+        internal fun createSquircleDrawable(density: Float): GradientDrawable {
+            return GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20f * density
+                setColor(COLOR_VOLUME_BG_FILL)
+                val strokeWidth = (1.5f * density).toInt().coerceAtLeast(1)
+                setStroke(strokeWidth, COLOR_VOLUME_STROKE)
+            }
+        }
 
         /**
          * Computes the 4-heart battery string:
@@ -631,14 +667,363 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
     }
 
     /**
-     * Stage C stub: squircle volume dialog in VolumeDialogImpl (do not activate yet).
+     * Stage C: Squircle volume dialog in VolumeDialogImpl.
+     * - Target VolumeDialogImpl.initDialog() (signature: private void initDialog()).
+     * - Apply a GradientDrawable (corner radius 20dp * density, fill #F6F0FC, 1.5dp stroke #4A2E56 at 40% alpha)
+     *   to dialog content views by id name (do NOT touch window background).
+     * - Style volume rows (initRow & updateVolumeRowTintH):
+     *   slider progress tint #FFB7D5, slider track tint #EADDF8, icons #4A2E56.
+     * - Re-apply on updates without allocating drawables per update.
      */
-    @Suppress("UNUSED_PARAMETER")
+    @android.annotation.SuppressLint("DiscouragedApi")
     private fun hookVolume(classLoader: ClassLoader) {
-        try {
-            Log.d(TAG, "hookVolume: Stage C stub registered (inactive until Stage C)")
+        val volumeDialogImplClassName = "com.android.systemui.volume.VolumeDialogImpl"
+
+        // Apply Mochibun pastel styling to a VolumeRow
+        fun styleVolumeRow(row: Any) {
+            val slider = XposedHelpers.getObjectField(row, "slider") as? SeekBar
+            val icon = XposedHelpers.getObjectField(row, "icon") as? ImageButton
+            val sliderProgressSolid = XposedHelpers.getObjectField(row, "sliderProgressSolid") as? Drawable
+            val sliderBgSolid = XposedHelpers.getObjectField(row, "sliderBgSolid") as? Drawable
+            val sliderProgressIcon = XposedHelpers.getObjectField(row, "sliderProgressIcon") as? Drawable
+            val sliderBgIcon = XposedHelpers.getObjectField(row, "sliderBgIcon") as? Drawable
+
+            // Slider progress tint: #FFB7D5
+            sliderProgressSolid?.setTintList(VOLUME_PROGRESS_TINT_LIST)
+            slider?.progressTintList = VOLUME_PROGRESS_TINT_LIST
+
+            // Slider track tint: #EADDF8
+            sliderBgSolid?.setTintList(VOLUME_TRACK_TINT_LIST)
+            slider?.progressBackgroundTintList = VOLUME_TRACK_TINT_LIST
+            val progressDrawable = slider?.progressDrawable as? LayerDrawable
+            progressDrawable?.findDrawableByLayerId(android.R.id.background)?.setTintList(VOLUME_TRACK_TINT_LIST)
+
+            // Icons: deep plum #4A2E56
+            icon?.imageTintList = VOLUME_ICON_TINT_LIST
+            icon?.imageAlpha = 255
+            sliderProgressIcon?.setTintList(VOLUME_ICON_TINT_LIST)
+            sliderBgIcon?.setTintList(VOLUME_ICON_TINT_LIST)
+
+            val number = XposedHelpers.getObjectField(row, "number") as? TextView
+            number?.setTextColor(COLOR_DARK_MODE_DEEP_PLUM)
+        }
+
+        // Apply squircle GradientDrawable to content views found by ID name
+        fun applySquircleToDialog(instance: Any) {
+            val dialog = XposedHelpers.getObjectField(instance, "mDialog") as? Dialog ?: return
+            val context = dialog.context
+            val res = context.resources
+            val density = res.displayMetrics.density
+
+            fun findView(idName: String): View? {
+                val id = res.getIdentifier(idName, "id", TARGET_PACKAGE)
+                return if (id != 0) dialog.findViewById(id) else null
+            }
+
+            // Top container wraps ringer drawer, rows, and settings
+            val topContainer = findView("volume_dialog_top_container")
+            if (topContainer != null) {
+                topContainer.background = createSquircleDrawable(density)
+                topContainer.clipToOutline = true
+            }
+
+            // Set top/bottom cap backgrounds to transparent so topContainer forms a unified squircle.
+            // NOTE: ringerDrawerContainer's background MUST be a LayerDrawable with >= 1 layers,
+            // because VolumeDialogImpl.lambda$initDialog$5 explicitly casts
+            // (LayerDrawable) this.mRingerAndDrawerContainer.getBackground()!
+            val ringerDrawerContainer = findView("volume_ringer_and_drawer_container")
+            ringerDrawerContainer?.background = LayerDrawable(arrayOf(ColorDrawable(0)))
+
+            val settingsContainer = findView("settings_container")
+            settingsContainer?.background = ColorDrawable(0)
+
+            // Live caption button below top container
+            val captionsView = findView("odi_captions")
+            if (captionsView != null) {
+                captionsView.background = createSquircleDrawable(density)
+                captionsView.clipToOutline = true
+            }
+
+            // Standalone ringer button (if present)
+            val ringerView = findView("ringer")
+            if (ringerView != null) {
+                ringerView.background = createSquircleDrawable(density)
+                ringerView.clipToOutline = true
+            }
+
+            // Hide the 3-item ringer drawer container when closed so it does not add ~84dp of empty height
+            val isDrawerOpen = try {
+                XposedHelpers.getBooleanField(instance, "mIsRingerDrawerOpen")
+            } catch (_: Throwable) {
+                false
+            }
+            if (!isDrawerOpen) {
+                val drawerContainer = findView("volume_drawer_container")
+                drawerContainer?.visibility = View.GONE
+            }
+
+            // Tint ringer and settings icons to deep plum #4A2E56
+            val settingsIcon = findView("settings") as? ImageButton
+            settingsIcon?.imageTintList = VOLUME_ICON_TINT_LIST
+
+            val ringerIcon = findView("ringer_icon") as? ImageButton
+            ringerIcon?.imageTintList = VOLUME_ICON_TINT_LIST
+
+            val ringerMuteIcon = findView("volume_drawer_mute_icon") as? ImageView
+            ringerMuteIcon?.imageTintList = VOLUME_ICON_TINT_LIST
+
+            val ringerVibrateIcon = findView("volume_drawer_vibrate_icon") as? ImageView
+            ringerVibrateIcon?.imageTintList = VOLUME_ICON_TINT_LIST
+
+            val ringerNormalIcon = findView("volume_drawer_normal_icon") as? ImageView
+            ringerNormalIcon?.imageTintList = VOLUME_ICON_TINT_LIST
+
+            val captionsIcon = findView("odi_captions_icon") as? ImageView
+            captionsIcon?.imageTintList = VOLUME_ICON_TINT_LIST
+        }
+
+        val volumeRowClass = try {
+            XposedHelpers.findClass(
+                "com.android.systemui.volume.VolumeDialogImpl\$VolumeRow",
+                classLoader
+            )
         } catch (t: Throwable) {
-            Log.d(TAG, "hookVolume failed", t)
+            Log.d(TAG, "Failed to find VolumeRow class", t)
+            null
+        }
+
+        // 1. Hook initDialog() to style dialog content views with squircle drawables
+        try {
+            XposedHelpers.findAndHookMethod(
+                volumeDialogImplClassName,
+                classLoader,
+                "initDialog",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            XposedHelpers.setBooleanField(param.thisObject, "mShowActiveStreamOnly", true)
+                            applySquircleToDialog(param.thisObject)
+                            Log.d(TAG, "Applied squircle backgrounds to VolumeDialogImpl content views")
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in VolumeDialogImpl.initDialog hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: VolumeDialogImpl.initDialog")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook VolumeDialogImpl.initDialog", t)
+        }
+
+        // 2. Hook setTopContainerBackgroundDrawable() so subsequent layout calls do not overwrite squircle
+        try {
+            XposedHelpers.findAndHookMethod(
+                volumeDialogImplClassName,
+                classLoader,
+                "setTopContainerBackgroundDrawable",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val topContainer = XposedHelpers.getObjectField(param.thisObject, "mTopContainer") as? View
+                            if (topContainer != null) {
+                                val density = topContainer.resources.displayMetrics.density
+                                topContainer.background = createSquircleDrawable(density)
+                                topContainer.clipToOutline = true
+                            }
+                            val ringerDrawer = XposedHelpers.getObjectField(param.thisObject, "mRingerAndDrawerContainer") as? View
+                            ringerDrawer?.background = LayerDrawable(arrayOf(ColorDrawable(0)))
+                            val settingsView = XposedHelpers.getObjectField(param.thisObject, "mSettingsView") as? View
+                            settingsView?.background = ColorDrawable(0)
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in VolumeDialogImpl.setTopContainerBackgroundDrawable hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: VolumeDialogImpl.setTopContainerBackgroundDrawable")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook VolumeDialogImpl.setTopContainerBackgroundDrawable", t)
+        }
+
+        // 3. Hook initRow to style rows and scale slider height for 480x800 display
+        if (volumeRowClass != null) {
+            try {
+                XposedHelpers.findAndHookMethod(
+                    volumeDialogImplClassName,
+                    classLoader,
+                    "initRow",
+                    volumeRowClass,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Boolean::class.javaPrimitiveType,
+                    Boolean::class.javaPrimitiveType,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val row = param.args[0] ?: return
+                                styleVolumeRow(row)
+
+                                val rowView = XposedHelpers.getObjectField(row, "view") as? View
+                                rowView?.background = ColorDrawable(0)
+
+                                val res = rowView?.resources ?: return
+                                val density = res.displayMetrics.density
+                                val sliderFrameId = res.getIdentifier("volume_row_slider_frame", "id", TARGET_PACKAGE)
+                                val sliderFrame = if (sliderFrameId != 0) rowView.findViewById<View>(sliderFrameId) else null
+                                val slider = XposedHelpers.getObjectField(row, "slider") as? SeekBar
+
+                                // Scale down from stock 192dp to 128dp for compact 480x800 display
+                                val targetHeight = (128f * density).toInt()
+                                sliderFrame?.layoutParams?.let { lp ->
+                                    lp.height = targetHeight
+                                    sliderFrame.layoutParams = lp
+                                }
+                                slider?.layoutParams?.let { lp ->
+                                    lp.width = targetHeight
+                                    slider.layoutParams = lp
+                                }
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Error in VolumeDialogImpl.initRow hook", t)
+                            }
+                        }
+                    }
+                )
+                Log.d(TAG, "Installed hook: VolumeDialogImpl.initRow")
+            } catch (t: Throwable) {
+                Log.d(TAG, "Failed to hook VolumeDialogImpl.initRow", t)
+            }
+
+            // 4. Hook updateVolumeRowTintH to re-apply custom tints whenever SystemUI re-tints sliders
+            try {
+                XposedHelpers.findAndHookMethod(
+                    volumeDialogImplClassName,
+                    classLoader,
+                    "updateVolumeRowTintH",
+                    volumeRowClass,
+                    Boolean::class.javaPrimitiveType,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val row = param.args[0]
+                                if (row != null) {
+                                    styleVolumeRow(row)
+                                }
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Error in VolumeDialogImpl.updateVolumeRowTintH hook", t)
+                            }
+                        }
+                    }
+                )
+                Log.d(TAG, "Installed hook: VolumeDialogImpl.updateVolumeRowTintH")
+            } catch (t: Throwable) {
+                Log.d(TAG, "Failed to hook VolumeDialogImpl.updateVolumeRowTintH", t)
+            }
+
+            // 5. Hook shouldBeVisibleH to enforce strictly single active slider
+            try {
+                XposedHelpers.findAndHookMethod(
+                    volumeDialogImplClassName,
+                    classLoader,
+                    "shouldBeVisibleH",
+                    volumeRowClass,
+                    volumeRowClass,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            try {
+                                val row = param.args[0]
+                                val activeRow = param.args[1]
+                                if (row != null && activeRow != null) {
+                                    val rowStream = XposedHelpers.getIntField(row, "stream")
+                                    val activeStream = XposedHelpers.getIntField(activeRow, "stream")
+                                    param.result = (rowStream == activeStream)
+                                }
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Error in VolumeDialogImpl.shouldBeVisibleH hook", t)
+                            }
+                        }
+                    }
+                )
+                Log.d(TAG, "Installed hook: VolumeDialogImpl.shouldBeVisibleH")
+            } catch (t: Throwable) {
+                Log.d(TAG, "Failed to hook VolumeDialogImpl.shouldBeVisibleH", t)
+            }
+
+            // 6. Hook updateRowsH to ensure all row views keep transparent backgrounds (no dark capsule)
+            try {
+                XposedHelpers.findAndHookMethod(
+                    volumeDialogImplClassName,
+                    classLoader,
+                    "updateRowsH",
+                    volumeRowClass,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val rows = XposedHelpers.getObjectField(param.thisObject, "mRows") as? List<*> ?: return
+                                for (row in rows) {
+                                    if (row != null) {
+                                        val rowView = XposedHelpers.getObjectField(row, "view") as? View
+                                        rowView?.background = ColorDrawable(0)
+                                    }
+                                }
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Error in VolumeDialogImpl.updateRowsH hook", t)
+                            }
+                        }
+                    }
+                )
+                Log.d(TAG, "Installed hook: VolumeDialogImpl.updateRowsH")
+            } catch (t: Throwable) {
+                Log.d(TAG, "Failed to hook VolumeDialogImpl.updateRowsH", t)
+            }
+        }
+
+        // 7. Hook showH to ensure drawer void remains GONE when dialog opens
+        try {
+            XposedHelpers.findAndHookMethod(
+                volumeDialogImplClassName,
+                classLoader,
+                "showH",
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val isDrawerOpen = XposedHelpers.getBooleanField(param.thisObject, "mIsRingerDrawerOpen")
+                            if (!isDrawerOpen) {
+                                val drawer = XposedHelpers.getObjectField(param.thisObject, "mRingerDrawerContainer") as? View
+                                drawer?.visibility = View.GONE
+                            }
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in VolumeDialogImpl.showH hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: VolumeDialogImpl.showH")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook VolumeDialogImpl.showH", t)
+        }
+
+        // 8. Hook hideRingerDrawer to set drawer container back to GONE when closed
+        try {
+            XposedHelpers.findAndHookMethod(
+                volumeDialogImplClassName,
+                classLoader,
+                "hideRingerDrawer",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val drawer = XposedHelpers.getObjectField(param.thisObject, "mRingerDrawerContainer") as? View
+                            drawer?.visibility = View.GONE
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in VolumeDialogImpl.hideRingerDrawer hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: VolumeDialogImpl.hideRingerDrawer")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook VolumeDialogImpl.hideRingerDrawer", t)
         }
     }
 }
