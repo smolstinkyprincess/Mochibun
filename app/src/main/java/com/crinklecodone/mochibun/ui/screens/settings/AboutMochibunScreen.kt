@@ -3,6 +3,7 @@ package com.crinklecodone.mochibun.ui.screens.settings
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import android.view.KeyEvent
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,7 +31,6 @@ import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.ui.components.MascotMood
 import com.crinklecodone.mochibun.ui.components.MochibunMascot
 import com.crinklecodone.mochibun.ui.components.mascotTintColor
-import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
@@ -94,7 +94,7 @@ internal fun AboutMochibunSubScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
                     if (event.type == KeyEventType.KeyUp) {
                         SoundEffectManager.play(context, SoundEffect.BACK)
                         onBack()

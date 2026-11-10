@@ -27,6 +27,7 @@ import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.core.system.ClamshellState
 import com.crinklecodone.mochibun.core.system.MemoryTrimTier
 import com.crinklecodone.mochibun.core.system.memoryTrimTier
+import com.crinklecodone.mochibun.core.util.MochibunSystemActions
 import com.crinklecodone.mochibun.core.widget.MochibunWidgetHost
 import com.crinklecodone.mochibun.ui.theme.MochibunTheme
 import com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge
@@ -39,7 +40,6 @@ import com.crinklecodone.mochibun.data.repository.IconPackManager
 import com.crinklecodone.mochibun.data.repository.WidgetRepository
 import com.crinklecodone.mochibun.service.InputArbiter
 import com.crinklecodone.mochibun.service.InputLayer
-import com.crinklecodone.mochibun.xposed.MochibunKeyHook
 
 class MainActivity : ComponentActivity() {
     private val launcherViewModel: LauncherViewModel by viewModels()
@@ -133,15 +133,15 @@ class MainActivity : ComponentActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent == null) return
             val action = intent.action
-            if (action == MochibunKeyHook.ACTION_LSK_TRIGGER ||
-                action == MochibunKeyHook.ACTION_BACK_TRIGGER ||
-                action == MochibunKeyHook.ACTION_HOME_TRIGGER
+            if (action == MochibunSystemActions.ACTION_LSK_TRIGGER ||
+                action == MochibunSystemActions.ACTION_BACK_TRIGGER ||
+                action == MochibunSystemActions.ACTION_HOME_TRIGGER
             ) {
                 @Suppress("DEPRECATION")
-                val rawEvent = intent.getParcelableExtra<KeyEvent>(MochibunKeyHook.EXTRA_KEY_EVENT)
+                val rawEvent = intent.getParcelableExtra<KeyEvent>(MochibunSystemActions.EXTRA_KEY_EVENT)
                 val targetKeyCode = when (action) {
-                    MochibunKeyHook.ACTION_LSK_TRIGGER -> KeyEvent.KEYCODE_APP_SWITCH
-                    MochibunKeyHook.ACTION_BACK_TRIGGER -> KeyEvent.KEYCODE_BACK
+                    MochibunSystemActions.ACTION_LSK_TRIGGER -> KeyEvent.KEYCODE_APP_SWITCH
+                    MochibunSystemActions.ACTION_BACK_TRIGGER -> KeyEvent.KEYCODE_BACK
                     else -> KeyEvent.KEYCODE_HOME
                 }
                 val event = if (rawEvent != null) {
@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
                             rawEvent.repeatCount,
                             rawEvent.metaState,
                             rawEvent.deviceId,
-                            if (action == MochibunKeyHook.ACTION_LSK_TRIGGER) 580 else rawEvent.scanCode,
+                            if (action == MochibunSystemActions.ACTION_LSK_TRIGGER) 580 else rawEvent.scanCode,
                             rawEvent.flags,
                             rawEvent.source
                         )
@@ -162,8 +162,8 @@ class MainActivity : ComponentActivity() {
                         rawEvent
                     }
                 } else {
-                    val keyAction = intent.getIntExtra(MochibunKeyHook.EXTRA_ACTION, KeyEvent.ACTION_DOWN)
-                    val repeatCount = intent.getIntExtra(MochibunKeyHook.EXTRA_REPEAT_COUNT, 0)
+                    val keyAction = intent.getIntExtra(MochibunSystemActions.EXTRA_ACTION, KeyEvent.ACTION_DOWN)
+                    val repeatCount = intent.getIntExtra(MochibunSystemActions.EXTRA_REPEAT_COUNT, 0)
                     KeyEvent(SystemClock.uptimeMillis(), SystemClock.uptimeMillis(), keyAction, targetKeyCode, repeatCount)
                 }
                 dispatchKeyEvent(event)
@@ -210,6 +210,9 @@ class MainActivity : ComponentActivity() {
         @Volatile
         var keyEventInterceptor: ((KeyEvent) -> Boolean)? = null
 
+        @Volatile
+        var settingsBackKeyHandler: ((KeyEvent) -> Boolean)? = null
+
         private const val WAKE_SETTLE_MS = 1000L
     }
 
@@ -222,6 +225,7 @@ class MainActivity : ComponentActivity() {
 
     @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (settingsBackKeyHandler?.invoke(event) == true) return true
         if (HardwareRemapManager.keyCaptureListener?.invoke(event) == true) return true
         val interceptor = keyEventInterceptor
         if (InputArbiter.isNewPress(event)) {
@@ -243,6 +247,7 @@ class MainActivity : ComponentActivity() {
         // Drop the host's references to widget views, which hold this activity
         widgetHost.releaseViews(this)
         keyEventInterceptor = null
+        settingsBackKeyHandler = null
         isForeground = false
         ClamshellManager.removeListener(clamshellListener)
         try {
@@ -331,9 +336,9 @@ class MainActivity : ComponentActivity() {
         registerReceiver(userPresentReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
 
         val softKeyFilter = IntentFilter().apply {
-            addAction(MochibunKeyHook.ACTION_LSK_TRIGGER)
-            addAction(MochibunKeyHook.ACTION_BACK_TRIGGER)
-            addAction(MochibunKeyHook.ACTION_HOME_TRIGGER)
+            addAction(MochibunSystemActions.ACTION_LSK_TRIGGER)
+            addAction(MochibunSystemActions.ACTION_BACK_TRIGGER)
+            addAction(MochibunSystemActions.ACTION_HOME_TRIGGER)
         }
         androidx.core.content.ContextCompat.registerReceiver(
             this,

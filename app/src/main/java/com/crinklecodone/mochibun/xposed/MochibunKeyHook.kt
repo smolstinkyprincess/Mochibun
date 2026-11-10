@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.view.KeyEvent
+import com.crinklecodone.mochibun.core.util.MochibunSystemActions
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -27,20 +28,20 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         const val PACKAGE_MOCHIBUN = "com.crinklecodone.mochibun"
         const val ACTIVITY_MAIN = "com.crinklecodone.mochibun.ui.MainActivity"
 
-        // Broadcast actions
-        const val ACTION_TOGGLE_CURSOR = "com.crinklecodone.mochibun.ACTION_TOGGLE_CURSOR"
-        const val ACTION_CURSOR_KEY = "com.crinklecodone.mochibun.ACTION_CURSOR_KEY"
-        const val ACTION_LSK_TRIGGER = "com.crinklecodone.mochibun.ACTION_LSK_TRIGGER"
-        const val ACTION_BACK_TRIGGER = "com.crinklecodone.mochibun.ACTION_BACK_TRIGGER"
-        const val ACTION_HOME_TRIGGER = "com.crinklecodone.mochibun.ACTION_HOME_TRIGGER"
-        const val ACTION_HARDWARE_KEY_TRIGGER = "com.crinklecodone.mochibun.ACTION_HARDWARE_KEY_TRIGGER"
+        // Shared broadcast actions and extras live in a no-Xposed constants object so the app
+        // process can safely register receivers without linking against the Xposed API directly.
+        const val ACTION_TOGGLE_CURSOR = MochibunSystemActions.ACTION_TOGGLE_CURSOR
+        const val ACTION_CURSOR_KEY = MochibunSystemActions.ACTION_CURSOR_KEY
+        const val ACTION_LSK_TRIGGER = MochibunSystemActions.ACTION_LSK_TRIGGER
+        const val ACTION_BACK_TRIGGER = MochibunSystemActions.ACTION_BACK_TRIGGER
+        const val ACTION_HOME_TRIGGER = MochibunSystemActions.ACTION_HOME_TRIGGER
+        const val ACTION_HARDWARE_KEY_TRIGGER = MochibunSystemActions.ACTION_HARDWARE_KEY_TRIGGER
 
-        // Intent extras
-        const val EXTRA_KEY_EVENT = "key_event"
-        const val EXTRA_KEY_CODE = "keyCode"
-        const val EXTRA_ACTION = "action"
-        const val EXTRA_REPEAT_COUNT = "repeatCount"
-        const val EXTRA_CURSOR_ACTIVE = "isCursorActive"
+        const val EXTRA_KEY_EVENT = MochibunSystemActions.EXTRA_KEY_EVENT
+        const val EXTRA_KEY_CODE = MochibunSystemActions.EXTRA_KEY_CODE
+        const val EXTRA_ACTION = MochibunSystemActions.EXTRA_ACTION
+        const val EXTRA_REPEAT_COUNT = MochibunSystemActions.EXTRA_REPEAT_COUNT
+        const val EXTRA_CURSOR_ACTIVE = MochibunSystemActions.EXTRA_CURSOR_ACTIVE
 
         // AT-M120 physical scan codes
         private const val SCANCODE_SIDE_F4 = 62

@@ -1,9 +1,11 @@
 package com.crinklecodone.mochibun.ui.screens
 
 import android.view.KeyEvent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -19,9 +21,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
+import com.crinklecodone.mochibun.ui.MainActivity
 import com.crinklecodone.mochibun.ui.components.curtainUnfurl
 import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
-import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
 import com.crinklecodone.mochibun.ui.screens.settings.*
@@ -61,13 +63,58 @@ fun SettingsHubScreen(
     initialDestination: SettingsDestination = SettingsDestination.Hub
 ) {
     var currentDestination by remember { mutableStateOf(initialDestination) }
+    var rootFocusedIndex by remember { mutableIntStateOf(0) }
+    val rootListState = rememberLazyListState()
+    val context = LocalContext.current
+
+    fun handleBack() {
+        SoundEffectManager.play(context, SoundEffect.BACK)
+        if (currentDestination == SettingsDestination.Hub) {
+            onClose()
+        } else {
+            currentDestination = SettingsDestination.Hub
+        }
+    }
+
+    DisposableEffect(Unit) {
+        MainActivity.settingsBackKeyHandler = { event ->
+            if (event.keyCode != KeyEvent.KEYCODE_BACK &&
+                event.keyCode != KeyEvent.KEYCODE_ESCAPE
+            ) {
+                false
+            } else {
+                if (event.action == KeyEvent.ACTION_UP) handleBack()
+                true
+            }
+        }
+        onDispose {
+            MainActivity.settingsBackKeyHandler = null
+        }
+    }
+
+    val settingsModifier = modifier.onPreviewKeyEvent { event ->
+        if (event.nativeKeyEvent.keyCode != KeyEvent.KEYCODE_BACK) {
+            return@onPreviewKeyEvent false
+        }
+        if (event.type == KeyEventType.KeyUp) {
+            handleBack()
+        }
+        true
+    }
+
+    BackHandler {
+        handleBack()
+    }
 
     when (currentDestination) {
         SettingsDestination.Hub -> {
             SettingsHubRootScreen(
                 onNavigate = { currentDestination = it },
                 onClose = onClose,
-                modifier = modifier
+                focusedIndex = rootFocusedIndex,
+                onFocusedIndexChange = { rootFocusedIndex = it },
+                listState = rootListState,
+                modifier = settingsModifier
             )
         }
         SettingsDestination.Appearance -> {
@@ -78,13 +125,13 @@ fun SettingsHubScreen(
                 onPickWallpaperClick = onPickWallpaperClick,
                 onResetWallpaperClick = onResetWallpaperClick,
                 hasCustomWallpaper = hasCustomWallpaper,
-                modifier = modifier
+                modifier = settingsModifier
             )
         }
         SettingsDestination.CursorHardware -> {
             CursorHardwareSettingsSubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
-                modifier = modifier
+                modifier = settingsModifier
             )
         }
         SettingsDestination.Behavior -> {
@@ -93,32 +140,32 @@ fun SettingsHubScreen(
                 onOpenHiddenApps = onOpenHiddenApps,
                 onCreateFolderClick = onCreateFolderClick,
                 onOpenHardwareButtons = onOpenHardwareButtons,
-                modifier = modifier
+                modifier = settingsModifier
             )
         }
         SettingsDestination.PermissionsRoot -> {
             PermissionsRootSettingsSubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
-                modifier = modifier
+                modifier = settingsModifier
             )
         }
         SettingsDestination.BackupRestore -> {
             BackupRestoreSettingsSubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onSettingsRestored = onSettingsRestored,
-                modifier = modifier
+                modifier = settingsModifier
             )
         }
         SettingsDestination.About -> {
             AboutMochibunSubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
-                modifier = modifier
+                modifier = settingsModifier
             )
         }
         SettingsDestination.Keyboard -> {
             KeyboardSettingsSubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
-                modifier = modifier
+                modifier = settingsModifier
             )
         }
     }
@@ -131,12 +178,13 @@ fun SettingsHubScreen(
 private fun SettingsHubRootScreen(
     onNavigate: (SettingsDestination) -> Unit,
     onClose: () -> Unit,
+    focusedIndex: Int,
+    onFocusedIndexChange: (Int) -> Unit,
+    listState: LazyListState,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
-    var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
     val totalItems = 7 // 7 primary navigation cards
@@ -158,7 +206,7 @@ private fun SettingsHubRootScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
                     if (event.type == KeyEventType.KeyUp) {
                         SoundEffectManager.play(context, SoundEffect.BACK)
                         onClose()
@@ -188,7 +236,7 @@ private fun SettingsHubRootScreen(
                 if (digit != null && digit in 1..totalItems) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         val targetIndex = digit - 1
-                        focusedIndex = targetIndex
+                        onFocusedIndexChange(targetIndex)
                         SoundEffectManager.play(context, SoundEffect.SELECT)
                         when (targetIndex) {
                             0 -> onNavigate(SettingsDestination.Appearance)
@@ -204,11 +252,11 @@ private fun SettingsHubRootScreen(
                 }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                     if (event.type == KeyEventType.KeyDown) {
-                        focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                        onFocusedIndexChange(if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                             if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
                         } else {
                             if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
-                        }
+                        })
                         SoundEffectManager.play(context, SoundEffect.NAV)
                     }
                     return@onPreviewKeyEvent true
@@ -337,7 +385,7 @@ fun SettingsHubDialog(
     BasicAlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
-            dismissOnBackPress = true,
+            dismissOnBackPress = false,
             dismissOnClickOutside = false,
             usePlatformDefaultWidth = false
         ),

@@ -1,7 +1,8 @@
 /**
  * System-wide virtual mouse cursor foreground service for the Chinoe AT-M120 (Android 12).
- * Driven via system-level broadcast events (LSPosed MochibunKeyHook), translating discrete
- * D-pad presses into continuous, fluid hardware-accelerated cursor motion.
+ * Driven via system-level broadcast events that are routed through the launcher’s neutral
+ * action constants, translating discrete D-pad presses into continuous, fluid
+ * hardware-accelerated cursor motion.
  */
 package com.crinklecodone.mochibun.service
 
@@ -29,6 +30,7 @@ import com.crinklecodone.mochibun.core.system.ClamshellListener
 import com.crinklecodone.mochibun.core.system.ClamshellManager
 import com.crinklecodone.mochibun.core.system.RootTouchInjector
 import com.crinklecodone.mochibun.core.util.CursorPhysics
+import com.crinklecodone.mochibun.core.util.MochibunSystemActions
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
 import com.crinklecodone.mochibun.ui.overlay.CursorOverlayView
 import kotlin.math.abs
@@ -43,14 +45,14 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         private const val NOTIFICATION_CHANNEL_ID = "virtual_cursor_service"
         private const val NOTIFICATION_ID = 4801
 
-        const val ACTION_TOGGLE_CURSOR = "com.crinklecodone.mochibun.ACTION_TOGGLE_CURSOR"
-        const val ACTION_CURSOR_KEY = "com.crinklecodone.mochibun.ACTION_CURSOR_KEY"
+        const val ACTION_TOGGLE_CURSOR = MochibunSystemActions.ACTION_TOGGLE_CURSOR
+        const val ACTION_CURSOR_KEY = MochibunSystemActions.ACTION_CURSOR_KEY
 
-        const val EXTRA_KEY_EVENT = "key_event"
-        const val EXTRA_KEY_CODE = "keyCode"
-        const val EXTRA_ACTION = "action"
-        const val EXTRA_REPEAT_COUNT = "repeatCount"
-        const val EXTRA_CURSOR_ACTIVE = "isCursorActive"
+        const val EXTRA_KEY_EVENT = MochibunSystemActions.EXTRA_KEY_EVENT
+        const val EXTRA_KEY_CODE = MochibunSystemActions.EXTRA_KEY_CODE
+        const val EXTRA_ACTION = MochibunSystemActions.EXTRA_ACTION
+        const val EXTRA_REPEAT_COUNT = MochibunSystemActions.EXTRA_REPEAT_COUNT
+        const val EXTRA_CURSOR_ACTIVE = MochibunSystemActions.EXTRA_CURSOR_ACTIVE
 
         @Volatile
         var isServiceRunning = false

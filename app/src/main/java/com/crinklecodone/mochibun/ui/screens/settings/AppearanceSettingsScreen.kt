@@ -38,7 +38,6 @@ import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.TypographyManager
 import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
-import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
@@ -156,7 +155,7 @@ internal fun AppearanceSettingsSubScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
                     if (event.type == KeyEventType.KeyUp) {
                         SoundEffectManager.play(context, SoundEffect.BACK)
                         if (isEditingName) {

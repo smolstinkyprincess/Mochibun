@@ -76,6 +76,9 @@ object ActiveHookTheme {
         }
     @Volatile var lowBattery: Int = DEFAULT_LOW_BATTERY
 
+    val notificationRows: MutableSet<View> =
+        Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<View, Boolean>()))
+
     // Pre-allocated / pre-cached ColorStateLists to avoid allocations on draw
     @Volatile var primaryColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_PRIMARY) } catch (_: Throwable) { null }
         internal set
@@ -347,6 +350,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
     private val trackedNumPadButtons = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<ImageView, Boolean>()))
     private val trackedEmergencyButtons = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<TextView, Boolean>()))
     private val trackedMessageAreas = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<TextView, Boolean>()))
+    private val trackedNotificationFooters = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<View, Boolean>()))
 
     @Volatile
     private var trackedNotificationPanelView: WeakReference<View>? = null
@@ -609,6 +613,28 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                         styleMessageArea(messageArea)
                     } catch (t: Throwable) {
                         Log.d(TAG, "Error refreshing KeyguardMessageArea", t)
+                    }
+                }
+
+                // 17. Notification cards and the shade's Clear All button
+                val notificationRows = synchronized(ActiveHookTheme.notificationRows) {
+                    ActiveHookTheme.notificationRows.toList()
+                }
+                for (row in notificationRows) {
+                    try {
+                        styleNotificationRow(row)
+                    } catch (t: Throwable) {
+                        Log.d(TAG, "Error refreshing notification row", t)
+                    }
+                }
+                val notificationFooters = synchronized(trackedNotificationFooters) {
+                    trackedNotificationFooters.toList()
+                }
+                for (footer in notificationFooters) {
+                    try {
+                        styleNotificationFooter(footer)
+                    } catch (t: Throwable) {
+                        Log.d(TAG, "Error refreshing notification footer", t)
                     }
                 }
 
@@ -1022,6 +1048,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
         hookBattery(lpparam.classLoader)
         hookVolume(lpparam.classLoader)
         hookQuickSettings(lpparam.classLoader)
+        hookNotifications(lpparam.classLoader)
         hookToast(lpparam.classLoader)
         hookLockscreen(lpparam.classLoader)
         hookPinBouncer(lpparam.classLoader)
@@ -1877,6 +1904,261 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
     }
 
     /**
+     * Applies the active pastel palette to notification rows, content text, action buttons,
+     * and the notification shade's Clear All button.
+     */
+    private fun hookNotifications(classLoader: ClassLoader) {
+        val rowClassName = "com.android.systemui.statusbar.notification.row.ExpandableNotificationRow"
+        val rowHooks = listOf("onFinishInflate", "onNotificationUpdated")
+        for (methodName in rowHooks) {
+            try {
+                XposedHelpers.findAndHookMethod(
+                    rowClassName,
+                    classLoader,
+                    methodName,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                (param.thisObject as? View)?.let(::styleNotificationRow)
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Failed styling notification row after $methodName", t)
+                            }
+                        }
+                    }
+                )
+                Log.d(TAG, "Installed notification row hook: $methodName")
+            } catch (t: Throwable) {
+                Log.d(TAG, "Unable to hook notification row method $methodName; skipping", t)
+            }
+        }
+
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.statusbar.notification.row.NotificationBackgroundView",
+                classLoader,
+                "setTint",
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        try {
+                            param.args[0] = 0
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Failed suppressing stock notification background tint", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed notification background tint suppression")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Unable to hook NotificationBackgroundView.setTint; skipping", t)
+        }
+
+        for (methodName in listOf("setContractedChild", "setExpandedChild", "setHeadsUpChild")) {
+            try {
+                XposedHelpers.findAndHookMethod(
+                    "com.android.systemui.statusbar.notification.row.NotificationContentView",
+                    classLoader,
+                    methodName,
+                    View::class.java,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                (param.thisObject as? View)?.let(::styleNotificationExpandButton)
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Failed styling notification expand button after $methodName", t)
+                            }
+                        }
+                    }
+                )
+                Log.d(TAG, "Installed notification content hook: $methodName")
+            } catch (t: Throwable) {
+                Log.d(TAG, "Unable to hook NotificationContentView.$methodName; skipping", t)
+            }
+        }
+
+        val footerClassName = "com.android.systemui.statusbar.notification.row.FooterView"
+        for (methodName in listOf("onFinishInflate", "setTextColor", "onConfigurationChanged")) {
+            try {
+                val parameterTypes = when (methodName) {
+                    "setTextColor" -> arrayOf(Int::class.javaPrimitiveType!!)
+                    "onConfigurationChanged" -> arrayOf(android.content.res.Configuration::class.java)
+                    else -> emptyArray()
+                }
+                val footerHook = object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            (param.thisObject as? View)?.let { footer ->
+                                trackedNotificationFooters.add(footer)
+                                styleNotificationFooter(footer)
+                            }
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Failed styling notification footer after $methodName", t)
+                        }
+                    }
+                }
+                val hookArguments = ArrayList<Any>(parameterTypes.size + 1).apply {
+                    parameterTypes.forEach(::add)
+                    add(footerHook)
+                }
+                XposedHelpers.findAndHookMethod(
+                    footerClassName,
+                    classLoader,
+                    methodName,
+                    *hookArguments.toTypedArray()
+                )
+                Log.d(TAG, "Installed notification footer hook: $methodName")
+            } catch (t: Throwable) {
+                Log.d(TAG, "Unable to hook FooterView.$methodName; skipping", t)
+            }
+        }
+    }
+
+    private fun styleNotificationRow(row: View) {
+        try {
+            ActiveHookTheme.notificationRows.add(row)
+            val density = row.resources.displayMetrics.density
+            val background = try {
+                XposedHelpers.getObjectField(row, "mBackgroundNormal") as? View
+            } catch (_: Throwable) {
+                null
+            } ?: run {
+                val backgroundId = row.resources.getIdentifier("backgroundNormal", "id", TARGET_PACKAGE)
+                if (backgroundId != 0) row.findViewById(backgroundId) else null
+            }
+
+            if (background != null) {
+                val border = (0x4D shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF)
+                val drawable = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 19f * density
+                    setColor(ActiveHookTheme.container)
+                    setStroke((1.2f * density).toInt().coerceAtLeast(1), border)
+                }
+                XposedHelpers.callMethod(background, "setCustomBackground", drawable)
+            }
+
+            styleNotificationExpandButton(row)
+
+            styleNotificationContentTree(row, inActionContainer = false)
+            row.invalidate()
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed applying pastel notification row styling", t)
+        }
+    }
+
+    private fun styleNotificationExpandButton(root: View) {
+        try {
+            val expandButton = findNotificationViewByName(root, "expand_button") ?: return
+            val pill = findNotificationViewByName(expandButton, "expand_button_pill")
+            val visibleButton = pill ?: expandButton
+            val density = root.resources.displayMetrics.density
+            val border = (0x4D shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF)
+            visibleButton.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(ActiveHookTheme.container)
+                setStroke((1.2f * density).toInt().coerceAtLeast(1), border)
+            }
+            visibleButton.backgroundTintList = null
+
+            (findNotificationViewByName(expandButton, "expand_button_icon") as? ImageView)?.let { icon ->
+                icon.imageTintList = ActiveHookTheme.accentDeepColorStateList
+                icon.setColorFilter(ActiveHookTheme.accentDeep, PorterDuff.Mode.SRC_IN)
+            }
+            visibleButton.invalidate()
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed applying pastel notification expand-button styling", t)
+        }
+    }
+
+    private fun findNotificationViewByName(root: View, targetName: String): View? {
+        val viewName = try {
+            if (root.id != View.NO_ID) root.resources.getResourceEntryName(root.id) else null
+        } catch (_: Throwable) {
+            null
+        }
+        if (viewName == targetName) return root
+
+        if (root is ViewGroup) {
+            for (index in 0 until root.childCount) {
+                findNotificationViewByName(root.getChildAt(index), targetName)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun styleNotificationContentTree(view: View, inActionContainer: Boolean) {
+        val idName = try {
+            if (view.id != View.NO_ID) view.resources.getResourceEntryName(view.id).lowercase() else ""
+        } catch (_: Throwable) {
+            ""
+        }
+        val inActions = inActionContainer ||
+            idName.contains("action") ||
+            idName.contains("smart_reply")
+
+        if (view is TextView) {
+            when {
+                view.id == android.R.id.title || idName in setOf("title", "notification_title") ->
+                    view.setTextColor(ActiveHookTheme.accentDeep)
+                idName in setOf(
+                    "text", "text_line_1", "big_text", "text2", "notification_text"
+                ) ->
+                    view.setTextColor((0xD9 shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF))
+                idName.contains("app_name") || idName.contains("header") ||
+                    idName.contains("time") || idName.contains("chronometer") ->
+                    view.setTextColor((0xA6 shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF))
+            }
+
+            if (inActions && (view.isClickable || idName.contains("action"))) {
+                val density = view.resources.displayMetrics.density
+                val actionBackground = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 16f * density
+                    setColor(ActiveHookTheme.primary)
+                }
+                view.background = actionBackground
+                view.setTextColor(ActiveHookTheme.accentDeep)
+            }
+        }
+
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                styleNotificationContentTree(view.getChildAt(index), inActions)
+            }
+        }
+    }
+
+    private fun styleNotificationFooter(footer: View) {
+        try {
+            val resources = footer.resources
+            val dismissId = resources.getIdentifier("dismiss_text", "id", TARGET_PACKAGE)
+            val clearAllId = resources.getIdentifier("clear_all", "id", TARGET_PACKAGE)
+            val dismissButton = (if (dismissId != 0) footer.findViewById(dismissId) else null)
+                ?: (if (clearAllId != 0) footer.findViewById(clearAllId) else null)
+                ?: try {
+                    XposedHelpers.getObjectField(footer, "mDismissButton") as? View
+                } catch (_: Throwable) {
+                    null
+                }
+            val button = dismissButton as? TextView ?: return
+            val density = resources.displayMetrics.density
+            val border = (0x4D shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF)
+            button.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 16f * density
+                setColor(ActiveHookTheme.container)
+                setStroke((1.2f * density).toInt().coerceAtLeast(1), border)
+            }
+            button.text = "♡ Clear All ♡"
+            button.setTextColor(ActiveHookTheme.accentDeep)
+            button.clipToOutline = true
+            button.invalidate()
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed applying pastel notification footer styling", t)
+        }
+    }
+
+    /**
      * Stage D1: Scrim & Blur Suppression.
      * Disables GPU surface blur on MT6761 hardware and replaces stock black shade backdrop with
      * soft translucent lavender / frosted ivory #F6F0FC at ~92% opacity (0xEBF6F0FC).
@@ -2511,6 +2793,116 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
         hookLockscreenCarrierGreeting(classLoader)
         hookLockscreenLockIcon(classLoader)
         hookLockscreenScrimSafety(classLoader)
+        hookLockscreenEmergencyButton(classLoader)
+    }
+
+    /**
+     * Keeps the keyguard emergency call button hidden despite controller visibility updates.
+     */
+    private fun hookLockscreenEmergencyButton(classLoader: ClassLoader) {
+        try {
+            val emergencyButtonClass = XposedHelpers.findClass(
+                "com.android.keyguard.EmergencyButton",
+                classLoader
+            )
+            XposedHelpers.findAndHookMethod(
+                View::class.java,
+                "setVisibility",
+                Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        try {
+                            if (emergencyButtonClass.isInstance(param.thisObject)) {
+                                param.args[0] = View.GONE
+                            }
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error suppressing EmergencyButton visibility", t)
+                        }
+                    }
+                }
+            )
+
+            try {
+                val controllerClass = XposedHelpers.findClass(
+                    "com.android.keyguard.EmergencyButtonController",
+                    classLoader
+                )
+                XposedHelpers.findAndHookMethod(
+                    controllerClass,
+                    "updateEmergencyCallButton",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val button = XposedHelpers.getObjectField(param.thisObject, "mView") as? View
+                                button?.visibility = View.GONE
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Error hiding EmergencyButton after controller update", t)
+                            }
+                        }
+                    }
+                )
+            } catch (t: Throwable) {
+                Log.d(TAG, "EmergencyButtonController hook unavailable", t)
+            }
+
+            try {
+                val securityContainerClass = XposedHelpers.findClass(
+                    "com.android.keyguard.KeyguardSecurityContainer",
+                    classLoader
+                )
+                XposedHelpers.findAndHookMethod(
+                    securityContainerClass,
+                    "onFinishInflate",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                hideEmergencyButtonInContainer(param.thisObject as? View)
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Error searching KeyguardSecurityContainer", t)
+                            }
+                        }
+                    }
+                )
+            } catch (t: Throwable) {
+                Log.d(TAG, "KeyguardSecurityContainer fallback unavailable", t)
+            }
+
+            try {
+                XposedHelpers.findAndHookMethod(
+                    "com.android.systemui.statusbar.phone.KeyguardBouncer",
+                    classLoader,
+                    "ensureView",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val root = XposedHelpers.getObjectField(param.thisObject, "mRoot") as? View
+                                hideEmergencyButtonInContainer(root)
+                            } catch (t: Throwable) {
+                                Log.d(TAG, "Error searching KeyguardBouncer root", t)
+                            }
+                        }
+                    }
+                )
+            } catch (t: Throwable) {
+                Log.d(TAG, "KeyguardBouncer fallback unavailable", t)
+            }
+
+            Log.d(TAG, "Installed hook: Suppress EmergencyButton")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to install EmergencyButton suppression hook", t)
+        }
+    }
+
+    private fun hideEmergencyButtonInContainer(container: View?) {
+        if (container == null) return
+        val buttonId = container.resources.getIdentifier(
+            "emergency_call_button",
+            "id",
+            "com.android.systemui"
+        )
+        if (buttonId != 0) {
+            container.findViewById<View>(buttonId)?.visibility = View.GONE
+        }
     }
 
     /**

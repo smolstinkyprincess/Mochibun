@@ -51,7 +51,6 @@ import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
 import com.crinklecodone.mochibun.ui.dialogs.LidLedColorPickerDialog
 import com.crinklecodone.mochibun.ui.dialogs.PixelRibbonBow
 import com.crinklecodone.mochibun.ui.dialogs.RetroKeyBadge
-import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
@@ -276,7 +275,7 @@ internal fun BehaviorSettingsSubScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (isBackDismissKey(native.keyCode)) {
+                if (native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
                     if (event.type == KeyEventType.KeyUp) {
                         SoundEffectManager.play(context, SoundEffect.BACK)
                         onBack()

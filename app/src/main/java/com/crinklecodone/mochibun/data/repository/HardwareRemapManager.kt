@@ -12,6 +12,7 @@ import com.android.quickstep.RecentsActivity
 import com.crinklecodone.mochibun.BuildConfig
 import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.core.system.TorchManager
+import com.crinklecodone.mochibun.core.util.MochibunSystemActions
 import com.crinklecodone.mochibun.data.model.ActionType
 import com.crinklecodone.mochibun.data.model.BASELINE_MTK_KPD_MAPPINGS
 import com.crinklecodone.mochibun.data.model.ButtonActionConfig
@@ -70,13 +71,13 @@ object HardwareRemapManager {
     private val hardwareKeyReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (context == null || intent == null) return
-            if (intent.action == com.crinklecodone.mochibun.xposed.MochibunKeyHook.ACTION_HARDWARE_KEY_TRIGGER) {
+            if (intent.action == MochibunSystemActions.ACTION_HARDWARE_KEY_TRIGGER) {
                 @Suppress("DEPRECATION")
-                val rawEvent = intent.getParcelableExtra<KeyEvent>(com.crinklecodone.mochibun.xposed.MochibunKeyHook.EXTRA_KEY_EVENT)
+                val rawEvent = intent.getParcelableExtra<KeyEvent>(MochibunSystemActions.EXTRA_KEY_EVENT)
                 val event = rawEvent ?: run {
-                    val keyCode = intent.getIntExtra(com.crinklecodone.mochibun.xposed.MochibunKeyHook.EXTRA_KEY_CODE, KeyEvent.KEYCODE_UNKNOWN)
-                    val action = intent.getIntExtra(com.crinklecodone.mochibun.xposed.MochibunKeyHook.EXTRA_ACTION, KeyEvent.ACTION_DOWN)
-                    val repeatCount = intent.getIntExtra(com.crinklecodone.mochibun.xposed.MochibunKeyHook.EXTRA_REPEAT_COUNT, 0)
+                    val keyCode = intent.getIntExtra(MochibunSystemActions.EXTRA_KEY_CODE, KeyEvent.KEYCODE_UNKNOWN)
+                    val action = intent.getIntExtra(MochibunSystemActions.EXTRA_ACTION, KeyEvent.ACTION_DOWN)
+                    val repeatCount = intent.getIntExtra(MochibunSystemActions.EXTRA_REPEAT_COUNT, 0)
                     KeyEvent(SystemClock.uptimeMillis(), SystemClock.uptimeMillis(), action, keyCode, repeatCount)
                 }
                 onKeyEvent(context, event)
@@ -92,7 +93,7 @@ object HardwareRemapManager {
         getPrefs(appContext).registerOnSharedPreferenceChangeListener { _, _ ->
             reloadActiveConfig(appContext)
         }
-        val filter = android.content.IntentFilter(com.crinklecodone.mochibun.xposed.MochibunKeyHook.ACTION_HARDWARE_KEY_TRIGGER)
+        val filter = android.content.IntentFilter(MochibunSystemActions.ACTION_HARDWARE_KEY_TRIGGER)
         androidx.core.content.ContextCompat.registerReceiver(
             appContext,
             hardwareKeyReceiver,
