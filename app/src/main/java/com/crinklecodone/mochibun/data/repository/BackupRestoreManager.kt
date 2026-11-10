@@ -484,6 +484,7 @@ object BackupRestoreManager {
 
             // Refresh in-memory reactive state
             PreferencesManager.init(context)
+            com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge.broadcastSavedTheme(context)
 
             Result.success(
                 BackupSummary(
@@ -511,5 +512,6 @@ object BackupRestoreManager {
 
         PreferencesManager.init(context)
         HardwareRemapManager.reloadActiveConfig(context)
+        com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge.broadcastSavedTheme(context)
     }
 }

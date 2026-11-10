@@ -372,6 +372,7 @@ object ThemeBundleManager {
 
             editor.apply()
             PreferencesManager.init(context)
+            com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge.broadcastSavedTheme(context)
 
             Result.success(targetManifest)
         } catch (e: Exception) {

@@ -28,6 +28,7 @@ import com.crinklecodone.mochibun.core.system.MemoryTrimTier
 import com.crinklecodone.mochibun.core.system.memoryTrimTier
 import com.crinklecodone.mochibun.core.widget.MochibunWidgetHost
 import com.crinklecodone.mochibun.ui.theme.MochibunTheme
+import com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge
 import com.crinklecodone.mochibun.ui.theme.ThemeBackground
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -192,6 +193,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         isForeground = true
         com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog.checkAsync(this, force = false)
+        SystemUiThemeBridge.broadcastSavedTheme(this)
     }
 
     override fun onPause() {
@@ -347,6 +349,7 @@ class MainActivity : ComponentActivity() {
                 .forEach(widgetHost::deleteAppWidgetIdSafely)
         }
 
+        SystemUiThemeBridge.broadcastSavedTheme(this)
         enableEdgeToEdge()
         setContent {
             MochibunTheme {

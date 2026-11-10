@@ -84,6 +84,7 @@ import com.crinklecodone.mochibun.ui.screens.ThemeStudioDialog
 import com.crinklecodone.mochibun.ui.screens.firstLetterOf
 import com.crinklecodone.mochibun.ui.theme.LauncherTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge
 import com.crinklecodone.mochibun.ui.theme.loadSavedTheme
 import com.crinklecodone.mochibun.ui.theme.saveTheme
 import kotlinx.coroutines.Dispatchers
@@ -699,6 +700,7 @@ fun MainLauncher(
             currentTheme = newTheme
             saveTheme(preferences, newTheme)
             PreferencesManager.setThemePreset(context, newTheme.name)
+            SystemUiThemeBridge.broadcastTheme(context, newTheme)
             activeModal = null
         }
     }
@@ -1380,6 +1382,7 @@ fun MainLauncher(
                                     }
                                     withContext(Dispatchers.Main) {
                                         currentTheme = loadSavedTheme(preferences)
+                                        SystemUiThemeBridge.broadcastTheme(context, currentTheme)
                                         launcherVm.reloadAllFromPreferences()
                                     }
                                 } catch (e: Exception) {

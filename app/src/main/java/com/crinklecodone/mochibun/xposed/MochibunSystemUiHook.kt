@@ -1,6 +1,11 @@
 package com.crinklecodone.mochibun.xposed
 
+import android.animation.ValueAnimator
 import android.app.Dialog
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.graphics.PorterDuff
 import android.graphics.drawable.ColorDrawable
@@ -9,6 +14,8 @@ import android.graphics.drawable.DrawableWrapper
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.RippleDrawable
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
@@ -21,6 +28,92 @@ import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import java.util.Collections
+import java.util.WeakHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * In-memory active theme cache for Mochibun's SystemUI hooks running inside com.android.systemui.
+ * Stores volatile primitive ARGB integers and pre-cached ColorStateLists.
+ * Ensures zero object allocations during frame/draw callbacks.
+ */
+object ActiveHookTheme {
+    const val DEFAULT_PRIMARY: Int = 0xFFFFB7D5.toInt()        // Sakura Pink #FFB7D5
+    const val DEFAULT_CONTAINER: Int = 0xFFFFF9FB.toInt()      // Cream / Soft Surface #FFF9FB
+    const val DEFAULT_ACCENT_DEEP: Int = 0xFF4A2E56.toInt()    // Deep Plum #4A2E56
+    const val DEFAULT_TRACK: Int = 0xFFEADDF8.toInt()          // Soft Lilac #EADDF8
+    const val DEFAULT_SCRIM: Int = 0xEBF6F0FC.toInt()          // Frosted Ivory / Lavender ~92%
+    const val DEFAULT_LOW_BATTERY: Int = 0xFFF06292.toInt()    // Rose #F06292
+
+    @Volatile var primary: Int = DEFAULT_PRIMARY
+        set(value) {
+            field = value
+            try { primaryColorStateList = ColorStateList.valueOf(value) } catch (_: Throwable) {}
+        }
+    @Volatile var container: Int = DEFAULT_CONTAINER
+    @Volatile var accentDeep: Int = DEFAULT_ACCENT_DEEP
+        set(value) {
+            field = value
+            try { accentDeepColorStateList = ColorStateList.valueOf(value) } catch (_: Throwable) {}
+        }
+    @Volatile var track: Int = DEFAULT_TRACK
+        set(value) {
+            field = value
+            try { trackColorStateList = ColorStateList.valueOf(value) } catch (_: Throwable) {}
+        }
+    @Volatile var scrim: Int = DEFAULT_SCRIM
+        set(value) {
+            field = if ((value ushr 24) == 0xFF) {
+                (0xEB shl 24) or (value and 0x00FFFFFF)
+            } else {
+                value
+            }
+        }
+    @Volatile var lowBattery: Int = DEFAULT_LOW_BATTERY
+
+    // Pre-allocated / pre-cached ColorStateLists to avoid allocations on draw
+    @Volatile var primaryColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_PRIMARY) } catch (_: Throwable) { null }
+        internal set
+    @Volatile var trackColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_TRACK) } catch (_: Throwable) { null }
+        internal set
+    @Volatile var accentDeepColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_ACCENT_DEEP) } catch (_: Throwable) { null }
+        internal set
+
+    // Alpha-derived dynamic colors for Volume dialog and Quick Settings
+    val volumeStroke: Int
+        get() = (0x66 shl 24) or (accentDeep and 0x00FFFFFF)
+
+    val qsTileStroke: Int
+        get() = (0x4D shl 24) or (accentDeep and 0x00FFFFFF)
+
+    val qsTileUnavailableBg: Int
+        get() = (0x66 shl 24) or (track and 0x00FFFFFF)
+
+    val qsTileInactiveFg: Int
+        get() = (0x99 shl 24) or (accentDeep and 0x00FFFFFF)
+
+    val qsTileUnavailableFg: Int
+        get() = (0x4D shl 24) or (accentDeep and 0x00FFFFFF)
+
+    val qsFooterBtnStroke: Int
+        get() = (0x4D shl 24) or (accentDeep and 0x00FFFFFF)
+
+    fun updateColors(
+        newPrimary: Int,
+        newContainer: Int,
+        newAccentDeep: Int,
+        newTrack: Int,
+        newScrim: Int,
+        newLowBattery: Int = DEFAULT_LOW_BATTERY
+    ) {
+        primary = newPrimary
+        container = newContainer
+        accentDeep = newAccentDeep
+        track = newTrack
+        scrim = newScrim
+        lowBattery = newLowBattery
+    }
+}
 
 /**
  * LSPosed / Xposed hook inside SystemUI (target package: "com.android.systemui") for
@@ -36,6 +129,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  *            #EADDF8 track, and #4A2E56 icons).
  * - Stage D: Kawaii Quick Settings & shade restyle (scrim & blur suppression, squircle tiles
  *            in 3 pastel states, and pastel brightness slider tinting).
+ * - Dynamic Theme Synchronization: Listens for explicit THEME_CHANGED broadcasts from Mochibun,
+ *            updating ActiveHookTheme in-memory and re-rendering active hooked views instantly.
  */
 class MochibunSystemUiHook : IXposedHookLoadPackage {
 
@@ -43,80 +138,40 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
         private const val TAG = "MochibunSysUI"
         private const val TARGET_PACKAGE = "com.android.systemui"
 
-        // Stage A3 palette colors
-        // Icons drawn dark (over light backgrounds): deep plum #4A2E56
-        private const val COLOR_DARK_MODE_DEEP_PLUM = 0xFF4A2E56.toInt()
-        // Icons drawn light (over dark backgrounds): pale pink #FFE4F0
-        private const val COLOR_LIGHT_MODE_PALE_PINK = 0xFFFFE4F0.toInt()
+        // Canonical action and extra keys for dynamic theme synchronization
+        const val ACTION_THEME_CHANGED = "com.crinklecodone.mochibun.action.THEME_CHANGED"
+        const val EXTRA_PRIMARY = "EXTRA_PRIMARY"
+        const val EXTRA_CONTAINER = "EXTRA_CONTAINER"
+        const val EXTRA_ACCENT_DEEP = "EXTRA_ACCENT_DEEP"
+        const val EXTRA_TRACK = "EXTRA_TRACK"
+        const val EXTRA_SCRIM = "EXTRA_SCRIM"
 
-        // Stage B palette colors
-        // Rose for low battery (level <= 15 and not charging): #F06292
-        private const val COLOR_ROSE_LOW_BATTERY = 0xFFF06292.toInt()
+        // Stage A3 fallback palette colors
+        internal const val COLOR_DARK_MODE_DEEP_PLUM = 0xFF4A2E56.toInt()
+        internal const val COLOR_LIGHT_MODE_PALE_PINK = 0xFFFFE4F0.toInt()
 
-        // Stage C palette colors & pre-allocated tints
-        // Dialog background fill #F6F0FC, 1.5dp stroke #4A2E56 at 40% alpha (0x664A2E56)
-        private const val COLOR_VOLUME_BG_FILL = 0xFFF6F0FC.toInt()
-        private const val COLOR_VOLUME_STROKE = 0x664A2E56.toInt()
+        // Stage B fallback palette colors
+        internal const val COLOR_ROSE_LOW_BATTERY = 0xFFF06292.toInt()
 
-        // Volume row tints
-        private val VOLUME_PROGRESS_TINT_LIST = ColorStateList.valueOf(0xFFFFB7D5.toInt())
-        private val VOLUME_TRACK_TINT_LIST = ColorStateList.valueOf(0xFFEADDF8.toInt())
-        private val VOLUME_ICON_TINT_LIST = ColorStateList.valueOf(0xFF4A2E56.toInt())
+        // Stage C fallback palette colors & pre-allocated tints
+        internal const val COLOR_VOLUME_BG_FILL = 0xFFF6F0FC.toInt()
+        internal const val COLOR_VOLUME_STROKE = 0x664A2E56.toInt()
 
-        // Stage D palette colors (Quick Settings & Shade)
-        // Soft translucent lavender / frosted ivory backdrop: #F6F0FC at ~92% (ARGB: 0xEB, 0xF6, 0xF0, 0xFC)
+        // Stage D fallback palette colors (Quick Settings & Shade)
         internal const val COLOR_QS_BACKDROP_TINT = 0xEBF6F0FC.toInt()
-
-        // Tile stroke: 1.2dp with #4A2E56 at 30% alpha (0x4D4A2E56)
         internal const val COLOR_QS_TILE_STROKE = 0x4D4A2E56.toInt()
 
-        // Tile fill colors
         internal const val COLOR_QS_TILE_ACTIVE_BG = 0xFFFFB7D5.toInt()        // Sakura Pink #FFB7D5
         internal const val COLOR_QS_TILE_INACTIVE_BG = 0xFFFFF9FB.toInt()      // Cream / Soft Surface #FFF9FB
         internal const val COLOR_QS_TILE_UNAVAILABLE_BG = 0x66EADDF8.toInt()   // Muted Soft Lilac #EADDF8 at 40%
 
-        // Tile text / icon / chevron colors
         internal const val COLOR_QS_TILE_ACTIVE_FG = 0xFF4A2E56.toInt()        // Deep Plum #4A2E56
         internal const val COLOR_QS_TILE_INACTIVE_FG = 0x994A2E56.toInt()      // Deep Plum at 60% alpha
         internal const val COLOR_QS_TILE_UNAVAILABLE_FG = 0x4D4A2E56.toInt()   // Deep Plum at 30% alpha
 
-        // Brightness slider tints
         internal const val COLOR_BRIGHTNESS_PROGRESS = 0xFFFFB7D5.toInt()      // Sakura Pink #FFB7D5
         internal const val COLOR_BRIGHTNESS_TRACK = 0xFFEADDF8.toInt()         // Soft Lilac #EADDF8
         internal const val COLOR_BRIGHTNESS_ICON = 0xFF4A2E56.toInt()          // Deep Plum #4A2E56
-
-        /**
-         * Creates a squircle GradientDrawable for Volume dialog:
-         * - Corner radius: 20dp * density
-         * - Fill: #F6F0FC
-         * - Stroke: 1.5dp * density of #4A2E56 at 40% alpha
-         */
-        internal fun createSquircleDrawable(density: Float): GradientDrawable {
-            return GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 20f * density
-                setColor(COLOR_VOLUME_BG_FILL)
-                val strokeWidth = (1.5f * density).toInt().coerceAtLeast(1)
-                setStroke(strokeWidth, COLOR_VOLUME_STROKE)
-            }
-        }
-
-        /**
-         * Creates a squircle GradientDrawable for QS tiles:
-         * - Shape: Rectangle
-         * - Corner radius: 14dp * density
-         * - Stroke: 1.2dp * density with color #4A2E56 at 30% alpha (0x4D4A2E56)
-         * - Default color: Cream / Soft Surface #FFF9FB
-         */
-        internal fun createTileSquircleDrawable(density: Float): GradientDrawable {
-            return GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 14f * density
-                val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
-                setStroke(strokeWidth, COLOR_QS_TILE_STROKE)
-                setColor(COLOR_QS_TILE_INACTIVE_BG)
-            }
-        }
 
         // Quick Settings footer action button styling (Edit, Power, Settings)
         internal const val COLOR_QS_FOOTER_BTN_BG = 0xFFFFF9FB.toInt()         // Soft Cream #FFF9FB
@@ -125,19 +180,52 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
         internal val QS_FOOTER_BTN_ICON_TINT_LIST = ColorStateList.valueOf(COLOR_QS_FOOTER_BTN_ICON)
 
         /**
+         * Creates a squircle GradientDrawable for Volume dialog:
+         * - Corner radius: 20dp * density
+         * - Fill: ActiveHookTheme.container
+         * - Stroke: 1.5dp * density of ActiveHookTheme.volumeStroke
+         */
+        internal fun createSquircleDrawable(density: Float): GradientDrawable {
+            return GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20f * density
+                setColor(ActiveHookTheme.container)
+                val strokeWidth = (1.5f * density).toInt().coerceAtLeast(1)
+                setStroke(strokeWidth, ActiveHookTheme.volumeStroke)
+            }
+        }
+
+        /**
+         * Creates a squircle GradientDrawable for QS tiles:
+         * - Shape: Rectangle
+         * - Corner radius: 14dp * density
+         * - Stroke: 1.2dp * density with color ActiveHookTheme.qsTileStroke
+         * - Default color: ActiveHookTheme.container
+         */
+        internal fun createTileSquircleDrawable(density: Float): GradientDrawable {
+            return GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 14f * density
+                val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
+                setStroke(strokeWidth, ActiveHookTheme.qsTileStroke)
+                setColor(ActiveHookTheme.container)
+            }
+        }
+
+        /**
          * Creates a squircle GradientDrawable for QS footer action buttons:
          * - Shape: Rectangle
          * - Corner radius: 12dp * density
-         * - Stroke: 1.2dp * density with color #4A2E56 at 30% alpha (0x4D4A2E56)
-         * - Fill: Soft Cream #FFF9FB
+         * - Stroke: 1.2dp * density with color ActiveHookTheme.qsFooterBtnStroke
+         * - Fill: ActiveHookTheme.container
          */
         internal fun createFooterButtonDrawable(density: Float): GradientDrawable {
             return GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 12f * density
                 val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
-                setStroke(strokeWidth, COLOR_QS_FOOTER_BTN_STROKE)
-                setColor(COLOR_QS_FOOTER_BTN_BG)
+                setStroke(strokeWidth, ActiveHookTheme.qsFooterBtnStroke)
+                setColor(ActiveHookTheme.container)
             }
         }
 
@@ -155,10 +243,577 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             BatteryHeartFormatter.format(level, charging)
     }
 
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+    private val isReceiverRegistered = AtomicBoolean(false)
+
+    // Weak sets for tracking active hooked view instances across SystemUI
+    private val trackedDarkDispatchers = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<Any, Boolean>()))
+    private val trackedBatteryViews = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<Any, Boolean>()))
+    private val trackedVolumeDialogs = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<Any, Boolean>()))
+    private val trackedTileViews = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<View, Boolean>()))
+    private val trackedBrightnessSliders = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<View, Boolean>()))
+    private val trackedFooters = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<View, Boolean>()))
+    private val trackedScrimControllers = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<Any, Boolean>()))
+
+    private val themeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, intent: Intent?) {
+            if (intent == null || intent.action != ACTION_THEME_CHANGED) return
+
+            Log.d(TAG, "Theme broadcast received! Updating colors.")
+            val primary = intent.getIntExtra(EXTRA_PRIMARY, ActiveHookTheme.DEFAULT_PRIMARY)
+            val container = intent.getIntExtra(EXTRA_CONTAINER, ActiveHookTheme.DEFAULT_CONTAINER)
+            val accentDeep = intent.getIntExtra(EXTRA_ACCENT_DEEP, ActiveHookTheme.DEFAULT_ACCENT_DEEP)
+            val track = intent.getIntExtra(EXTRA_TRACK, ActiveHookTheme.DEFAULT_TRACK)
+            val scrim = intent.getIntExtra(EXTRA_SCRIM, ActiveHookTheme.DEFAULT_SCRIM)
+
+            Log.d(
+                TAG,
+                "Received THEME_CHANGED broadcast: primary=#%08X container=#%08X accentDeep=#%08X track=#%08X scrim=#%08X".format(
+                    primary, container, accentDeep, track, scrim
+                )
+            )
+
+            ActiveHookTheme.primary = primary
+            ActiveHookTheme.container = container
+            ActiveHookTheme.accentDeep = accentDeep
+            ActiveHookTheme.track = track
+            ActiveHookTheme.scrim = scrim
+
+            // Trigger invalidate and state re-application on all cached views
+            refreshAllHookedViews()
+        }
+    }
+
+    /**
+     * Registers a dynamic BroadcastReceiver in com.android.systemui for ACTION_THEME_CHANGED.
+     * Guaranteed to run at most once.
+     */
+    @android.annotation.SuppressLint("WrongConstant", "UnprotectedReceiver", "NewApi")
+    private fun ensureReceiverRegistered(context: Context) {
+        if (isReceiverRegistered.compareAndSet(false, true)) {
+            val filter = IntentFilter(ACTION_THEME_CHANGED)
+            try {
+                // Use Context.RECEIVER_EXPORTED (value 2) for cross-process broadcasts on Android 12+
+                context.registerReceiver(themeReceiver, filter, Context.RECEIVER_EXPORTED)
+                Log.d(TAG, "Theme broadcast receiver successfully registered (EXPORTED)")
+            } catch (_: NoSuchMethodError) {
+                try {
+                    context.registerReceiver(themeReceiver, filter)
+                    Log.d(TAG, "Theme broadcast receiver successfully registered (legacy fallback)")
+                } catch (t: Throwable) {
+                    isReceiverRegistered.set(false)
+                    Log.e(TAG, "Failed to register theme broadcast receiver (legacy fallback)", t)
+                }
+            } catch (t: Throwable) {
+                try {
+                    context.registerReceiver(themeReceiver, filter)
+                    Log.d(TAG, "Theme broadcast receiver successfully registered (fallback)")
+                } catch (inner: Throwable) {
+                    isReceiverRegistered.set(false)
+                    Log.e(TAG, "Failed to register theme broadcast receiver", inner)
+                }
+            }
+        }
+    }
+
+    /**
+     * Re-renders all cached active hooked views across SystemUI with the new ActiveHookTheme colors.
+     */
+    private fun refreshAllHookedViews() {
+        mainHandler.post {
+            try {
+                // 1. Status Bar Icons & Clock (DarkIconDispatcherImpl)
+                for (dispatcher in trackedDarkDispatchers) {
+                    try {
+                        XposedHelpers.setIntField(dispatcher, "mDarkModeIconColorSingleTone", ActiveHookTheme.accentDeep)
+                        XposedHelpers.setIntField(dispatcher, "mLightModeIconColorSingleTone", ActiveHookTheme.container)
+                        val intensity = try {
+                            XposedHelpers.getFloatField(dispatcher, "mDarkIntensity")
+                        } catch (_: Throwable) {
+                            0f
+                        }
+                        XposedHelpers.callMethod(dispatcher, "applyDarkIntensity", intensity)
+                    } catch (t: Throwable) {
+                        Log.d(TAG, "Error refreshing DarkIconDispatcherImpl", t)
+                    }
+                }
+
+                // 2. Battery Meter (BatteryMeterView)
+                for (battery in trackedBatteryViews) {
+                    try {
+                        applyHeartBattery(battery)
+                        (battery as? View)?.invalidate()
+                    } catch (t: Throwable) {
+                        Log.d(TAG, "Error refreshing BatteryMeterView", t)
+                    }
+                }
+
+                // 3. Volume Dialog (VolumeDialogImpl)
+                for (dialogImpl in trackedVolumeDialogs) {
+                    try {
+                        applySquircleToDialog(dialogImpl)
+                        val rows = XposedHelpers.getObjectField(dialogImpl, "mRows") as? List<*>
+                        if (rows != null) {
+                            for (row in rows) {
+                                if (row != null) {
+                                    styleVolumeRow(row)
+                                }
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        Log.d(TAG, "Error refreshing VolumeDialogImpl", t)
+                    }
+                }
+
+                // 4. Quick Settings Tiles (QSTileViewImpl)
+                for (tileView in trackedTileViews) {
+                    try {
+                        refreshTileView(tileView)
+                    } catch (t: Throwable) {
+                        Log.d(TAG, "Error refreshing QSTileViewImpl", t)
+                    }
+                }
+
+                // 5. Brightness Slider (BrightnessSliderView)
+                for (sliderView in trackedBrightnessSliders) {
+                    try {
+                        styleBrightnessSlider(sliderView)
+                        sliderView.invalidate()
+                    } catch (t: Throwable) {
+                        Log.d(TAG, "Error refreshing BrightnessSliderView", t)
+                    }
+                }
+
+                // 6. QS Footer Action Buttons (Edit, Power, Settings)
+                for (footerView in trackedFooters) {
+                    try {
+                        styleFooterView(footerView)
+                        footerView.invalidate()
+                    } catch (t: Throwable) {
+                        Log.d(TAG, "Error refreshing QSFooterView", t)
+                    }
+                }
+
+                // 7. Scrim backdrop
+                for (scrimController in trackedScrimControllers) {
+                    try {
+                        val scrimBehind = XposedHelpers.getObjectField(scrimController, "mScrimBehind") as? View
+                        val notifScrim = XposedHelpers.getObjectField(scrimController, "mNotificationsScrim") as? View
+                        scrimBehind?.invalidate()
+                        notifScrim?.invalidate()
+                        try {
+                            XposedHelpers.callMethod(scrimController, "applyAndDispatchState")
+                        } catch (_: Throwable) {}
+                    } catch (t: Throwable) {
+                        Log.d(TAG, "Error refreshing ScrimController", t)
+                    }
+                }
+
+                Log.d(TAG, "Successfully refreshed all hooked SystemUI surfaces with active theme")
+            } catch (t: Throwable) {
+                Log.e(TAG, "Error executing refreshAllHookedViews", t)
+            }
+        }
+    }
+
+    private fun refreshHookedViews() = refreshAllHookedViews()
+
+    private fun applyHeartBattery(instance: Any) {
+        val textView = XposedHelpers.getObjectField(instance, "mBatteryPercentView") as? TextView ?: return
+        val level = XposedHelpers.getIntField(instance, "mLevel")
+        val charging = XposedHelpers.getBooleanField(instance, "mCharging")
+
+        textView.text = getBatteryHearts(level, charging)
+
+        if (level <= 15 && !charging) {
+            textView.setTextColor(ActiveHookTheme.lowBattery)
+        } else {
+            val textColor = XposedHelpers.getIntField(instance, "mTextColor")
+            if (textColor != 0) {
+                textView.setTextColor(textColor)
+            } else {
+                textView.setTextColor(ActiveHookTheme.accentDeep)
+            }
+        }
+    }
+
+    private fun hideBatteryIcon(instance: Any) {
+        val iconView = XposedHelpers.getObjectField(instance, "mBatteryIconView") as? View
+        iconView?.visibility = View.GONE
+    }
+
+    private fun styleVolumeRow(row: Any) {
+        val slider = XposedHelpers.getObjectField(row, "slider") as? SeekBar
+        val icon = XposedHelpers.getObjectField(row, "icon") as? ImageButton
+        val sliderProgressSolid = XposedHelpers.getObjectField(row, "sliderProgressSolid") as? Drawable
+        val sliderBgSolid = XposedHelpers.getObjectField(row, "sliderBgSolid") as? Drawable
+        val sliderProgressIcon = XposedHelpers.getObjectField(row, "sliderProgressIcon") as? Drawable
+        val sliderBgIcon = XposedHelpers.getObjectField(row, "sliderBgIcon") as? Drawable
+
+        sliderProgressSolid?.setTintList(ActiveHookTheme.primaryColorStateList)
+        slider?.progressTintList = ActiveHookTheme.primaryColorStateList
+
+        sliderBgSolid?.setTintList(ActiveHookTheme.trackColorStateList)
+        slider?.progressBackgroundTintList = ActiveHookTheme.trackColorStateList
+        val progressDrawable = slider?.progressDrawable as? LayerDrawable
+        progressDrawable?.findDrawableByLayerId(android.R.id.background)?.setTintList(ActiveHookTheme.trackColorStateList)
+
+        icon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
+        icon?.imageAlpha = 255
+        sliderProgressIcon?.setTintList(ActiveHookTheme.accentDeepColorStateList)
+        sliderBgIcon?.setTintList(ActiveHookTheme.accentDeepColorStateList)
+
+        val number = XposedHelpers.getObjectField(row, "number") as? TextView
+        number?.setTextColor(ActiveHookTheme.accentDeep)
+    }
+
+    @android.annotation.SuppressLint("DiscouragedApi")
+    private fun applySquircleToDialog(instance: Any) {
+        val dialog = XposedHelpers.getObjectField(instance, "mDialog") as? Dialog ?: return
+        val context = dialog.context
+        val res = context.resources
+        val density = res.displayMetrics.density
+
+        fun findView(idName: String): View? {
+            val id = res.getIdentifier(idName, "id", TARGET_PACKAGE)
+            return if (id != 0) dialog.findViewById(id) else null
+        }
+
+        val topContainer = findView("volume_dialog_top_container")
+        if (topContainer != null) {
+            topContainer.background = createSquircleDrawable(density)
+            topContainer.clipToOutline = true
+        }
+
+        val ringerDrawerContainer = findView("volume_ringer_and_drawer_container")
+        ringerDrawerContainer?.background = LayerDrawable(arrayOf(ColorDrawable(0)))
+
+        val settingsContainer = findView("settings_container")
+        settingsContainer?.background = ColorDrawable(0)
+
+        val captionsView = findView("odi_captions")
+        if (captionsView != null) {
+            captionsView.background = createSquircleDrawable(density)
+            captionsView.clipToOutline = true
+        }
+
+        val ringerView = findView("ringer")
+        if (ringerView != null) {
+            ringerView.background = createSquircleDrawable(density)
+            ringerView.clipToOutline = true
+        }
+
+        val isDrawerOpen = try {
+            XposedHelpers.getBooleanField(instance, "mIsRingerDrawerOpen")
+        } catch (_: Throwable) {
+            false
+        }
+        if (!isDrawerOpen) {
+            val drawerContainer = findView("volume_drawer_container")
+            drawerContainer?.visibility = View.GONE
+        }
+
+        val settingsIcon = findView("settings") as? ImageButton
+        settingsIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
+
+        val ringerIcon = findView("ringer_icon") as? ImageButton
+        ringerIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
+
+        val ringerMuteIcon = findView("volume_drawer_mute_icon") as? ImageView
+        ringerMuteIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
+
+        val ringerVibrateIcon = findView("volume_drawer_vibrate_icon") as? ImageView
+        ringerVibrateIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
+
+        val ringerNormalIcon = findView("volume_drawer_normal_icon") as? ImageView
+        ringerNormalIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
+
+        val captionsIcon = findView("odi_captions_icon") as? ImageView
+        captionsIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
+    }
+
+    private fun refreshTileView(tileView: View) {
+        val stateInt = try {
+            val s = XposedHelpers.getIntField(tileView, "lastState")
+            if (s == -1) {
+                val tileState = try { XposedHelpers.getBooleanField(tileView, "tileState") } catch (_: Throwable) { false }
+                if (tileState) 2 else 1
+            } else {
+                s
+            }
+        } catch (_: Throwable) {
+            1
+        }
+        val density = tileView.context.resources.displayMetrics.density
+
+        var bgDrawable = XposedHelpers.getObjectField(tileView, "colorBackgroundDrawable") as? GradientDrawable
+        if (bgDrawable == null) {
+            bgDrawable = createTileSquircleDrawable(density)
+            XposedHelpers.setObjectField(tileView, "colorBackgroundDrawable", bgDrawable)
+            val ripple = XposedHelpers.getObjectField(tileView, "ripple") as? RippleDrawable
+            val bgId = tileView.context.resources.getIdentifier("background", "id", TARGET_PACKAGE)
+            if (bgId != 0 && ripple != null) {
+                try {
+                    ripple.setDrawableByLayerId(bgId, bgDrawable)
+                } catch (_: Throwable) {}
+            }
+        }
+
+        val fillColor = when (stateInt) {
+            2 -> ActiveHookTheme.primary
+            1 -> ActiveHookTheme.container
+            0 -> ActiveHookTheme.qsTileUnavailableBg
+            else -> ActiveHookTheme.container
+        }
+        val fgColor = when (stateInt) {
+            2 -> ActiveHookTheme.accentDeep
+            1 -> ActiveHookTheme.qsTileInactiveFg
+            0 -> ActiveHookTheme.qsTileUnavailableFg
+            else -> ActiveHookTheme.qsTileInactiveFg
+        }
+
+        // Cancel any active animator to prevent it from animating back to old colors
+        try {
+            (XposedHelpers.getObjectField(tileView, "singleAnimator") as? ValueAnimator)?.cancel()
+        } catch (_: Throwable) {}
+
+        // Call tileView.setColor(fillColor) to keep QSTileViewImpl internal paintColor in sync
+        try {
+            XposedHelpers.callMethod(tileView, "setColor", fillColor)
+        } catch (_: Throwable) {
+            try {
+                XposedHelpers.setIntField(tileView, "paintColor", fillColor)
+            } catch (_: Throwable) {}
+        }
+
+        // Update both the fill color, tint, and stroke on the squircle GradientDrawable
+        bgDrawable.setColor(fillColor)
+        bgDrawable.setTint(fillColor)
+        val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
+        bgDrawable.setStroke(strokeWidth, ActiveHookTheme.qsTileStroke)
+
+        val label = XposedHelpers.getObjectField(tileView, "label") as? TextView
+        label?.setTextColor(fgColor)
+
+        val secondaryLabel = try {
+            XposedHelpers.callMethod(tileView, "getSecondaryLabel") as? TextView
+        } catch (_: Throwable) {
+            null
+        }
+        secondaryLabel?.setTextColor(fgColor)
+
+        val chevron = XposedHelpers.getObjectField(tileView, "chevronView") as? ImageView
+        chevron?.imageTintList = ColorStateList.valueOf(fgColor)
+
+        val iconView = try {
+            XposedHelpers.callMethod(tileView, "getIcon")
+        } catch (_: Throwable) {
+            null
+        }
+        if (iconView != null) {
+            val iconIv = try {
+                XposedHelpers.callMethod(iconView, "getIconView") as? ImageView
+            } catch (_: Throwable) {
+                null
+            }
+            iconIv?.imageTintList = ColorStateList.valueOf(fgColor)
+        }
+
+        tileView.invalidate()
+    }
+
+    private fun styleBrightnessSlider(sliderView: View) {
+        val context = sliderView.context
+        val res = context.resources
+        val sliderId = res.getIdentifier("slider", "id", TARGET_PACKAGE)
+        val slider = (if (sliderId != 0) sliderView.findViewById<SeekBar>(sliderId) else null)
+            ?: (try { XposedHelpers.getObjectField(sliderView, "mSlider") as? SeekBar } catch (_: Throwable) { null })
+            ?: return
+
+        slider.progressTintList = ActiveHookTheme.primaryColorStateList
+        slider.progressBackgroundTintList = ActiveHookTheme.trackColorStateList
+
+        val progressDrawable = slider.progressDrawable as? LayerDrawable
+        if (progressDrawable != null) {
+            val bgDrawable = progressDrawable.findDrawableByLayerId(android.R.id.background)
+            bgDrawable?.setTint(ActiveHookTheme.track)
+
+            val progressLayer = progressDrawable.findDrawableByLayerId(android.R.id.progress)
+            val fullLayer = when (progressLayer) {
+                is LayerDrawable -> progressLayer
+                is DrawableWrapper -> progressLayer.drawable as? LayerDrawable
+                else -> null
+            }
+            if (fullLayer != null) {
+                val fgId = res.getIdentifier("slider_foreground", "id", TARGET_PACKAGE)
+                if (fgId != 0) {
+                    val fgDrawable = fullLayer.findDrawableByLayerId(fgId)
+                    fgDrawable?.setTint(ActiveHookTheme.primary)
+                }
+                val iconId = res.getIdentifier("slider_icon", "id", TARGET_PACKAGE)
+                if (iconId != 0) {
+                    val iconDrawable = fullLayer.findDrawableByLayerId(iconId)
+                    iconDrawable?.setTint(ActiveHookTheme.accentDeep)
+                    iconDrawable?.setTintList(ActiveHookTheme.accentDeepColorStateList)
+                }
+            }
+        }
+    }
+
+    private fun styleFooterView(footerView: View) {
+        val context = footerView.context
+        val res = context.resources
+        val density = res.displayMetrics.density
+
+        fun styleButton(view: View) {
+            view.background = createFooterButtonDrawable(density)
+            view.clipToOutline = true
+            if (view is ImageView) {
+                view.imageTintList = ActiveHookTheme.accentDeepColorStateList
+                view.setColorFilter(ActiveHookTheme.accentDeep, PorterDuff.Mode.SRC_IN)
+            }
+            if (view is ViewGroup) {
+                for (i in 0 until view.childCount) {
+                    val child = view.getChildAt(i)
+                    if (child is ImageView) {
+                        child.imageTintList = ActiveHookTheme.accentDeepColorStateList
+                        child.setColorFilter(ActiveHookTheme.accentDeep, PorterDuff.Mode.SRC_IN)
+                    }
+                }
+            }
+        }
+
+        // 1. Edit Quick Settings button (pencil)
+        var editView: View? = footerView.findViewById(android.R.id.edit)
+        if (editView == null) {
+            val editId = res.getIdentifier("edit", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                ?: res.getIdentifier("qs_edit", "id", TARGET_PACKAGE).takeIf { it != 0 }
+                ?: 0
+            if (editId != 0) {
+                editView = footerView.findViewById(editId)
+            }
+        }
+        if (editView == null) {
+            editView = try {
+                XposedHelpers.getObjectField(footerView, "mEdit") as? View
+            } catch (_: Throwable) { null }
+        }
+        if (editView != null) {
+            styleButton(editView)
+        } else {
+            Log.d(TAG, "QSFooterView: edit button view ID ('edit' / 'qs_edit') not found")
+        }
+
+        // 2. Power Menu button
+        val powerId = res.getIdentifier("pm_lite", "id", TARGET_PACKAGE).takeIf { it != 0 }
+            ?: res.getIdentifier("power_button", "id", TARGET_PACKAGE).takeIf { it != 0 }
+            ?: res.getIdentifier("power_group", "id", TARGET_PACKAGE).takeIf { it != 0 }
+            ?: 0
+        var powerView: View? = if (powerId != 0) footerView.findViewById(powerId) else null
+        if (powerView == null) {
+            powerView = try {
+                XposedHelpers.getObjectField(footerView, "mPowerMenuLite") as? View
+            } catch (_: Throwable) { null }
+        }
+        if (powerView != null) {
+            styleButton(powerView)
+        } else {
+            Log.d(TAG, "QSFooterView: power button view ID ('pm_lite' / 'power_button' / 'power_group') not found")
+        }
+
+        // 3. Settings button (gear)
+        val settingsId = res.getIdentifier("settings_button", "id", TARGET_PACKAGE).takeIf { it != 0 }
+            ?: res.getIdentifier("settings", "id", TARGET_PACKAGE).takeIf { it != 0 }
+            ?: 0
+        var settingsView: View? = if (settingsId != 0) footerView.findViewById(settingsId) else null
+        if (settingsView == null) {
+            settingsView = try {
+                XposedHelpers.getObjectField(footerView, "mSettingsButton") as? View
+            } catch (_: Throwable) { null }
+        }
+        if (settingsView != null) {
+            styleButton(settingsView)
+        } else {
+            Log.d(TAG, "QSFooterView: settings button view ID ('settings_button') not found")
+        }
+
+        val containerId = res.getIdentifier("settings_button_container", "id", TARGET_PACKAGE).takeIf { it != 0 }
+            ?: res.getIdentifier("settings_container", "id", TARGET_PACKAGE).takeIf { it != 0 }
+            ?: 0
+        val settingsContainer = (if (containerId != 0) footerView.findViewById<View>(containerId) else null)
+            ?: (try { XposedHelpers.getObjectField(footerView, "mSettingsContainer") as? View } catch (_: Throwable) { null })
+        settingsContainer?.background = ColorDrawable(0)
+
+        val tunerId = res.getIdentifier("tuner_icon", "id", TARGET_PACKAGE)
+        val tunerIcon = (if (tunerId != 0) footerView.findViewById<View>(tunerId) else null)
+            ?: (try { XposedHelpers.getObjectField(footerView, "mTunerIcon") as? View } catch (_: Throwable) { null })
+        if (tunerIcon is ImageView) {
+            tunerIcon.imageTintList = ActiveHookTheme.accentDeepColorStateList
+            tunerIcon.setColorFilter(ActiveHookTheme.accentDeep, PorterDuff.Mode.SRC_IN)
+        }
+
+        val multiUserId = res.getIdentifier("multi_user_switch", "id", TARGET_PACKAGE)
+        val multiUserSwitch = (if (multiUserId != 0) footerView.findViewById<View>(multiUserId) else null)
+            ?: (try { XposedHelpers.getObjectField(footerView, "mMultiUserSwitch") as? View } catch (_: Throwable) { null })
+        if (multiUserSwitch != null) {
+            styleButton(multiUserSwitch)
+        }
+    }
+
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName != TARGET_PACKAGE) return
 
         Log.d(TAG, "Initializing MochibunSystemUiHook for package: ${lpparam.packageName}")
+
+        // Register dynamic theme receiver as early as possible on SystemUIApplication startup
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.SystemUIApplication",
+                lpparam.classLoader,
+                "onCreate",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val app = param.thisObject as? Context
+                            if (app != null) {
+                                ensureReceiverRegistered(app)
+                            }
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in SystemUIApplication.onCreate hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: SystemUIApplication.onCreate")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook SystemUIApplication.onCreate", t)
+        }
+
+        // Fallback hook on PhoneStatusBarView.onAttachedToWindow to ensure receiver registration
+        // occurs even if SystemUIApplication.onCreate was bypassed
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.android.systemui.statusbar.phone.PhoneStatusBarView",
+                lpparam.classLoader,
+                "onAttachedToWindow",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val view = param.thisObject as? View
+                            val context = view?.context
+                            if (context != null) {
+                                ensureReceiverRegistered(context.applicationContext ?: context)
+                            }
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in PhoneStatusBarView.onAttachedToWindow hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed fallback hook: PhoneStatusBarView.onAttachedToWindow")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook PhoneStatusBarView.onAttachedToWindow", t)
+        }
 
         hookStatusBar(lpparam.classLoader)
         hookBattery(lpparam.classLoader)
@@ -529,15 +1184,16 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     object : XC_MethodHook() {
                         override fun afterHookedMethod(param: MethodHookParam) {
                             try {
+                                trackedDarkDispatchers.add(param.thisObject)
                                 XposedHelpers.setIntField(
                                     param.thisObject,
                                     "mDarkModeIconColorSingleTone",
-                                    COLOR_DARK_MODE_DEEP_PLUM
+                                    ActiveHookTheme.accentDeep
                                 )
                                 XposedHelpers.setIntField(
                                     param.thisObject,
                                     "mLightModeIconColorSingleTone",
-                                    COLOR_LIGHT_MODE_PALE_PINK
+                                    ActiveHookTheme.container
                                 )
                                 Log.d(TAG, "Applied Mochibun icon tint colors to DarkIconDispatcherImpl")
                             } catch (t: Throwable) {
@@ -558,32 +1214,10 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
      * - Force percent text on (mShowPercentMode = 1).
      * - Hide stock battery icon view (mBatteryIconView.visibility = View.GONE).
      * - Replace percent text with 4 hearts (♥ / ♡) and " ✦" when charging.
-     * - Tint rose (#F06292) when level <= 15 and not charging.
+     * - Tint rose (ActiveHookTheme.lowBattery) when level <= 15 and not charging.
      */
     private fun hookBattery(classLoader: ClassLoader) {
         val batteryMeterViewClassName = "com.android.systemui.BatteryMeterView"
-
-        fun applyHeartBattery(instance: Any) {
-            val textView = XposedHelpers.getObjectField(instance, "mBatteryPercentView") as? TextView ?: return
-            val level = XposedHelpers.getIntField(instance, "mLevel")
-            val charging = XposedHelpers.getBooleanField(instance, "mCharging")
-
-            textView.text = getBatteryHearts(level, charging)
-
-            if (level <= 15 && !charging) {
-                textView.setTextColor(COLOR_ROSE_LOW_BATTERY)
-            } else {
-                val textColor = XposedHelpers.getIntField(instance, "mTextColor")
-                if (textColor != 0) {
-                    textView.setTextColor(textColor)
-                }
-            }
-        }
-
-        fun hideBatteryIcon(instance: Any) {
-            val iconView = XposedHelpers.getObjectField(instance, "mBatteryIconView") as? View
-            iconView?.visibility = View.GONE
-        }
 
         // 1. Hook BatteryMeterView constructors to force percent mode and hide icon
         try {
@@ -594,6 +1228,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     object : XC_MethodHook() {
                         override fun afterHookedMethod(param: MethodHookParam) {
                             try {
+                                trackedBatteryViews.add(param.thisObject)
                                 XposedHelpers.setIntField(param.thisObject, "mShowPercentMode", 1)
                                 hideBatteryIcon(param.thisObject)
                             } catch (t: Throwable) {
@@ -617,6 +1252,11 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         try {
+                            trackedBatteryViews.add(param.thisObject)
+                            val view = param.thisObject as? View
+                            if (view != null) {
+                                ensureReceiverRegistered(view.context.applicationContext ?: view.context)
+                            }
                             XposedHelpers.setIntField(param.thisObject, "mShowPercentMode", 1)
                             hideBatteryIcon(param.thisObject)
                             applyHeartBattery(param.thisObject)
@@ -684,7 +1324,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             Log.d(TAG, "Failed to hook BatteryMeterView.setPercentTextAtCurrentLevel", t)
         }
 
-        // 5. Hook updateColors to preserve low battery rose tint (#F06292) across dark-mode transitions
+        // 5. Hook updateColors to preserve low battery rose tint across dark-mode transitions
         try {
             XposedHelpers.findAndHookMethod(
                 batteryMeterViewClassName,
@@ -700,7 +1340,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                             val charging = XposedHelpers.getBooleanField(param.thisObject, "mCharging")
                             if (level <= 15 && !charging) {
                                 val textView = XposedHelpers.getObjectField(param.thisObject, "mBatteryPercentView") as? TextView
-                                textView?.setTextColor(COLOR_ROSE_LOW_BATTERY)
+                                textView?.setTextColor(ActiveHookTheme.lowBattery)
                             }
                         } catch (t: Throwable) {
                             Log.d(TAG, "Error in BatteryMeterView.updateColors hook", t)
@@ -738,119 +1378,17 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
     /**
      * Stage C: Squircle volume dialog in VolumeDialogImpl.
      * - Target VolumeDialogImpl.initDialog() (signature: private void initDialog()).
-     * - Apply a GradientDrawable (corner radius 20dp * density, fill #F6F0FC, 1.5dp stroke #4A2E56 at 40% alpha)
-     *   to dialog content views by id name (do NOT touch window background).
+     * - Apply a GradientDrawable (corner radius 20dp * density, fill ActiveHookTheme.container,
+     *   1.5dp stroke ActiveHookTheme.volumeStroke) to dialog content views by id name (do NOT touch window background).
      * - Style volume rows (initRow & updateVolumeRowTintH):
-     *   slider progress tint #FFB7D5, slider track tint #EADDF8, icons #4A2E56.
+     *   slider progress tint ActiveHookTheme.primaryColorStateList,
+     *   slider track tint ActiveHookTheme.trackColorStateList,
+     *   icons ActiveHookTheme.accentDeepColorStateList.
      * - Re-apply on updates without allocating drawables per update.
      */
     @android.annotation.SuppressLint("DiscouragedApi")
     private fun hookVolume(classLoader: ClassLoader) {
         val volumeDialogImplClassName = "com.android.systemui.volume.VolumeDialogImpl"
-
-        // Apply Mochibun pastel styling to a VolumeRow
-        fun styleVolumeRow(row: Any) {
-            val slider = XposedHelpers.getObjectField(row, "slider") as? SeekBar
-            val icon = XposedHelpers.getObjectField(row, "icon") as? ImageButton
-            val sliderProgressSolid = XposedHelpers.getObjectField(row, "sliderProgressSolid") as? Drawable
-            val sliderBgSolid = XposedHelpers.getObjectField(row, "sliderBgSolid") as? Drawable
-            val sliderProgressIcon = XposedHelpers.getObjectField(row, "sliderProgressIcon") as? Drawable
-            val sliderBgIcon = XposedHelpers.getObjectField(row, "sliderBgIcon") as? Drawable
-
-            // Slider progress tint: #FFB7D5
-            sliderProgressSolid?.setTintList(VOLUME_PROGRESS_TINT_LIST)
-            slider?.progressTintList = VOLUME_PROGRESS_TINT_LIST
-
-            // Slider track tint: #EADDF8
-            sliderBgSolid?.setTintList(VOLUME_TRACK_TINT_LIST)
-            slider?.progressBackgroundTintList = VOLUME_TRACK_TINT_LIST
-            val progressDrawable = slider?.progressDrawable as? LayerDrawable
-            progressDrawable?.findDrawableByLayerId(android.R.id.background)?.setTintList(VOLUME_TRACK_TINT_LIST)
-
-            // Icons: deep plum #4A2E56
-            icon?.imageTintList = VOLUME_ICON_TINT_LIST
-            icon?.imageAlpha = 255
-            sliderProgressIcon?.setTintList(VOLUME_ICON_TINT_LIST)
-            sliderBgIcon?.setTintList(VOLUME_ICON_TINT_LIST)
-
-            val number = XposedHelpers.getObjectField(row, "number") as? TextView
-            number?.setTextColor(COLOR_DARK_MODE_DEEP_PLUM)
-        }
-
-        // Apply squircle GradientDrawable to content views found by ID name
-        fun applySquircleToDialog(instance: Any) {
-            val dialog = XposedHelpers.getObjectField(instance, "mDialog") as? Dialog ?: return
-            val context = dialog.context
-            val res = context.resources
-            val density = res.displayMetrics.density
-
-            fun findView(idName: String): View? {
-                val id = res.getIdentifier(idName, "id", TARGET_PACKAGE)
-                return if (id != 0) dialog.findViewById(id) else null
-            }
-
-            // Top container wraps ringer drawer, rows, and settings
-            val topContainer = findView("volume_dialog_top_container")
-            if (topContainer != null) {
-                topContainer.background = createSquircleDrawable(density)
-                topContainer.clipToOutline = true
-            }
-
-            // Set top/bottom cap backgrounds to transparent so topContainer forms a unified squircle.
-            // NOTE: ringerDrawerContainer's background MUST be a LayerDrawable with >= 1 layers,
-            // because VolumeDialogImpl.lambda$initDialog$5 explicitly casts
-            // (LayerDrawable) this.mRingerAndDrawerContainer.getBackground()!
-            val ringerDrawerContainer = findView("volume_ringer_and_drawer_container")
-            ringerDrawerContainer?.background = LayerDrawable(arrayOf(ColorDrawable(0)))
-
-            val settingsContainer = findView("settings_container")
-            settingsContainer?.background = ColorDrawable(0)
-
-            // Live caption button below top container
-            val captionsView = findView("odi_captions")
-            if (captionsView != null) {
-                captionsView.background = createSquircleDrawable(density)
-                captionsView.clipToOutline = true
-            }
-
-            // Standalone ringer button (if present)
-            val ringerView = findView("ringer")
-            if (ringerView != null) {
-                ringerView.background = createSquircleDrawable(density)
-                ringerView.clipToOutline = true
-            }
-
-            // Hide the 3-item ringer drawer container when closed so it does not add ~84dp of empty height
-            val isDrawerOpen = try {
-                XposedHelpers.getBooleanField(instance, "mIsRingerDrawerOpen")
-            } catch (_: Throwable) {
-                false
-            }
-            if (!isDrawerOpen) {
-                val drawerContainer = findView("volume_drawer_container")
-                drawerContainer?.visibility = View.GONE
-            }
-
-            // Tint ringer and settings icons to deep plum #4A2E56
-            val settingsIcon = findView("settings") as? ImageButton
-            settingsIcon?.imageTintList = VOLUME_ICON_TINT_LIST
-
-            val ringerIcon = findView("ringer_icon") as? ImageButton
-            ringerIcon?.imageTintList = VOLUME_ICON_TINT_LIST
-
-            val ringerMuteIcon = findView("volume_drawer_mute_icon") as? ImageView
-            ringerMuteIcon?.imageTintList = VOLUME_ICON_TINT_LIST
-
-            val ringerVibrateIcon = findView("volume_drawer_vibrate_icon") as? ImageView
-            ringerVibrateIcon?.imageTintList = VOLUME_ICON_TINT_LIST
-
-            val ringerNormalIcon = findView("volume_drawer_normal_icon") as? ImageView
-            ringerNormalIcon?.imageTintList = VOLUME_ICON_TINT_LIST
-
-            val captionsIcon = findView("odi_captions_icon") as? ImageView
-            captionsIcon?.imageTintList = VOLUME_ICON_TINT_LIST
-        }
-
         val volumeRowClass = try {
             XposedHelpers.findClass(
                 "com.android.systemui.volume.VolumeDialogImpl\$VolumeRow",
@@ -870,6 +1408,12 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         try {
+                            trackedVolumeDialogs.add(param.thisObject)
+                            val dialog = XposedHelpers.getObjectField(param.thisObject, "mDialog") as? Dialog
+                            val context = dialog?.context
+                            if (context != null) {
+                                ensureReceiverRegistered(context.applicationContext ?: context)
+                            }
                             XposedHelpers.setBooleanField(param.thisObject, "mShowActiveStreamOnly", true)
                             applySquircleToDialog(param.thisObject)
                             Log.d(TAG, "Applied squircle backgrounds to VolumeDialogImpl content views")
@@ -1214,13 +1758,14 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         try {
+                            trackedScrimControllers.add(param.thisObject)
                             val view = param.args[0] as? View ?: return
                             val scrimBehind = XposedHelpers.getObjectField(param.thisObject, "mScrimBehind") as? View
                             val notifScrim = XposedHelpers.getObjectField(param.thisObject, "mNotificationsScrim") as? View
                             if (view === scrimBehind || view === notifScrim) {
                                 val currentTint = param.args[2] as? Int ?: 0
                                 if (currentTint != 0) {
-                                    param.args[2] = COLOR_QS_BACKDROP_TINT
+                                    param.args[2] = ActiveHookTheme.scrim
                                 }
                             }
                         } catch (t: Throwable) {
@@ -1255,10 +1800,10 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
                         param.result = when (state) {
-                            2 -> COLOR_QS_TILE_ACTIVE_BG
-                            1 -> COLOR_QS_TILE_INACTIVE_BG
-                            0 -> COLOR_QS_TILE_UNAVAILABLE_BG
-                            else -> COLOR_QS_TILE_INACTIVE_BG
+                            2 -> ActiveHookTheme.primary
+                            1 -> ActiveHookTheme.container
+                            0 -> ActiveHookTheme.qsTileUnavailableBg
+                            else -> ActiveHookTheme.container
                         }
                     }
                 }
@@ -1279,10 +1824,10 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
                         param.result = when (state) {
-                            2 -> COLOR_QS_TILE_ACTIVE_FG
-                            1 -> COLOR_QS_TILE_INACTIVE_FG
-                            0 -> COLOR_QS_TILE_UNAVAILABLE_FG
-                            else -> COLOR_QS_TILE_INACTIVE_FG
+                            2 -> ActiveHookTheme.accentDeep
+                            1 -> ActiveHookTheme.qsTileInactiveFg
+                            0 -> ActiveHookTheme.qsTileUnavailableFg
+                            else -> ActiveHookTheme.qsTileInactiveFg
                         }
                     }
                 }
@@ -1303,10 +1848,10 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
                         param.result = when (state) {
-                            2 -> COLOR_QS_TILE_ACTIVE_FG
-                            1 -> COLOR_QS_TILE_INACTIVE_FG
-                            0 -> COLOR_QS_TILE_UNAVAILABLE_FG
-                            else -> COLOR_QS_TILE_INACTIVE_FG
+                            2 -> ActiveHookTheme.accentDeep
+                            1 -> ActiveHookTheme.qsTileInactiveFg
+                            0 -> ActiveHookTheme.qsTileUnavailableFg
+                            else -> ActiveHookTheme.qsTileInactiveFg
                         }
                     }
                 }
@@ -1327,10 +1872,10 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
                         param.result = when (state) {
-                            2 -> COLOR_QS_TILE_ACTIVE_FG
-                            1 -> COLOR_QS_TILE_INACTIVE_FG
-                            0 -> COLOR_QS_TILE_UNAVAILABLE_FG
-                            else -> COLOR_QS_TILE_INACTIVE_FG
+                            2 -> ActiveHookTheme.accentDeep
+                            1 -> ActiveHookTheme.qsTileInactiveFg
+                            0 -> ActiveHookTheme.qsTileUnavailableFg
+                            else -> ActiveHookTheme.qsTileInactiveFg
                         }
                     }
                 }
@@ -1352,10 +1897,10 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[1] as? Int ?: return
                         param.result = when (state) {
-                            2 -> COLOR_QS_TILE_ACTIVE_FG
-                            1 -> COLOR_QS_TILE_INACTIVE_FG
-                            0 -> COLOR_QS_TILE_UNAVAILABLE_FG
-                            else -> COLOR_QS_TILE_INACTIVE_FG
+                            2 -> ActiveHookTheme.accentDeep
+                            1 -> ActiveHookTheme.qsTileInactiveFg
+                            0 -> ActiveHookTheme.qsTileUnavailableFg
+                            else -> ActiveHookTheme.qsTileInactiveFg
                         }
                     }
                 }
@@ -1375,6 +1920,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         try {
                             val tileView = param.thisObject as? View ?: return
+                            trackedTileViews.add(tileView)
+                            ensureReceiverRegistered(tileView.context.applicationContext ?: tileView.context)
                             val density = tileView.context.resources.displayMetrics.density
                             val squircle = createTileSquircleDrawable(density)
                             XposedHelpers.setObjectField(param.thisObject, "colorBackgroundDrawable", squircle)
@@ -1409,9 +1956,10 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         try {
+                            val tileView = param.thisObject as? View ?: return
+                            trackedTileViews.add(tileView)
                             val state = param.args[0] ?: return
                             val stateInt = XposedHelpers.getIntField(state, "state")
-                            val tileView = param.thisObject as? View ?: return
                             val density = tileView.context.resources.displayMetrics.density
 
                             var bgDrawable = XposedHelpers.getObjectField(param.thisObject, "colorBackgroundDrawable") as? GradientDrawable
@@ -1428,21 +1976,22 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                             }
 
                             val fillColor = when (stateInt) {
-                                2 -> COLOR_QS_TILE_ACTIVE_BG
-                                1 -> COLOR_QS_TILE_INACTIVE_BG
-                                0 -> COLOR_QS_TILE_UNAVAILABLE_BG
-                                else -> COLOR_QS_TILE_INACTIVE_BG
+                                2 -> ActiveHookTheme.primary
+                                1 -> ActiveHookTheme.container
+                                0 -> ActiveHookTheme.qsTileUnavailableBg
+                                else -> ActiveHookTheme.container
                             }
                             val fgColor = when (stateInt) {
-                                2 -> COLOR_QS_TILE_ACTIVE_FG
-                                1 -> COLOR_QS_TILE_INACTIVE_FG
-                                0 -> COLOR_QS_TILE_UNAVAILABLE_FG
-                                else -> COLOR_QS_TILE_INACTIVE_FG
+                                2 -> ActiveHookTheme.accentDeep
+                                1 -> ActiveHookTheme.qsTileInactiveFg
+                                0 -> ActiveHookTheme.qsTileUnavailableFg
+                                else -> ActiveHookTheme.qsTileInactiveFg
                             }
 
                             bgDrawable.setColor(fillColor)
+                            bgDrawable.setTint(fillColor)
                             val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
-                            bgDrawable.setStroke(strokeWidth, COLOR_QS_TILE_STROKE)
+                            bgDrawable.setStroke(strokeWidth, ActiveHookTheme.qsTileStroke)
 
                             val label = XposedHelpers.getObjectField(param.thisObject, "label") as? TextView
                             label?.setTextColor(fgColor)
@@ -1478,49 +2027,6 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
 
     @android.annotation.SuppressLint("DiscouragedApi")
     private fun hookQuickSettingsBrightness(classLoader: ClassLoader) {
-        fun styleBrightnessSlider(sliderView: View) {
-            val context = sliderView.context
-            val res = context.resources
-            val sliderId = res.getIdentifier("slider", "id", TARGET_PACKAGE)
-            val slider = (if (sliderId != 0) sliderView.findViewById<SeekBar>(sliderId) else null)
-                ?: (try { XposedHelpers.getObjectField(sliderView, "mSlider") as? SeekBar } catch (_: Throwable) { null })
-                ?: return
-
-            // Active progress track tint: Sakura Pink #FFB7D5
-            slider.progressTintList = ColorStateList.valueOf(COLOR_BRIGHTNESS_PROGRESS)
-
-            // Inactive / background track tint: Soft Lilac #EADDF8
-            slider.progressBackgroundTintList = ColorStateList.valueOf(COLOR_BRIGHTNESS_TRACK)
-
-            val progressDrawable = slider.progressDrawable as? LayerDrawable
-            if (progressDrawable != null) {
-                // Background track layer
-                val bgDrawable = progressDrawable.findDrawableByLayerId(android.R.id.background)
-                bgDrawable?.setTint(COLOR_BRIGHTNESS_TRACK)
-
-                // Progress layer (inside DrawableWrapper -> LayerDrawable)
-                val progressLayer = progressDrawable.findDrawableByLayerId(android.R.id.progress)
-                val fullLayer = when (progressLayer) {
-                    is LayerDrawable -> progressLayer
-                    is DrawableWrapper -> progressLayer.drawable as? LayerDrawable
-                    else -> null
-                }
-                if (fullLayer != null) {
-                    val fgId = res.getIdentifier("slider_foreground", "id", TARGET_PACKAGE)
-                    if (fgId != 0) {
-                        val fgDrawable = fullLayer.findDrawableByLayerId(fgId)
-                        fgDrawable?.setTint(COLOR_BRIGHTNESS_PROGRESS)
-                    }
-                    val iconId = res.getIdentifier("slider_icon", "id", TARGET_PACKAGE)
-                    if (iconId != 0) {
-                        val iconDrawable = fullLayer.findDrawableByLayerId(iconId)
-                        iconDrawable?.setTint(COLOR_BRIGHTNESS_ICON)
-                        iconDrawable?.setTintList(ColorStateList.valueOf(COLOR_BRIGHTNESS_ICON))
-                    }
-                }
-            }
-        }
-
         try {
             XposedHelpers.findAndHookMethod(
                 "com.android.systemui.settings.brightness.BrightnessSliderView",
@@ -1530,6 +2036,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         try {
                             val view = param.thisObject as? View ?: return
+                            trackedBrightnessSliders.add(view)
+                            ensureReceiverRegistered(view.context.applicationContext ?: view.context)
                             styleBrightnessSlider(view)
                         } catch (t: Throwable) {
                             Log.d(TAG, "Error in BrightnessSliderView.onFinishInflate hook", t)
@@ -1551,6 +2059,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         try {
                             val view = XposedHelpers.getObjectField(param.thisObject, "mView") as? View ?: return
+                            trackedBrightnessSliders.add(view)
+                            ensureReceiverRegistered(view.context.applicationContext ?: view.context)
                             styleBrightnessSlider(view)
                         } catch (t: Throwable) {
                             Log.d(TAG, "Error in BrightnessSlider.onViewAttached hook", t)
@@ -1568,115 +2078,12 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
      * Stage D4: Quick Settings Footer Action Buttons (Edit, Power, Settings).
      * Restyles the bottom action buttons in the expanded Quick Settings shade to match
      * Mochibun's pastel kawaii squircle design language:
-     * - Background: Soft Cream #FFF9FB (12dp squircle)
-     * - Border: 1.2dp stroke in Deep Plum #4A2E56 at 30% alpha (0x4D4A2E56)
-     * - Icon Tint: Deep Plum #4A2E56
+     * - Background: Soft Cream (12dp squircle)
+     * - Border: 1.2dp stroke in Deep Plum at 30% alpha
+     * - Icon Tint: Deep Plum
      */
     @android.annotation.SuppressLint("DiscouragedApi")
     private fun hookQuickSettingsFooter(classLoader: ClassLoader) {
-        fun styleFooterView(footerView: View) {
-            val context = footerView.context
-            val res = context.resources
-            val density = res.displayMetrics.density
-
-            fun styleButton(view: View) {
-                view.background = createFooterButtonDrawable(density)
-                view.clipToOutline = true
-                if (view is ImageView) {
-                    view.imageTintList = QS_FOOTER_BTN_ICON_TINT_LIST
-                    view.setColorFilter(COLOR_QS_FOOTER_BTN_ICON, PorterDuff.Mode.SRC_IN)
-                }
-                if (view is ViewGroup) {
-                    for (i in 0 until view.childCount) {
-                        val child = view.getChildAt(i)
-                        if (child is ImageView) {
-                            child.imageTintList = QS_FOOTER_BTN_ICON_TINT_LIST
-                            child.setColorFilter(COLOR_QS_FOOTER_BTN_ICON, PorterDuff.Mode.SRC_IN)
-                        }
-                    }
-                }
-            }
-
-            // 1. Edit Quick Settings button (pencil)
-            var editView: View? = footerView.findViewById(android.R.id.edit)
-            if (editView == null) {
-                val editId = res.getIdentifier("edit", "id", TARGET_PACKAGE).takeIf { it != 0 }
-                    ?: res.getIdentifier("qs_edit", "id", TARGET_PACKAGE).takeIf { it != 0 }
-                    ?: 0
-                if (editId != 0) {
-                    editView = footerView.findViewById(editId)
-                }
-            }
-            if (editView == null) {
-                editView = try {
-                    XposedHelpers.getObjectField(footerView, "mEdit") as? View
-                } catch (_: Throwable) { null }
-            }
-            if (editView != null) {
-                styleButton(editView)
-            } else {
-                Log.d(TAG, "QSFooterView: edit button view ID ('edit' / 'qs_edit') not found")
-            }
-
-            // 2. Power Menu button
-            val powerId = res.getIdentifier("pm_lite", "id", TARGET_PACKAGE).takeIf { it != 0 }
-                ?: res.getIdentifier("power_button", "id", TARGET_PACKAGE).takeIf { it != 0 }
-                ?: res.getIdentifier("power_group", "id", TARGET_PACKAGE).takeIf { it != 0 }
-                ?: 0
-            var powerView: View? = if (powerId != 0) footerView.findViewById(powerId) else null
-            if (powerView == null) {
-                powerView = try {
-                    XposedHelpers.getObjectField(footerView, "mPowerMenuLite") as? View
-                } catch (_: Throwable) { null }
-            }
-            if (powerView != null) {
-                styleButton(powerView)
-            } else {
-                Log.d(TAG, "QSFooterView: power button view ID ('pm_lite' / 'power_button' / 'power_group') not found")
-            }
-
-            // 3. Settings button (gear)
-            val settingsId = res.getIdentifier("settings_button", "id", TARGET_PACKAGE).takeIf { it != 0 }
-                ?: res.getIdentifier("settings", "id", TARGET_PACKAGE).takeIf { it != 0 }
-                ?: 0
-            var settingsView: View? = if (settingsId != 0) footerView.findViewById(settingsId) else null
-            if (settingsView == null) {
-                settingsView = try {
-                    XposedHelpers.getObjectField(footerView, "mSettingsButton") as? View
-                } catch (_: Throwable) { null }
-            }
-            if (settingsView != null) {
-                styleButton(settingsView)
-            } else {
-                Log.d(TAG, "QSFooterView: settings button view ID ('settings_button') not found")
-            }
-
-            // Settings button container: clear stock dark chip background so it doesn't bleed behind squircle
-            val containerId = res.getIdentifier("settings_button_container", "id", TARGET_PACKAGE).takeIf { it != 0 }
-                ?: res.getIdentifier("settings_container", "id", TARGET_PACKAGE).takeIf { it != 0 }
-                ?: 0
-            val settingsContainer = (if (containerId != 0) footerView.findViewById<View>(containerId) else null)
-                ?: (try { XposedHelpers.getObjectField(footerView, "mSettingsContainer") as? View } catch (_: Throwable) { null })
-            settingsContainer?.background = ColorDrawable(0)
-
-            // Tuner icon inside settings button container: tint to Deep Plum
-            val tunerId = res.getIdentifier("tuner_icon", "id", TARGET_PACKAGE)
-            val tunerIcon = (if (tunerId != 0) footerView.findViewById<View>(tunerId) else null)
-                ?: (try { XposedHelpers.getObjectField(footerView, "mTunerIcon") as? View } catch (_: Throwable) { null })
-            if (tunerIcon is ImageView) {
-                tunerIcon.imageTintList = QS_FOOTER_BTN_ICON_TINT_LIST
-                tunerIcon.setColorFilter(COLOR_QS_FOOTER_BTN_ICON, PorterDuff.Mode.SRC_IN)
-            }
-
-            // Multi-user switch (if present)
-            val multiUserId = res.getIdentifier("multi_user_switch", "id", TARGET_PACKAGE)
-            val multiUserSwitch = (if (multiUserId != 0) footerView.findViewById<View>(multiUserId) else null)
-                ?: (try { XposedHelpers.getObjectField(footerView, "mMultiUserSwitch") as? View } catch (_: Throwable) { null })
-            if (multiUserSwitch != null) {
-                styleButton(multiUserSwitch)
-            }
-        }
-
         val footerClassNames = listOf(
             "com.android.systemui.qs.QSFooterView",
             "com.android.systemui.qs.FooterActionsView"
@@ -1697,6 +2104,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                         override fun afterHookedMethod(param: MethodHookParam) {
                             try {
                                 val view = param.thisObject as? View ?: return
+                                trackedFooters.add(view)
+                                ensureReceiverRegistered(view.context.applicationContext ?: view.context)
                                 styleFooterView(view)
                                 Log.d(TAG, "Applied Mochibun squircle styling to $className")
                             } catch (t: Throwable) {
@@ -1719,6 +2128,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                         override fun afterHookedMethod(param: MethodHookParam) {
                             try {
                                 val view = param.thisObject as? View ?: return
+                                trackedFooters.add(view)
                                 styleFooterView(view)
                             } catch (t: Throwable) {
                                 Log.d(TAG, "Error in $className.onConfigurationChanged hook", t)
@@ -1743,6 +2153,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         try {
                             val view = XposedHelpers.getObjectField(param.thisObject, "mView") as? View ?: return
+                            trackedFooters.add(view)
+                            ensureReceiverRegistered(view.context.applicationContext ?: view.context)
                             styleFooterView(view)
                             Log.d(TAG, "Applied Mochibun squircle styling in QSFooterViewController.onViewAttached")
                         } catch (t: Throwable) {
