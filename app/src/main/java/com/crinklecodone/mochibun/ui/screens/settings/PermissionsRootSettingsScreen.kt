@@ -1,15 +1,25 @@
 package com.crinklecodone.mochibun.ui.screens.settings
 
-import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -17,7 +27,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -28,22 +37,14 @@ import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog
 import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.core.system.WatchdogResult
-import com.crinklecodone.mochibun.data.prefs.ClickMethod
-import com.crinklecodone.mochibun.data.prefs.CursorPreferences
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
-import com.crinklecodone.mochibun.service.MochibunImeStatus
 import com.crinklecodone.mochibun.service.VirtualCursorService
 import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
 import kotlinx.coroutines.launch
 
-/**
- * Tier 3.5: Permissions & Root Sub-Screen
- * Centralizes Accessibility Services, Magisk Root Status, Root-Shell Recents Fallback,
- * and Root Cursor Click Dispatch.
- */
 @Composable
 internal fun PermissionsRootSettingsSubScreen(
     onBack: () -> Unit,
@@ -55,199 +56,157 @@ internal fun PermissionsRootSettingsSubScreen(
     val focusRequester = remember { FocusRequester() }
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
-
-    var hasOverlayPermission by remember {
-        mutableStateOf(Settings.canDrawOverlays(context))
-    }
-    var isCursorServiceActive by remember {
-        mutableStateOf(VirtualCursorService.isServiceRunning)
-    }
+    var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var accessibilityEnabled by remember { mutableStateOf(HardwareRemapManager.isAccessibilityServiceEnabled(context)) }
+    var cursorServiceRunning by remember { mutableStateOf(VirtualCursorService.isServiceRunning) }
     var rootStatus by remember {
-        mutableStateOf<RootStatus>(
-            if (!RootShell.isSuBinaryPresent()) RootStatus.NotAvailable else RootStatus.Unknown
-        )
+        mutableStateOf(if (RootShell.isSuBinaryPresent()) RootStatus.Unknown else RootStatus.NotAvailable)
     }
-    var useRootRecentsFallback by remember {
-        mutableStateOf(HardwareRemapManager.isRootRecentsFallbackEnabled(context))
-    }
-    var clickMethod by remember { mutableStateOf(CursorPreferences.getClickMethod(context)) }
-    var isWatchdogEnabled by remember {
-        mutableStateOf(PreferencesManager.isRootA11yWatchdogEnabled(context))
-    }
-    var isHealingServices by remember { mutableStateOf(false) }
-    var isRootQuickSettingsEnabled by remember {
-        mutableStateOf(PreferencesManager.isRootQuickSettingsEnabled(context))
-    }
-    var imeState by remember { mutableStateOf(MochibunImeStatus.state(context)) }
+    var rootRecentsEnabled by remember { mutableStateOf(HardwareRemapManager.isRootRecentsFallbackEnabled(context)) }
+    var rootQuickSettingsEnabled by remember { mutableStateOf(PreferencesManager.isRootQuickSettingsEnabled(context)) }
+    var watchdogEnabled by remember { mutableStateOf(PreferencesManager.isRootA11yWatchdogEnabled(context)) }
+    var healing by remember { mutableStateOf(false) }
 
-    fun refreshPermissionsState() {
-        hasOverlayPermission = Settings.canDrawOverlays(context)
-        isCursorServiceActive = VirtualCursorService.isServiceRunning
-        useRootRecentsFallback = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
-        clickMethod = CursorPreferences.getClickMethod(context)
-        isWatchdogEnabled = PreferencesManager.isRootA11yWatchdogEnabled(context)
-        isRootQuickSettingsEnabled = PreferencesManager.isRootQuickSettingsEnabled(context)
-        imeState = MochibunImeStatus.state(context)
-        if (!RootShell.isSuBinaryPresent()) {
-            rootStatus = RootStatus.NotAvailable
-        }
+    val rowIds = listOf("overlay", "accessibility", "cursor", "root", "recents", "quick_settings", "watchdog", "self_heal")
+    val totalItems = rowIds.size
+
+    fun refreshState() {
+        overlayGranted = Settings.canDrawOverlays(context)
+        accessibilityEnabled = HardwareRemapManager.isAccessibilityServiceEnabled(context)
+        cursorServiceRunning = VirtualCursorService.isServiceRunning
+        rootRecentsEnabled = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
+        rootQuickSettingsEnabled = PreferencesManager.isRootQuickSettingsEnabled(context)
+        watchdogEnabled = PreferencesManager.isRootA11yWatchdogEnabled(context)
+        if (!RootShell.isSuBinaryPresent()) rootStatus = RootStatus.NotAvailable
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) refreshPermissionsState()
+            if (event == Lifecycle.Event.ON_RESUME) refreshState()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(Unit) { refreshPermissionsState() }
-
-    // Closing the system keyboard picker returns focus without an ON_RESUME
-    val windowInfo = LocalWindowInfo.current
-    LaunchedEffect(windowInfo) {
-        snapshotFlow { windowInfo.isWindowFocused }.collect { focused ->
-            if (focused) imeState = MochibunImeStatus.state(context)
-        }
-    }
-
-    val totalItems = 9 // 0: Remap A11y, 1: Cursor A11y, 2: Magisk Root, 3: Root Recents, 4: Root QS Toggles, 5: Root Click Dispatch, 6: Watchdog, 7: Self-Heal, 8: Keyboard
-
-    val targetCardIndex = remember(focusedIndex) {
-        when (focusedIndex) {
-            0, 1 -> 0
-            2, 3, 4, 5, 6, 7 -> 1
-            8 -> 2
-            else -> 0
-        }
-    }
-
-    LaunchedEffect(targetCardIndex) {
-        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
-        if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
-        listState.animateScrollToItem(targetCardIndex)
-    }
-
-    fun toggleRootRecents() {
-        val newTarget = !useRootRecentsFallback
-        if (newTarget) {
-            if (!RootShell.isSuBinaryPresent()) {
-                Toast.makeText(context, "su binary not found. Device is not rooted.", Toast.LENGTH_SHORT).show()
-            } else if (rootStatus !is RootStatus.Granted) {
-                scope.launch {
-                    rootStatus = RootStatus.Requesting
-                    val res = RootShell.requestRoot()
-                    rootStatus = res
-                    if (res is RootStatus.Granted) {
-                        useRootRecentsFallback = true
-                        HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
-                    } else {
-                        Toast.makeText(context, "Root access denied in Magisk.", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            } else {
-                useRootRecentsFallback = true
-                HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
-            }
-        } else {
-            useRootRecentsFallback = false
+    fun toggleRecents() {
+        val enabled = !rootRecentsEnabled
+        if (!enabled) {
             HardwareRemapManager.setRootRecentsFallbackEnabled(context, false)
-        }
-    }
-
-    fun toggleRootQuickSettings() {
-        val next = !isRootQuickSettingsEnabled
-        PreferencesManager.setRootQuickSettingsEnabled(context, next)
-        isRootQuickSettingsEnabled = next
-    }
-
-    fun toggleClickDispatchMethod() {
-        val nextMethod = if (clickMethod == ClickMethod.ACCESSIBILITY_GESTURE) {
-            ClickMethod.ROOT_INPUT_TAP
+            rootRecentsEnabled = false
+        } else if (!RootShell.isSuBinaryPresent()) {
+            Toast.makeText(context, "su binary not found. Device is not rooted.", Toast.LENGTH_SHORT).show()
+        } else if (rootStatus !is RootStatus.Granted) {
+            scope.launch {
+                rootStatus = RootStatus.Requesting
+                rootStatus = RootShell.requestRoot()
+                if (rootStatus is RootStatus.Granted) {
+                    HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+                    rootRecentsEnabled = true
+                } else {
+                    Toast.makeText(context, "Root access denied in Magisk.", Toast.LENGTH_SHORT).show()
+                }
+            }
         } else {
-            ClickMethod.ACCESSIBILITY_GESTURE
+            HardwareRemapManager.setRootRecentsFallbackEnabled(context, true)
+            rootRecentsEnabled = true
         }
-        CursorPreferences.setClickMethod(context, nextMethod)
-        clickMethod = nextMethod
     }
 
-    fun activatePermissionItem(index: Int) {
-        when (index) {
-            0 -> {
-                try {
-                    context.startActivity(
-                        Intent(
-                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            android.net.Uri.parse("package:${context.packageName}")
-                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                } catch (_: Exception) {
-                    try {
-                        context.startActivity(
-                            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
-                    } catch (_: Exception) {}
-                }
-            }
-            1 -> {
-                if (!VirtualCursorService.isServiceRunning) {
-                    VirtualCursorService.start(context)
-                } else {
-                    VirtualCursorService.toggleCursor()
-                }
-                refreshPermissionsState()
-            }
-            2 -> {
-                if (!RootShell.isSuBinaryPresent()) {
-                    rootStatus = RootStatus.NotAvailable
-                    Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
-                } else {
-                    scope.launch {
-                        rootStatus = RootStatus.Requesting
-                        rootStatus = RootShell.requestRoot()
-                    }
-                }
-            }
-            8 -> activateMochibunKeyboard(context, scope, imeState) { refreshPermissionsState() }
-            3 -> toggleRootRecents()
-            4 -> toggleRootQuickSettings()
-            5 -> toggleClickDispatchMethod()
-            6 -> {
-                val next = !isWatchdogEnabled
-                PreferencesManager.setRootA11yWatchdogEnabled(context, next)
-                isWatchdogEnabled = next
-                if (next) {
-                    RootAccessibilityWatchdog.checkAsync(context, force = true) {
-                        refreshPermissionsState()
-                    }
-                }
-            }
-            7 -> {
-                if (!RootShell.isSuBinaryPresent()) {
-                    Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
-                } else {
-                    isHealingServices = true
-                    RootAccessibilityWatchdog.checkAsync(context, force = true) { res ->
-                        isHealingServices = false
-                        refreshPermissionsState()
-                        when (res) {
-                            is WatchdogResult.Healthy -> Toast.makeText(context, "Services are healthy and running ♡", Toast.LENGTH_SHORT).show()
-                            is WatchdogResult.Healed -> Toast.makeText(context, "Services successfully repaired! ♡", Toast.LENGTH_SHORT).show()
-                            is WatchdogResult.Failed -> Toast.makeText(context, "Repair failed: ${res.reason}", Toast.LENGTH_LONG).show()
-                            is WatchdogResult.NoRoot -> Toast.makeText(context, "Root access required to self-heal", Toast.LENGTH_SHORT).show()
-                            is WatchdogResult.Disabled -> Toast.makeText(context, "Watchdog is disabled", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
+    fun toggleQuickSettings() {
+        rootQuickSettingsEnabled = !rootQuickSettingsEnabled
+        PreferencesManager.setRootQuickSettingsEnabled(context, rootQuickSettingsEnabled)
+    }
+
+    fun toggleWatchdog() {
+        watchdogEnabled = !watchdogEnabled
+        PreferencesManager.setRootA11yWatchdogEnabled(context, watchdogEnabled)
+        if (watchdogEnabled) {
+            RootAccessibilityWatchdog.checkAsync(context, force = true) { refreshState() }
+        }
+    }
+
+    fun requestRoot() {
+        if (!RootShell.isSuBinaryPresent()) {
+            rootStatus = RootStatus.NotAvailable
+            Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
+        } else {
+            scope.launch {
+                rootStatus = RootStatus.Requesting
+                rootStatus = RootShell.requestRoot()
             }
         }
+    }
+
+    fun selfHeal() {
+        if (!RootShell.isSuBinaryPresent()) {
+            Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
+            return
+        }
+        healing = true
+        RootAccessibilityWatchdog.checkAsync(context, force = true) { result ->
+            healing = false
+            refreshState()
+            val message = when (result) {
+                is WatchdogResult.Healthy -> "Services are healthy and running ♡"
+                is WatchdogResult.Healed -> "Services successfully repaired! ♡"
+                is WatchdogResult.Failed -> "Repair failed: ${result.reason}"
+                is WatchdogResult.NoRoot -> "Root access required to self-heal"
+                is WatchdogResult.Disabled -> "Watchdog is disabled"
+            }
+            Toast.makeText(context, message, if (result is WatchdogResult.Failed) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun activate(index: Int) {
+        when (rowIds.getOrNull(index)) {
+            "overlay" -> context.startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:${context.packageName}")
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            "accessibility" -> context.startActivity(
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            "cursor" -> {
+                if (!VirtualCursorService.isServiceRunning) VirtualCursorService.start(context)
+                else VirtualCursorService.toggleCursor()
+                refreshState()
+            }
+            "root" -> requestRoot()
+            "recents" -> toggleRecents()
+            "quick_settings" -> toggleQuickSettings()
+            "watchdog" -> toggleWatchdog()
+            "self_heal" -> selfHeal()
+        }
+    }
+
+    fun adjust(index: Int): Boolean {
+        when (rowIds.getOrNull(index)) {
+            "recents" -> toggleRecents()
+            "quick_settings" -> toggleQuickSettings()
+            "watchdog" -> toggleWatchdog()
+            else -> return false
+        }
+        return true
+    }
+
+    fun stepIndex(direction: Int) {
+        focusedIndex = (focusedIndex + direction + totalItems) % totalItems
+        SoundEffectManager.play(context, SoundEffect.NAV)
+    }
+
+    LaunchedEffect(focusedIndex) {
+        val cardIndex = if (focusedIndex <= 2) 0 else 1
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+        if (visible.isEmpty() || cardIndex in visible) return@LaunchedEffect
+        listState.animateScrollToItem(cardIndex)
     }
 
     requestFocusSafely(focusRequester)
-
     SettingsScaffold(
-        title = "Permissions & Root",
+        title = "Permissions & Superuser",
         showBack = true,
         onBack = onBack,
         modifier = modifier
@@ -268,52 +227,37 @@ internal fun PermissionsRootSettingsSubScreen(
                         SoundEffectManager.play(context, SoundEffect.CLICK)
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
+                        activate(focusedIndex)
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        activatePermissionItem(focusedIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
                 val digit = getDigitFromKeyCode(native.keyCode)
                 if (digit != null && digit in 1..totalItems) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
-                        val targetIndex = digit - 1
-                        focusedIndex = targetIndex
-                        SoundEffectManager.play(context, SoundEffect.SELECT)
-                        activatePermissionItem(targetIndex)
+                        focusedIndex = digit - 1
+                        activate(focusedIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                ) {
                     if (event.type == KeyEventType.KeyDown) {
-                        focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                            if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
-                        } else {
-                            if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
-                        }
-                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        stepIndex(if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) -1 else 1)
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                ) {
                     if (event.type == KeyEventType.KeyDown) {
-                        if (focusedIndex == 5) {
-                            toggleClickDispatchMethod()
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                        } else if (focusedIndex == 6) {
-                            val next = !isWatchdogEnabled
-                            PreferencesManager.setRootA11yWatchdogEnabled(context, next)
-                            isWatchdogEnabled = next
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                            if (next) {
-                                RootAccessibilityWatchdog.checkAsync(context, force = true) {
-                                    refreshPermissionsState()
-                                }
-                            }
+                        if (!adjust(focusedIndex)) {
+                            stepIndex(if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1)
                         }
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 false
             }
     ) {
@@ -323,170 +267,88 @@ internal fun PermissionsRootSettingsSubScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item {
-                SettingsCard(categoryTitle = "System Overlay & LSPosed") {
+                SettingsCard(categoryTitle = "System Overlay & Accessibility") {
                     SettingsNavigationRow(
                         title = "Overlay Window Permission",
-                        subtitle = if (hasOverlayPermission) {
-                            "✔ Granted • SYSTEM_ALERT_WINDOW active"
-                        } else {
-                            "✖ Missing • Press OK to grant in Android Settings"
-                        },
-                        icon = if (hasOverlayPermission) "✓" else "!",
+                        subtitle = if (overlayGranted) "Granted • Display over other apps" else "Missing • Open Android permission settings",
+                        icon = if (overlayGranted) "✓" else "!",
                         isFocused = focusedIndex == 0,
                         jumpNumber = 1,
-                        onClick = { activatePermissionItem(0) }
+                        onClick = { activate(0) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Virtual Cursor Foreground Service",
-                        subtitle = if (isCursorServiceActive) {
-                            "✔ Running • F4 & D-pad hooked in system_server"
-                        } else {
-                            "✖ Inactive • Press OK to start foreground service"
-                        },
-                        icon = if (isCursorServiceActive) "✓" else "⚡",
+                        title = "Accessibility Service Status",
+                        subtitle = if (accessibilityEnabled) "Enabled" else "Disabled • Open Android Accessibility settings",
+                        icon = if (accessibilityEnabled) "✓" else "!",
                         isFocused = focusedIndex == 1,
                         jumpNumber = 2,
-                        onClick = { activatePermissionItem(1) }
+                        onClick = { activate(1) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsInfoRow(
+                        label = "Virtual Cursor Foreground",
+                        value = if (cursorServiceRunning) "Running" else "Stopped"
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsInfoRow(
+                        label = "LSPosed Hooks",
+                        value = "Enable system_server and SystemUI hooks in LSPosed"
                     )
                 }
             }
-
             item {
                 SettingsCard(categoryTitle = "Magisk Root & Superuser") {
-                    val rootStatusLabel = when (rootStatus) {
-                        is RootStatus.Granted -> "✔ Granted • libsu root shell authorized"
-                        is RootStatus.Denied -> "✖ Denied • Authorize Mochibun in Magisk"
-                        is RootStatus.Requesting -> "⏳ Requesting Magisk root permission..."
-                        is RootStatus.NotAvailable -> "✖ Not Available • su binary not found"
+                    val rootLabel = when (rootStatus) {
+                        is RootStatus.Granted -> "Granted • libsu root shell authorized"
+                        is RootStatus.Denied -> "Denied • Authorize in Magisk"
+                        is RootStatus.Requesting -> "Requesting Magisk root permission…"
+                        is RootStatus.NotAvailable -> "Unavailable • su binary not found"
                         else -> "Press OK to request or verify Magisk root access"
                     }
                     SettingsNavigationRow(
                         title = "Magisk Root Access",
-                        subtitle = rootStatusLabel,
+                        subtitle = rootLabel,
                         icon = if (rootStatus is RootStatus.Granted) "✓" else "⚡",
-                        isFocused = focusedIndex == 2,
-                        jumpNumber = 3,
-                        onClick = {
-                            if (!RootShell.isSuBinaryPresent()) {
-                                rootStatus = RootStatus.NotAvailable
-                            } else {
-                                scope.launch {
-                                    rootStatus = RootStatus.Requesting
-                                    rootStatus = RootShell.requestRoot()
-                                }
-                            }
-                        }
+                        isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
+                        onClick = { activate(3) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Root-Shell Recents Fallback",
-                        subtitle = if (useRootRecentsFallback) {
-                            "Launches Recents directly via root shell if stock fails"
-                        } else {
-                            "Using standard Android Recents intent"
-                        },
-                        checked = useRootRecentsFallback,
-                        isFocused = focusedIndex == 3,
-                        jumpNumber = 4,
-                        onCheckedChange = { toggleRootRecents() }
+                        title = "Root-Shell Recents Fallback (QuickSwitch)",
+                        subtitle = "Use root shell if standard Recents activation fails",
+                        checked = rootRecentsEnabled,
+                        isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
+                        onCheckedChange = { toggleRecents() }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "Root Quick Settings Toggles",
-                        subtitle = if (isRootQuickSettingsEnabled) {
-                            "Toggle Wi-Fi and Bluetooth instantly in-place via root shell"
-                        } else {
-                            "Opening system dialog panels (standard non-root)"
-                        },
-                        checked = isRootQuickSettingsEnabled,
-                        isFocused = focusedIndex == 4,
-                        jumpNumber = 5,
-                        onCheckedChange = { toggleRootQuickSettings() }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsStepperRow(
-                        title = "Cursor Click Dispatch",
-                        subtitle = if (clickMethod == ClickMethod.ACCESSIBILITY_GESTURE) {
-                            "Accessibility Gesture (Non-root)"
-                        } else {
-                            "Root Shell Injection (libsu daemon)"
-                        },
-                        valueDisplay = if (clickMethod == ClickMethod.ROOT_INPUT_TAP) "Root Tap" else "Gesture",
+                        subtitle = "Toggle Wi-Fi and Bluetooth through root shell",
+                        checked = rootQuickSettingsEnabled,
                         isFocused = focusedIndex == 5,
                         jumpNumber = 6,
-                        onDecrement = {
-                            toggleClickDispatchMethod()
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                        },
-                        onIncrement = {
-                            toggleClickDispatchMethod()
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                        }
+                        onCheckedChange = { toggleQuickSettings() }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "A11y Root Watchdog",
-                        subtitle = if (isWatchdogEnabled) {
-                            "Auto-rebinds services on sleep & wake if dropped"
-                        } else {
-                            "Watchdog disabled • manual service restart"
-                        },
-                        checked = isWatchdogEnabled,
+                        subtitle = "Repair accessibility services after sleep or wake",
+                        checked = watchdogEnabled,
                         isFocused = focusedIndex == 6,
                         jumpNumber = 7,
-                        onCheckedChange = { enabled ->
-                            PreferencesManager.setRootA11yWatchdogEnabled(context, enabled)
-                            isWatchdogEnabled = enabled
-                            if (enabled) {
-                                RootAccessibilityWatchdog.checkAsync(context, force = true) {
-                                    refreshPermissionsState()
-                                }
-                            }
-                        }
+                        onCheckedChange = { toggleWatchdog() }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Self-Heal Services Now",
-                        subtitle = if (isHealingServices) {
-                            "⏳ Verifying & restoring services via Root..."
-                        } else {
-                            "Force-restores A11y permissions & re-binds daemons"
-                        },
-                        icon = if (isHealingServices) "⏳" else "♡",
+                        title = "Self-heal Services Now",
+                        subtitle = if (healing) "Checking and restoring services…" else "Verify and rebind services using root",
+                        icon = if (healing) "⏳" else "♡",
                         isFocused = focusedIndex == 7,
                         jumpNumber = 8,
-                        onClick = {
-                            if (!RootShell.isSuBinaryPresent()) {
-                                Toast.makeText(context, "No su binary detected on device", Toast.LENGTH_SHORT).show()
-                            } else {
-                                isHealingServices = true
-                                RootAccessibilityWatchdog.checkAsync(context, force = true) { res ->
-                                    isHealingServices = false
-                                    refreshPermissionsState()
-                                    when (res) {
-                                        is WatchdogResult.Healthy -> Toast.makeText(context, "Services are healthy and running ♡", Toast.LENGTH_SHORT).show()
-                                        is WatchdogResult.Healed -> Toast.makeText(context, "Services successfully repaired! ♡", Toast.LENGTH_SHORT).show()
-                                        is WatchdogResult.Failed -> Toast.makeText(context, "Repair failed: ${res.reason}", Toast.LENGTH_LONG).show()
-                                        is WatchdogResult.NoRoot -> Toast.makeText(context, "Root access required to self-heal", Toast.LENGTH_SHORT).show()
-                                        is WatchdogResult.Disabled -> Toast.makeText(context, "Watchdog is disabled", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-
-            item {
-                SettingsCard(categoryTitle = "Input Method") {
-                    SettingsNavigationRow(
-                        title = "Mochibun Keyboard (IME)",
-                        subtitle = keyboardStatusSubtitle(imeState),
-                        icon = if (imeState == MochibunImeStatus.State.DEFAULT) "✓" else "!",
-                        isFocused = focusedIndex == 8,
-                        jumpNumber = 9,
-                        onClick = { activateMochibunKeyboard(context, scope, imeState) { refreshPermissionsState() } }
+                        onClick = { selfHeal() }
                     )
                 }
             }

@@ -67,21 +67,27 @@ internal fun AppearanceSettingsSubScreen(
     var tempNameInput by remember { mutableStateOf(customName) }
 
     val isWallpaperOverlayEnabled by PreferencesManager.isWallpaperOverlayEnabled.collectAsState()
+    val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
+    val systemMonitorInterval by PreferencesManager.systemMonitorInterval.collectAsState()
+    val isPhotoFrameEnabled by PreferencesManager.isPhotoFrameEnabled.collectAsState()
     val fontId by PreferencesManager.themeFontFamily.collectAsState()
     val fontOptions by TypographyManager.options.collectAsState()
 
     // Dynamic item list based on custom wallpaper state
-    val items = remember(hasCustomWallpaper) {
+    val items = remember(hasCustomWallpaper, isSystemMonitorEnabled) {
         buildList {
             add("theme")
             add("typography")
             add("name")
-            add("icon_pack")
             add("pick_wallpaper")
             if (hasCustomWallpaper) {
                 add("reset_wallpaper")
             }
+            add("icon_pack")
             add("wallpaper_stickers")
+            add("system_monitor")
+            if (isSystemMonitorEnabled) add("monitor_interval")
+            add("photo_frame")
         }
     }
 
@@ -91,9 +97,8 @@ internal fun AppearanceSettingsSubScreen(
         when (items.getOrNull(focusedIndex)) {
             "theme", "typography" -> 0
             "name" -> 1
-            "icon_pack" -> 2
-            "pick_wallpaper", "reset_wallpaper" -> 3
-            "wallpaper_stickers" -> 4
+            "icon_pack", "pick_wallpaper", "reset_wallpaper", "wallpaper_stickers" -> 2
+            "system_monitor", "monitor_interval", "photo_frame" -> 3
             else -> 0
         }
     }
@@ -141,6 +146,17 @@ internal fun AppearanceSettingsSubScreen(
                 PreferencesManager.setWallpaperOverlayEnabled(context, !isWallpaperOverlayEnabled)
                 SoundEffectManager.play(context, SoundEffect.SELECT)
             }
+            "system_monitor" -> PreferencesManager.setSystemMonitorEnabled(context, !isSystemMonitorEnabled)
+            "monitor_interval" -> {
+                val next = when (systemMonitorInterval) {
+                    1 -> 2
+                    2 -> 3
+                    3 -> 5
+                    else -> 1
+                }
+                PreferencesManager.setSystemMonitorInterval(context, next)
+            }
+            "photo_frame" -> PreferencesManager.setPhotoFrameEnabled(context, !isPhotoFrameEnabled)
         }
     }
 
@@ -209,6 +225,10 @@ internal fun AppearanceSettingsSubScreen(
                             }
                             PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
                             SoundEffectManager.play(context, SoundEffect.NAV)
+                        } else {
+                            val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                            focusedIndex = (focusedIndex + direction + totalItems) % totalItems
+                            SoundEffectManager.play(context, SoundEffect.NAV)
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -229,7 +249,7 @@ internal fun AppearanceSettingsSubScreen(
                         subtitle = "Active: ${ActiveTheme.palette.name}",
                         icon = "🎨",
                         isFocused = items.getOrNull(focusedIndex) == "theme",
-                        jumpNumber = items.indexOf("theme") + 1,
+                        jumpNumber = (items.indexOf("theme") + 1).takeIf { it <= 9 },
                         onClick = { onOpenThemeStudio?.invoke() }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -237,11 +257,11 @@ internal fun AppearanceSettingsSubScreen(
                         fontOptions.firstOrNull { it.id == fontId } ?: TypographyManager.BuiltInTypographyOptions.first()
                     }
                     SettingsStepperRow(
-                        title = "Typography",
+                        title = "Font Style",
                         subtitle = currentFont.subtitle,
                         valueDisplay = currentFont.name,
                         isFocused = items.getOrNull(focusedIndex) == "typography",
-                        jumpNumber = items.indexOf("typography") + 1,
+                        jumpNumber = (items.indexOf("typography") + 1).takeIf { it <= 9 },
                         onDecrement = {
                             val curIdx = fontOptions.indexOfFirst { it.id == fontId }.coerceAtLeast(0)
                             val prevIdx = if (curIdx > 0) curIdx - 1 else fontOptions.size - 1
@@ -259,13 +279,13 @@ internal fun AppearanceSettingsSubScreen(
             }
 
             item {
-                SettingsCard(categoryTitle = "Greeting Personalization") {
+                SettingsCard(categoryTitle = "Greeting & Standby") {
                     SettingsTextInputRow(
-                        title = "User Name",
+                        title = "Display Name (Greeting)",
                         subtitle = if (customName.isNotBlank()) "♡ Welcome home, $customName ♡" else "Tap or Enter to set greeting name",
                         value = customName.ifBlank { "Not set" },
                         isFocused = items.getOrNull(focusedIndex) == "name",
-                        jumpNumber = items.indexOf("name") + 1,
+                        jumpNumber = (items.indexOf("name") + 1).takeIf { it <= 9 },
                         onClick = {
                             tempNameInput = customName
                             isEditingName = true
@@ -275,26 +295,13 @@ internal fun AppearanceSettingsSubScreen(
             }
 
             item {
-                SettingsCard(categoryTitle = "Icon Pack") {
-                    SettingsNavigationRow(
-                        title = "Installed Icon Packs",
-                        subtitle = "Apply ADW / Nova compatible kawaii packs",
-                        icon = "🌸",
-                        isFocused = items.getOrNull(focusedIndex) == "icon_pack",
-                        jumpNumber = items.indexOf("icon_pack") + 1,
-                        onClick = { onOpenIconPackDialog?.invoke() }
-                    )
-                }
-            }
-
-            item {
-                SettingsCard(categoryTitle = "Wallpaper") {
+                SettingsCard(categoryTitle = "Wallpaper & Deco") {
                     SettingsNavigationRow(
                         title = "Pick from Gallery",
                         subtitle = "Select custom wallpaper image",
                         icon = "🖼",
                         isFocused = items.getOrNull(focusedIndex) == "pick_wallpaper",
-                        jumpNumber = items.indexOf("pick_wallpaper") + 1,
+                        jumpNumber = (items.indexOf("pick_wallpaper") + 1).takeIf { it <= 9 },
                         onClick = { onPickWallpaperClick?.invoke() }
                     )
                     if (hasCustomWallpaper) {
@@ -303,22 +310,77 @@ internal fun AppearanceSettingsSubScreen(
                             title = "Reset to Default Wallpaper",
                             isFocused = items.getOrNull(focusedIndex) == "reset_wallpaper",
                             isDestructive = true,
-                            jumpNumber = items.indexOf("reset_wallpaper") + 1,
+                            jumpNumber = (items.indexOf("reset_wallpaper") + 1).takeIf { it <= 9 },
                             onClick = { onResetWallpaperClick?.invoke() }
                         )
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "Installed Icon Packs",
+                        subtitle = "Apply compatible icon packs",
+                        icon = "🌸",
+                        isFocused = items.getOrNull(focusedIndex) == "icon_pack",
+                        jumpNumber = (items.indexOf("icon_pack") + 1).takeIf { it <= 9 },
+                        onClick = { onOpenIconPackDialog?.invoke() }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Wallpaper Stickers (PixelSpray)",
+                        subtitle = "Show rotating pastel pixel overlays above wallpaper",
+                        checked = isWallpaperOverlayEnabled,
+                        isFocused = items.getOrNull(focusedIndex) == "wallpaper_stickers",
+                        jumpNumber = (items.indexOf("wallpaper_stickers") + 1).takeIf { it <= 9 },
+                        onCheckedChange = { PreferencesManager.setWallpaperOverlayEnabled(context, it) }
+                    )
                 }
             }
 
             item {
-                SettingsCard(categoryTitle = "Visual Effects") {
+                SettingsCard(categoryTitle = "Widget Deck") {
                     SettingsToggleRow(
-                        title = "♡ Wallpaper Stickers ♡",
-                        subtitle = "Show rotating pastel pixel overlays above wallpaper",
-                        checked = isWallpaperOverlayEnabled,
-                        isFocused = items.getOrNull(focusedIndex) == "wallpaper_stickers",
-                        jumpNumber = items.indexOf("wallpaper_stickers") + 1,
-                        onCheckedChange = { PreferencesManager.setWallpaperOverlayEnabled(context, it) }
+                        title = "System Monitor Card",
+                        subtitle = "Display live CPU, RAM, and storage gauges",
+                        checked = isSystemMonitorEnabled,
+                        isFocused = items.getOrNull(focusedIndex) == "system_monitor",
+                        jumpNumber = (items.indexOf("system_monitor") + 1).takeIf { it <= 9 },
+                        onCheckedChange = { PreferencesManager.setSystemMonitorEnabled(context, it) }
+                    )
+                    if (isSystemMonitorEnabled) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsStepperRow(
+                            title = "Refresh Interval",
+                            subtitle = "System monitor update frequency",
+                            valueDisplay = "$systemMonitorInterval sec",
+                            isFocused = items.getOrNull(focusedIndex) == "monitor_interval",
+                            jumpNumber = (items.indexOf("monitor_interval") + 1).takeIf { it <= 9 },
+                            onDecrement = {
+                                val next = when (systemMonitorInterval) {
+                                    5 -> 3
+                                    3 -> 2
+                                    2 -> 1
+                                    else -> 5
+                                }
+                                PreferencesManager.setSystemMonitorInterval(context, next)
+                            },
+                            onIncrement = {
+                                val next = when (systemMonitorInterval) {
+                                    1 -> 2
+                                    2 -> 3
+                                    3 -> 5
+                                    else -> 1
+                                }
+                                PreferencesManager.setSystemMonitorInterval(context, next)
+                            }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Photo Frame Card",
+                        subtitle = "Show your framed photo on the Widgets page",
+                        checked = isPhotoFrameEnabled,
+                        isFocused = items.getOrNull(focusedIndex) == "photo_frame",
+                        jumpNumber = (items.indexOf("photo_frame") + 1).takeIf { it <= 9 },
+                        onCheckedChange = { PreferencesManager.setPhotoFrameEnabled(context, it) }
                     )
                 }
             }

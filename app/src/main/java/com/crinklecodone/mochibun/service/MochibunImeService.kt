@@ -105,7 +105,9 @@ class MochibunImeService : InputMethodService() {
     private var holdKeyCode = KeyEvent.KEYCODE_UNKNOWN
     private var holdFired = false
     private var holdDelayMs = PreferencesManager.DEFAULT_IME_HOLD_DELAY_MS.toLong()
+    private var holdForDigitEnabled = PreferencesManager.DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED
     private var holdVibrates = PreferencesManager.DEFAULT_IME_HOLD_VIBRATION
+    private var autoCommitEnabled = PreferencesManager.DEFAULT_IME_AUTO_COMMIT_ENABLED
     private val holdRunnable = Runnable { fireHold() }
     private var idleCommitMs = PreferencesManager.DEFAULT_IME_IDLE_COMMIT_MS.toLong()
 
@@ -262,7 +264,9 @@ class MochibunImeService : InputMethodService() {
         composingShown = false
         consumedDown.fill(false)
         holdDelayMs = PreferencesManager.getImeHoldDelayMs(this).toLong()
+        holdForDigitEnabled = PreferencesManager.isImeHoldForDigitEnabled(this)
         holdVibrates = PreferencesManager.isImeHoldVibrationEnabled(this)
+        autoCommitEnabled = PreferencesManager.isImeAutoCommitEnabled(this)
         idleCommitMs = PreferencesManager.getImeIdleCommitMs(this).toLong()
         isNumericField = when ((info?.inputType ?: 0) and InputType.TYPE_MASK_CLASS) {
             InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> true
@@ -436,7 +440,7 @@ class MochibunImeService : InputMethodService() {
     /** Hold timer: type the held key's digit (or '*'), replacing the pending letter typed on DOWN. */
     private fun fireHold() {
         val keyCode = holdKeyCode
-        if (keyCode == KeyEvent.KEYCODE_UNKNOWN || holdFired) return
+        if (keyCode == KeyEvent.KEYCODE_UNKNOWN || holdFired || !holdForDigitEnabled) return
         holdFired = true
         batchEdit {
             if (keyCode == KeyEvent.KEYCODE_STAR) {
@@ -527,7 +531,7 @@ class MochibunImeService : InputMethodService() {
         handler.removeCallbacks(idleCommitRunnable)
         val ic = currentInputConnection ?: return
         if (candidateState.isActive) {
-            handler.postDelayed(idleCommitRunnable, idleCommitMs)
+            if (autoCommitEnabled) handler.postDelayed(idleCommitRunnable, idleCommitMs)
             ic.setComposingText(candidateState.candidates[candidateState.selectedIndex], 1)
             composingShown = true
         } else if (composingShown) {

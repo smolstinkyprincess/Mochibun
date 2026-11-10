@@ -6,6 +6,9 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -86,13 +89,27 @@ internal fun KeyboardSettingsSubScreen(
     var sawCenterDown by remember { mutableStateOf(false) }
 
     var imeState by remember { mutableStateOf(MochibunImeStatus.state(context)) }
-    var holdDelayMs by remember { mutableIntStateOf(PreferencesManager.getImeHoldDelayMs(context)) }
-    var idleCommitMs by remember { mutableIntStateOf(PreferencesManager.getImeIdleCommitMs(context)) }
+    var holdForDigit by remember { mutableStateOf(PreferencesManager.isImeHoldForDigitEnabled(context)) }
+    var autoCommit by remember { mutableStateOf(PreferencesManager.isImeAutoCommitEnabled(context)) }
     var holdVibration by remember { mutableStateOf(PreferencesManager.isImeHoldVibrationEnabled(context)) }
+    var showKeyGuide by remember { mutableStateOf(false) }
 
-    fun toggleHoldVibration() {
-        holdVibration = !holdVibration
-        PreferencesManager.setImeHoldVibrationEnabled(context, holdVibration)
+    fun toggleSetting(index: Int) {
+        when (index) {
+            2 -> {
+                holdForDigit = !holdForDigit
+                PreferencesManager.setImeHoldForDigitEnabled(context, holdForDigit)
+            }
+            3 -> {
+                autoCommit = !autoCommit
+                PreferencesManager.setImeAutoCommitEnabled(context, autoCommit)
+            }
+            4 -> {
+                holdVibration = !holdVibration
+                PreferencesManager.setImeHoldVibrationEnabled(context, holdVibration)
+            }
+            5 -> showKeyGuide = true
+        }
     }
 
     fun refresh() {
@@ -115,7 +132,7 @@ internal fun KeyboardSettingsSubScreen(
         snapshotFlow { windowInfo.isWindowFocused }.collect { focused -> if (focused) refresh() }
     }
 
-    val totalItems = 5 // 0: Keyboard status, 1: Switch keyboard, 2: Hold delay, 3: Auto-commit, 4: Hold vibration
+    val totalItems = 6
 
     LaunchedEffect(focusedIndex) {
         val target = if (focusedIndex <= 1) 0 else 1
@@ -124,40 +141,18 @@ internal fun KeyboardSettingsSubScreen(
         listState.animateScrollToItem(target)
     }
 
-    fun stepHoldDelay(delta: Int) {
-        val next = (holdDelayMs + delta).coerceIn(
-            PreferencesManager.MIN_IME_HOLD_DELAY_MS,
-            PreferencesManager.MAX_IME_HOLD_DELAY_MS
-        )
-        if (next == holdDelayMs) return
-        holdDelayMs = next
-        PreferencesManager.setImeHoldDelayMs(context, next)
-        SoundEffectManager.play(context, SoundEffect.NAV)
-    }
-
-    fun stepIdleCommit(delta: Int) {
-        val next = (idleCommitMs + delta).coerceIn(
-            PreferencesManager.MIN_IME_IDLE_COMMIT_MS,
-            PreferencesManager.MAX_IME_IDLE_COMMIT_MS
-        )
-        if (next == idleCommitMs) return
-        idleCommitMs = next
-        PreferencesManager.setImeIdleCommitMs(context, next)
-        SoundEffectManager.play(context, SoundEffect.NAV)
-    }
-
     fun activate(index: Int) {
         when (index) {
             0 -> activateMochibunKeyboard(context, scope, imeState, ::refresh)
             1 -> MochibunImeStatus.showPicker(context)
-            4 -> toggleHoldVibration()
+            else -> toggleSetting(index)
         }
     }
 
     requestFocusSafely(focusRequester)
 
     SettingsScaffold(
-        title = "Keyboard",
+        title = "Typing",
         showBack = true,
         onBack = onBack,
         modifier = modifier
@@ -204,13 +199,14 @@ internal fun KeyboardSettingsSubScreen(
                     return@onPreviewKeyEvent true
                 }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    if (event.type == KeyEventType.KeyDown && focusedIndex == 2) {
-                        stepHoldDelay(if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -HOLD_STEP_MS else HOLD_STEP_MS)
-                    } else if (event.type == KeyEventType.KeyDown && focusedIndex == 3) {
-                        stepIdleCommit(if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -IDLE_STEP_MS else IDLE_STEP_MS)
-                    } else if (event.type == KeyEventType.KeyDown && focusedIndex == 4) {
-                        toggleHoldVibration()
-                        SoundEffectManager.play(context, SoundEffect.NAV)
+                    if (event.type == KeyEventType.KeyDown) {
+                        if (focusedIndex in 2..4) {
+                            toggleSetting(focusedIndex)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        } else {
+                            val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                            focusedIndex = (focusedIndex + direction + totalItems) % totalItems
+                        }
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -245,56 +241,79 @@ internal fun KeyboardSettingsSubScreen(
             }
 
             item {
-                SettingsCard(categoryTitle = "Typing") {
-                    SettingsStepperRow(
+                SettingsCard(categoryTitle = "Input Behavior") {
+                    SettingsToggleRow(
                         title = "Hold for Digit",
-                        subtitle = "Hold time to type a number",
-                        valueDisplay = "$holdDelayMs ms",
+                        subtitle = "Hold a keypad key to type its number",
+                        checked = holdForDigit,
                         isFocused = focusedIndex == 2,
                         jumpNumber = 3,
-                        onDecrement = { stepHoldDelay(-HOLD_STEP_MS) },
-                        onIncrement = { stepHoldDelay(HOLD_STEP_MS) }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsStepperRow(
-                        title = "Letter Auto-commit",
-                        subtitle = "Pause before a letter is kept",
-                        valueDisplay = "%.2f s".format(idleCommitMs / 1000f),
-                        isFocused = focusedIndex == 3,
-                        jumpNumber = 4,
-                        onDecrement = { stepIdleCommit(-IDLE_STEP_MS) },
-                        onIncrement = { stepIdleCommit(IDLE_STEP_MS) }
+                        onCheckedChange = {
+                            holdForDigit = it
+                            PreferencesManager.setImeHoldForDigitEnabled(context, it)
+                        }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Hold Vibration",
+                        title = "Letter Auto-commit",
+                        subtitle = "Commit the selected letter after a short pause",
+                        checked = autoCommit,
+                        isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
+                        onCheckedChange = {
+                            autoCommit = it
+                            PreferencesManager.setImeAutoCommitEnabled(context, it)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Key Hold Haptic",
                         subtitle = "Buzz when a hold types a number",
                         checked = holdVibration,
                         isFocused = focusedIndex == 4,
                         jumpNumber = 5,
-                        onCheckedChange = { toggleHoldVibration() }
+                        onCheckedChange = {
+                            holdVibration = it
+                            PreferencesManager.setImeHoldVibrationEnabled(context, it)
+                        }
                     )
-                }
-            }
-
-            item {
-                SettingsCard(categoryTitle = "Key Guide") {
-                    SettingsInfoRow(label = "Tap 2–9", value = "cycle letters")
-                    SettingsInfoRow(label = "Tap 1", value = "symbols  . , ? ! ♡ ★")
-                    SettingsInfoRow(label = "Tap 0", value = "space  / _ ~ $ | [ ]")
-                    SettingsInfoRow(label = "Tap *", value = "shift  abc › Abc › ABC")
-                    SettingsInfoRow(label = "Hold 0–9 / *", value = "type the number / *")
-                    SettingsInfoRow(label = "◀ ▶", value = "pick a candidate")
-                    SettingsInfoRow(label = "Tap #", value = "space")
-                    SettingsInfoRow(label = "OK", value = "commit")
-                    SettingsInfoRow(label = "DEL", value = "delete")
-                    SettingsInfoRow(label = "BACK", value = "cancel candidate")
-                    SettingsInfoRow(label = "Hold #", value = "kaomoji wheel")
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "Key Guide",
+                        subtitle = "View physical keypad and hardware key mappings",
+                        icon = "ⓘ",
+                        isFocused = focusedIndex == 5,
+                        jumpNumber = 6,
+                        onClick = { showKeyGuide = true }
+                    )
                 }
             }
         }
     }
-}
 
-private const val HOLD_STEP_MS = 50
-private const val IDLE_STEP_MS = 250
+    if (showKeyGuide) {
+        AlertDialog(
+            onDismissRequest = { showKeyGuide = false },
+            title = { Text("Mochibun Key Guide") },
+            text = {
+                Text(
+                    "LSK — Left soft key action\n" +
+                        "RSK — Right soft key / Back action\n" +
+                        "F4 side key — Toggle the virtual cursor\n" +
+                        "Hold # — Open the Kaomoji Wheel\n\n" +
+                        "Tap 2–9 — Cycle letters\n" +
+                        "Tap 1 — Symbols\n" +
+                        "Tap 0 / # — Space\n" +
+                        "Tap * — Cycle letter case\n" +
+                        "Hold 0–9 / * — Type the key value\n" +
+                        "◀ / ▶ — Choose a candidate · OK — Commit · DEL — Delete"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showKeyGuide = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+}

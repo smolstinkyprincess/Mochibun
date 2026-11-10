@@ -1,6 +1,7 @@
 package com.crinklecodone.mochibun.ui.screens.settings
 
 import android.os.Build
+import android.app.ActivityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import android.view.KeyEvent
@@ -48,35 +49,28 @@ internal fun AboutMochibunSubScreen(
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
 
-    val rt = Runtime.getRuntime()
-    val usedRamMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
-    val maxRamMb = rt.maxMemory() / (1024 * 1024)
+    val memoryInfo = remember(context) {
+        ActivityManager.MemoryInfo().also { info ->
+            (context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as ActivityManager)
+                .getMemoryInfo(info)
+        }
+    }
+    val totalRamMb = memoryInfo.totalMem / (1024 * 1024)
+    val usedRamMb = (memoryInfo.totalMem - memoryInfo.availMem) / (1024 * 1024)
 
     val dm = context.resources.displayMetrics
     val displayResolution = remember(configuration, dm.widthPixels, dm.heightPixels) {
         "${dm.widthPixels} × ${dm.heightPixels} px (${configuration.densityDpi} dpi)"
     }
 
-    val manufacturer = remember {
-        Build.MANUFACTURER.orEmpty().replaceFirstChar {
-            if (it.isLowerCase()) it.titlecase() else it.toString()
-        }
-    }
-    val model = remember { Build.MODEL.orEmpty() }
-    val deviceDisplay = remember(manufacturer, model) {
-        if (manufacturer.isNotEmpty() && !model.startsWith(manufacturer, ignoreCase = true)) {
-            "$manufacturer $model".trim()
-        } else {
-            model.ifEmpty { manufacturer.ifEmpty { "Android Device" } }
-        }
-    }
+    val deviceDisplay = remember { "${Build.MANUFACTURER} ${Build.MODEL}".trim() }
 
     val osVersion = remember {
         "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     }
 
     val primaryAbi = remember {
-        Build.SUPPORTED_ABIS?.firstOrNull() ?: "Unknown"
+        Build.SUPPORTED_ABIS.firstOrNull() ?: "Unknown"
     }
 
     val isTargetDevice = remember {
@@ -124,9 +118,9 @@ internal fun AboutMochibunSubScreen(
                     )
                 }
                 SettingsCard(categoryTitle = "Application Info") {
-                    SettingsInfoRow(label = "Application", value = "Mochibun Launcher")
-                    SettingsInfoRow(label = "Version", value = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                    SettingsInfoRow(label = "Package", value = BuildConfig.APPLICATION_ID)
+                    SettingsInfoRow(label = "Application", value = "Mochibun")
+                    SettingsInfoRow(label = "Version", value = BuildConfig.VERSION_NAME)
+                    SettingsInfoRow(label = "Package Name", value = context.packageName)
                 }
             }
 
@@ -163,7 +157,7 @@ internal fun AboutMochibunSubScreen(
                     SettingsInfoRow(label = "OS Version", value = osVersion)
                     SettingsInfoRow(label = "Architecture", value = primaryAbi)
                     SettingsInfoRow(label = "Display", value = displayResolution)
-                    SettingsInfoRow(label = "Active RAM Envelope", value = "$usedRamMb MB / $maxRamMb MB")
+                    SettingsInfoRow(label = "Memory", value = "$usedRamMb MB used / $totalRamMb MB total")
                 }
             }
 
@@ -172,6 +166,7 @@ internal fun AboutMochibunSubScreen(
                     SettingsInfoRow(label = "License", value = "Apache 2.0 License")
                     SettingsInfoRow(label = "Root Bridge", value = "libsu:core daemon")
                     SettingsInfoRow(label = "Image Loader", value = "Coil (GIF & Bitmap)")
+                    SettingsInfoRow(label = "YAML Parser", value = "kaml")
                     SettingsInfoRow(label = "Typography", value = "MaruMinya (マルミーニャ)")
                 }
             }

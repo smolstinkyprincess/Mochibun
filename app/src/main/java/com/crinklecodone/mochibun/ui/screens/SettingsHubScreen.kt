@@ -35,6 +35,7 @@ sealed class SettingsDestination {
     object Hub : SettingsDestination()
     object Appearance : SettingsDestination()
     object CursorHardware : SettingsDestination()
+    object SoundFeedback : SettingsDestination()
     object Behavior : SettingsDestination()
     object PermissionsRoot : SettingsDestination()
     object BackupRestore : SettingsDestination()
@@ -131,6 +132,13 @@ fun SettingsHubScreen(
         SettingsDestination.CursorHardware -> {
             CursorHardwareSettingsSubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
+                onOpenHardwareButtons = onOpenHardwareButtons,
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.SoundFeedback -> {
+            SoundFeedbackSettingsSubScreen(
+                onBack = { currentDestination = SettingsDestination.Hub },
                 modifier = settingsModifier
             )
         }
@@ -139,7 +147,6 @@ fun SettingsHubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onOpenHiddenApps = onOpenHiddenApps,
                 onCreateFolderClick = onCreateFolderClick,
-                onOpenHardwareButtons = onOpenHardwareButtons,
                 modifier = settingsModifier
             )
         }
@@ -187,7 +194,20 @@ private fun SettingsHubRootScreen(
     val focusRequester = remember { FocusRequester() }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val totalItems = 7 // 7 primary navigation cards
+    val totalItems = 8 // Eight primary navigation cards
+
+    fun openDestination(index: Int) {
+        when (index) {
+            0 -> onNavigate(SettingsDestination.Appearance)
+            1 -> onNavigate(SettingsDestination.Keyboard)
+            2 -> onNavigate(SettingsDestination.CursorHardware)
+            3 -> onNavigate(SettingsDestination.SoundFeedback)
+            4 -> onNavigate(SettingsDestination.Behavior)
+            5 -> onNavigate(SettingsDestination.PermissionsRoot)
+            6 -> onNavigate(SettingsDestination.BackupRestore)
+            7 -> onNavigate(SettingsDestination.About)
+        }
+    }
 
     LaunchedEffect(focusedIndex) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
@@ -220,15 +240,7 @@ private fun SettingsHubRootScreen(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        when (focusedIndex) {
-                            0 -> onNavigate(SettingsDestination.Appearance)
-                            1 -> onNavigate(SettingsDestination.Keyboard)
-                            2 -> onNavigate(SettingsDestination.CursorHardware)
-                            3 -> onNavigate(SettingsDestination.Behavior)
-                            4 -> onNavigate(SettingsDestination.PermissionsRoot)
-                            5 -> onNavigate(SettingsDestination.BackupRestore)
-                            6 -> onNavigate(SettingsDestination.About)
-                        }
+                        openDestination(focusedIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -238,19 +250,15 @@ private fun SettingsHubRootScreen(
                         val targetIndex = digit - 1
                         onFocusedIndexChange(targetIndex)
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        when (targetIndex) {
-                            0 -> onNavigate(SettingsDestination.Appearance)
-                            1 -> onNavigate(SettingsDestination.Keyboard)
-                            2 -> onNavigate(SettingsDestination.CursorHardware)
-                            3 -> onNavigate(SettingsDestination.Behavior)
-                            4 -> onNavigate(SettingsDestination.PermissionsRoot)
-                            5 -> onNavigate(SettingsDestination.BackupRestore)
-                            6 -> onNavigate(SettingsDestination.About)
-                        }
+                        openDestination(targetIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                ) {
                     if (event.type == KeyEventType.KeyDown) {
                         onFocusedIndexChange(if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                             if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
@@ -310,13 +318,26 @@ private fun SettingsHubRootScreen(
             }
 
             item {
+                SettingsCard(categoryTitle = "Sound & Feedback") {
+                    SettingsNavigationRow(
+                        title = "Sound & Feedback",
+                        subtitle = "Audio routing, keypad volume & sound profiles",
+                        icon = "♫",
+                        isFocused = focusedIndex == 3,
+                        jumpNumber = 4,
+                        onClick = { onNavigate(SettingsDestination.SoundFeedback) }
+                    )
+                }
+            }
+
+            item {
                 SettingsCard(categoryTitle = "Layout & Features") {
                     SettingsNavigationRow(
                         title = "Behavior",
-                        subtitle = "Folders, app drawer, keypad remapper & system monitor",
+                        subtitle = "Folders, app drawer & clamshell options",
                         icon = "📁",
-                        isFocused = focusedIndex == 3,
-                        jumpNumber = 4,
+                        isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
                         onClick = { onNavigate(SettingsDestination.Behavior) }
                     )
                 }
@@ -328,8 +349,8 @@ private fun SettingsHubRootScreen(
                         title = "Permissions & Root",
                         subtitle = "Overlay permission, Magisk root status & LSPosed features",
                         icon = "🛡️",
-                        isFocused = focusedIndex == 4,
-                        jumpNumber = 5,
+                        isFocused = focusedIndex == 5,
+                        jumpNumber = 6,
                         onClick = { onNavigate(SettingsDestination.PermissionsRoot) }
                     )
                 }
@@ -341,8 +362,8 @@ private fun SettingsHubRootScreen(
                         title = "Backup & Restore",
                         subtitle = "Export or restore layout, themes, folders & key remaps",
                         icon = "💾",
-                        isFocused = focusedIndex == 5,
-                        jumpNumber = 6,
+                        isFocused = focusedIndex == 6,
+                        jumpNumber = 7,
                         onClick = { onNavigate(SettingsDestination.BackupRestore) }
                     )
                 }
@@ -354,8 +375,8 @@ private fun SettingsHubRootScreen(
                         title = "About Mochibun",
                         subtitle = "Version, hardware specs & credits",
                         icon = "♡",
-                        isFocused = focusedIndex == 6,
-                        jumpNumber = 7,
+                        isFocused = focusedIndex == 7,
+                        jumpNumber = 8,
                         onClick = { onNavigate(SettingsDestination.About) }
                     )
                 }

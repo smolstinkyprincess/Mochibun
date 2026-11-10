@@ -159,12 +159,18 @@ object BackupRestoreManager {
         behaviorObj.put("dpad_boundary_haptics", PreferencesManager.isDpadBoundaryHaptics(context))
         behaviorObj.put("launcher_audio_stream", PreferencesManager.getLauncherAudioStream(context))
         behaviorObj.put("launcher_sound_volume", PreferencesManager.getLauncherSoundVolume(context))
+        behaviorObj.put("keypad_sound_mode", PreferencesManager.getKeypadSoundMode(context))
+        behaviorObj.put("media_volume_lock_enabled", PreferencesManager.isMediaVolumeLockEnabled(context))
+        behaviorObj.put("lid_close_snap_sound_enabled", PreferencesManager.isLidCloseSnapSoundEnabled(context))
+        behaviorObj.put("kaomoji_wheel_enabled", PreferencesManager.isKaomojiWheelEnabled(context))
         behaviorObj.put("t9_search_enabled", PreferencesManager.isT9SearchEnabled(context))
         behaviorObj.put("system_monitor_enabled", PreferencesManager.isSystemMonitorEnabled(context))
         behaviorObj.put("system_monitor_interval_sec", PreferencesManager.getSystemMonitorInterval(context))
         behaviorObj.put("ime_hold_delay_ms", PreferencesManager.getImeHoldDelayMs(context))
+        behaviorObj.put("ime_hold_for_digit_enabled", PreferencesManager.isImeHoldForDigitEnabled(context))
         behaviorObj.put("ime_hold_vibration", PreferencesManager.isImeHoldVibrationEnabled(context))
         behaviorObj.put("ime_idle_commit_ms", PreferencesManager.getImeIdleCommitMs(context))
+        behaviorObj.put("ime_auto_commit_enabled", PreferencesManager.isImeAutoCommitEnabled(context))
         root.put("behavior", behaviorObj)
 
         // ── 5. Virtual Cursor Physics & Pointer ──────────────────────
@@ -412,6 +418,18 @@ object BackupRestoreManager {
                 if (behaviorObj.has("launcher_sound_volume")) {
                     PreferencesManager.setLauncherSoundVolume(context, behaviorObj.optInt("launcher_sound_volume", PreferencesManager.DEFAULT_LAUNCHER_SOUND_VOLUME))
                 }
+                if (behaviorObj.has("keypad_sound_mode")) {
+                    PreferencesManager.setKeypadSoundMode(context, behaviorObj.optString("keypad_sound_mode", PreferencesManager.DEFAULT_KEYPAD_SOUND_MODE))
+                }
+                if (behaviorObj.has("media_volume_lock_enabled")) {
+                    PreferencesManager.setMediaVolumeLockEnabled(context, behaviorObj.optBoolean("media_volume_lock_enabled", PreferencesManager.DEFAULT_MEDIA_VOLUME_LOCK_ENABLED))
+                }
+                if (behaviorObj.has("lid_close_snap_sound_enabled")) {
+                    PreferencesManager.setLidCloseSnapSoundEnabled(context, behaviorObj.optBoolean("lid_close_snap_sound_enabled", PreferencesManager.DEFAULT_LID_CLOSE_SNAP_SOUND))
+                }
+                if (behaviorObj.has("kaomoji_wheel_enabled")) {
+                    PreferencesManager.setKaomojiWheelEnabled(context, behaviorObj.optBoolean("kaomoji_wheel_enabled", PreferencesManager.DEFAULT_KAOMOJI_WHEEL_ENABLED))
+                }
                 if (behaviorObj.has("t9_search_enabled")) {
                     PreferencesManager.setT9SearchEnabled(context, behaviorObj.optBoolean("t9_search_enabled", true))
                 }
@@ -421,10 +439,22 @@ object BackupRestoreManager {
                         behaviorObj.optInt("ime_hold_delay_ms", PreferencesManager.DEFAULT_IME_HOLD_DELAY_MS)
                     )
                 }
+                if (behaviorObj.has("ime_hold_for_digit_enabled")) {
+                    PreferencesManager.setImeHoldForDigitEnabled(
+                        context,
+                        behaviorObj.optBoolean("ime_hold_for_digit_enabled", PreferencesManager.DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED)
+                    )
+                }
                 if (behaviorObj.has("ime_idle_commit_ms")) {
                     PreferencesManager.setImeIdleCommitMs(
                         context,
                         behaviorObj.optInt("ime_idle_commit_ms", PreferencesManager.DEFAULT_IME_IDLE_COMMIT_MS)
+                    )
+                }
+                if (behaviorObj.has("ime_auto_commit_enabled")) {
+                    PreferencesManager.setImeAutoCommitEnabled(
+                        context,
+                        behaviorObj.optBoolean("ime_auto_commit_enabled", PreferencesManager.DEFAULT_IME_AUTO_COMMIT_ENABLED)
                     )
                 }
                 if (behaviorObj.has("ime_hold_vibration")) {

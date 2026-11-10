@@ -38,6 +38,8 @@ object PreferencesManager {
     const val KEY_WALLPAPER_OVERLAY_ROTATION_MODE = "pref_wallpaper_overlay_rotation_mode"
     const val ROTATION_MODE_DAILY = "daily"
     const val DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE = ROTATION_MODE_DAILY
+    const val KEY_KAOMOJI_WHEEL_ENABLED = "pref_kaomoji_wheel_enabled"
+    const val DEFAULT_KAOMOJI_WHEEL_ENABLED = true
 
 
     const val KEY_SYSTEM_MONITOR_ENABLED = "pref_system_monitor_enabled"
@@ -131,6 +133,10 @@ object PreferencesManager {
     const val MIN_IME_HOLD_DELAY_MS = 250
     const val MAX_IME_HOLD_DELAY_MS = 800
     const val KEY_IME_HOLD_VIBRATION = "pref_ime_hold_vibration"
+    const val KEY_IME_HOLD_FOR_DIGIT_ENABLED = "pref_ime_hold_for_digit_enabled"
+    const val KEY_IME_AUTO_COMMIT_ENABLED = "pref_ime_auto_commit_enabled"
+    const val DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED = true
+    const val DEFAULT_IME_AUTO_COMMIT_ENABLED = true
     const val KEY_IME_IDLE_COMMIT_MS = "pref_ime_idle_commit_ms"
     const val DEFAULT_IME_IDLE_COMMIT_MS = 1500
     const val MIN_IME_IDLE_COMMIT_MS = 500
@@ -338,13 +344,19 @@ object PreferencesManager {
         }
     }
 
-    /** The Kaomoji Wheel is permanently bound to holding '#'. */
-    @Suppress("UNUSED_PARAMETER")
+    fun isKaomojiWheelEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_KAOMOJI_WHEEL_ENABLED, DEFAULT_KAOMOJI_WHEEL_ENABLED)
+
+    fun setKaomojiWheelEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_KAOMOJI_WHEEL_ENABLED, enabled).apply()
+    }
+
     fun matchesKaomojiTrigger(
         eventKeyCode: Int,
         eventScanCode: Int = 0,
         context: Context? = null
-    ): Boolean = eventKeyCode == KeyEvent.KEYCODE_POUND
+    ): Boolean = eventKeyCode == KeyEvent.KEYCODE_POUND &&
+        (context == null || isKaomojiWheelEnabled(context))
 
     fun formatKaomojiKeyName(keyCode: Int, scanCode: Int = 0): String {
         val physical = PhysicalKey.fromKeyCode(keyCode)
@@ -877,6 +889,20 @@ object PreferencesManager {
     /** Short vibration when a held key in MochibunImeService types its digit. */
     fun isImeHoldVibrationEnabled(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_IME_HOLD_VIBRATION, DEFAULT_IME_HOLD_VIBRATION)
+
+    fun isImeHoldForDigitEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_IME_HOLD_FOR_DIGIT_ENABLED, DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED)
+
+    fun setImeHoldForDigitEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_IME_HOLD_FOR_DIGIT_ENABLED, enabled).apply()
+    }
+
+    fun isImeAutoCommitEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_IME_AUTO_COMMIT_ENABLED, DEFAULT_IME_AUTO_COMMIT_ENABLED)
+
+    fun setImeAutoCommitEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_IME_AUTO_COMMIT_ENABLED, enabled).apply()
+    }
 
     fun setImeHoldVibrationEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_IME_HOLD_VIBRATION, enabled).apply()

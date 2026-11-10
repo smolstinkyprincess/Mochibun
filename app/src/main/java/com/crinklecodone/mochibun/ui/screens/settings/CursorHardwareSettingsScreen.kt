@@ -2,7 +2,6 @@ package com.crinklecodone.mochibun.ui.screens.settings
 
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
 import android.view.KeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,8 +20,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
-import com.crinklecodone.mochibun.core.system.RootShell
 import com.crinklecodone.mochibun.data.prefs.CursorPreferences
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.service.VirtualCursorService
 import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
@@ -35,6 +34,7 @@ import java.util.Locale
 @Composable
 internal fun CursorHardwareSettingsSubScreen(
     onBack: () -> Unit,
+    onOpenHardwareButtons: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -49,10 +49,11 @@ internal fun CursorHardwareSettingsSubScreen(
     var cursorSizeDp by remember { mutableIntStateOf(CursorPreferences.getCursorSizeDp(context)) }
     var scrollStepPx by remember { mutableIntStateOf(CursorPreferences.getScrollStepPx(context)) }
     var customUri by remember { mutableStateOf(CursorPreferences.getCustomCursorUri(context)) }
-
-    val hasOverlayPermission = remember { Settings.canDrawOverlays(context) }
-    val isRootAvailable = remember { RootShell.isRootAvailable() }
-    val isLsposedActive = VirtualCursorService.isServiceRunning
+    var kaomojiEnabled by remember {
+        mutableStateOf(PreferencesManager.isKaomojiWheelEnabled(context))
+    }
+    val dpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
+    val boundaryHaptics by PreferencesManager.isDpadBoundaryHaptics.collectAsState()
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
@@ -67,14 +68,15 @@ internal fun CursorHardwareSettingsSubScreen(
         }
     }
 
-    // Step, MaxSpeed, Accel, Size, ScrollStep, SpritePicker, (ResetSprite)
-    val totalItems = if (customUri != null) 7 else 6
+    // Keep every row's focus index stable even when the default cursor sprite is active.
+    val totalItems = 11
 
     val targetCardIndex = remember(focusedIndex) {
         when (focusedIndex) {
-            0 -> 0
-            1, 2, 3, 4 -> 1
-            5, 6 -> 2
+            in 0..4 -> 0
+            5, 6 -> 1
+            7, 8 -> 2
+            9, 10 -> 3
             else -> 0
         }
     }
@@ -88,6 +90,7 @@ internal fun CursorHardwareSettingsSubScreen(
                     .coerceIn(CursorPreferences.MIN_TAP_STEP_PX, CursorPreferences.MAX_TAP_STEP_PX)
                 CursorPreferences.setTapStepPx(context, tapStepPx)
             }
+
             1 -> {
                 maxSpeed = (maxSpeed + direction * CursorPreferences.MAX_SPEED_INCREMENT)
                     .coerceIn(CursorPreferences.MIN_MAX_SPEED, CursorPreferences.MAX_MAX_SPEED)
@@ -110,6 +113,35 @@ internal fun CursorHardwareSettingsSubScreen(
             else -> return false
         }
         return true
+    }
+
+    fun activate(index: Int) {
+        when (index) {
+            in 0..4 -> adjustSetting(index, 1)
+            5 -> filePicker.launch(arrayOf("image/gif", "image/png"))
+            6 -> {
+                CursorPreferences.setCustomCursorUri(context, null)
+                customUri = null
+                focusedIndex = 5
+            }
+            7 -> onOpenHardwareButtons?.invoke()
+            8 -> {
+                kaomojiEnabled = !kaomojiEnabled
+                PreferencesManager.setKaomojiWheelEnabled(context, kaomojiEnabled)
+            }
+            9 -> PreferencesManager.setDpadWrapAround(context, !dpadWrapAround)
+            10 -> PreferencesManager.setDpadBoundaryHaptics(context, !boundaryHaptics)
+        }
+    }
+
+    fun stepIndex(direction: Int) {
+        val next = focusedIndex + direction
+        focusedIndex = if (dpadWrapAround) {
+            (next + totalItems) % totalItems
+        } else {
+            next.coerceIn(0, totalItems - 1)
+        }
+        SoundEffectManager.play(context, SoundEffect.NAV)
     }
 
     LaunchedEffect(targetCardIndex) {
@@ -143,18 +175,7 @@ internal fun CursorHardwareSettingsSubScreen(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        when (focusedIndex) {
-                            5 -> {
-                                try {
-                                    filePicker.launch(arrayOf("image/gif", "image/png"))
-                                } catch (_: Exception) {}
-                            }
-                            6 -> {
-                                CursorPreferences.setCustomCursorUri(context, null)
-                                customUri = null
-                                focusedIndex = 5
-                            }
-                        }
+                        activate(focusedIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -164,29 +185,13 @@ internal fun CursorHardwareSettingsSubScreen(
                         val targetIndex = digit - 1
                         focusedIndex = targetIndex
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        when (targetIndex) {
-                            5 -> {
-                                try {
-                                    filePicker.launch(arrayOf("image/gif", "image/png"))
-                                } catch (_: Exception) {}
-                            }
-                            6 -> {
-                                CursorPreferences.setCustomCursorUri(context, null)
-                                customUri = null
-                                focusedIndex = 5
-                            }
-                        }
+                        activate(targetIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                     if (event.type == KeyEventType.KeyDown) {
-                        focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                            if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
-                        } else {
-                            if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
-                        }
-                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        stepIndex(if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) -1 else 1)
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -196,6 +201,8 @@ internal fun CursorHardwareSettingsSubScreen(
                         val handled = adjustSetting(focusedIndex, direction)
                         if (handled) {
                             SoundEffectManager.play(context, SoundEffect.NAV)
+                        } else {
+                            stepIndex(direction)
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -209,25 +216,6 @@ internal fun CursorHardwareSettingsSubScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
-                SettingsCard(categoryTitle = "System Integration") {
-                    SettingsInfoRow(
-                        label = "Overlay Permission",
-                        value = if (hasOverlayPermission) "✔ Granted" else "✖ Missing"
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    SettingsInfoRow(
-                        label = "Root Shell (libsu / evinput)",
-                        value = if (isRootAvailable) "✔ Available" else "✖ Not Detected"
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    SettingsInfoRow(
-                        label = "LSPosed Key Hook",
-                        value = if (isLsposedActive) "✔ Active" else "Ready (F4)"
-                    )
-                }
-            }
-
             item {
                 SettingsCard(categoryTitle = "Movement & Physics") {
                     SettingsStepperRow(
@@ -286,30 +274,67 @@ internal fun CursorHardwareSettingsSubScreen(
                 SettingsCard(categoryTitle = "Custom Cursor Sprite") {
                     SettingsNavigationRow(
                         title = "Cursor Graphic",
-                        subtitle = if (customUri != null) "Custom sprite active" else "Default kawaii paw sprite",
+                        subtitle = if (customUri != null) "Custom sprite active • choose a .png or .gif" else "Default paw • choose a .png or .gif",
                         icon = "🐾",
                         isFocused = focusedIndex == 5,
                         jumpNumber = 6,
-                        onClick = {
-                            try {
-                                filePicker.launch(arrayOf("image/gif", "image/png"))
-                            } catch (_: Exception) {}
+                        onClick = { activate(5) }
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    SettingsActionRow(
+                        title = "Reset to Default Sprite",
+                        isFocused = focusedIndex == 6,
+                        isDestructive = true,
+                        jumpNumber = 7,
+                        onClick = { activate(6) }
+                    )
+                }
+            }
+
+            item {
+                SettingsCard(categoryTitle = "Physical Keypad") {
+                    SettingsNavigationRow(
+                        title = "Keypad Remapper",
+                        subtitle = "Assign actions to physical function keys",
+                        icon = "🎮",
+                        isFocused = focusedIndex == 7,
+                        jumpNumber = 8,
+                        onClick = { activate(7) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Kaomoji Trigger Key (# Long-press)",
+                        subtitle = "Open the Kaomoji Wheel when holding #",
+                        checked = kaomojiEnabled,
+                        isFocused = focusedIndex == 8,
+                        jumpNumber = 9,
+                        onCheckedChange = {
+                            kaomojiEnabled = it
+                            PreferencesManager.setKaomojiWheelEnabled(context, it)
                         }
                     )
-                    if (customUri != null) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        SettingsActionRow(
-                            title = "Reset to Default Sprite",
-                            isFocused = focusedIndex == 6,
-                            isDestructive = true,
-                            jumpNumber = 7,
-                            onClick = {
-                                CursorPreferences.setCustomCursorUri(context, null)
-                                customUri = null
-                                focusedIndex = 5
-                            }
-                        )
-                    }
+                }
+            }
+
+            item {
+                SettingsCard(categoryTitle = "D-Pad Navigation") {
+                    SettingsToggleRow(
+                        title = "D-Pad Wrap Around",
+                        subtitle = "Loop focus at navigation boundaries",
+                        checked = dpadWrapAround,
+                        isFocused = focusedIndex == 9,
+                        jumpNumber = null,
+                        onCheckedChange = { PreferencesManager.setDpadWrapAround(context, it) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Boundary Haptics",
+                        subtitle = "Subtle feedback when focus reaches an edge",
+                        checked = boundaryHaptics,
+                        isFocused = focusedIndex == 10,
+                        jumpNumber = null,
+                        onCheckedChange = { PreferencesManager.setDpadBoundaryHaptics(context, it) }
+                    )
                 }
             }
         }

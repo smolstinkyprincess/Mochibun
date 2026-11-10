@@ -234,6 +234,14 @@ internal fun BackupRestoreSettingsSubScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                        focusedIndex = (focusedIndex + direction + totalItems) % totalItems
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 false
             }
@@ -257,7 +265,7 @@ internal fun BackupRestoreSettingsSubScreen(
                     )
 
                     SettingsNavigationRow(
-                        title = "Import Setup Bundle",
+                        title = "Import Setup Bundle (.mochibun)",
                         subtitle = "Preview and apply a shared .mochibun preset",
                         icon = "✨",
                         isFocused = focusedIndex == 1,
@@ -298,7 +306,7 @@ internal fun BackupRestoreSettingsSubScreen(
             item {
                 SettingsCard(categoryTitle = "Factory Reset") {
                     SettingsNavigationRow(
-                        title = "Reset to Defaults",
+                        title = "Reset to Factory Defaults",
                         subtitle = "Reset launcher layout, folders, remaps & preferences",
                         icon = "🔄",
                         isFocused = focusedIndex == 4,
