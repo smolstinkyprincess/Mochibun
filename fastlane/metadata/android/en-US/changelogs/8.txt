@@ -1,0 +1,5 @@
+• Added Mochibun system UI styling for the status bar, battery, volume dialog, and Quick Settings (LSPosed)
+• Improved physical Home button behavior and Quick Settings toggling
+• Improved virtual cursor operation and low-latency input in third-party apps
+• Refined the keypad keyboard, settings navigation, and animations
+• Improved clamshell notification LED behavior
