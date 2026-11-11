@@ -226,6 +226,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         if (context == null) return
         val intent = Intent(ACTION_CURSOR_KEY).apply {
             setPackage(PACKAGE_MOCHIBUN)
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             putExtra(EXTRA_KEY_EVENT, event)
             putExtra(EXTRA_KEY_CODE, event.keyCode)
             putExtra(EXTRA_ACTION, event.action)

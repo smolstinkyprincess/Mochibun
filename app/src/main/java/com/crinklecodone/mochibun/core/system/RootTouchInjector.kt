@@ -61,7 +61,7 @@ object RootTouchInjector {
     private const val NO_MOVE = -1L
 
     /** Pin a node here ("/dev/input/event3") if auto-detect ever picks the wrong one. */
-    private val NODE_OVERRIDE: String? = null
+    private val NODE_OVERRIDE: String? = "/dev/input/event3"
 
     // One worker, no core threads: the thread exits ~10 s after the last command, so an idle
     // launcher carries no extra thread.
@@ -327,6 +327,12 @@ object RootTouchInjector {
      * run a stale helper.
      */
     private fun installHelper(ctx: Context): File? {
+        // prefer evinject binary in /data/local/tmp
+        val tmpBin = File("/data/local/tmp/evinject")
+        if (tmpBin.isFile && tmpBin.canExecute()) {
+            return tmpBin
+        }
+        // fallback to apk extraction
         val dir = File(ctx.filesDir, "evinject").apply { mkdirs() }
         val stamp = ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime
         val bin = File(dir, "evinject-$stamp")
@@ -373,11 +379,19 @@ object RootTouchInjector {
     // These are the original `input` shell commands. Keep the exact strings/behavior the file had.
 
     private fun legacyTap(x: Float, y: Float) {
-        RootShell.submit("input tap ${x.roundToInt()} ${y.roundToInt()}")
+        val bin = "/data/local/tmp/evinject"
+        val xi = x.roundToInt().coerceIn(0, 480)
+        val yi = y.roundToInt().coerceIn(0, 800)
+        RootShell.submit("if [ -x $bin ]; then $bin tap $xi $yi 50 --device /dev/input/event3; else input tap $xi $yi; fi")
     }
 
     private fun legacySwipe(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long) {
-        RootShell.submit("input swipe ${x1.roundToInt()} ${y1.roundToInt()} ${x2.roundToInt()} ${y2.roundToInt()} $durationMs")
+        val bin = "/data/local/tmp/evinject"
+        val xi1 = x1.roundToInt().coerceIn(0, 480)
+        val yi1 = y1.roundToInt().coerceIn(0, 800)
+        val xi2 = x2.roundToInt().coerceIn(0, 480)
+        val yi2 = y2.roundToInt().coerceIn(0, 800)
+        RootShell.submit("if [ -x $bin ]; then $bin swipe $xi1 $yi1 $xi2 $yi2 $durationMs --device /dev/input/event3; else input swipe $xi1 $yi1 $xi2 $yi2 $durationMs; fi")
     }
 
     private fun legacyDown(x: Float, y: Float) {

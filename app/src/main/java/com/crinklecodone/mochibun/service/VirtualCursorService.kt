@@ -151,6 +151,8 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         instance = this
         isServiceRunning = true
 
+        RootTouchInjector.attach(this)
+
         startInForeground()
 
         ClamshellManager.init(this)
@@ -170,7 +172,15 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
 
         overlayView = CursorOverlayView(this).apply {
             visibility = View.GONE
-            windowLayoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            windowLayoutParams.apply {
+                type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+            }
         }
 
         val filter = IntentFilter().apply {
@@ -251,6 +261,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         if (isCursorVisible) {
             isCursorVisible = false
             overlayView?.visibility = View.GONE
+            RootTouchInjector.cancelTouch()
             RootTouchInjector.release()
         }
     }
@@ -317,6 +328,8 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
 
         if (isCursorVisible) {
             RootTouchInjector.attach(applicationContext)
+            //Cancel any pending/stuck touch
+            RootTouchInjector.cancelTouch()
             if (!isOverlayAttached) {
                 try {
                     windowManager.addView(view, view.windowLayoutParams)
@@ -335,6 +348,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
             stopMovementTicker()
             view.pauseAnimation()
             view.visibility = View.GONE
+            RootTouchInjector.cancelTouch()
             RootTouchInjector.release()
             Log.d(TAG, "Virtual cursor hidden")
         }
@@ -364,7 +378,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                if (action == KeyEvent.ACTION_DOWN && repeatCount == 0) {
+                if (action == KeyEvent.ACTION_DOWN) {
                     performTapDispatch()
                 }
             }
@@ -455,9 +469,10 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         val view = overlayView ?: return
         view.showClickFeedback()
 
-        val tapX = view.getHotspotX().coerceIn(0f, (physics.screenWidth - 1f).coerceAtLeast(1f))
-        val tapY = view.getHotspotY().coerceIn(0f, (physics.screenHeight - 1f).coerceAtLeast(1f))
+        val tapX = physics.posX.coerceIn(0f, (physics.screenWidth - 1f).coerceAtLeast(1f))
+        val tapY = physics.posY.coerceIn(0f, (physics.screenHeight - 1f).coerceAtLeast(1f))
 
+        Log.d(TAG, "Dispatching tap at ($tapX, $tapY)")
         RootTouchInjector.tapAsync(tapX.toInt(), tapY.toInt())
     }
 
@@ -468,13 +483,13 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
      * - Key 8 (0, -1): upward drag to scroll DOWN.
      */
     private fun performScrollDispatch(dragX: Int, dragY: Int) {
-        val view = overlayView ?: return
+        if (overlayView == null) return
 
         val maxX = (physics.screenWidth - 1f).coerceAtLeast(1f)
         val maxY = (physics.screenHeight - 1f).coerceAtLeast(1f)
 
-        var startX = view.getHotspotX().coerceIn(0f, maxX)
-        var startY = view.getHotspotY().coerceIn(0f, maxY)
+        var startX = physics.posX.coerceIn(0f, maxX)
+        var startY = physics.posY.coerceIn(0f, maxY)
         val distance = scrollStepPx.toFloat().coerceIn(
             CursorPreferences.MIN_SCROLL_STEP_PX.toFloat(),
             CursorPreferences.MAX_SCROLL_STEP_PX.toFloat()
@@ -497,6 +512,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         val x2Int = endX.toInt()
         val y2Int = endY.toInt()
 
+        Log.d(TAG, "Dispatching scroll swipe: ($x1Int, $y1Int) -> ($x2Int, $y2Int) over $SCROLL_SWIPE_DURATION_MS")
         RootTouchInjector.swipeAsync(x1Int, y1Int, x2Int, y2Int, SCROLL_SWIPE_DURATION_MS)
     }
 }

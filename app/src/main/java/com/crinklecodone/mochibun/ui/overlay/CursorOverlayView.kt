@@ -68,7 +68,9 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
         type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
         format = PixelFormat.TRANSLUCENT
         gravity = Gravity.TOP or Gravity.START
@@ -76,6 +78,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
         height = WindowManager.LayoutParams.MATCH_PARENT
         x = 0
         y = 0
+        alpha = 0.79f
     }
 
     init {
