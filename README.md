@@ -11,7 +11,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ---
 
-> ♡ **Quick heads up:** Mochibun works out of the box as a launcher and keyboard. The hardware-key magic (side-key mouse pointer, key remapping, system-wide key handling), and MtkSystemUI theming runs through a small **LSPosed module** that lives in the same APK, and LSPosed needs a Magisk-rooted phone. Full steps are in [Setup](#-downloads--setup).
+> ♡ **Quick heads up:** Mochibun works out of the box as a launcher and keyboard. The hardware-key magic (side-key mouse pointer, key remapping, system-wide key handling), and MtkSystemUI theming runs through a small **LSPosed module** that lives in the same APK, and LSPosed/Vector needs a Magisk-rooted phone. Full steps are in [Setup](#-downloads--setup).
 
 ---
 
@@ -173,12 +173,12 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 
 Mochibun is one APK that's both the launcher *and* an LSPosed module, so there's nothing extra to download. The module hooks into the system so your physical keys, the side-key mouse pointer, and key remaps work in every app, without any accessibility service.
 
-1. **Root with Magisk and install LSPosed** (the Zygisk version). The [AT-M120 guide](docs/m120_root_setup.md) covers the Magisk side.
-2. **Install Mochibun**, then open LSPosed and enable the **Mochibun** module.
+1. **Root with Magisk and install LSPosed(or Vector with Zygisk Next)** (the Zygisk version). The [AT-M120 guide](docs/m120_root_setup.md) covers the Magisk side.
+2. **Install Mochibun**, then open LSPosed/Vector and enable the **Mochibun** module.
 3. **Tick both scopes** for the module: *System Framework* (`android`) and *System UI* (`com.android.systemui`).
 4. **Reboot** so the hook loads.
 
-No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backups, and the Keitai Keyboard all work without it. You'll just miss the system-wide key handling.
+No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backups, and the Keitai Keyboard all work without it. You'll just miss the system-wide key handling and virtual cursor.
 
 ### 🗝️ Quick Permissions Checklist
 
