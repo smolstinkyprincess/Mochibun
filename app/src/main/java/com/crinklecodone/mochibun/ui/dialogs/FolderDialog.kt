@@ -172,22 +172,17 @@ fun FavoriteFolderDialog(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     var editingName by remember(folder.id) { mutableStateOf(initialEditingName) }
-    var newName by remember(folder.id, folder.name) { mutableStateOf(folder.name) }
-    // Cursor for newName; only valid while it was recorded against the same text, so
-    // programmatic changes (reset, suggestions) put the cursor at the end.
-    var newNameCursor by remember(folder.id) { mutableStateOf("" to TextRange.Zero) }
-    val currentNameValue: () -> TextFieldValue = {
-        TextFieldValue(
-            newName,
-            if (newNameCursor.first == newName) newNameCursor.second else TextRange(newName.length)
-        )
+    var newNameValue by remember(folder.id, folder.name) {
+        mutableStateOf(TextFieldValue(folder.name))
+    }
+    val newName = newNameValue.text
+    val setNewName: (String) -> Unit = {
+        val text = it.take(32)
+        newNameValue = TextFieldValue(text, TextRange(text.length))
     }
     val setNameFieldValue: (TextFieldValue) -> Unit = {
-        newName = it.text.take(32)
-        newNameCursor = newName to it.selection
+        newNameValue = it.limitTextLength(32)
     }
-    val candidateState = remember(folder.id) { KeitaiCandidateState() }
-    val commitCandidate: (String) -> Unit = { setNameFieldValue(currentNameValue().insertAtCursor(it, 32)) }
     var managing by remember(folder.id) { mutableStateOf(false) }
     var pickingApps by remember(folder.id) { mutableStateOf(initialPickingApps) }
     var confirmingDelete by remember(folder.id) { mutableStateOf(false) }
@@ -250,7 +245,6 @@ fun FavoriteFolderDialog(
         if (editingName && renameFocusZone == 0 && isEditingRenameField) {
             renameFieldFocusRequester.awaitFocusSafely(attempts = 6)
         } else {
-            if (editingName) candidateState.commitActive(commitCandidate) else candidateState.reset()
             focusManager.clearFocus(force = true)
             keyboardController?.hide()
             delay(16)
@@ -271,7 +265,7 @@ fun FavoriteFolderDialog(
                 keyboardController?.hide()
             }
             editingName -> {
-                newName = folder.name
+                setNewName(folder.name)
                 isEditingRenameField = false
                 editingName = false
                 keyboardController?.hide()
@@ -298,19 +292,6 @@ fun FavoriteFolderDialog(
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                val renameFieldActive = editingName && renameFocusZone == 0 && isEditingRenameField
-
-                // Keypad multi-tap candidates for the rename field (also lets BACK cancel a
-                // pending candidate before it can leave the field).
-                if (renameFieldActive && candidateState.handleFieldKeyEvent(
-                        native.keyCode,
-                        isDown = event.type == KeyEventType.KeyDown,
-                        repeatCount = native.repeatCount,
-                        onCommit = commitCandidate
-                    )
-                ) {
-                    return@onPreviewKeyEvent true
-                }
 
                 // Intercept KEYCODE_F4 (OEM side key) alongside standard back keys so the physical
                 // shortcut button consistently returns the user to the launcher home state.
@@ -360,10 +341,10 @@ fun FavoriteFolderDialog(
                                                         it.id != folder.id && it.name.equals(candidate, ignoreCase = true)
                                                     }
                                         } ?: SUGGESTED_FOLDER_NAMES.first()
-                                        newName = nextSuggestion
+                                        setNewName(nextSuggestion)
                                     }
                                     2 -> {
-                                        newName = folder.name
+                                        setNewName(folder.name)
                                         isEditingRenameField = false
                                         editingName = false
                                     }
@@ -521,7 +502,7 @@ fun FavoriteFolderDialog(
                         sawCenterDown = false
                         when (focusSection) {
                             0 -> {
-                                newName = folder.name
+                                setNewName(folder.name)
                                 renameFocusZone = 0
                                 editingName = true
                             }
@@ -857,7 +838,7 @@ fun FavoriteFolderDialog(
                                 )
 
                                 OutlinedTextField(
-                                    value = currentNameValue(),
+                                    value = newNameValue,
                                     onValueChange = setNameFieldValue,
                                     label = { Text("Folder name") },
                                     singleLine = true,
@@ -874,10 +855,6 @@ fun FavoriteFolderDialog(
                                         .fillMaxWidth()
                                         .focusRequester(renameFieldFocusRequester)
                                 )
-
-                                AnimatedVisibility(visible = candidateState.isActive) {
-                                    KeitaiCandidateStrip(state = candidateState)
-                                }
 
                                 if (duplicateRename) {
                                     Text(
@@ -899,7 +876,7 @@ fun FavoriteFolderDialog(
                                                         it.id != folder.id && it.name.equals(candidate, ignoreCase = true)
                                                     }
                                         } ?: SUGGESTED_FOLDER_NAMES.first()
-                                        newName = nextSuggestion
+                                        setNewName(nextSuggestion)
                                     }
                                 )
 
@@ -911,7 +888,7 @@ fun FavoriteFolderDialog(
                                         text = "Cancel",
                                         isFocused = renameFocusZone == 2,
                                         onClick = {
-                                            newName = folder.name
+                                            setNewName(folder.name)
                                             editingName = false
                                         }
                                     )
@@ -958,7 +935,7 @@ fun FavoriteFolderDialog(
                                             headerShape
                                         )
                                         .clickable {
-                                            newName = folder.name
+                                            setNewName(folder.name)
                                             renameFocusZone = 0
                                             editingName = true
                                         }

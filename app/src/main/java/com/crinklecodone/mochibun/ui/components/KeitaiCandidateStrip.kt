@@ -213,6 +213,19 @@ fun TextFieldValue.insertAtCursor(insert: String, maxLength: Int = Int.MAX_VALUE
     return TextFieldValue(newText, TextRange(start + insert.length))
 }
 
+/** Limits the text while preserving valid selection and IME composition ranges. */
+fun TextFieldValue.limitTextLength(maxLength: Int): TextFieldValue {
+    val limitedText = text.take(maxLength)
+    fun clamp(range: TextRange) = TextRange(
+        range.start.coerceIn(0, limitedText.length),
+        range.end.coerceIn(0, limitedText.length)
+    )
+    val limitedComposition = composition?.takeIf {
+        it.min >= 0 && it.max <= limitedText.length
+    }
+    return TextFieldValue(limitedText, clamp(selection), limitedComposition)
+}
+
 @Composable
 fun KeitaiCandidateStrip(
     state: KeitaiCandidateState,

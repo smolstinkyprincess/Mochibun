@@ -6,6 +6,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import com.crinklecodone.mochibun.ui.components.KeitaiCandidatePools
 import com.crinklecodone.mochibun.ui.components.KeitaiCandidateState
 import com.crinklecodone.mochibun.ui.components.insertAtCursor
+import com.crinklecodone.mochibun.ui.components.limitTextLength
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -158,5 +159,15 @@ class KeitaiCandidateStateTest {
         assertEquals(TextFieldValue("Moxchi", TextRange(3)), value.insertAtCursor("x"))
         assertEquals(TextFieldValue("Mii", TextRange(2)), TextFieldValue("Mochi", TextRange(1, 4)).insertAtCursor("i"))
         assertEquals(value, value.insertAtCursor("x", maxLength = 5))
+    }
+
+    @Test
+    fun textLengthLimitPreservesValidImeComposition() {
+        val composing = TextFieldValue("Mochi", TextRange(5), TextRange(3, 5))
+        assertEquals(composing, composing.limitTextLength(32))
+        assertEquals(
+            TextFieldValue("Moc", TextRange(3)),
+            composing.limitTextLength(3)
+        )
     }
 }
