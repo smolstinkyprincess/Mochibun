@@ -5,9 +5,13 @@
 A lightweight pastel Android launcher built from scratch for physical keypad and D-pad flip phones ♡<br/>
 Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
-[Download Latest APK](https://github.com/smolstinkyprincess/Mochibun/releases/latest) • [Screenshots](#-gallery--showcase-) • [Keypad Guide](#️-physical-key-map)
+[Download Latest APK](https://github.com/smolstinkyprincess/Mochibun/releases/latest) • [Setup](#-downloads--setup) • [Screenshots](#-gallery--showcase-) • [Keypad Guide](#️-physical-key-map)
 
 </div>
+
+---
+
+> ♡ **Quick heads up:** Mochibun works out of the box as a launcher and keyboard. The hardware-key magic (side-key mouse pointer, key remapping, system-wide key handling), and MtkSystemUI theming runs through a small **LSPosed module** that lives in the same APK, and LSPosed needs a Magisk-rooted phone. Full steps are in [Setup](#-downloads--setup).
 
 ---
 
@@ -16,11 +20,11 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Made for Real Buttons**: Feels like your old 2000s keitai, all clicks and no taps. Glide through cards, folders, and drawers with the physical arrows, pick things with the center key, and follow the gentle pastel glow wherever you go.
 - **Snug on Small Screens**: Fitted specifically for 480 × 800 flip-phone displays, so there's no squished text or cut-off buttons.
 - **Physical T9 App Search**: Just start typing numbers on the keypad to filter your apps and launch one in a blink. No tiny search bars to poke at!
-- **Mochibun Keitai Keyboard**: A system-wide multi-tap keypad keyboard, just like the old flip phones. Tap a number key to cycle its letters in a cute candidate strip, hold it to type the digit, and use **`*`** for shift and **`#`** for space. Works in every app, with a handy *Keyboard* card in settings to set it up.
+- **Mochibun Keitai Keyboard**: A system-wide multi-tap keypad keyboard, just like the old flip phones. Tap a number key to cycle its letters in a cute floating pill, hold it to type the digit, and use **`*`** for shift and **`#`** for space. The pill hops out of the way when it would cover the box you're typing in, and fades when you pause. Works in every app, with a handy *Keyboard* card in settings to set it up.
 - **Global Kaomoji Wheel**: Long-press **`#`** anywhere on the phone, even inside your messaging apps, to pop up the radial mood wheel and paste cute text faces straight into your chat `( ˶ˆᗜˆ˵ ) ♡`
-- **Virtual Mouse Pointer**: Press the side key to toggle a little mouse cursor for those apps that were only ever made for touchscreens. Dress it up with your own `.png` or animated `.gif` sprite, scroll with `2` & `8` (and sideways with `4` & `6`), and set the speed just how you like it.
+- **Virtual Mouse Pointer**: Press the side key to toggle a little mouse cursor for those apps that were only ever made for touchscreens. Dress it up with your own `.png` or animated `.gif` sprite, scroll with `2` & `8` (and sideways with `4` & `6`), and set the speed just how you like it. *(Needs the LSPosed module.)*
 - **Nostalgic Keitai Click Sounds**: Retro tactile sound effects that are generated right on your phone, so the app stays tiny. Pick a sound profile in settings (*Kawaii Pop*, *Retro Keitai* 2000s clicks, *8-Bit Chiptune*, *Cyber Pager*, *Soft Thock*, *Water Drop*, or mute).
-- **Key Remapping (Root Optional)**: Remap your extra physical buttons to launch your favorite apps or trigger quick shortcuts.
+- **Key Remapping (LSPosed Module)**: Remap your extra physical buttons to launch your favorite apps or trigger quick shortcuts. A tiny hook in the system handles the keys, so they behave the same in every app, with no accessibility service running in the background.
 - **Widgets & Music Deck**: A cozy widget page with a Now Playing card that pops in while music is playing and tucks itself away when the audio stops, plus room for your own Android widgets.
 - **Theme Studio & Simple YAML**: 4 built-in pastel palettes (*Sakura Dream*, *Lavender Mist*, *Minty Matcha*, and *Milky Peach*) that switch live the moment you pick one, or write your own theme files in clean, readable YAML.
 - **Setup Sharing & Backups**: Export your pinned apps, folders, and settings to a quick `.json` backup, or pack your colors, custom cursor, and wallpaper into a shareable `.mochibun` theme bundle to swap with friends.
@@ -62,6 +66,8 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 | **Home** | Return Home from anywhere; on Home, open the app drawer | — |
 | **Recents (LSK)** | On Home, go to the Stats page | On Home, open Recents |
 
+> 🗝️ The system-wide parts of this map (grabbing the side key, remapping, keys working in every app) come from the [LSPosed module](#-lsposed-module-hardware-keys--cursor).
+
 ---
 
 ## 🔤 Mochibun Keitai Keyboard
@@ -78,6 +84,9 @@ Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai
 | **Up / Down** | Commit the letter and move on | — |
 | **Back / Delete** | Cancel the pending letter, or delete | — |
 
+- The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` badge.
+- **It dodges your text box.** If the box you're typing in is down at the bottom of the screen (hi, Discord), the pill hops to the top so you can see your words, then hops back down when the coast is clear. Some apps don't tell Android where the cursor is, and in those the pill just stays at the bottom.
+- **It fades when you pause.** After a moment with no key presses the pill turns soft and see-through, then comes back to full strength on your next press.
 - A pending letter commits on its own after a short pause (1.5 s by default, adjustable from 0.5 to 3 s), so you can just keep typing.
 - Sentences auto-capitalize.
 - Number, phone, and date fields get plain digits, so dialing works the way you'd expect.
@@ -160,14 +169,26 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 
 > **Boot animation bonus 🎀**: Got root now? Grab the optional `mochibun-bootanimation.zip` from [Releases](https://github.com/smolstinkyprincess/Mochibun/releases/latest) for a matching pastel boot screen!
 
+### 🧩 LSPosed Module (Hardware Keys & Cursor)
+
+Mochibun is one APK that's both the launcher *and* an LSPosed module, so there's nothing extra to download. The module hooks into the system so your physical keys, the side-key mouse pointer, and key remaps work in every app, without any accessibility service.
+
+1. **Root with Magisk and install LSPosed** (the Zygisk version). The [AT-M120 guide](docs/m120_root_setup.md) covers the Magisk side.
+2. **Install Mochibun**, then open LSPosed and enable the **Mochibun** module.
+3. **Tick both scopes** for the module: *System Framework* (`android`) and *System UI* (`com.android.systemui`).
+4. **Reboot** so the hook loads.
+
+No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backups, and the Keitai Keyboard all work without it. You'll just miss the system-wide key handling.
+
 ### 🗝️ Quick Permissions Checklist
 
 1. **Default Home**: Set Mochibun as your home app in *Settings > Apps > Default Apps > Home app*.
 2. **Now Playing Card**: Enable notification access in *Settings > Apps > Special app access > Notification access* so the media widget can show your currently playing song and album art.
-3. **Mouse Pointer, Kaomoji Wheel & Key Remapper**: Turn on **Mochibun Virtual Cursor** and **Mochibun Button Remapper** in *Settings > Accessibility*, and allow *Display over other apps* when asked.
-4. **Keitai Keyboard**: Enable **Mochibun Keitai IME** as your keyboard (see [Mochibun Keitai Keyboard](#-mochibun-keitai-keyboard)), or let *Settings > Keyboard* walk you through it.
-5. **Root Access (Optional)**: If you're rooted with Magisk, granting superuser access lets the cursor click through privileged shell taps and hooks into custom recents providers.
-6. **QuickSwitch (Optional)**: If you use QuickSwitch for hardware multitasking, set Mochibun as your provider:
+3. **Mouse Pointer**: Allow *Display over other apps* when asked, so the cursor can float on top of everything.
+4. **Hardware Keys & Remapping**: Enable the Mochibun module in LSPosed (see [above](#-lsposed-module-hardware-keys--cursor)). There's no Accessibility setting to turn on.
+5. **Keitai Keyboard**: Enable **Mochibun Keitai IME** as your keyboard (see [Mochibun Keitai Keyboard](#-mochibun-keitai-keyboard)), or let *Settings > Keyboard* walk you through it.
+6. **Superuser Access (Optional extras)**: Granting Mochibun superuser access in Magisk unlocks privileged touch injection (handy when a screen blocks normal taps, like permission dialogs), root Quick Settings toggles, and hooks into custom recents providers. The LSPosed hook doesn't need it.
+7. **QuickSwitch (Optional)**: If you use QuickSwitch for hardware multitasking, set Mochibun as your provider:
    ```bash
    su -c "/data/adb/modules/quickswitch/quickswitch --ch=com.crinklecodone.mochibun"
    ```
