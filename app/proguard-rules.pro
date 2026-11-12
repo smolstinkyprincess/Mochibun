@@ -15,6 +15,8 @@
 }
 
 # Keep Mochibun's Virtual Cursor & Core Services intact
+-keep class com.crinklecodone.mochibun.service.** { *; }
+-keep class com.crinklecodone.mochibun.xposed.** { *; }
 -keep class com.crinklecodone.mochibun.service.VirtualCursorService { *; }
 -keep class com.crinklecodone.mochibun.xposed.MochibunKeyHook { *; }
 
@@ -61,3 +63,22 @@
 # coil (animated cursors)
 -keep class coil.decode.GifDecoder { *; }
 -keep class coil.decode.AnimatedImageDecoder { *; }
+
+
+# Preserve LSPosed / Xposed Entry Points and Hook Classes
+-keep class com.crinklecodone.mochibun.xposed.** { *; }
+-keep interface de.robv.android.xposed.** { *; }
+-keep class de.robv.android.xposed.** { *; }
+
+# Preserve SystemUI Theme Bridge and Color Tokens
+-keep class com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge { *; }
+-keep class com.crinklecodone.mochibun.xposed.ActiveHookTheme { *; }
+-keepclassmembers class com.crinklecodone.mochibun.xposed.ActiveHookTheme {
+    public static <fields>;
+    public static <methods>;
+}
+
+# Keep any classes accessed via reflection across processes
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+
+-keep public class * extends android.inputmethodservice.InputMethodService

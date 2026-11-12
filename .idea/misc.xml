@@ -3,6 +3,7 @@
   <component name="CidrRootsConfiguration">
     <excludeRoots>
       <file path="$PROJECT_DIR$/mtksystemui" />
+      <file path="$PROJECT_DIR$/mtksystemui/mtksystemui-decomp" />
     </excludeRoots>
   </component>
   <component name="ExternalStorageConfigurationManager" enabled="true" />
