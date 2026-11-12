@@ -1,0 +1,1 @@
+harden broadcast permissions, bundle byte caps, hook diagnostics, backup preview, proguard, and androidTest coverage
