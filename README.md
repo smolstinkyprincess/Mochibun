@@ -115,30 +115,33 @@ Never wrestle with tiny touch keyboards just to send a cute face:
 Want to show off your setup on r/flipphones or Discord? Export a `.mochibun` bundle to pack up your colors, greeting text, wallpaper, and custom mouse cursor (`.gif`/`.png`). Opening a `.mochibun` file on your phone shows a live color swatch card, and it applies in one click!
 
 ### 📝 Hand-Crafted YAML Themes (`kaml`)
-Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom themes:
+Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom themes—drop your `.yaml` files into `/sdcard/Android/data/com.crinklecodone.mochibun/files/themes/`:
 
 ```yaml
-# /sdcard/Mochibun/themes/sweet_sakura.yaml
+# /sdcard/Android/data/com.crinklecodone.mochibun/files/themes/sweet_sakura.yaml
 id: "sweet_sakura"
 name: "Sweet Sakura ♡"
 author: "emii"
+version: "1.0"
 
-palette:
+colors:
   primary: "#FFB7C5"
-  surface: "#FFF0F5"
+  container: "#FFF0F5"
   cardBorder: "#F3D1DC"
   accentDeep: "#8B3A62"
+  background: "#FFF5F8"
+  outline: "#F8BBD0"
   selectionGlow: "#FF8DA1"
+  textColor: "#4A154B"
 
-greeting:
-  template: "♡ Welcome home, %s ♡"
-  defaultName: "Princess"
-  sparkles: true
+decorations:
+  greetingText: "— ♡ Sweet Sakura ♡ —"
+  glowExpansionDp: 4.0
+  cardRoundnessDp: 24.0
 ```
 
 ### 📦 Full Backups (`.json`)
-Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, and cursor tweaks to a simple `.json` file. Restoring reloads everything instantly, no reboot needed.
-
+Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, and cursor tweaks to a simple `.json` file. Restoring shows a preview summary first and reloads everything instantly, no reboot needed.
 ---
 
 ## 📱 Hardware & Specs
@@ -173,7 +176,7 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 
 Mochibun is one APK that's both the launcher *and* an LSPosed module, so there's nothing extra to download. The module hooks into the system so your physical keys, the side-key mouse pointer, and key remaps work in every app, without any accessibility service.
 
-1. **Root with Magisk and install LSPosed(or Vector with Zygisk Next)** (the Zygisk version). The [AT-M120 guide](docs/m120_root_setup.md) covers the Magisk side.
+1. **Root with Magisk and install LSPosed (or Vector with Zygisk Next)** (the Zygisk version). The [AT-M120 guide](docs/m120_root_setup.md) covers the Magisk side.
 2. **Install Mochibun**, then open LSPosed/Vector and enable the **Mochibun** module.
 3. **Tick both scopes** for the module: *System Framework* (`android`) and *System UI* (`com.android.systemui`).
 4. **Reboot** so the hook loads.
