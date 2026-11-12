@@ -814,8 +814,7 @@ class MochibunImeService : InputMethodService() {
         if (!ic.getSelectedText(0).isNullOrEmpty()) {
             ic.commitText("", 1)
         } else {
-            // Code points, so one press removes a whole ♡ / emoji surrogate pair
-            ic.deleteSurroundingTextInCodePoints(1, 0)
+            ic.deleteSurroundingText(1, 0)
         }
     }
 

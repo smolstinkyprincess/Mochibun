@@ -110,6 +110,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.tooling)
 

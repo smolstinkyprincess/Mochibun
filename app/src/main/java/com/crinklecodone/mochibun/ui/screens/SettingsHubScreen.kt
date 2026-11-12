@@ -65,12 +65,16 @@ fun SettingsHubScreen(
 ) {
     var currentDestination by remember { mutableStateOf(initialDestination) }
     var rootFocusedIndex by remember { mutableIntStateOf(0) }
+    var backupPreviewBackHandler by remember { mutableStateOf<(() -> Unit)?>(null) }
     val rootListState = rememberLazyListState()
     val context = LocalContext.current
 
     fun handleBack() {
         SoundEffectManager.play(context, SoundEffect.BACK)
-        if (currentDestination == SettingsDestination.Hub) {
+        val dismissBackupPreview = backupPreviewBackHandler
+        if (dismissBackupPreview != null) {
+            dismissBackupPreview()
+        } else if (currentDestination == SettingsDestination.Hub) {
             onClose()
         } else {
             currentDestination = SettingsDestination.Hub
@@ -160,6 +164,7 @@ fun SettingsHubScreen(
             BackupRestoreSettingsSubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onSettingsRestored = onSettingsRestored,
+                onPreviewDialogBackHandlerChanged = { backupPreviewBackHandler = it },
                 modifier = settingsModifier
             )
         }

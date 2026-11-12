@@ -9,8 +9,11 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -26,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
+import com.crinklecodone.mochibun.data.repository.BackupPreviewSummary
 import com.crinklecodone.mochibun.data.repository.BackupRestoreManager
 import com.crinklecodone.mochibun.data.repository.BundlePreviewData
 import com.crinklecodone.mochibun.data.repository.ThemeBundleManager
@@ -38,6 +42,8 @@ import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
 
 /**
  * Tier 1: Backup & Restore Sub-Screen
@@ -46,6 +52,7 @@ import kotlinx.coroutines.withContext
 internal fun BackupRestoreSettingsSubScreen(
     onBack: () -> Unit,
     onSettingsRestored: (() -> Unit)?,
+    onPreviewDialogBackHandlerChanged: (( (() -> Unit)? ) -> Unit),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -59,6 +66,8 @@ internal fun BackupRestoreSettingsSubScreen(
     var showExportBundleDialog by remember { mutableStateOf(false) }
     var pendingImportPreviewData by remember { mutableStateOf<BundlePreviewData?>(null) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingBackupPreview by remember { mutableStateOf<BackupPreviewSummary?>(null) }
+    var pendingBackupUri by remember { mutableStateOf<Uri?>(null) }
 
     // State for pending export configuration awaiting file creation URI
     var pendingBundleName by remember { mutableStateOf("Mochibun Setup") }
@@ -134,23 +143,20 @@ internal fun BackupRestoreSettingsSubScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            // JSON parsing + bulk prefs writes run off the main thread; UI updates resume on Main
+            // Validate off the main thread before offering to apply anything.
             scope.launch {
                 try {
                     val result = withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                            BackupRestoreManager.importBackup(context, inputStream)
-                        }
+                        BackupRestoreManager.previewBackup(context, uri)
                     }
-                    if (result != null && result.isSuccess) {
-                        val summary = result.getOrThrow()
-                        onSettingsRestored?.invoke()
-                        statusMessage = "Restored: ${summary.folderCount} folders, ${summary.favoriteCount} favorites, ${summary.remapCount} remaps! ♡"
+                    if (result.isSuccess) {
+                        pendingBackupUri = uri
+                        pendingBackupPreview = result.getOrThrow()
                     } else {
-                        statusMessage = "Restore failed: ${result?.exceptionOrNull()?.message ?: "Invalid file"}"
+                        statusMessage = "Invalid backup: ${result.exceptionOrNull()?.message ?: "The file could not be validated."}"
                     }
                 } catch (e: Exception) {
-                    statusMessage = "Restore failed: ${e.message}"
+                    statusMessage = "Invalid backup: ${e.message}"
                 }
             }
         }
@@ -182,6 +188,23 @@ internal fun BackupRestoreSettingsSubScreen(
             "restore" -> importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
             "reset" -> showResetConfirmDialog = true
         }
+    }
+
+    val dismissBackupPreview: () -> Unit = remember {
+        {
+            pendingBackupPreview = null
+            pendingBackupUri = null
+        }
+    }
+
+    SideEffect {
+        onPreviewDialogBackHandlerChanged(
+            if (pendingBackupPreview != null) dismissBackupPreview else null
+        )
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { onPreviewDialogBackHandlerChanged(null) }
     }
 
     requestFocusSafely(focusRequester)
@@ -334,6 +357,37 @@ internal fun BackupRestoreSettingsSubScreen(
         )
     }
 
+    pendingBackupPreview?.let { preview ->
+        BackupPreviewConfirmationDialog(
+            preview = preview,
+            onRestore = {
+                val uri = pendingBackupUri
+                dismissBackupPreview()
+                if (uri != null) {
+                    scope.launch {
+                        try {
+                            val result = withContext(Dispatchers.IO) {
+                                val input = context.contentResolver.openInputStream(uri)
+                                    ?: throw IllegalArgumentException("The selected backup could not be opened.")
+                                input.use { BackupRestoreManager.importBackup(context, it) }
+                            }
+                            if (result.isSuccess) {
+                                val summary = result.getOrThrow()
+                                onSettingsRestored?.invoke()
+                                statusMessage = "Restored: ${summary.folderCount} folders, ${summary.favoriteCount} favorites, ${summary.remapCount} remaps! ♡"
+                            } else {
+                                statusMessage = "Restore failed: ${result.exceptionOrNull()?.message}"
+                            }
+                        } catch (e: Exception) {
+                            statusMessage = "Restore failed: ${e.message}"
+                        }
+                    }
+                }
+            },
+            onDismiss = dismissBackupPreview
+        )
+    }
+
     pendingImportPreviewData?.let { preview ->
         PresetPreviewDialog(
             previewData = preview,
@@ -350,6 +404,7 @@ internal fun BackupRestoreSettingsSubScreen(
                                 statusMessage = "Apply failed: ${applyRes.exceptionOrNull()?.message}"
                             }
                         }
+
                     } catch (e: Exception) {
                         statusMessage = "Apply failed: ${e.message}"
                     }
@@ -403,4 +458,104 @@ internal fun BackupRestoreSettingsSubScreen(
             statusMessage = null
         }
     }
+}
+
+@Composable
+private fun BackupPreviewConfirmationDialog(
+    preview: BackupPreviewSummary,
+    onRestore: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val focusRequester = remember { FocusRequester() }
+    var focusedButton by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    requestFocusSafely(focusRequester)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val keyCode = event.nativeKeyEvent.keyCode
+                if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
+                    if (event.type == KeyEventType.KeyUp) onDismiss()
+                    return@onPreviewKeyEvent true
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                ) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        focusedButton = 1 - focusedButton
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (isCenterActivateKey(keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
+                        sawCenterDown = true
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        if (focusedButton == 0) onRestore() else onDismiss()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                false
+            },
+        title = {
+            Text("Restore this backup?", fontWeight = FontWeight.Bold, color = ActiveTheme.accentDeep)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "Exported ${DateFormat.getDateTimeInstance().format(Date(preview.timestamp))} · Mochibun ${preview.appVersion}",
+                    color = ActiveTheme.textPrimary
+                )
+                Text("Favorites: ${preview.favoriteCount}", color = ActiveTheme.textPrimary)
+                Text("Folders: ${preview.folderCount}", color = ActiveTheme.textPrimary)
+                Text("Hardware remaps: ${preview.remapCount}", color = ActiveTheme.textPrimary)
+                Text("Theme: ${preview.themeName ?: "Default"}", color = ActiveTheme.textPrimary)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onRestore,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (focusedButton == 0) ActiveTheme.accentDeep else ActiveTheme.surfaceTint,
+                    contentColor = if (focusedButton == 0) Color.White else ActiveTheme.textPrimary
+                ),
+                modifier = Modifier.border(
+                    width = if (focusedButton == 0) 2.dp else 1.dp,
+                    color = if (focusedButton == 0) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
+                    shape = RoundedCornerShape(14.dp)
+                )
+            ) {
+                Text("Restore Now", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (focusedButton == 1) ActiveTheme.accentDeep else ActiveTheme.surfaceTint,
+                    contentColor = if (focusedButton == 1) Color.White else ActiveTheme.textPrimary
+                ),
+                modifier = Modifier.border(
+                    width = if (focusedButton == 1) 2.dp else 1.dp,
+                    color = if (focusedButton == 1) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
+                    shape = RoundedCornerShape(14.dp)
+                )
+            ) {
+                Text("Cancel")
+            }
+        },
+        containerColor = ActiveTheme.container,
+        shape = RoundedCornerShape(22.dp)
+    )
 }

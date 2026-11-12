@@ -1,6 +1,9 @@
 # Preserve Android entry points and system services
 -keep public class * extends android.app.Activity
 -keep public class * extends android.app.Service
+-keep public class * extends android.content.BroadcastReceiver
+-keep class * extends android.content.BroadcastReceiver { *; }
+-keep public class * extends android.inputmethodservice.InputMethodService
 -keep public class * extends android.accessibilityservice.AccessibilityService
 
 # Keep ViewModels and their constructors for reflection instantiation by ViewModelProvider
@@ -19,6 +22,8 @@
 -keep class com.crinklecodone.mochibun.xposed.** { *; }
 -keep class com.crinklecodone.mochibun.service.VirtualCursorService { *; }
 -keep class com.crinklecodone.mochibun.xposed.MochibunKeyHook { *; }
+-keep class com.crinklecodone.mochibun.data.repository.HardwareRemapManager { *; }
+-keep class com.crinklecodone.mochibun.core.util.MochibunSystemActions { *; }
 
 # Quickstep Recents & SystemUI interfaces
 -keep class com.android.quickstep.** { *; }
@@ -54,7 +59,23 @@
 -keepclassmembers class * {
     synthetic <init>(...);
 }
--keepattributes *Annotation*, InnerClasses
+-keep class com.crinklecodone.mochibun.data.model.MochibunBundleManifest { *; }
+-keep class com.crinklecodone.mochibun.data.model.BundleGreetingConfig { *; }
+-keep class com.crinklecodone.mochibun.data.model.BundlePaletteConfig { *; }
+-keep class com.crinklecodone.mochibun.data.model.BundleCursorConfig { *; }
+-keep class com.crinklecodone.mochibun.data.model.YamlTheme { *; }
+-keep class com.crinklecodone.mochibun.data.model.YamlThemeColors { *; }
+-keep class com.crinklecodone.mochibun.data.model.YamlThemeDecorations { *; }
+-keep class com.crinklecodone.mochibun.data.repository.BackupPreviewSummary { *; }
+-keepclassmembers class com.crinklecodone.mochibun.data.model.MochibunBundleManifest { *; }
+-keepclassmembers class com.crinklecodone.mochibun.data.model.BundleGreetingConfig { *; }
+-keepclassmembers class com.crinklecodone.mochibun.data.model.BundlePaletteConfig { *; }
+-keepclassmembers class com.crinklecodone.mochibun.data.model.BundleCursorConfig { *; }
+-keepclassmembers class com.crinklecodone.mochibun.data.model.YamlTheme { *; }
+-keepclassmembers class com.crinklecodone.mochibun.data.model.YamlThemeColors { *; }
+-keepclassmembers class com.crinklecodone.mochibun.data.model.YamlThemeDecorations { *; }
+-keepclassmembers class com.crinklecodone.mochibun.data.repository.BackupPreviewSummary { *; }
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 
 # kaml (YAML parser)
 -dontwarn com.charleskorn.kaml.**
@@ -66,7 +87,6 @@
 
 
 # Preserve LSPosed / Xposed Entry Points and Hook Classes
--keep class com.crinklecodone.mochibun.xposed.** { *; }
 -keep interface de.robv.android.xposed.** { *; }
 -keep class de.robv.android.xposed.** { *; }
 
@@ -80,5 +100,3 @@
 
 # Keep any classes accessed via reflection across processes
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
-
--keep public class * extends android.inputmethodservice.InputMethodService

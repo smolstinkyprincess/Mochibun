@@ -1,9 +1,10 @@
 package com.crinklecodone.mochibun.data.repository
 
 import android.content.Context
+import android.net.Uri
 import com.crinklecodone.mochibun.BuildConfig
 import com.crinklecodone.mochibun.data.model.ActionType
-import com.crinklecodone.mochibun.data.model.ButtonActionConfig
+import com.crinklecodone.mochibun.data.model.CONTROLLED_STATIC_KEYCODES
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
 import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.prefs.ClickMethod
@@ -12,6 +13,7 @@ import com.crinklecodone.mochibun.data.prefs.HotspotAlignment
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -31,6 +33,15 @@ data class BackupSummary(
     val remapCount: Int
 )
 
+data class BackupPreviewSummary(
+    val timestamp: Long,
+    val appVersion: String,
+    val favoriteCount: Int,
+    val folderCount: Int,
+    val remapCount: Int,
+    val themeName: String?
+)
+
 /**
  * Centralized backup and restore manager for Mochibun.
  * Exports and restores themes, layout, favorites, folders, hardware button remaps,
@@ -39,6 +50,17 @@ data class BackupSummary(
 object BackupRestoreManager {
 
     const val CURRENT_BACKUP_VERSION = 1
+    private const val MAX_FAVORITES = 200
+    private const val MAX_FOLDERS = 100
+    private const val MAX_APPS_PER_FOLDER = 200
+    private const val MAX_ICON_ENTRIES = 200
+    private const val MAX_REMAP_ENTRIES = 32
+    private const val MAX_BACKUP_SIZE_BYTES = 2 * 1024 * 1024
+
+    private data class ValidatedBackup(
+        val root: JSONObject,
+        val preview: BackupPreviewSummary
+    )
 
     fun generateBackupFileName(): String {
         val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
@@ -202,11 +224,290 @@ object BackupRestoreManager {
     }
 
     /**
+     * Reads and validates a backup selected through the Storage Access Framework.
+     * This method never changes preferences or files.
+     */
+    fun previewBackup(context: Context, uri: Uri): Result<BackupPreviewSummary> {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+                ?: throw IllegalArgumentException("The selected backup could not be opened.")
+            val jsonText = readBackupText(inputStream)
+            Result.success(parseAndValidateBackup(jsonText).preview)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Validates JSON backup content without touching application state.
+     */
+    fun previewBackupJson(jsonString: String): Result<BackupPreviewSummary> {
+        return try {
+            Result.success(parseAndValidateBackup(jsonString).preview)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun parseAndValidateBackup(jsonString: String): ValidatedBackup {
+        require(jsonString.isNotBlank()) { "The backup file is empty." }
+        val root = JSONObject(jsonString)
+        val version = root.requiredInt("version")
+        require(version in 1..CURRENT_BACKUP_VERSION) {
+            "Unsupported backup version: $version"
+        }
+        val timestamp = root.requiredLong("timestamp")
+        require(timestamp > 0) { "Backup timestamp is invalid." }
+        val appVersion = root.requiredString("app_version", maxLength = 64)
+
+        val theme = root.requiredObject("theme")
+        val themeName = theme.optString("preset").takeIf { it.isNotBlank() && it != "null" }
+        if (theme.has("preset")) {
+            val preset = theme.get("preset")
+            require(preset == JSONObject.NULL || preset is String) { "Theme preset is invalid." }
+        }
+        theme.requiredString("custom_user_name", maxLength = 128, allowBlank = true)
+        theme.requiredBoolean("wallpaper_overlay_enabled")
+        val colors = theme.requiredObject("colors")
+        colors.keys().forEach { key ->
+            val value = colors.get(key)
+            if (key == PreferencesManager.KEY_THEME_CARD_ROUNDNESS) {
+                require(value is Number && value.toDouble().isFinite() && value.toDouble() in 0.0..100.0) {
+                    "Theme card roundness is invalid."
+                }
+            } else {
+                require(value is Number && value.toDouble().isFinite() &&
+                    value.toDouble() >= Int.MIN_VALUE && value.toDouble() <= Int.MAX_VALUE
+                ) { "Theme color '$key' is invalid." }
+            }
+        }
+
+        val layout = root.requiredObject("layout")
+        val favorites = layout.requiredArray("favorite_items_ordered")
+        require(favorites.length() <= MAX_FAVORITES) {
+            "Backup contains too many favorites (maximum $MAX_FAVORITES)."
+        }
+        val favoriteKeys = mutableSetOf<String>()
+        for (index in 0 until favorites.length()) {
+            val key = favorites.requiredString(index, "favorite")
+            require(favoriteKeys.add(key)) { "Backup contains duplicate favorites." }
+        }
+
+        val folders = layout.requiredArray("folders")
+        require(folders.length() <= MAX_FOLDERS) {
+            "Backup contains too many folders (maximum $MAX_FOLDERS)."
+        }
+        val folderIds = mutableSetOf<String>()
+        for (index in 0 until folders.length()) {
+            val folder = folders.optJSONObject(index)
+                ?: throw IllegalArgumentException("Folder ${index + 1} is invalid.")
+            val id = folder.requiredString("id", maxLength = 128)
+            folder.requiredString("name", maxLength = 128)
+            require(folderIds.add(id)) { "Backup contains duplicate folder IDs." }
+            val apps = folder.requiredArray("apps")
+            require(apps.length() <= MAX_APPS_PER_FOLDER) {
+                "Folder contains too many apps (maximum $MAX_APPS_PER_FOLDER)."
+            }
+            for (appIndex in 0 until apps.length()) {
+                apps.requiredString(appIndex, "folder app")
+            }
+        }
+
+        validateStringObject(layout.requiredObject("custom_app_icons"), "custom app icons")
+        validateStringObject(layout.requiredObject("custom_folder_icons"), "custom folder icons")
+        require(layout.requiredArray("hidden_apps").length() <= MAX_FAVORITES) {
+            "Backup contains too many hidden apps."
+        }
+        val hiddenApps = layout.getJSONArray("hidden_apps")
+        for (index in 0 until hiddenApps.length()) hiddenApps.requiredString(index, "hidden app")
+        layout.requiredBoolean("folder_grid_mode")
+        val speedDials = layout.requiredObject("speed_dials")
+        require(speedDials.length() <= 8) { "Backup contains too many speed dials." }
+        speedDials.keys().forEach { digit ->
+            require(digit.toIntOrNull() in 2..9) { "Speed dial '$digit' is invalid." }
+            speedDials.requiredString(digit, maxLength = 255)
+        }
+        if (layout.has("selected_icon_pack")) {
+            layout.requiredString("selected_icon_pack", maxLength = 255)
+        }
+
+        val remaps = root.requiredObject("hardware_remaps")
+        val buttonActions = remaps.requiredObject("button_actions")
+        require(buttonActions.length() <= PhysicalKey.entries.size) {
+            "Backup contains too many hardware button remaps."
+        }
+        buttonActions.keys().forEach { scanCodeText ->
+            val scanCode = scanCodeText.toIntOrNull()
+            require(scanCode != null && PhysicalKey.fromScancode(scanCode) != null) {
+                "Hardware remap scancode '$scanCodeText' is not supported."
+            }
+            val actions = buttonActions.requiredObject(scanCodeText)
+            listOf("single", "double", "long").forEach { name ->
+                val action = actions.requiredString(name, maxLength = 512)
+                require(ActionType.deserialize(action).serialize() == action) {
+                    "Hardware remap action '$name' is not supported."
+                }
+            }
+        }
+        val staticMappings = remaps.requiredObject("static_mappings")
+        require(staticMappings.length() <= MAX_REMAP_ENTRIES) {
+            "Backup contains too many static hardware remaps."
+        }
+        staticMappings.keys().forEach { scanCodeText ->
+            val scanCode = scanCodeText.toIntOrNull()
+            val physicalKey = scanCode?.let { PhysicalKey.fromScancode(it) }
+            require(physicalKey != null && physicalKey.isStaticRemapSafe) {
+                "Static remap scancode '$scanCodeText' is not supported."
+            }
+            val target = staticMappings.requiredString(scanCodeText, maxLength = 64)
+            require(target in CONTROLLED_STATIC_KEYCODES) {
+                "Static remap target '$target' is not supported."
+            }
+        }
+        remaps.requiredBoolean("use_root_recents_fallback")
+
+        validateBehavior(root.requiredObject("behavior"))
+        validateCursor(root.requiredObject("cursor"))
+
+        val preview = BackupPreviewSummary(
+            timestamp = timestamp,
+            appVersion = appVersion,
+            favoriteCount = favorites.length(),
+            folderCount = folders.length(),
+            remapCount = buttonActions.length() + staticMappings.length(),
+            themeName = themeName
+        )
+        return ValidatedBackup(root, preview)
+    }
+
+    private fun readBackupText(inputStream: InputStream): String {
+        return inputStream.use { input ->
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(8 * 1024)
+            var totalBytes = 0
+            while (true) {
+                val bytesRead = input.read(buffer)
+                if (bytesRead < 0) break
+                totalBytes += bytesRead
+                require(totalBytes <= MAX_BACKUP_SIZE_BYTES) {
+                    "Backup file is too large (maximum ${MAX_BACKUP_SIZE_BYTES / 1024} KB)."
+                }
+                output.write(buffer, 0, bytesRead)
+            }
+            output.toString(Charsets.UTF_8.name())
+        }
+    }
+
+    private fun validateStringObject(value: JSONObject, fieldName: String) {
+        require(value.length() <= MAX_ICON_ENTRIES) { "Backup contains too many $fieldName entries." }
+        value.keys().forEach { key ->
+            require(key.isNotBlank() && key.length <= 255) { "A $fieldName key is invalid." }
+            value.requiredString(key, maxLength = 4096)
+        }
+    }
+
+    private fun validateBehavior(value: JSONObject) {
+        listOf(
+            "dpad_wrap_around", "dpad_boundary_haptics", "media_volume_lock_enabled",
+            "lid_close_snap_sound_enabled", "kaomoji_wheel_enabled", "t9_search_enabled",
+            "system_monitor_enabled", "ime_hold_for_digit_enabled", "ime_hold_vibration",
+            "ime_auto_commit_enabled"
+        ).forEach { value.requiredBoolean(it) }
+        value.requiredString("launcher_audio_stream", maxLength = 64)
+        value.requiredIntInRange("launcher_sound_volume", 0..100)
+        value.requiredString("keypad_sound_mode", maxLength = 64)
+        value.requiredIntInRange("system_monitor_interval_sec", 1..60)
+        value.requiredIntInRange("ime_hold_delay_ms", 100..5000)
+        value.requiredIntInRange("ime_idle_commit_ms", 100..10000)
+    }
+
+    private fun validateCursor(value: JSONObject) {
+        value.requiredIntInRange("toggle_keycode", 0..1000)
+        value.requiredFiniteNumber("move_speed", 0.1..100.0)
+        value.requiredFiniteNumber("acceleration", 1.0..5.0)
+        value.requiredIntInRange("tap_step_px", 1..1000)
+        value.requiredIntInRange("max_speed_px_per_sec", 1..10000)
+        value.requiredIntInRange("accel_ramp_ms", 1..10000)
+        require(value.requiredString("click_method", maxLength = 32) in ClickMethod.entries.map { it.name }) {
+            "Cursor click method is invalid."
+        }
+        require(value.requiredString("hotspot_alignment", maxLength = 32) in HotspotAlignment.entries.map { it.name }) {
+            "Cursor hotspot alignment is invalid."
+        }
+        value.requiredIntInRange("cursor_size_dp", 1..256)
+        value.requiredFiniteNumber("gif_playback_speed", 0.1..4.0)
+    }
+
+    private fun JSONObject.requiredObject(name: String): JSONObject =
+        optJSONObject(name) ?: throw IllegalArgumentException("Backup field '$name' is missing or invalid.")
+
+    private fun JSONObject.requiredArray(name: String): JSONArray =
+        optJSONArray(name) ?: throw IllegalArgumentException("Backup field '$name' is missing or invalid.")
+
+    private fun JSONObject.requiredString(
+        name: String,
+        maxLength: Int = 255,
+        allowBlank: Boolean = false
+    ): String {
+        val value = opt(name)
+        require(value is String && value.length <= maxLength && (allowBlank || value.isNotBlank())) {
+            "Backup field '$name' is missing or invalid."
+        }
+        return value
+    }
+
+    private fun JSONArray.requiredString(index: Int, fieldName: String): String {
+        val value = opt(index)
+        require(value is String && value.isNotBlank() && value.length <= 255) {
+            "Backup $fieldName ${index + 1} is missing or invalid."
+        }
+        return value
+    }
+
+    private fun JSONObject.requiredBoolean(name: String): Boolean {
+        val value = opt(name)
+        require(value is Boolean) { "Backup field '$name' is missing or invalid." }
+        return value
+    }
+
+    private fun JSONObject.requiredInt(name: String): Int {
+        val value = opt(name)
+        require(value is Number && value.toDouble().isFinite() &&
+            value.toDouble() >= Int.MIN_VALUE && value.toDouble() <= Int.MAX_VALUE &&
+            value.toDouble() % 1.0 == 0.0
+        ) { "Backup field '$name' is missing or invalid." }
+        return value.toInt()
+    }
+
+    private fun JSONObject.requiredLong(name: String): Long {
+        val value = opt(name)
+        require(value is Number && value.toDouble().isFinite() &&
+            value.toDouble() > 0.0 && value.toDouble() <= Long.MAX_VALUE.toDouble() &&
+            value.toDouble() % 1.0 == 0.0
+        ) { "Backup field '$name' is missing or invalid." }
+        return value.toLong()
+    }
+
+    private fun JSONObject.requiredIntInRange(name: String, range: IntRange): Int {
+        val value = requiredInt(name)
+        require(value in range) { "Backup field '$name' is outside the supported range." }
+        return value
+    }
+
+    private fun JSONObject.requiredFiniteNumber(name: String, range: ClosedFloatingPointRange<Double>): Double {
+        val value = opt(name)
+        require(value is Number && value.toDouble().isFinite() && value.toDouble() in range) {
+            "Backup field '$name' is outside the supported range."
+        }
+        return value.toDouble()
+    }
+
+    /**
      * Imports and applies a backup from an InputStream.
      */
     fun importBackup(context: Context, inputStream: InputStream): Result<BackupSummary> {
         return try {
-            val jsonText = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val jsonText = readBackupText(inputStream)
             restoreBackupJson(context, jsonText)
         } catch (e: Exception) {
             Result.failure(e)
@@ -217,22 +518,23 @@ object BackupRestoreManager {
      * Parses and restores Mochibun configuration from JSON.
      */
     fun restoreBackupJson(context: Context, jsonString: String): Result<BackupSummary> {
+        val validated = try {
+            parseAndValidateBackup(jsonString)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
         return try {
-            val root = JSONObject(jsonString)
-            val version = root.optInt("version", -1)
-            if (version < 1 || version > CURRENT_BACKUP_VERSION) {
-                return Result.failure(IllegalArgumentException("Unsupported backup version: $version"))
-            }
+            val root = validated.root
 
-            val timestamp = root.optLong("timestamp", System.currentTimeMillis())
-            val appVersion = root.optString("app_version", "unknown")
+            val timestamp = validated.preview.timestamp
+            val appVersion = validated.preview.appVersion
 
             val launcherPrefs = PreferencesManager.getPrefs(context)
             val launcherEditor = launcherPrefs.edit()
 
             // ── 1. Restore Theme ─────────────────────────────────────────
             val themeObj = root.optJSONObject("theme")
-            val themePreset = themeObj?.optString("preset", null)
+            val themePreset = themeObj?.optString("preset")?.takeUnless { it == "null" }
             if (!themePreset.isNullOrBlank()) {
                 PreferencesManager.setThemePreset(context, themePreset)
             }
@@ -390,6 +692,7 @@ object BackupRestoreManager {
                     val target = staticMappingsObj.optString(scancodeStr, "")
                     if (scancode != null && target.isNotBlank()) {
                         remapEditor.putString("static_remap_$scancode", target)
+                        remapCount++
                     }
                 }
 
