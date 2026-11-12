@@ -29,6 +29,7 @@ import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -56,7 +57,16 @@ object ThemeBundleManager {
 
     private const val MAX_WALLPAPER_WIDTH = 480
     private const val MAX_WALLPAPER_HEIGHT = 800
-    private const val MAX_PREVIEW_WALLPAPER_BYTES = 5 * 1024 * 1024 // 5MB guard against MT6761 memory spike
+
+    const val MAX_MANIFEST_BYTES = 512L * 1024L
+    const val MAX_WALLPAPER_BYTES = 5L * 1024L * 1024L
+    const val MAX_CURSOR_BYTES = 2L * 1024L * 1024L
+    const val MAX_TOTAL_BUNDLE_BYTES = 8L * 1024L * 1024L
+
+    private val DISCARD_OUTPUT_STREAM = object : OutputStream() {
+        override fun write(value: Int) = Unit
+        override fun write(buffer: ByteArray, offset: Int, length: Int) = Unit
+    }
 
     // Default pastel theme color fallbacks
     const val DEFAULT_FALLBACK_BG_INT = 0xFFFFF5F8.toInt()
@@ -193,6 +203,7 @@ object ThemeBundleManager {
     fun readBundleManifest(inputStream: InputStream): Result<BundlePreviewData> {
         return try {
             val bufferedIn = BufferedInputStream(inputStream)
+            val totalBytes = AtomicLong()
 
             var manifest: MochibunBundleManifest? = null
             var wallpaperBitmap: Bitmap? = null
@@ -203,21 +214,12 @@ object ThemeBundleManager {
                 while (entry != null) {
                     when (entry.name) {
                         MANIFEST_ENTRY -> {
-                            val text = zipIn.bufferedReader(Charsets.UTF_8).readText()
+                            val text = readBytesBounded(zipIn, MAX_MANIFEST_BYTES, totalBytes)
+                                .toString(Charsets.UTF_8)
                             manifest = bundleJsonFormat.decodeFromString<MochibunBundleManifest>(text)
                         }
                         WALLPAPER_ENTRY -> {
-                            // Extract downsampled thumbnail preview with strict memory bounds
-                            val bytesOut = ByteArrayOutputStream()
-                            val buffer = ByteArray(8192)
-                            var bytesReadTotal = 0
-                            var read = zipIn.read(buffer)
-                            while (read != -1 && bytesReadTotal < MAX_PREVIEW_WALLPAPER_BYTES) {
-                                bytesOut.write(buffer, 0, read)
-                                bytesReadTotal += read
-                                read = zipIn.read(buffer)
-                            }
-                            val wallBytes = bytesOut.toByteArray()
+                            val wallBytes = readBytesBounded(zipIn, MAX_WALLPAPER_BYTES, totalBytes)
                             val opts = BitmapFactory.Options().apply {
                                 inJustDecodeBounds = true
                             }
@@ -230,8 +232,15 @@ object ThemeBundleManager {
                             wallpaperBitmap = BitmapFactory.decodeByteArray(wallBytes, 0, wallBytes.size, decodeOpts)
                         }
                         CURSOR_GIF_ENTRY, CURSOR_PNG_ENTRY -> {
+                            copyBounded(zipIn, DISCARD_OUTPUT_STREAM, MAX_CURSOR_BYTES, totalBytes)
                             hasCursor = true
                         }
+                        else -> copyBounded(
+                            zipIn,
+                            DISCARD_OUTPUT_STREAM,
+                            MAX_TOTAL_BUNDLE_BYTES,
+                            totalBytes
+                        )
                     }
                     zipIn.closeEntry()
                     entry = zipIn.nextEntry
@@ -258,49 +267,69 @@ object ThemeBundleManager {
      * Extracts and applies all settings, palette tokens, and assets from a .mochibun bundle.
      */
     fun applyBundle(context: Context, inputStream: InputStream): Result<MochibunBundleManifest> {
+        val stagedFiles = mutableListOf<File>()
         return try {
             var manifest: MochibunBundleManifest? = null
             var extractedWallpaperFile: File? = null
             var extractedCursorFile: File? = null
+            var stagedWallpaperFile: File? = null
+            var stagedCursorFile: File? = null
+            val totalBytes = AtomicLong()
 
             ZipInputStream(BufferedInputStream(inputStream)).use { zipIn ->
                 var entry = zipIn.nextEntry
                 while (entry != null) {
                     when (entry.name) {
                         MANIFEST_ENTRY -> {
-                            val text = zipIn.bufferedReader(Charsets.UTF_8).readText()
+                            val text = readBytesBounded(zipIn, MAX_MANIFEST_BYTES, totalBytes)
+                                .toString(Charsets.UTF_8)
                             manifest = bundleJsonFormat.decodeFromString<MochibunBundleManifest>(text)
                         }
                         WALLPAPER_ENTRY -> {
-                            // Bitmap dimension guard: ensure incoming wallpaper is downsampled to AT-M120 screen
-                            val tempFile = File(context.cacheDir, "temp_wall_import.png")
-                            try {
-                                FileOutputStream(tempFile).use { out ->
-                                    zipIn.copyTo(out, bufferSize = 8192)
-                                }
-                                val destFile = File(context.filesDir, "bundle_wallpaper.png")
-                                downsampleAndSaveImage(tempFile, destFile, MAX_WALLPAPER_WIDTH, MAX_WALLPAPER_HEIGHT)
-                                extractedWallpaperFile = destFile
-                            } finally {
-                                if (tempFile.exists()) {
-                                    tempFile.delete()
-                                }
+                            val tempFile = File.createTempFile(
+                                "theme_bundle_wallpaper_",
+                                ".tmp",
+                                context.cacheDir
+                            )
+                            stagedFiles.add(tempFile)
+                            stagedWallpaperFile = tempFile
+                            FileOutputStream(tempFile).use { out ->
+                                copyBounded(zipIn, out, MAX_WALLPAPER_BYTES, totalBytes)
                             }
+                            extractedWallpaperFile = File(context.filesDir, "bundle_wallpaper.png")
                         }
                         CURSOR_GIF_ENTRY -> {
-                            val cursorFile = File(context.filesDir, "bundle_cursor.gif")
+                            val cursorFile = File.createTempFile(
+                                "theme_bundle_cursor_",
+                                ".gif",
+                                context.cacheDir
+                            )
+                            stagedFiles.add(cursorFile)
+                            stagedCursorFile = cursorFile
                             FileOutputStream(cursorFile).use { out ->
-                                zipIn.copyTo(out, bufferSize = 8192)
+                                copyBounded(zipIn, out, MAX_CURSOR_BYTES, totalBytes)
                             }
-                            extractedCursorFile = cursorFile
+                            extractedCursorFile = File(context.filesDir, "bundle_cursor.gif")
                         }
                         CURSOR_PNG_ENTRY -> {
-                            val cursorFile = File(context.filesDir, "bundle_cursor.png")
+                            val cursorFile = File.createTempFile(
+                                "theme_bundle_cursor_",
+                                ".png",
+                                context.cacheDir
+                            )
+                            stagedFiles.add(cursorFile)
+                            stagedCursorFile = cursorFile
                             FileOutputStream(cursorFile).use { out ->
-                                zipIn.copyTo(out, bufferSize = 8192)
+                                copyBounded(zipIn, out, MAX_CURSOR_BYTES, totalBytes)
                             }
-                            extractedCursorFile = cursorFile
+                            extractedCursorFile = File(context.filesDir, "bundle_cursor.png")
                         }
+                        else -> copyBounded(
+                            zipIn,
+                            DISCARD_OUTPUT_STREAM,
+                            MAX_TOTAL_BUNDLE_BYTES,
+                            totalBytes
+                        )
                     }
                     zipIn.closeEntry()
                     entry = zipIn.nextEntry
@@ -310,6 +339,31 @@ object ThemeBundleManager {
             val targetManifest = manifest ?: return Result.failure(
                 IllegalArgumentException("Bundle is missing manifest.json")
             )
+
+            extractedWallpaperFile?.let { destination ->
+                val wallpaperTemp = checkNotNull(stagedWallpaperFile)
+                try {
+                    downsampleAndSaveImage(
+                        wallpaperTemp,
+                        destination,
+                        MAX_WALLPAPER_WIDTH,
+                        MAX_WALLPAPER_HEIGHT
+                    )
+                } catch (e: Exception) {
+                    destination.delete()
+                    throw e
+                }
+            }
+
+            extractedCursorFile?.let { destination ->
+                val cursorTemp = checkNotNull(stagedCursorFile)
+                try {
+                    cursorTemp.copyTo(destination, overwrite = true)
+                } catch (e: Exception) {
+                    destination.delete()
+                    throw e
+                }
+            }
 
             // 1. Apply Palette & Colors
             val launcherPrefs = PreferencesManager.getPrefs(context)
@@ -377,6 +431,46 @@ object ThemeBundleManager {
             Result.success(targetManifest)
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            stagedFiles.forEach { stagedFile ->
+                if (stagedFile.exists() && !stagedFile.delete()) {
+                    android.util.Log.w(TAG, "Failed to delete staged bundle file: ${stagedFile.name}")
+                }
+            }
+        }
+    }
+
+    private fun readBytesBounded(
+        input: InputStream,
+        maxEntryBytes: Long,
+        totalCounter: AtomicLong
+    ): ByteArray {
+        val output = ByteArrayOutputStream()
+        copyBounded(input, output, maxEntryBytes, totalCounter)
+        return output.toByteArray()
+    }
+
+    private fun copyBounded(
+        input: InputStream,
+        output: OutputStream,
+        maxEntryBytes: Long,
+        totalCounter: AtomicLong
+    ): Long {
+        val buffer = ByteArray(8192)
+        var entryBytes = 0L
+        while (true) {
+            val bytesRead = input.read(buffer)
+            if (bytesRead == -1) return entryBytes
+
+            val nextEntryBytes = entryBytes + bytesRead
+            val nextTotalBytes = totalCounter.get() + bytesRead
+            if (nextEntryBytes > maxEntryBytes || nextTotalBytes > MAX_TOTAL_BUNDLE_BYTES) {
+                throw IllegalArgumentException("Theme bundle entry exceeds maximum allowed size")
+            }
+
+            output.write(buffer, 0, bytesRead)
+            entryBytes = nextEntryBytes
+            totalCounter.set(nextTotalBytes)
         }
     }
 

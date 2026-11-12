@@ -98,6 +98,8 @@ object HardwareRemapManager {
             appContext,
             hardwareKeyReceiver,
             filter,
+            MochibunSystemActions.SYSTEM_SERVER_BROADCAST_PERMISSION,
+            null,
             androidx.core.content.ContextCompat.RECEIVER_EXPORTED
         )
     }

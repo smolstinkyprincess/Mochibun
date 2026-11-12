@@ -1,6 +1,7 @@
 package com.crinklecodone.mochibun
 
 import android.view.KeyEvent
+import com.crinklecodone.mochibun.core.util.MochibunSystemActions
 import com.crinklecodone.mochibun.service.InputArbiter
 import com.crinklecodone.mochibun.service.InputLayer
 import com.crinklecodone.mochibun.service.KaomojiOverlayController
@@ -75,6 +76,51 @@ class InputArbiterTest {
         assertFalse(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_5, 0, cursorVisible = true))
         // Hidden cursor leaves navigation alone
         assertFalse(InputArbiter.cursorTakesPress(KeyEvent.KEYCODE_DPAD_LEFT, 0, cursorVisible = false))
+    }
+
+    @Test
+    fun `system hook forwards all four keypad scroll directions`() {
+        assertEquals(
+            KeyEvent.KEYCODE_2,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_2, 0)
+        )
+        assertEquals(
+            KeyEvent.KEYCODE_2,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_DPAD_UP, 3)
+        )
+        assertEquals(
+            KeyEvent.KEYCODE_4,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_4, 0)
+        )
+        assertEquals(
+            KeyEvent.KEYCODE_6,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_6, 0)
+        )
+        assertEquals(
+            KeyEvent.KEYCODE_8,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_8, 0)
+        )
+        assertEquals(
+            KeyEvent.KEYCODE_8,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_DPAD_DOWN, 9)
+        )
+        assertEquals(
+            KeyEvent.KEYCODE_4,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_DPAD_LEFT, 5)
+        )
+        assertEquals(
+            KeyEvent.KEYCODE_6,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_DPAD_RIGHT, 7)
+        )
+        assertEquals(
+            KeyEvent.KEYCODE_NUMPAD_4,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_NUMPAD_4, 0)
+        )
+        assertEquals(
+            KeyEvent.KEYCODE_NUMPAD_6,
+            MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_NUMPAD_6, 0)
+        )
+        assertEquals(null, MochibunSystemActions.cursorKeyCodeForEvent(KeyEvent.KEYCODE_5, 0))
     }
 
     @Test

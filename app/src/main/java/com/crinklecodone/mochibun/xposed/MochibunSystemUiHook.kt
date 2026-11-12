@@ -19,6 +19,7 @@ import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
@@ -32,6 +33,7 @@ import de.robv.android.xposed.XC_MethodReplacement
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import java.lang.ref.WeakReference
 import java.util.Collections
 import java.util.WeakHashMap
@@ -332,6 +334,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
 
     private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private val isReceiverRegistered = AtomicBoolean(false)
+    private val hooksInstalled = AtomicBoolean(false)
 
     // Weak sets for tracking active hooked view instances across SystemUI
     private val trackedDarkDispatchers = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<Any, Boolean>()))
@@ -994,18 +997,18 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
 
         Log.d(TAG, "Initializing MochibunSystemUiHook for package: ${lpparam.packageName}")
 
-        // Register dynamic theme receiver as early as possible on SystemUIApplication startup
+        // SystemUIApplication provides a resolver that can read the root-controlled kill switch.
         try {
             XposedHelpers.findAndHookMethod(
                 "com.android.systemui.SystemUIApplication",
                 lpparam.classLoader,
                 "onCreate",
                 object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
                         try {
                             val app = param.thisObject as? Context
                             if (app != null) {
-                                ensureReceiverRegistered(app)
+                                installHooksIfEnabled(app, lpparam.classLoader)
                             }
                         } catch (t: Throwable) {
                             Log.d(TAG, "Error in SystemUIApplication.onCreate hook", t)
@@ -1018,8 +1021,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             Log.d(TAG, "Failed to hook SystemUIApplication.onCreate", t)
         }
 
-        // Fallback hook on PhoneStatusBarView.onAttachedToWindow to ensure receiver registration
-        // occurs even if SystemUIApplication.onCreate was bypassed
+        // Fallback startup point for ROMs that bypass SystemUIApplication.onCreate.
         try {
             XposedHelpers.findAndHookMethod(
                 "com.android.systemui.statusbar.phone.PhoneStatusBarView",
@@ -1031,7 +1033,10 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                             val view = param.thisObject as? View
                             val context = view?.context
                             if (context != null) {
-                                ensureReceiverRegistered(context.applicationContext ?: context)
+                                installHooksIfEnabled(
+                                    context.applicationContext ?: context,
+                                    lpparam.classLoader
+                                )
                             }
                         } catch (t: Throwable) {
                             Log.d(TAG, "Error in PhoneStatusBarView.onAttachedToWindow hook", t)
@@ -1043,16 +1048,37 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
         } catch (t: Throwable) {
             Log.d(TAG, "Failed to hook PhoneStatusBarView.onAttachedToWindow", t)
         }
-
-        hookStatusBar(lpparam.classLoader)
-        hookBattery(lpparam.classLoader)
-        hookVolume(lpparam.classLoader)
-        hookQuickSettings(lpparam.classLoader)
-        hookNotifications(lpparam.classLoader)
-        hookToast(lpparam.classLoader)
-        hookLockscreen(lpparam.classLoader)
-        hookPinBouncer(lpparam.classLoader)
     }
+
+    private fun installHooksIfEnabled(context: Context, classLoader: ClassLoader) {
+        if (!isSystemUiHookEnabled(context)) {
+            Log.i(TAG, "SystemUI styling hooks disabled by ${PreferencesManager.GLOBAL_HOOK_SYSUI_ENABLED}")
+            return
+        }
+        if (!hooksInstalled.compareAndSet(false, true)) return
+
+        ensureReceiverRegistered(context)
+        hookStatusBar(classLoader)
+        hookBattery(classLoader)
+        hookVolume(classLoader)
+        hookQuickSettings(classLoader)
+        hookNotifications(classLoader)
+        hookToast(classLoader)
+        hookLockscreen(classLoader)
+        hookPinBouncer(classLoader)
+    }
+
+    private fun isSystemUiHookEnabled(context: Context): Boolean =
+        try {
+            Settings.Global.getInt(
+                context.contentResolver,
+                PreferencesManager.GLOBAL_HOOK_SYSUI_ENABLED,
+                1
+            ) == 1
+        } catch (t: Throwable) {
+            Log.w(TAG, "Unable to read SystemUI hook switch; keeping hooks enabled", t)
+            true
+        }
 
     /**
      * Stage A: Status bar hooks (cellular suppression, carrier text suppression, icon tint).

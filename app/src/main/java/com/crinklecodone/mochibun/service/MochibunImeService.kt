@@ -20,6 +20,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -51,7 +52,12 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.crinklecodone.mochibun.core.haptic.HapticManager
+import com.crinklecodone.mochibun.core.sound.SoundEffect
+import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import com.crinklecodone.mochibun.ui.dialogs.KaomojiWheelState
+import com.crinklecodone.mochibun.ui.dialogs.KaomojiWheelCard
+import com.crinklecodone.mochibun.ui.dialogs.handleKaomojiWheelNavKey
 import com.crinklecodone.mochibun.ui.components.KeitaiCandidatePools
 import com.crinklecodone.mochibun.ui.components.KeitaiCandidateState
 import com.crinklecodone.mochibun.ui.components.KeitaiCandidateStrip
@@ -104,9 +110,12 @@ class MochibunImeService : InputMethodService() {
 
     // '#' auto-repeated (held): its release types nothing
     private var poundRepeated = false
+    private var poundWheelTriggered = false
+    private var kaomojiWheelState by mutableStateOf<KaomojiWheelState?>(null)
 
     // True while our pending candidate is shown as composing text in the editor
     private var composingShown = false
+    private var manualSelection = false
 
     private val commit: (String) -> Unit = { text ->
         currentInputConnection?.commitText(text, 1)
@@ -122,13 +131,14 @@ class MochibunImeService : InputMethodService() {
     private var holdKeyCode = KeyEvent.KEYCODE_UNKNOWN
     private var holdFired = false
     private var holdDelayMs = PreferencesManager.DEFAULT_IME_HOLD_DELAY_MS.toLong()
+    private val poundHoldRunnable = Runnable { openKaomojiWheel() }
     private var holdForDigitEnabled = PreferencesManager.DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED
     private var holdVibrates = PreferencesManager.DEFAULT_IME_HOLD_VIBRATION
     private var autoCommitEnabled = PreferencesManager.DEFAULT_IME_AUTO_COMMIT_ENABLED
     private val holdRunnable = Runnable { fireHold() }
     private var idleCommitMs = PreferencesManager.DEFAULT_IME_IDLE_COMMIT_MS.toLong()
     private val pillIdleFadeRunnable = Runnable {
-        pillAlpha = PILL_IDLE_ALPHA
+        if (!manualSelection) pillAlpha = PILL_IDLE_ALPHA
     }
 
     // A TYPE_NULL editor (terminal) that asked for the keyboard: it gets multi-tap like any field
@@ -136,7 +146,7 @@ class MochibunImeService : InputMethodService() {
 
     // Idle timeout: keeps the typed letter and clears the strip
     private val idleCommitRunnable = Runnable {
-        if (holdKeyCode != KeyEvent.KEYCODE_UNKNOWN || !candidateState.isActive) return@Runnable
+        if (manualSelection || holdKeyCode != KeyEvent.KEYCODE_UNKNOWN || !candidateState.isActive) return@Runnable
         batchEdit {
             candidateState.commitActive(commit)
             syncComposing()
@@ -151,7 +161,11 @@ class MochibunImeService : InputMethodService() {
 
     override fun onDestroy() {
         cancelHold()
+        manualSelection = false
         handler.removeCallbacks(pillIdleFadeRunnable)
+        handler.removeCallbacks(idleCommitRunnable)
+        handler.removeCallbacks(poundHoldRunnable)
+        kaomojiWheelState = null
         moveAnimator?.cancel()
         moveAnimator = null
         owner.destroy()
@@ -177,6 +191,7 @@ class MochibunImeService : InputMethodService() {
 
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
+        manualSelection = false
         if (!restarting) nullEditorEngaged = false
     }
 
@@ -251,33 +266,48 @@ class MochibunImeService : InputMethodService() {
                             // Full-height spike for validating IME window sizing and insets.
                             .height(resources.configuration.screenHeightDp.dp)
                             .padding(start = 14.dp, end = 14.dp, bottom = 10.dp, top = 2.dp),
-                        contentAlignment = Alignment.BottomCenter
+                        contentAlignment = Alignment.Center
                     ) {
-                        KeitaiCandidateStrip(
-                            state = candidateState,
-                            leadingLabel = modeLabel(),
-                            modifier = Modifier
-                                .onGloballyPositioned { coords ->
-                                    val screenPos = coords.positionOnScreen()
-                                    val size = coords.size
-                                    val touchMargin = (4 * density).toInt()
-                                    val screenTop = screenPos.y.toInt() - touchMargin
-                                    val screenBottom = (screenPos.y + size.height).toInt() + touchMargin
-                                    val changed = pillBoundsOnScreen.setIfChanged(
-                                        (screenPos.x.toInt() - touchMargin).coerceAtLeast(0),
-                                        screenTop,
-                                        (screenPos.x + size.width).toInt() + touchMargin,
-                                        screenBottom
-                                    )
-                                    if (changed) updatePillDodgeForCurrentCaret()
-                                }
-                                .graphicsLayer {
-                                    translationY = pillTranslationY
-                                    alpha = pillAlpha
-                                    compositingStrategy = CompositingStrategy.ModulateAlpha
-                                }
-                                .shadow(elevation = 4.dp, shape = CircleShape)
-                        )
+                        val wheelState = kaomojiWheelState
+                        if (wheelState != null) {
+                            KaomojiWheelCard(
+                                state = wheelState,
+                                onConfirm = ::confirmKaomojiWheel,
+                                onDismiss = { kaomojiWheelState = null },
+                                hintText = "◀▶ Mood  •  ▲▼ Kaomoji  •  Center: Insert"
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.BottomCenter
+                            ) {
+                                KeitaiCandidateStrip(
+                                    state = candidateState,
+                                    leadingLabel = modeLabel(),
+                                    modifier = Modifier
+                                        .onGloballyPositioned { coords ->
+                                            val screenPos = coords.positionOnScreen()
+                                            val size = coords.size
+                                            val touchMargin = (4 * density).toInt()
+                                            val screenTop = screenPos.y.toInt() - touchMargin
+                                            val screenBottom = (screenPos.y + size.height).toInt() + touchMargin
+                                            val changed = pillBoundsOnScreen.setIfChanged(
+                                                (screenPos.x.toInt() - touchMargin).coerceAtLeast(0),
+                                                screenTop,
+                                                (screenPos.x + size.width).toInt() + touchMargin,
+                                                screenBottom
+                                            )
+                                            if (changed) updatePillDodgeForCurrentCaret()
+                                        }
+                                        .graphicsLayer {
+                                            translationY = pillTranslationY
+                                            alpha = pillAlpha
+                                            compositingStrategy = CompositingStrategy.ModulateAlpha
+                                        }
+                                        .shadow(elevation = 4.dp, shape = CircleShape)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -287,6 +317,8 @@ class MochibunImeService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         cancelHold()
+        handler.removeCallbacks(poundHoldRunnable)
+        kaomojiWheelState = null
         handler.removeCallbacks(pillIdleFadeRunnable)
         pillAlpha = 1f
         moveAnimator?.cancel()
@@ -296,6 +328,7 @@ class MochibunImeService : InputMethodService() {
         hasCursorAnchor = false
         requestCursorAnchorUpdates()
         schedulePillIdleFade()
+        manualSelection = false
         candidateState.reset()
         composingShown = false
         consumedDown.fill(false)
@@ -317,6 +350,8 @@ class MochibunImeService : InputMethodService() {
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        handler.removeCallbacks(poundHoldRunnable)
+        kaomojiWheelState = null
         currentInputConnection?.requestCursorUpdates(0)
         handler.removeCallbacks(pillIdleFadeRunnable)
         moveAnimator?.cancel()
@@ -326,6 +361,7 @@ class MochibunImeService : InputMethodService() {
         pillAlpha = 1f
         pillBoundsOnScreen.setEmpty()
         hasCursorAnchor = false
+        manualSelection = false
         resolvePendingTap()
         candidateState.commitActive(commit)
         InputArbiter.isInputActive = false
@@ -334,6 +370,7 @@ class MochibunImeService : InputMethodService() {
 
     override fun onFinishInput() {
         // Covers editors that never showed the input view (e.g. focus moved while hidden)
+        manualSelection = false
         resolvePendingTap()
         candidateState.commitActive(commit)
         super.onFinishInput()
@@ -350,6 +387,7 @@ class MochibunImeService : InputMethodService() {
             if (candidatesEnd != -1 && (newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) {
                 currentInputConnection?.finishComposingText()
                 composingShown = false
+                manualSelection = false
                 candidateState.reset()
                 refreshAutoCap()
             }
@@ -408,6 +446,12 @@ class MochibunImeService : InputMethodService() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         showPillForKeyPress()
         if (keyCode !in consumedDown.indices) return super.onKeyDown(keyCode, event)
+        kaomojiWheelState?.let { wheelState ->
+            consumedDown[keyCode] = true
+            if (keyCode == KeyEvent.KEYCODE_POUND && event.repeatCount > 0) poundRepeated = true
+            if (event.repeatCount == 0) handleKaomojiWheelKey(wheelState, keyCode)
+            return true
+        }
         if (event.repeatCount > 0) {
             if (!consumedDown[keyCode]) return super.onKeyDown(keyCode, event)
             handleRepeat(keyCode, event)
@@ -427,12 +471,18 @@ class MochibunImeService : InputMethodService() {
         if (keyCode in consumedDown.indices && consumedDown[keyCode]) {
             consumedDown[keyCode] = false
             if (keyCode == holdKeyCode) resolvePendingTap()
-            if (keyCode == KeyEvent.KEYCODE_POUND && !poundRepeated) {
-                batchEdit {
-                    candidateState.commitActive(commit)
-                    commit(" ")
-                    syncComposing()
+            if (keyCode == KeyEvent.KEYCODE_POUND) {
+                handler.removeCallbacks(poundHoldRunnable)
+                if (!poundWheelTriggered && !poundRepeated) {
+                    batchEdit {
+                        manualSelection = false
+                        candidateState.commitActive(commit)
+                        commit(" ")
+                        syncComposing()
+                    }
                 }
+                poundWheelTriggered = false
+                poundRepeated = false
             }
             return true
         }
@@ -448,27 +498,36 @@ class MochibunImeService : InputMethodService() {
                 // Space, typed on release; a hold belongs to the Kaomoji Wheel
                 if (isNumericField) return false
                 poundRepeated = false
+                poundWheelTriggered = false
+                handler.removeCallbacks(poundHoldRunnable)
+                if (PreferencesManager.isKaomojiWheelEnabled(this)) {
+                    handler.postDelayed(poundHoldRunnable, POUND_HOLD_MS)
+                }
                 return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (!active) return false
+                manualSelection = true
                 candidateState.navigateLeft()
                 syncComposing()
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (!active) return false
+                manualSelection = true
                 candidateState.navigateRight()
                 syncComposing()
                 return true
             }
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
                 // Navigation commits, then the editor (or our dialog) still gets the key
+                manualSelection = false
                 candidateState.commitActive(commit)
                 syncComposing()
                 return false
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                manualSelection = false
                 if (active) {
                     candidateState.commitActive(commit)
                     syncComposing()
@@ -478,6 +537,7 @@ class MochibunImeService : InputMethodService() {
             }
             KeyEvent.KEYCODE_DEL -> {
                 // Terminals delete on the raw key (their editable is always empty)
+                manualSelection = false
                 if (!active && isNullEditor()) return false
                 if (active) {
                     candidateState.handleBackspace()
@@ -489,14 +549,17 @@ class MochibunImeService : InputMethodService() {
             }
             KeyEvent.KEYCODE_BACK -> {
                 if (!active) return false // the app handles BACK; never a "hide keyboard" step
+                manualSelection = false
                 candidateState.reset()
                 syncComposing()
                 return true
             }
         }
         // Number / phone / date fields take raw digit keys (and '*' for dialling) as they are
+        val isMultiTapKey = keyCode == KeyEvent.KEYCODE_STAR || KeitaiCandidatePools.forKey(keyCode) != null
+        if (isMultiTapKey) manualSelection = false
         if (isNumericField) return false
-        if (keyCode == KeyEvent.KEYCODE_STAR || KeitaiCandidatePools.forKey(keyCode) != null) {
+        if (isMultiTapKey) {
             // Typing after the strip was hidden (e.g. BACK) would leave candidates invisible
             if (!isInputViewShown) requestShowSelf(0)
             handler.removeCallbacks(holdRunnable)
@@ -534,6 +597,7 @@ class MochibunImeService : InputMethodService() {
         val keyCode = holdKeyCode
         if (keyCode == KeyEvent.KEYCODE_UNKNOWN || holdFired || !holdForDigitEnabled) return
         holdFired = true
+        manualSelection = false
         batchEdit {
             if (keyCode == KeyEvent.KEYCODE_STAR) {
                 // Tapping STAR cycled shift on DOWN; held STAR is typing a literal '*'
@@ -548,6 +612,43 @@ class MochibunImeService : InputMethodService() {
             syncComposing()
         }
         if (holdVibrates) HapticManager.vibrateTick(this)
+    }
+
+    private fun openKaomojiWheel() {
+        if (!PreferencesManager.isKaomojiWheelEnabled(this) || kaomojiWheelState != null) return
+        poundWheelTriggered = true
+        batchEdit {
+            candidateState.commitActive(commit)
+            syncComposing()
+        }
+        kaomojiWheelState = KaomojiWheelState()
+        HapticManager.vibrateTick(this)
+        SoundEffectManager.play(this, SoundEffect.SELECT)
+    }
+
+    private fun handleKaomojiWheelKey(state: KaomojiWheelState, keyCode: Int) {
+        when (keyCode) {
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_POUND ->
+                kaomojiWheelState = null
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_NUMPAD_ENTER -> confirmKaomojiWheel()
+            else -> handleKaomojiWheelNavKey(state, keyCode, this)
+        }
+    }
+
+    private fun confirmKaomojiWheel() {
+        val kaomoji = kaomojiWheelState?.currentKaomoji.orEmpty()
+        kaomojiWheelState = null
+        if (kaomoji.isNotBlank()) {
+            batchEdit {
+                candidateState.commitActive(commit)
+                commit(kaomoji)
+                syncComposing()
+            }
+            HapticManager.vibrateTick(this)
+            SoundEffectManager.play(this, SoundEffect.SELECT)
+        }
     }
 
     /** Ends the pending keypad press: key already acted on DOWN, so just clear hold timer state. */
@@ -686,7 +787,7 @@ class MochibunImeService : InputMethodService() {
         handler.removeCallbacks(idleCommitRunnable)
         val ic = currentInputConnection ?: return
         if (candidateState.isActive) {
-            if (autoCommitEnabled) handler.postDelayed(idleCommitRunnable, idleCommitMs)
+            if (autoCommitEnabled && !manualSelection) handler.postDelayed(idleCommitRunnable, idleCommitMs)
             ic.setComposingText(candidateState.candidates[candidateState.selectedIndex], 1)
             composingShown = true
         } else if (composingShown) {
@@ -769,6 +870,7 @@ class MochibunImeService : InputMethodService() {
         const val KEYCODE_TABLE_SIZE = 512
 
         const val PILL_IDLE_TIMEOUT_MS = 1_500L
+        const val POUND_HOLD_MS = 400L
         const val PILL_IDLE_ALPHA = 0.35f
         const val PILL_MOVE_DURATION_MS = 220L
         const val DOCK_ENTER_MARGIN_DP = 12f

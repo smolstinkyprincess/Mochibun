@@ -47,6 +47,8 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
 
         const val ACTION_TOGGLE_CURSOR = MochibunSystemActions.ACTION_TOGGLE_CURSOR
         const val ACTION_CURSOR_KEY = MochibunSystemActions.ACTION_CURSOR_KEY
+        private const val ACTION_CURSOR_MODE_CHANGED = MochibunSystemActions.ACTION_CURSOR_MODE_CHANGED
+        private const val ACTION_REQUEST_CURSOR_MODE = MochibunSystemActions.ACTION_REQUEST_CURSOR_MODE
 
         const val EXTRA_KEY_EVENT = MochibunSystemActions.EXTRA_KEY_EVENT
         const val EXTRA_KEY_CODE = MochibunSystemActions.EXTRA_KEY_CODE
@@ -74,8 +76,12 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
             service.mainHandler.post { service.handleLidClosed() }
         }
 
-        fun start(context: Context) {
+        fun start(context: Context, showCursor: Boolean = false) {
             val intent = Intent(context, VirtualCursorService::class.java)
+            if (showCursor) {
+                intent.action = ACTION_TOGGLE_CURSOR
+                intent.putExtra(EXTRA_CURSOR_ACTIVE, true)
+            }
             context.startForegroundService(intent)
         }
 
@@ -132,6 +138,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
                     }
                     setCursorVisibility(active)
                 }
+                ACTION_REQUEST_CURSOR_MODE -> broadcastCursorModeChanged(isCursorVisible)
                 ACTION_CURSOR_KEY -> {
                     @Suppress("DEPRECATION")
                     val keyEvent = intent.getParcelableExtra<KeyEvent>(EXTRA_KEY_EVENT)
@@ -186,11 +193,14 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         val filter = IntentFilter().apply {
             addAction(ACTION_TOGGLE_CURSOR)
             addAction(ACTION_CURSOR_KEY)
+            addAction(ACTION_REQUEST_CURSOR_MODE)
         }
         androidx.core.content.ContextCompat.registerReceiver(
             this,
             cursorReceiver,
             filter,
+            MochibunSystemActions.SYSTEM_SERVER_BROADCAST_PERMISSION,
+            null,
             androidx.core.content.ContextCompat.RECEIVER_EXPORTED,
         )
 
@@ -263,6 +273,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
             overlayView?.visibility = View.GONE
             RootTouchInjector.cancelTouch()
             RootTouchInjector.release()
+            broadcastCursorModeChanged(false)
         }
     }
 
@@ -275,8 +286,10 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
     }
 
     override fun onDestroy() {
+        val cursorWasVisible = isCursorVisible
         isServiceRunning = false
         isCursorVisible = false
+        if (cursorWasVisible) broadcastCursorModeChanged(false)
         instance = null
         InputArbiter.cursorToggleKeyCode = KeyEvent.KEYCODE_UNKNOWN
         mainHandler.removeCallbacks(toggleRunnable)
@@ -324,7 +337,11 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
     fun setCursorVisibility(visible: Boolean) {
         if (isCursorVisible == visible) return
         isCursorVisible = visible
-        val view = overlayView ?: return
+        val view = overlayView ?: run {
+            isCursorVisible = false
+            broadcastCursorModeChanged(false)
+            return
+        }
 
         if (isCursorVisible) {
             RootTouchInjector.attach(applicationContext)
@@ -337,6 +354,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to attach cursor overlay window: ${e.message}")
                     isCursorVisible = false
+                    broadcastCursorModeChanged(false)
                     return
                 }
             }
@@ -351,6 +369,18 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
             RootTouchInjector.cancelTouch()
             RootTouchInjector.release()
             Log.d(TAG, "Virtual cursor hidden")
+        }
+        broadcastCursorModeChanged(isCursorVisible)
+    }
+
+    private fun broadcastCursorModeChanged(active: Boolean) {
+        val intent = Intent(ACTION_CURSOR_MODE_CHANGED)
+            .setPackage("android")
+            .putExtra(EXTRA_CURSOR_ACTIVE, active)
+        try {
+            sendBroadcast(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to synchronize cursor mode with system_server", e)
         }
     }
 

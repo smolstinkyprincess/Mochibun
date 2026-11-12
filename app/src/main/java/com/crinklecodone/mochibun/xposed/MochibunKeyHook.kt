@@ -1,11 +1,16 @@
 package com.crinklecodone.mochibun.xposed
 
 import android.app.ActivityManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.SystemClock
+import android.provider.Settings
 import android.view.KeyEvent
 import com.crinklecodone.mochibun.core.util.MochibunSystemActions
+import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -36,6 +41,12 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         const val ACTION_BACK_TRIGGER = MochibunSystemActions.ACTION_BACK_TRIGGER
         const val ACTION_HOME_TRIGGER = MochibunSystemActions.ACTION_HOME_TRIGGER
         const val ACTION_HARDWARE_KEY_TRIGGER = MochibunSystemActions.ACTION_HARDWARE_KEY_TRIGGER
+        private const val ACTION_CURSOR_MODE_CHANGED = MochibunSystemActions.ACTION_CURSOR_MODE_CHANGED
+        private const val ACTION_REQUEST_CURSOR_MODE = MochibunSystemActions.ACTION_REQUEST_CURSOR_MODE
+        private const val ACTION_REQUEST_KEY_HOOK_STATUS =
+            MochibunSystemActions.ACTION_REQUEST_KEY_HOOK_STATUS
+        private const val ACTION_KEY_HOOK_STATUS = MochibunSystemActions.ACTION_KEY_HOOK_STATUS
+        private const val HOOK_SETTING_CACHE_TTL_MS = 2_000L
 
         const val EXTRA_KEY_EVENT = MochibunSystemActions.EXTRA_KEY_EVENT
         const val EXTRA_KEY_CODE = MochibunSystemActions.EXTRA_KEY_CODE
@@ -54,6 +65,32 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         // Volatile internal Home key press state tracked across key events in system_server
         @Volatile
         var isHomePressedOnMochibun: Boolean = false
+
+        @Volatile
+        private var cursorModeReceiverRegistered = false
+
+        private var cursorModeReceiver: BroadcastReceiver? = null
+
+        @Volatile
+        private var keyHookStatusReceiverRegistered = false
+
+        @Volatile
+        private var cachedHookEnabled = true
+
+        @Volatile
+        private var lastHookSettingCheckElapsed = 0L
+
+        @Volatile
+        private var hasHookSettingCheck = false
+
+        @Volatile
+        private var heartbeatRecorded = false
+
+        @Volatile
+        private var hookStatusInitialized = false
+
+        @Volatile
+        private var systemServerResolver: android.content.ContentResolver? = null
     }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
@@ -62,6 +99,16 @@ class MochibunKeyHook : IXposedHookLoadPackage {
 
         try {
             hookPhoneWindowManager(lpparam.classLoader)
+            val systemContext = try {
+                val activityThread = XposedHelpers.findClass(
+                    "android.app.ActivityThread",
+                    lpparam.classLoader
+                )
+                XposedHelpers.callStaticMethod(activityThread, "currentApplication") as? Context
+            } catch (_: Throwable) {
+                null
+            }
+            if (systemContext != null) initializeHookStatus(systemContext)
             XposedBridge.log("$TAG: Successfully installed PhoneWindowManager key hook")
         } catch (t: Throwable) {
             XposedBridge.log("$TAG: Failed to hook PhoneWindowManager: ${t.message}")
@@ -95,6 +142,9 @@ class MochibunKeyHook : IXposedHookLoadPackage {
 
         val phoneWindowManager = param.thisObject
         val context = XposedHelpers.getObjectField(phoneWindowManager, "mContext") as? Context
+        if (context != null && !hookStatusInitialized) initializeHookStatus(context)
+        if (!isHookEnabled()) return
+        if (context != null) ensureCursorModeReceiver(context)
 
         // 1. F4 Key (KEYCODE_F4 / AT-M120 side key scanCode 62)
         val isF4 = keyCode == KeyEvent.KEYCODE_F4 || event.scanCode == SCANCODE_SIDE_F4
@@ -104,14 +154,16 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                 XposedBridge.log("$TAG: F4 pressed, toggling cursor -> isCursorActive=$isCursorActive")
                 broadcastCursorToggle(context, isCursorActive)
             }
+
             // Swallow key from the OS on both ACTION_DOWN and ACTION_UP
             param.result = 0
             return
         }
 
         // 2. Cursor active redirection
-        if (isCursorActive && isCursorNavKey(keyCode)) {
-            forwardCursorKey(context, event)
+        val cursorKeyCode = MochibunSystemActions.cursorKeyCodeForEvent(keyCode, event.scanCode)
+        if (isCursorActive && cursorKeyCode != null) {
+            forwardCursorKey(context, event, cursorKeyCode)
             // Swallow key so foreground application and OS never receive directional or numeric inputs
             param.result = 0
             return
@@ -196,20 +248,95 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         }
     }
 
-    private fun isCursorNavKey(keyCode: Int): Boolean {
-        return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT,
-            KeyEvent.KEYCODE_DPAD_CENTER,
-            KeyEvent.KEYCODE_ENTER,
-            KeyEvent.KEYCODE_NUMPAD_ENTER,
-            KeyEvent.KEYCODE_2,
-            KeyEvent.KEYCODE_NUMPAD_2,
-            KeyEvent.KEYCODE_8,
-            KeyEvent.KEYCODE_NUMPAD_8 -> true
-            else -> false
+    private fun initializeHookStatus(context: Context) {
+        if (hookStatusInitialized) return
+        synchronized(MochibunKeyHook::class.java) {
+            if (hookStatusInitialized) return
+            systemServerResolver = context.contentResolver
+            if (!heartbeatRecorded) {
+                try {
+                    Settings.Global.putLong(
+                        context.contentResolver,
+                        PreferencesManager.GLOBAL_KEY_HOOK_ALIVE_ELAPSED,
+                        SystemClock.elapsedRealtime()
+                    )
+                    Settings.Global.putInt(
+                        context.contentResolver,
+                        PreferencesManager.GLOBAL_KEY_HOOK_ALIVE_BOOT_COUNT,
+                        Settings.Global.getInt(
+                            context.contentResolver,
+                            Settings.Global.BOOT_COUNT,
+                            -1
+                        )
+                    )
+                } catch (t: Throwable) {
+                    XposedBridge.log("$TAG: Failed to record key hook heartbeat: ${t.message}")
+                }
+                heartbeatRecorded = true
+            }
+            ensureKeyHookStatusReceiver(context)
+            hasHookSettingCheck = false
+            hookStatusInitialized = true
+        }
+    }
+
+    private fun isHookEnabled(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (!hasHookSettingCheck ||
+            now - lastHookSettingCheckElapsed >= HOOK_SETTING_CACHE_TTL_MS
+        ) {
+            synchronized(MochibunKeyHook::class.java) {
+                if (!hasHookSettingCheck ||
+                    now - lastHookSettingCheckElapsed >= HOOK_SETTING_CACHE_TTL_MS
+                ) {
+                    val resolver = systemServerResolver
+                    if (resolver != null) {
+                        cachedHookEnabled = try {
+                            Settings.Global.getInt(
+                                resolver,
+                                PreferencesManager.GLOBAL_HOOK_KEY_ENABLED,
+                                1
+                            ) == 1
+                        } catch (_: Throwable) {
+                            true
+                        }
+                    }
+                    lastHookSettingCheckElapsed = now
+                    hasHookSettingCheck = true
+                }
+            }
+        }
+        return cachedHookEnabled
+    }
+
+    private fun ensureKeyHookStatusReceiver(context: Context) {
+        synchronized(MochibunKeyHook::class.java) {
+            if (keyHookStatusReceiverRegistered) return
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action != ACTION_REQUEST_KEY_HOOK_STATUS) return
+                    val response = Intent(ACTION_KEY_HOOK_STATUS).apply {
+                        setPackage(PACKAGE_MOCHIBUN)
+                        putExtra(
+                            MochibunSystemActions.EXTRA_KEY_HOOK_ACTIVE,
+                            isHookEnabled()
+                        )
+                    }
+                    context?.sendBroadcast(response)
+                }
+            }
+            val filter = IntentFilter(ACTION_REQUEST_KEY_HOOK_STATUS)
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.registerReceiver(receiver, filter)
+                }
+            } catch (t: Throwable) {
+                XposedBridge.log("$TAG: Failed to register key hook status receiver: ${t.message}")
+            }
+            keyHookStatusReceiverRegistered = true
         }
     }
 
@@ -222,13 +349,41 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         sendBroadcastSafe(context, intent)
     }
 
-    private fun forwardCursorKey(context: Context?, event: KeyEvent) {
+    private fun ensureCursorModeReceiver(context: Context) {
+        if (cursorModeReceiverRegistered) return
+        synchronized(this) {
+            if (cursorModeReceiverRegistered) return
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action == ACTION_CURSOR_MODE_CHANGED) {
+                        isCursorActive = intent.getBooleanExtra(EXTRA_CURSOR_ACTIVE, false)
+                    }
+                }
+            }
+            try {
+                context.registerReceiver(
+                    receiver,
+                    IntentFilter(ACTION_CURSOR_MODE_CHANGED),
+                    MochibunSystemActions.CURSOR_MODE_SYNC_PERMISSION,
+                    null
+                )
+                cursorModeReceiver = receiver
+                cursorModeReceiverRegistered = true
+                val request = Intent(ACTION_REQUEST_CURSOR_MODE).setPackage(PACKAGE_MOCHIBUN)
+                sendBroadcastSafe(context, request)
+            } catch (t: Throwable) {
+                XposedBridge.log("$TAG: Failed to register cursor state receiver: ${t.message}")
+            }
+        }
+    }
+
+    private fun forwardCursorKey(context: Context?, event: KeyEvent, cursorKeyCode: Int) {
         if (context == null) return
         val intent = Intent(ACTION_CURSOR_KEY).apply {
             setPackage(PACKAGE_MOCHIBUN)
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             putExtra(EXTRA_KEY_EVENT, event)
-            putExtra(EXTRA_KEY_CODE, event.keyCode)
+            putExtra(EXTRA_KEY_CODE, cursorKeyCode)
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
         }
@@ -287,6 +442,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
     }
 
     private fun sendBroadcastSafe(context: Context, intent: Intent) {
+        intent.setPackage(PACKAGE_MOCHIBUN)
         try {
             val userAll = XposedHelpers.getStaticObjectField(android.os.UserHandle::class.java, "ALL")
             XposedHelpers.callMethod(context, "sendBroadcastAsUser", intent, userAll)

@@ -344,6 +344,8 @@ class MainActivity : ComponentActivity() {
             this,
             softKeyReceiver,
             softKeyFilter,
+            MochibunSystemActions.SYSTEM_SERVER_BROADCAST_PERMISSION,
+            null,
             androidx.core.content.ContextCompat.RECEIVER_EXPORTED,
         )
 

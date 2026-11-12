@@ -127,6 +127,14 @@ object PreferencesManager {
     const val DEFAULT_ROOT_A11Y_WATCHDOG_ENABLED = true
     const val KEY_ROOT_QUICK_SETTINGS_ENABLED = "pref_root_quick_settings_enabled"
     const val DEFAULT_ROOT_QUICK_SETTINGS_ENABLED = true
+    const val KEY_HOOK_KEY_ENABLED = "pref_hook_key_enabled"
+    const val DEFAULT_HOOK_KEY_ENABLED = true
+    const val KEY_HOOK_SYSUI_ENABLED = "pref_hook_sysui_enabled"
+    const val DEFAULT_HOOK_SYSUI_ENABLED = true
+    const val GLOBAL_HOOK_KEY_ENABLED = "mochibun_hook_key_enabled"
+    const val GLOBAL_HOOK_SYSUI_ENABLED = "mochibun_hook_sysui_enabled"
+    const val GLOBAL_KEY_HOOK_ALIVE_ELAPSED = "mochibun_key_hook_alive_elapsed"
+    const val GLOBAL_KEY_HOOK_ALIVE_BOOT_COUNT = "mochibun_key_hook_alive_boot_count"
 
     const val KEY_IME_HOLD_DELAY_MS = "pref_ime_hold_delay_ms"
     const val DEFAULT_IME_HOLD_DELAY_MS = 400
@@ -854,6 +862,20 @@ object PreferencesManager {
     fun setRootQuickSettingsEnabled(context: Context, enabled: Boolean) {
         _isRootQuickSettingsEnabled.value = enabled
         getPrefs(context).edit().putBoolean(KEY_ROOT_QUICK_SETTINGS_ENABLED, enabled).apply()
+    }
+
+    fun isKeyHookEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_HOOK_KEY_ENABLED, DEFAULT_HOOK_KEY_ENABLED)
+
+    fun setKeyHookEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_HOOK_KEY_ENABLED, enabled).apply()
+    }
+
+    fun isSystemUiHookEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_HOOK_SYSUI_ENABLED, DEFAULT_HOOK_SYSUI_ENABLED)
+
+    fun setSystemUiHookEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_HOOK_SYSUI_ENABLED, enabled).apply()
     }
 
     fun isRootA11yWatchdogEnabled(context: Context): Boolean {

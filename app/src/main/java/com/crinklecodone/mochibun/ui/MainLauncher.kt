@@ -619,7 +619,8 @@ fun MainLauncher(
     val currentKeyHandler by rememberUpdatedState(keyHandler)
     val currentKeypadStateProvider by rememberUpdatedState(::getCurrentKeypadState)
 
-    // Bind accessibility key listener strictly to Lifecycle.State.RESUMED so it is never active in background
+    // Keep the in-app keypad path active whenever foreground; it is the fallback when the
+    // system_server hook is unavailable or disabled.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, keyHandler) {
         val listener: (android.view.KeyEvent) -> Boolean = { nativeEvent ->

@@ -1,5 +1,7 @@
 package com.crinklecodone.mochibun
 
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import com.crinklecodone.mochibun.data.model.BundleCursorConfig
 import com.crinklecodone.mochibun.data.model.BundleGreetingConfig
 import com.crinklecodone.mochibun.data.model.BundlePaletteConfig
@@ -13,6 +15,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.lang.reflect.Proxy
+import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -115,6 +120,99 @@ class ThemeBundleTest {
     }
 
     @Test
+    fun oversizedManifestIsRejectedByPreviewAndApply() {
+        val oversizedManifest = ByteArray(ThemeBundleManager.MAX_MANIFEST_BYTES.toInt() + 1)
+        val bundle = createZip("manifest.json" to oversizedManifest)
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle))
+        assertTrue("Oversized manifest must fail preview", preview.isFailure)
+        assertEquals(
+            "Theme bundle entry exceeds maximum allowed size",
+            preview.exceptionOrNull()?.message
+        )
+
+        withTestContext { context ->
+            val applied = ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle))
+            assertTrue("Oversized manifest must fail apply", applied.isFailure)
+            assertEquals(
+                "Theme bundle entry exceeds maximum allowed size",
+                applied.exceptionOrNull()?.message
+            )
+            assertTrue("Failed import must not leave files", context.filesDir.listFiles().isNullOrEmpty())
+            assertTrue("Failed import must clean staging files", context.cacheDir.listFiles().isNullOrEmpty())
+        }
+    }
+
+    @Test
+    fun oversizedWallpaperOrCursorIsRejectedWithoutLeavingFiles() {
+        val manifest = bundleJsonFormat.encodeToString(validManifest()).toByteArray(Charsets.UTF_8)
+        val oversizedAssets = listOf(
+            "wallpaper.png" to ByteArray(ThemeBundleManager.MAX_WALLPAPER_BYTES.toInt() + 1),
+            "cursor.png" to ByteArray(ThemeBundleManager.MAX_CURSOR_BYTES.toInt() + 1)
+        )
+
+        oversizedAssets.forEach { (entryName, assetBytes) ->
+            val bundle = createZip("manifest.json" to manifest, entryName to assetBytes)
+            withTestContext { context ->
+                val applied = ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle))
+                assertTrue("$entryName must be rejected", applied.isFailure)
+                assertEquals(
+                    "Theme bundle entry exceeds maximum allowed size",
+                    applied.exceptionOrNull()?.message
+                )
+                assertTrue("$entryName must not leave partial files", context.filesDir.listFiles().isNullOrEmpty())
+                assertTrue("$entryName must clean staging files", context.cacheDir.listFiles().isNullOrEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun bundleExceedingAggregateLimitIsRejected() {
+        val manifest = bundleJsonFormat.encodeToString(validManifest()).toByteArray(Charsets.UTF_8)
+        val bundle = createZip(
+            "manifest.json" to manifest,
+            "asset-one.bin" to ByteArray(4 * 1024 * 1024),
+            "asset-two.bin" to ByteArray(4 * 1024 * 1024)
+        )
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle))
+        assertTrue("Aggregate bundle limit must apply during preview", preview.isFailure)
+        assertEquals(
+            "Theme bundle entry exceeds maximum allowed size",
+            preview.exceptionOrNull()?.message
+        )
+
+        withTestContext { context ->
+            val applied = ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle))
+            assertTrue("Aggregate bundle limit must apply during extraction", applied.isFailure)
+            assertEquals(
+                "Theme bundle entry exceeds maximum allowed size",
+                applied.exceptionOrNull()?.message
+            )
+            assertTrue("Failed import must not leave files", context.filesDir.listFiles().isNullOrEmpty())
+        }
+    }
+
+    @Test
+    fun validBundleContinuesToPreviewAndApply() {
+        val manifest = validManifest()
+        val bundle = createZip(
+            "manifest.json" to bundleJsonFormat.encodeToString(manifest).toByteArray(Charsets.UTF_8)
+        )
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle))
+        assertTrue("Valid bundle preview should succeed", preview.isSuccess)
+        assertEquals(manifest.bundleName, preview.getOrThrow().manifest.bundleName)
+
+        withTestContext { context ->
+            val applied = ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle))
+            assertTrue("Valid bundle apply should succeed", applied.isSuccess)
+            assertEquals(manifest.bundleName, applied.getOrThrow().bundleName)
+            assertTrue("Valid bundle apply should clean staging files", context.cacheDir.listFiles().isNullOrEmpty())
+        }
+    }
+
+    @Test
     fun testMissingManifestZipFailsValidation() {
         val zipBytesOut = ByteArrayOutputStream()
         ZipOutputStream(zipBytesOut).use { zipOut ->
@@ -152,5 +250,108 @@ class ThemeBundleTest {
             bundleJsonFormat.encodeToString(current)
         )
         assertEquals(current, decoded)
+    }
+
+    private fun validManifest() = MochibunBundleManifest(
+        bundleVersion = 1,
+        bundleName = "Test Theme",
+        author = "Mochibun",
+        createdAtEpochSec = 1729600000L,
+        greeting = BundleGreetingConfig(userName = "Mochi User", showSparkles = true),
+        palette = BundlePaletteConfig(
+            activePresetId = "sakura_dream",
+            isCustom = false,
+            bgColorHex = "#FFF5F8",
+            cardColorHex = "#FCE4EC",
+            greetingColorHex = "#A04064",
+            actionColorHex = "#A04064",
+            cardRoundnessDp = 20.0f
+        ),
+        cursor = BundleCursorConfig(
+            baseVelocity = 10.0f,
+            accelerationMulti = 1.05f,
+            pointerSizeDp = 28.0f,
+            clickMethod = "ACCESSIBILITY_GESTURE",
+            hotspot = "CENTER"
+        ),
+        hasWallpaper = false,
+        hasCustomCursor = false
+    )
+
+    private fun createZip(vararg entries: Pair<String, ByteArray>): ByteArray {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            entries.forEach { (name, bytes) ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+        }
+        return output.toByteArray()
+    }
+
+    private fun withTestContext(block: (BundleTestContext) -> Unit) {
+        val root = Files.createTempDirectory("mochibun-bundle-test").toFile()
+        try {
+            block(BundleTestContext(root, testSharedPreferences()))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    private fun testSharedPreferences(): SharedPreferences {
+        val values = mutableMapOf<String, Any?>()
+        lateinit var editor: SharedPreferences.Editor
+        editor = Proxy.newProxyInstance(
+            SharedPreferences.Editor::class.java.classLoader,
+            arrayOf(SharedPreferences.Editor::class.java)
+        ) { proxy, method, args ->
+            val arguments = args ?: emptyArray()
+            when (method.name) {
+                "putBoolean", "putFloat", "putInt", "putLong", "putString", "putStringSet" -> {
+                    val key = arguments[0] as String
+                    val value = arguments[1]
+                    if (value == null) values.remove(key) else values[key] = value
+                    proxy
+                }
+                "remove" -> {
+                    values.remove(arguments[0] as String)
+                    proxy
+                }
+                "clear" -> {
+                    values.clear()
+                    proxy
+                }
+                "commit" -> true
+                "apply" -> null
+                else -> null
+            }
+        } as SharedPreferences.Editor
+
+        return Proxy.newProxyInstance(
+            SharedPreferences::class.java.classLoader,
+            arrayOf(SharedPreferences::class.java)
+        ) { _, method, args ->
+            val arguments = args ?: emptyArray()
+            when (method.name) {
+                "getAll" -> HashMap(values)
+                "getBoolean", "getFloat", "getInt", "getLong", "getString", "getStringSet" ->
+                    values[arguments[0] as String] ?: arguments[1]
+                "contains" -> values.containsKey(arguments[0] as String)
+                "edit" -> editor
+                else -> null
+            }
+        } as SharedPreferences
+    }
+
+    private class BundleTestContext(root: File, private val preferences: SharedPreferences) :
+        ContextWrapper(null) {
+        private val files = File(root, "files").apply { mkdirs() }
+        private val cache = File(root, "cache").apply { mkdirs() }
+
+        override fun getFilesDir(): File = files
+        override fun getCacheDir(): File = cache
+        override fun getSharedPreferences(name: String, mode: Int): SharedPreferences = preferences
+        override fun sendBroadcast(intent: android.content.Intent) = Unit
     }
 }

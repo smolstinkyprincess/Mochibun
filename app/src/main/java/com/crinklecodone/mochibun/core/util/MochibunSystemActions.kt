@@ -1,5 +1,7 @@
 package com.crinklecodone.mochibun.core.util
 
+import android.view.KeyEvent
+
 object MochibunSystemActions {
     const val ACTION_TOGGLE_CURSOR = "com.crinklecodone.mochibun.ACTION_TOGGLE_CURSOR"
     const val ACTION_CURSOR_KEY = "com.crinklecodone.mochibun.ACTION_CURSOR_KEY"
@@ -7,10 +9,50 @@ object MochibunSystemActions {
     const val ACTION_BACK_TRIGGER = "com.crinklecodone.mochibun.ACTION_BACK_TRIGGER"
     const val ACTION_HOME_TRIGGER = "com.crinklecodone.mochibun.ACTION_HOME_TRIGGER"
     const val ACTION_HARDWARE_KEY_TRIGGER = "com.crinklecodone.mochibun.ACTION_HARDWARE_KEY_TRIGGER"
+    const val ACTION_CURSOR_MODE_CHANGED = "com.crinklecodone.mochibun.ACTION_CURSOR_MODE_CHANGED"
+    const val ACTION_REQUEST_CURSOR_MODE = "com.crinklecodone.mochibun.ACTION_REQUEST_CURSOR_MODE"
+    const val ACTION_REQUEST_KEY_HOOK_STATUS =
+        "com.crinklecodone.mochibun.ACTION_REQUEST_KEY_HOOK_STATUS"
+    const val ACTION_KEY_HOOK_STATUS = "com.crinklecodone.mochibun.ACTION_KEY_HOOK_STATUS"
+
+    const val SYSTEM_SERVER_BROADCAST_PERMISSION = "android.permission.INTERNAL_SYSTEM_WINDOW"
+    const val CURSOR_MODE_SYNC_PERMISSION = "com.crinklecodone.mochibun.permission.CURSOR_MODE_SYNC"
 
     const val EXTRA_KEY_EVENT = "key_event"
     const val EXTRA_KEY_CODE = "keyCode"
     const val EXTRA_ACTION = "action"
     const val EXTRA_REPEAT_COUNT = "repeatCount"
     const val EXTRA_CURSOR_ACTIVE = "isCursorActive"
+    const val EXTRA_KEY_HOOK_ACTIVE = "isKeyHookActive"
+
+    fun cursorKeyCodeForEvent(keyCode: Int, scanCode: Int): Int? {
+        // Linux keypad scan codes keep digit identity when a vendor keylayout maps 4/6 to D-pad.
+        val keypadScrollKey = when (scanCode) {
+            3 -> KeyEvent.KEYCODE_2
+            5 -> KeyEvent.KEYCODE_4
+            7 -> KeyEvent.KEYCODE_6
+            9 -> KeyEvent.KEYCODE_8
+            else -> null
+        }
+        if (keypadScrollKey != null) return keypadScrollKey
+
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_NUMPAD_ENTER,
+            KeyEvent.KEYCODE_2,
+            KeyEvent.KEYCODE_NUMPAD_2,
+            KeyEvent.KEYCODE_4,
+            KeyEvent.KEYCODE_NUMPAD_4,
+            KeyEvent.KEYCODE_6,
+            KeyEvent.KEYCODE_NUMPAD_6,
+            KeyEvent.KEYCODE_8,
+            KeyEvent.KEYCODE_NUMPAD_8 -> keyCode
+            else -> null
+        }
+    }
 }

@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <permission
+        android:name="com.crinklecodone.mochibun.permission.CURSOR_MODE_SYNC"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.crinklecodone.mochibun.permission.CURSOR_MODE_SYNC" />
+
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />

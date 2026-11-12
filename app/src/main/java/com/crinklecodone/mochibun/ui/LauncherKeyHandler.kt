@@ -259,6 +259,7 @@ internal class LauncherKeyHandler(
             return false
         }
 
+        // Handle local LSK/RSK and numeric input independently of LSPosed hook health.
         val softKeyHandled = handleSoftKey(nativeEvent, state)
         if (softKeyHandled != null) {
             if (softKeyHandled && nativeEvent.action == KeyEvent.ACTION_DOWN) {
