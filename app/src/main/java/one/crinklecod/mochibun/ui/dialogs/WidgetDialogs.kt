@@ -1,6 +1,7 @@
 package one.crinklecod.mochibun.ui.dialogs
 
-import one.crinklecod.mochibun.ui.components.KawaiiClosePill
+import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
+
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,7 +47,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -189,16 +188,16 @@ fun WidgetPickerDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.coerceIn(22f, 24f).dp)
-        KawaiiDialogSurface(
+        KeitaiLaceContainer(
+            cardCornerRadius = 22.dp,
+            // 14dp just clears the pearl ring; the default 20dp squeezes this dialog.
+            contentPadding = 14.dp,
+            containerColor = theme.cardBgColor,
+            borderColor = theme.greetingOutlineColor,
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
-                .curtainUnfurl(visible = true),
-            shape = shape,
-            containerColor = theme.cardBgColor,
-            borderColor = theme.greetingOutlineColor,
-            borderWidth = 1.5.dp
+                .curtainUnfurl(visible = true)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text(
@@ -388,16 +387,22 @@ fun WidgetOptionsDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.coerceIn(22f, 24f).dp)
-        KawaiiDialogSurface(
+        // The last action ("close") floats over the bottom rim instead of sitting in the list.
+        KeitaiLaceDialogWithClose(
+            isCloseFocused = selectedIndex == actions.lastIndex,
+            onClose = {
+                confirmingRemove = false
+                selectedIndex = actions.lastIndex
+                actions.last().run()
+            },
+            // 14dp just clears the pearl ring; the default 20dp squeezes this dialog.
+            contentPadding = 14.dp,
+            containerColor = theme.cardBgColor,
+            borderColor = theme.greetingOutlineColor,
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
-                .curtainUnfurl(visible = true),
-            shape = shape,
-            containerColor = theme.cardBgColor,
-            borderColor = theme.greetingOutlineColor,
-            borderWidth = 1.5.dp
+                .curtainUnfurl(visible = true)
         ) {
             Column(
                 modifier = Modifier
@@ -422,28 +427,13 @@ fun WidgetOptionsDialog(
                 HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
                 Spacer(modifier = Modifier.height(2.dp))
                 actions.forEachIndexed { idx, action ->
-                    val isClose = idx == actions.lastIndex
-                    if (isClose) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
-                    }
-                    if (isClose) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            KawaiiClosePill(
-                                isFocused = selectedIndex == idx,
-                                onClick = { confirmingRemove = false; selectedIndex = idx; action.run() }
-                            )
-                        }
-                    } else KawaiiDialogItem(
+                    if (idx == actions.lastIndex) return@forEachIndexed // "close" is the floating pill
+                    KawaiiDialogItem(
                         text = action.label,
                         isFocused = selectedIndex == idx,
                         enabled = action.enabled,
                         isDestructive = action.destructive,
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isClose) TextAlign.End else TextAlign.Start,
                         jumpNumber = idx + 1,
                         onClick = {
                             if (selectedIndex != idx) confirmingRemove = false

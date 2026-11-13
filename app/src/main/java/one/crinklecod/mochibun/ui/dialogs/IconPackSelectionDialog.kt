@@ -1,6 +1,6 @@
 package one.crinklecod.mochibun.ui.dialogs
 
-import one.crinklecod.mochibun.ui.components.KawaiiClosePill
+
 import android.content.Context
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
@@ -27,7 +27,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -171,17 +170,17 @@ fun IconPackSelectionDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(22.dp)
-
-        KawaiiDialogSurface(
+        // Single dismiss action: it floats over the bottom rim instead of a button row.
+        KeitaiLaceDialogWithClose(
+            isCloseFocused = focusedIndex == totalItems - 1,
+            onClose = onDismiss,
+            cardCornerRadius = 22.dp,
+            // 14dp just clears the pearl ring; the default 20dp squeezes this dialog.
+            contentPadding = 14.dp,
             modifier = Modifier
                 .width(dialogWidth)
                 .widthIn(max = 400.dp)
-                .heightIn(max = 500.dp),
-            shape = shape,
-            containerColor = ActiveTheme.surface,
-            borderColor = ActiveTheme.cardBorder,
-            borderWidth = 2.dp
+                .heightIn(max = 500.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -334,22 +333,6 @@ fun IconPackSelectionDialog(
                             }
                         }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    KawaiiClosePill(
-                        isFocused = focusedIndex == totalItems - 1,
-                        onClick = onDismiss
-                    )
                 }
             }
         }

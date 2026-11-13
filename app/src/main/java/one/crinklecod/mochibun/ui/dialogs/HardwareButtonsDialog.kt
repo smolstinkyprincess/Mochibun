@@ -1,6 +1,7 @@
 package one.crinklecod.mochibun.ui.dialogs
 
-import android.content.Context
+import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
+
 import android.view.KeyEvent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -51,7 +52,6 @@ import one.crinklecod.mochibun.data.repository.HardwareRemapManager
 import one.crinklecod.mochibun.ui.components.MascotMood
 import one.crinklecod.mochibun.ui.components.MochibunMascot
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
-import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.destructiveColor
 
 /**
@@ -406,14 +406,12 @@ fun HardwareButtonsDialog(
                 true
             }
     ) {
-        val shape = RoundedCornerShape(22.dp)
-        KawaiiDialogSurface(
+        KeitaiLaceContainer(
+            cardCornerRadius = 22.dp,
+            // 14dp just clears the pearl ring; the default 20dp squeezes this dialog.
+            contentPadding = 14.dp,
             modifier = Modifier
-                .fillMaxWidth(),
-            shape = shape,
-            containerColor = ActiveTheme.surface,
-            borderColor = ActiveTheme.cardBorder,
-            borderWidth = 1.5.dp
+                .fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
@@ -724,14 +722,12 @@ private fun AppPickerDialog(
                 false
             }
     ) {
-        val shape = RoundedCornerShape(22.dp)
-        KawaiiDialogSurface(
+        KeitaiLaceContainer(
+            cardCornerRadius = 22.dp,
+            // 14dp just clears the pearl ring; the default 20dp squeezes this dialog.
+            contentPadding = 14.dp,
             modifier = Modifier
-                .fillMaxSize(),
-            shape = shape,
-            containerColor = ActiveTheme.surface,
-            borderColor = ActiveTheme.cardBorder,
-            borderWidth = 1.5.dp
+                .fillMaxSize()
         ) {
             Column(
                 modifier = Modifier

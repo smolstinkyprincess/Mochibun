@@ -40,7 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import one.crinklecod.mochibun.ui.components.KawaiiClosePill
 import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
 import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
@@ -141,8 +140,13 @@ fun PhotoFrameActionDialog(
             }
     ) {
         ResizeWithKeyboard()
-        KeitaiLaceContainer(
-            cardCornerRadius = 22.dp,
+        // The last action ("close") floats over the bottom rim instead of sitting in the list.
+        KeitaiLaceDialogWithClose(
+            isCloseFocused = selectedIndex == actions.lastIndex,
+            onClose = {
+                selectedIndex = actions.lastIndex
+                actions.last().run()
+            },
             modifier = Modifier
                 .width(dialogWidth)
                 .curtainUnfurl(visible = true)
@@ -166,19 +170,7 @@ fun PhotoFrameActionDialog(
                 Spacer(modifier = Modifier.height(2.dp))
 
                 actions.forEachIndexed { idx, action ->
-                    if (idx == actions.lastIndex) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            KawaiiClosePill(
-                                isFocused = selectedIndex == idx,
-                                onClick = { selectedIndex = idx; action.run() }
-                            )
-                        }
-                    } else {
+                    if (idx != actions.lastIndex) { // "close" is the floating pill
                         KawaiiDialogItem(
                             text = action.label,
                             isFocused = selectedIndex == idx,

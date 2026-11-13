@@ -1,8 +1,9 @@
 package one.crinklecod.mochibun.ui.dialogs
 
+import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
+
 import one.crinklecod.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -304,16 +305,13 @@ fun CreateFavoriteFolderDialog(
             }
     ) {
         ResizeWithKeyboard()
-        val shape = RoundedCornerShape(22.dp)
-
-        KawaiiDialogSurface(
+        KeitaiLaceContainer(
+            cardCornerRadius = 22.dp,
+            // 14dp just clears the pearl ring; the default 20dp squeezes this dialog.
+            contentPadding = 14.dp,
             modifier = Modifier
                 .width(dialogWidth)
-                .heightIn(max = 500.dp),
-            shape = shape,
-            containerColor = ActiveTheme.surface,
-            borderColor = ActiveTheme.cardBorder,
-            borderWidth = 1.5.dp
+                .heightIn(max = 500.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -382,12 +380,16 @@ fun CreateFavoriteFolderDialog(
                         text = "Choose apps (${selectedPackages.size} selected):",
                         color = theme.fgTextColor,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     Text(
                         text = "▶ buttons",
                         color = theme.cardTextColor,
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        maxLines = 1
                     )
                 }
 
@@ -395,8 +397,10 @@ fun CreateFavoriteFolderDialog(
 
                 LazyColumn(
                     state = appListState,
+                    // Shrinks (up to 200dp) instead of pushing the Cancel/Create row out of the dialog.
                     modifier = Modifier
                         .fillMaxWidth()
+                        .weight(1f, fill = false)
                         .heightIn(max = 200.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {

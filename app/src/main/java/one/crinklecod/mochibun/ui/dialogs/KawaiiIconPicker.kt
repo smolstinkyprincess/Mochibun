@@ -1,6 +1,6 @@
 package one.crinklecod.mochibun.ui.dialogs
 
-import one.crinklecod.mochibun.ui.components.KawaiiClosePill
+
 import android.content.Context
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,7 +27,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -227,16 +225,20 @@ fun KawaiiIconPicker(
             }
     ) {
         ResizeWithKeyboard()
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.dp)
-        KawaiiDialogSurface(
+        // Single dismiss action: it floats over the bottom rim instead of a button row.
+        KeitaiLaceDialogWithClose(
+            isCloseFocused = focusZone == 2,
+            onClose = onDismiss,
+            closeLabel = "Cancel",
+            cardCornerRadius = 22.dp,
+            // 14dp just clears the pearl ring; the default 20dp squeezes this dialog.
+            contentPadding = 14.dp,
+            containerColor = theme.cardBgColor,
+            borderColor = theme.greetingOutlineColor,
             modifier = Modifier
                 .width(dialogWidth)
                 .widthIn(max = 400.dp)
-                .heightIn(max = 480.dp),
-            shape = shape,
-            containerColor = theme.cardBgColor,
-            borderColor = theme.greetingOutlineColor,
-            borderWidth = 2.5.dp
+                .heightIn(max = 480.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -340,23 +342,6 @@ fun KawaiiIconPicker(
                             }
                         }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    KawaiiClosePill(
-                        label = "Cancel",
-                        isFocused = focusZone == 2,
-                        onClick = onDismiss
-                    )
                 }
             }
         }

@@ -1,9 +1,7 @@
 package one.crinklecod.mochibun.ui.dialogs
 
-import one.crinklecod.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,12 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,23 +30,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import one.crinklecod.mochibun.data.model.LauncherApp
-import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
 import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
-import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 
 // long-press dialog for app actions (favorite reorder, custom icon, app info, hide, folder creation)
@@ -197,8 +189,13 @@ fun AppActionDialog(
                 }
             }
     ) {
-        KeitaiLaceContainer(
-            cardCornerRadius = 22.dp,
+        // The last action ("close") floats over the bottom rim instead of sitting in the list.
+        KeitaiLaceDialogWithClose(
+            isCloseFocused = selectedIndex == actions.lastIndex,
+            onClose = {
+                selectedIndex = actions.lastIndex
+                actions.last().second()
+            },
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
@@ -274,26 +271,11 @@ fun AppActionDialog(
                 val startIdx = if (isFav) 2 else 0
                 for (idx in startIdx until actions.size) {
                     val (label, action) = actions[idx]
-                    val isClose = idx == actions.lastIndex
-                    if (isClose) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
-                    }
-                    if (isClose) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            KawaiiClosePill(
-                                isFocused = selectedIndex == idx,
-                                onClick = { selectedIndex = idx; action() }
-                            )
-                        }
-                    } else KawaiiDialogItem(
+                    if (idx == actions.lastIndex) continue // "close" is the floating pill
+                    KawaiiDialogItem(
                         text = label,
                         isFocused = selectedIndex == idx,
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isClose) TextAlign.End else TextAlign.Start,
                         jumpNumber = if (idx + 1 <= 9) idx + 1 else null,
                         onClick = {
                             selectedIndex = idx

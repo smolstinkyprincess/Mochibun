@@ -1,6 +1,6 @@
 package one.crinklecod.mochibun.ui.dialogs
 
-import one.crinklecod.mochibun.ui.components.KawaiiClosePill
+
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -130,15 +129,16 @@ fun HiddenAppsDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(22.dp)
-        KawaiiDialogSurface(
+        // Single dismiss action: it floats over the bottom rim instead of a button row.
+        KeitaiLaceDialogWithClose(
+            isCloseFocused = selectedIndex == hiddenApps.size,
+            onClose = onDismiss,
+            cardCornerRadius = 22.dp,
+            // 14dp just clears the pearl ring; the default 20dp squeezes this dialog.
+            contentPadding = 14.dp,
             modifier = Modifier
                 .width(dialogWidth)
-                .heightIn(max = 420.dp),
-            shape = shape,
-            containerColor = ActiveTheme.surface,
-            borderColor = ActiveTheme.cardBorder,
-            borderWidth = 1.5.dp
+                .heightIn(max = 420.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -226,24 +226,6 @@ fun HiddenAppsDialog(
                             }
                         }
                     }
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                HorizontalDivider(
-                    color = theme.appActionColor.copy(alpha = 0.22f)
-                )
-
-                Spacer(Modifier.height(6.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    KawaiiClosePill(
-                        isFocused = selectedIndex == hiddenApps.size,
-                        onClick = onDismiss
-                    )
                 }
             }
         }

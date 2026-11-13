@@ -3,7 +3,6 @@ package one.crinklecod.mochibun.ui.dialogs
 import one.crinklecod.mochibun.ui.components.KawaiiClosePill
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,7 +34,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -247,16 +244,19 @@ fun FolderActionDialog(
                 }
             }
     ) {
-        val shape = RoundedCornerShape(theme.cardRoundnessDp.coerceIn(22f, 24f).dp)
-        KawaiiDialogSurface(
+        // Same keitai lace frame as the sibling AppActionDialog; "close" floats over the bottom
+        // rim (hidden during the delete confirmation, which has its own Cancel/Delete row).
+        KeitaiLaceDialogWithClose(
+            isCloseFocused = selectedIndex == actions.lastIndex,
+            onClose = {
+                selectedIndex = actions.lastIndex
+                actions.last().onClick()
+            },
+            showClose = !confirmingDelete,
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
-                .curtainUnfurl(visible = true),
-            shape = shape,
-            containerColor = theme.cardBgColor,
-            borderColor = theme.greetingOutlineColor,
-            borderWidth = 1.5.dp
+                .curtainUnfurl(visible = true)
         ) {
             if (confirmingDelete) {
                 Column(
@@ -353,28 +353,13 @@ fun FolderActionDialog(
 
                     for (idx in 2 until actions.size) {
                         val item = actions[idx]
-                        val isClose = idx == actions.lastIndex
-                        if (isClose) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
-                        }
-                        if (isClose) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                KawaiiClosePill(
-                                    isFocused = selectedIndex == idx,
-                                    onClick = { selectedIndex = idx; item.onClick() }
-                                )
-                            }
-                        } else KawaiiDialogItem(
+                        if (idx == actions.lastIndex) continue // "close" is the floating pill
+                        KawaiiDialogItem(
                             text = item.label,
                             isFocused = selectedIndex == idx,
                             enabled = item.enabled,
                             isDestructive = item.isDestructive,
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = if (isClose) TextAlign.End else TextAlign.Start,
                             jumpNumber = if (idx + 1 <= 9) idx + 1 else null,
                             onClick = {
                                 selectedIndex = idx

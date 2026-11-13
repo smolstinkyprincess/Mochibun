@@ -7,12 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -36,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.R
 import one.crinklecod.mochibun.ui.components.JumpNumberBadge
+import one.crinklecod.mochibun.ui.components.KawaiiClosePill
+import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
 import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
@@ -92,28 +95,72 @@ fun requestFocusSafely(focusRequester: FocusRequester, key: Any? = Unit) {
 }
 
 /**
- * Shared plain (non-lace) dialog card: a rounded Surface with a 1.5 dp outline, 6 dp tonal and
- * 8 dp shadow elevation. Size the card through [modifier] (width, heightIn, curtainUnfurl, …);
- * the border is drawn after it, matching the dialogs this replaced pixel for pixel.
+ * Lace dialog whose only bottom button is a dismiss pill floating over the bottom-centre rim,
+ * the same way the folder dialog shows its close pill. Use it for dialogs with a single
+ * close / cancel action; dialogs with two buttons keep their normal button row.
+ *
+ * The pill sits outside the lace frame (so scrolling content never moves it) and overlaps the
+ * rim by 2dp. The frame's content gets extra bottom padding, outside any scroll container the
+ * caller adds, so the last item can always scroll clear of the pill.
+ *
+ * [showClose] hides the pill for in-dialog sub-views that bring their own buttons (for example a
+ * delete confirmation).
  */
 @Composable
-fun KawaiiDialogSurface(
+fun KeitaiLaceDialogWithClose(
+    isCloseFocused: Boolean,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(22.dp),
+    closeLabel: String = "close",
+    showClose: Boolean = true,
+    cardCornerRadius: Dp = 22.dp,
+    contentPadding: Dp = 20.dp, // KeitaiLaceContainer's default for its default lace sizing
     containerColor: Color = ActiveTheme.surface,
     borderColor: Color = ActiveTheme.cardBorder,
-    borderWidth: Dp = 1.5.dp,
-    content: @Composable () -> Unit
+    content: @Composable BoxScope.() -> Unit
 ) {
-    Surface(
-        modifier = modifier.border(borderWidth, borderColor, shape),
-        shape = shape,
-        color = containerColor,
-        tonalElevation = 6.dp,
-        shadowElevation = 8.dp,
-        content = content
-    )
+    Box(modifier = Modifier.graphicsLayer { clip = false }) {
+        KeitaiLaceContainer(
+            cardCornerRadius = cardCornerRadius,
+            contentPadding = contentPadding,
+            containerColor = containerColor,
+            borderColor = borderColor,
+            modifier = modifier
+        ) {
+            Box(
+                modifier = Modifier
+                    .graphicsLayer { clip = false }
+                    .padding(
+                        bottom = if (showClose) {
+                            (FLOATING_PILL_CLEARANCE - contentPadding).coerceAtLeast(0.dp)
+                        } else {
+                            0.dp
+                        }
+                    ),
+                content = content
+            )
+        }
+
+        if (showClose) {
+            KawaiiClosePill(
+                label = closeLabel,
+                isFocused = isCloseFocused,
+                onClick = onClose,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(y = 2.dp)
+                    .width(154.dp)
+            )
+        }
+    }
 }
+
+/**
+ * Space kept between the frame's bottom edge and the end of its content when a floating pill is
+ * shown. The 36dp pill covers the bottom 34dp; dialog content adds its own ~14dp inner padding
+ * on top of this, leaving a clear gap above the pill.
+ */
+private val FLOATING_PILL_CLEARANCE = 30.dp
 
 @Composable
 fun KawaiiDialogItem(
