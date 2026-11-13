@@ -20,11 +20,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,10 +34,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,7 +41,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -61,15 +55,9 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.KeyEventType
@@ -101,6 +89,60 @@ import java.util.Locale
 
 // dynamic pastel theme colors provided via LocalLauncherTheme and MochibunThemePalette
 private val FavoriteSquircleShape = RoundedCornerShape(16.dp)
+private val FavoritesCardCorner = 22.dp
+/** Favorite slots shown per page on the Home card (also used by MainLauncher for page jumps). */
+const val FAVORITES_PAGE_SIZE = 3
+
+/** Number of Favorites pages; always at least 1 so an empty card still has a page. */
+internal fun favoritePageCount(itemCount: Int): Int =
+    ((itemCount + FAVORITES_PAGE_SIZE - 1) / FAVORITES_PAGE_SIZE).coerceAtLeast(1)
+
+/** The page that shows [selectedIndex], clamped to the pages that exist. */
+internal fun favoritePageForIndex(selectedIndex: Int, itemCount: Int): Int =
+    (selectedIndex / FAVORITES_PAGE_SIZE).coerceIn(0, favoritePageCount(itemCount) - 1)
+
+/** Index to select when jumping to [page] (swipe / page dot): its first slot, clamped to the list. */
+internal fun firstFavoriteIndexOfPage(page: Int, itemCount: Int): Int =
+    (page * FAVORITES_PAGE_SIZE).coerceIn(0, (itemCount - 1).coerceAtLeast(0))
+
+// Resting motifs tucked near the bottom corners only: the top corners hold the bow and Mochibunny.
+private val FavoritesCardMotifs = listOf(
+    CardMotifSpec(
+        type = KawaiiMotifType.MINI_HEART_OUTLINE, // accentDeep
+        anchor = CardMotifAnchor.BOTTOM_LEFT,
+        sizeDp = 9.dp,
+        offsetXDp = 2.dp,
+        offsetYDp = 3.dp,
+        alpha = 0.55f
+    ),
+    CardMotifSpec(
+        type = KawaiiMotifType.SPARKLE_FOUR_POINT_FILLED, // primary
+        anchor = CardMotifAnchor.BOTTOM_RIGHT,
+        sizeDp = 9.dp,
+        offsetXDp = (-2).dp,
+        offsetYDp = 3.dp,
+        alpha = 0.65f
+    ),
+    CardMotifSpec(
+        type = KawaiiMotifType.DIAMOND_GLINT, // primary
+        anchor = CardMotifAnchor.BOTTOM_RIGHT,
+        sizeDp = 5.dp,
+        offsetXDp = (-14).dp,
+        offsetYDp = 6.dp,
+        alpha = 0.45f
+    )
+)
+
+// Blush, lilac, mint, peach: cycled across favorite slots for a candy-box look.
+private val FavoriteSlotPastels = arrayOf(
+    Color(0xFFF8BBD0),
+    Color(0xFFE1BEE7),
+    Color(0xFFC8E6C9),
+    Color(0xFFFFE0B2)
+)
+private val FavoriteSlotHighlight = Color.White.copy(alpha = 0.7f)
+
+private fun favoriteSlotTint(index: Int): Color = FavoriteSlotPastels[index % FavoriteSlotPastels.size]
 
 /**
  * Main Home Screen composable recreating the kawaii Mochibun layout.
@@ -125,7 +167,8 @@ fun HomeScreen(
     onFolderLongClick: (FavoriteFolder) -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     onNavigateToStats: () -> Unit = {},
-    onNavigateToNotifications: () -> Unit = {}
+    onNavigateToNotifications: () -> Unit = {},
+    onFavoritePageChange: (page: Int) -> Unit = {}
 ) {
     val theme = LocalLauncherTheme.current
     val notifications by NotificationTracker.notifications.collectAsState()
@@ -177,7 +220,8 @@ fun HomeScreen(
                 onAppClick = onAppClick,
                 onAppLongClick = onAppLongClick,
                 onFolderClick = onFolderClick,
-                onFolderLongClick = onFolderLongClick
+                onFolderLongClick = onFolderLongClick,
+                onPageChange = onFavoritePageChange
             )
         }
 
@@ -282,32 +326,34 @@ fun WelcomeHomeBanner(
                 .offset(x = (-4).dp, y = 14.dp)
         )
 
-        // Pill container with enhanced vertical presence
-        Box(
+        // Pill wrapped in the same dainty lace + pearl rim as the Favorites card. The frill takes
+        // the outer 6dp (= contentPadding), and the inner padding is trimmed to match, so the
+        // banner keeps its exact size and the bow / clock below don't move.
+        KeitaiLaceContainer(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp)
-                .graphicsLayer { clip = false }
-                .softGlowFocus(isSelected = isFocused, cornerRadius = 32.dp)
-                .then(
-                    if (!isFocused) {
-                        Modifier.border(
-                            width = 2.dp,
-                            color = theme.greetingOutlineColor,
-                            shape = pillShape
-                        )
-                    } else {
-                        Modifier
-                    }
-                )
-                .background(theme.greetingBgColor, pillShape)
+                .softGlowFocus(isSelected = isFocused, cornerRadius = 32.dp),
+            cardCornerRadius = 32.dp,
+            scallopDepth = 3.dp,
+            beadDiameter = 4.dp,
+            contentPadding = 6.dp,
+            containerColor = theme.greetingBgColor,
+            borderColor = theme.greetingOutlineColor,
+            beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
+            showCornerBows = false // the top-centre bow badge is drawn below
+        ) {
+        // Inner pill: same shape as the lace card, so tap ripples stay rounded.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
                 .clip(pillShape)
                 .focusable()
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = onLongClick
                 )
-                .padding(horizontal = 18.dp, vertical = 15.dp),
+                .padding(horizontal = 12.dp, vertical = 9.dp),
             contentAlignment = Alignment.Center
         ) {
             // Inner corner sparkles
@@ -352,6 +398,7 @@ fun WelcomeHomeBanner(
                 softWrap = false,
                 modifier = Modifier.padding(horizontal = 14.dp)
             )
+        }
         }
 
         // Tiny hearts flanking the bow badge
@@ -618,8 +665,8 @@ fun ClockWidget(
  * Physical Focus Contract:
  * Outer and inner containers specify 'graphicsLayer { clip = false }' so the ~3.5 dp soft focus
  * halo around the active slot isn't clipped by container edges or viewport bounds.
- * When > 4 favorites exist, the LazyRow automatically scrolls focused slots into view so D-pad
- * navigation remains smooth and predictable.
+ * Favorites are shown 3 per page; the visible page is derived from [selectedIndex], so D-pad
+ * Left/Right steps flip pages at the boundaries. Swipes and the page dots call [onPageChange].
  */
 @Composable
 fun FavoritesCard(
@@ -635,30 +682,40 @@ fun FavoritesCard(
     onAppClick: (LauncherApp) -> Unit = {},
     onAppLongClick: (LauncherApp) -> Unit = {},
     onFolderClick: (FavoriteFolder) -> Unit = {},
-    onFolderLongClick: (FavoriteFolder) -> Unit = {}
+    onFolderLongClick: (FavoriteFolder) -> Unit = {},
+    onPageChange: (page: Int) -> Unit = {}
 ) {
     val theme = LocalLauncherTheme.current
-    val cardShape = RoundedCornerShape(24.dp)
     val itemCount = favoriteItems.size
-    val lazyRowState = rememberLazyListState()
+    // Paginated 3-slot carousel: the visible page always follows the D-pad selection, so
+    // Left/Right across a page boundary (and reorders across one) flip the card automatically.
+    val totalPages = favoritePageCount(itemCount)
+    val currentPage = favoritePageForIndex(selectedIndex, itemCount)
+    val pageStart = currentPage * FAVORITES_PAGE_SIZE
+    val pageItems = favoriteItems.subList(pageStart, minOf(pageStart + FAVORITES_PAGE_SIZE, itemCount))
 
-    // Smooth scroll if index moves outside viewport when more than 4 favorites exist
-    LaunchedEffect(selectedIndex, itemCount) {
-        if (itemCount > 4) {
-            val targetIndex = selectedIndex.coerceIn(0, itemCount - 1)
-            val selectedItemInfo = lazyRowState.layoutInfo.visibleItemsInfo.firstOrNull {
-                it.index == targetIndex
-            }
-            val viewportStart = lazyRowState.layoutInfo.viewportStartOffset
-            val viewportEnd = lazyRowState.layoutInfo.viewportEndOffset
-            val isFullyVisible = selectedItemInfo != null &&
-                selectedItemInfo.offset >= viewportStart &&
-                (selectedItemInfo.offset + selectedItemInfo.size) <= viewportEnd
-
-            if (!isFullyVisible) {
-                lazyRowState.animateScrollToItem(targetIndex)
-            }
+    // Horizontal swipe flips favorite pages. Only installed when there is more than one page, and
+    // it consumes the drag so the Home pager doesn't also slide to Widgets/Notifications.
+    val swipeModifier = if (totalPages > 1) {
+        Modifier.pointerInput(totalPages, currentPage) {
+            var dragTotal = 0f
+            val threshold = 32.dp.toPx()
+            detectHorizontalDragGestures(
+                onDragStart = { dragTotal = 0f },
+                onDragEnd = {
+                    when {
+                        dragTotal <= -threshold && currentPage < totalPages - 1 -> onPageChange(currentPage + 1)
+                        dragTotal >= threshold && currentPage > 0 -> onPageChange(currentPage - 1)
+                    }
+                },
+                onHorizontalDrag = { change, amount ->
+                    change.consume()
+                    dragTotal += amount
+                }
+            )
         }
+    } else {
+        Modifier
     }
 
     Box(
@@ -667,126 +724,114 @@ fun FavoritesCard(
             .graphicsLayer { clip = false }
             .padding(top = 26.dp)
     ) {
-        Box(
+        // Dainty keitai lace + pearl rim. Fill/rim use the LauncherTheme card colors (identical
+        // to ActiveTheme.surface / cardBorder on built-in palettes, but also honoring custom presets).
+        KeitaiLaceContainer(
             modifier = Modifier
                 .fillMaxWidth()
                 .kawaiiCardMotifs(
                     isFocused = isCardFocused,
-                    cornerRadius = 24.dp
+                    cornerRadius = FavoritesCardCorner,
+                    motifs = FavoritesCardMotifs
                 )
-                .border(
-                    width = 1.5.dp,
-                    color = theme.greetingOutlineColor,
-                    shape = cardShape
-                )
-                .background(theme.cardBgColor, cardShape)
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .then(swipeModifier),
+            cardCornerRadius = FavoritesCardCorner,
+            scallopDepth = 3.dp,
+            beadDiameter = 4.dp,
+            contentPadding = 11.dp,
+            containerColor = theme.cardBgColor,
+            borderColor = theme.greetingOutlineColor,
+            beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
+            // Corner bows off: the top-right corner belongs to Mochibunny.
+            showCornerBows = false
         ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { clip = false },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header with decorative side divider lines: — ♡ Favorites ♡ —
             MochibunSectionHeader(
                 title = "Favorites",
                 color = ActiveTheme.accentDeep,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                modifier = Modifier.padding(horizontal = 12.dp)
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
-            // Slots row: evenly distributed across 480px width
-            if (itemCount <= 4) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    favoriteItems.forEachIndexed { index, item ->
-                        when (item) {
-                            is FavoriteSlotItem.App -> {
-                                FavoriteAppSlot(
-                                    app = item.app,
-                                    index = index,
-                                    isSelected = isCardFocused && index == selectedIndex,
-                                    onClick = {
-                                        onAppClick(item.app)
-                                        context.packageManager
-                                            .getLaunchIntentForPackage(item.app.packageName)
-                                            ?.let(context::startActivity)
-                                    },
-                                    onLongClick = {
-                                        onAppClick(item.app)
-                                        onAppLongClick(item.app)
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            is FavoriteSlotItem.Folder -> {
-                                FavoriteFolderSlot(
-                                    context = context,
-                                    folder = item.folder,
-                                    index = index,
-                                    isSelected = isCardFocused && index == selectedIndex,
-                                    folderIconRefreshKey = folderIconRefreshKey,
-                                    onClick = { onFolderClick(item.folder) },
-                                    onLongClick = { onFolderLongClick(item.folder) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+            // Always 3 equal-weight columns so icons keep the same width on every page; a short
+            // page splits its unused columns into spacers on both sides to stay centered.
+            val sideGap = (FAVORITES_PAGE_SIZE - pageItems.size) / 2f
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { clip = false }
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                if (sideGap > 0f) Spacer(modifier = Modifier.weight(sideGap))
+                pageItems.forEachIndexed { localIndex, item ->
+                    val index = pageStart + localIndex // global index keeps each item's pastel tint
+                    when (item) {
+                        is FavoriteSlotItem.App -> {
+                            FavoriteAppSlot(
+                                app = item.app,
+                                index = index,
+                                isSelected = isCardFocused && index == selectedIndex,
+                                onClick = {
+                                    onAppClick(item.app)
+                                    context.packageManager
+                                        .getLaunchIntentForPackage(item.app.packageName)
+                                        ?.let(context::startActivity)
+                                },
+                                onLongClick = {
+                                    onAppClick(item.app)
+                                    onAppLongClick(item.app)
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        is FavoriteSlotItem.Folder -> {
+                            FavoriteFolderSlot(
+                                context = context,
+                                folder = item.folder,
+                                index = index,
+                                isSelected = isCardFocused && index == selectedIndex,
+                                folderIconRefreshKey = folderIconRefreshKey,
+                                onClick = { onFolderClick(item.folder) },
+                                onLongClick = { onFolderLongClick(item.folder) },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 }
-            } else {
-                LazyRow(
-                    state = lazyRowState,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    itemsIndexed(favoriteItems, key = { _, item -> item.key }) { index, item ->
-                        when (item) {
-                            is FavoriteSlotItem.App -> {
-                                FavoriteAppSlot(
-                                    app = item.app,
-                                    index = index,
-                                    isSelected = isCardFocused && index == selectedIndex,
-                                    onClick = {
-                                        onAppClick(item.app)
-                                        context.packageManager
-                                            .getLaunchIntentForPackage(item.app.packageName)
-                                            ?.let(context::startActivity)
-                                    },
-                                    onLongClick = {
-                                        onAppClick(item.app)
-                                        onAppLongClick(item.app)
-                                    },
-                                    modifier = Modifier.width(68.dp)
-                                )
-                            }
-                            is FavoriteSlotItem.Folder -> {
-                                FavoriteFolderSlot(
-                                    context = context,
-                                    folder = item.folder,
-                                    index = index,
-                                    isSelected = isCardFocused && index == selectedIndex,
-                                    folderIconRefreshKey = folderIconRefreshKey,
-                                    onClick = { onFolderClick(item.folder) },
-                                    onLongClick = { onFolderLongClick(item.folder) },
-                                    modifier = Modifier.width(68.dp)
-                                )
-                            }
-                        }
-                    }
-                }
+                if (sideGap > 0f) Spacer(modifier = Modifier.weight(sideGap))
+            }
+
+            if (totalPages > 1) {
+                FavoritesPageDots(
+                    totalPages = totalPages,
+                    currentPage = currentPage,
+                    onPageClick = onPageChange,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
     }
 
-    // Companion mascot loaf sitting on the top-right corner of the favorites card with dynamic speech bubble
+    // Mini pixel bow pinned on the top-left corner, balancing Mochibunny on the top-right.
+    PixelRibbonBow(
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .offset(x = (-3).dp, y = (-7).dp)
+            .graphicsLayer { rotationZ = -30f },
+        width = 24.dp,
+        height = 20.dp
+    )
+
+    // Companion mascot loaf sitting on the top-right corner of the favorites card with dynamic speech bubble.
+    // Declared last in this Box so she always draws above the lace rim and the bow.
     MochibunnyWithSpeechBubble(
         mood = getDefaultTimeOfDayMood(),
         size = 56.dp,
@@ -802,6 +847,37 @@ fun FavoritesCard(
 }
 
 /**
+ * Tiny page indicator under the favorites row: ♥ for the current page, • for the others.
+ * Each dot is tappable to jump straight to that page.
+ */
+@Composable
+private fun FavoritesPageDots(
+    totalPages: Int,
+    currentPage: Int,
+    onPageClick: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accent = ActiveTheme.accentDeep
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (page in 0 until totalPages) {
+            val isActive = page == currentPage
+            Text(
+                text = if (isActive) "♥" else "•",
+                fontSize = if (isActive) 10.sp else 12.sp,
+                lineHeight = 11.sp,
+                color = if (isActive) accent else accent.copy(alpha = 0.45f),
+                modifier = Modifier
+                    .clickable { onPageClick(page) }
+                    .padding(horizontal = 4.dp)
+            )
+        }
+    }
+}
+
+/**
  * Individual favorite app slot with squircle background and unclipped focus ring.
  */
 @Composable
@@ -814,7 +890,6 @@ private fun FavoriteAppSlot(
     modifier: Modifier = Modifier
 ) {
     val theme = LocalLauncherTheme.current
-    val palette = theme.palette
 
     val scale by animateFloatAsState(
         targetValue = if (isSelected) 1.08f else 1f,
@@ -822,7 +897,7 @@ private fun FavoriteAppSlot(
         label = "favAppScale"
     )
 
-    val squircleBg = if (index % 2 == 0) palette.squirclePrimary else palette.squircleSecondary
+    val squircleBg = favoriteSlotTint(index)
 
     Column(
         modifier = modifier
@@ -840,6 +915,8 @@ private fun FavoriteAppSlot(
                 .softGlowFocus(isSelected = isSelected, cornerRadius = 20.dp)
                 .padding(3.dp)
                 .background(squircleBg, FavoriteSquircleShape)
+                // Crisp 1dp inner highlight (border draws inside the bounds)
+                .border(1.dp, FavoriteSlotHighlight, FavoriteSquircleShape)
                 .clip(FavoriteSquircleShape)
                 .combinedClickable(
                     onClick = onClick,
@@ -866,7 +943,7 @@ private fun FavoriteAppSlot(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(max = 66.dp)
+            modifier = Modifier.widthIn(max = 80.dp)
         )
     }
 }
@@ -886,7 +963,6 @@ private fun FavoriteFolderSlot(
     modifier: Modifier = Modifier
 ) {
     val theme = LocalLauncherTheme.current
-    val palette = theme.palette
 
     val scale by animateFloatAsState(
         targetValue = if (isSelected) 1.08f else 1f,
@@ -906,7 +982,7 @@ private fun FavoriteFolderSlot(
         }
     }
 
-    val squircleBg = if (index % 2 == 0) palette.squirclePrimary else palette.squircleSecondary
+    val squircleBg = favoriteSlotTint(index)
 
     Column(
         modifier = modifier
@@ -924,6 +1000,8 @@ private fun FavoriteFolderSlot(
                 .softGlowFocus(isSelected = isSelected, cornerRadius = 20.dp)
                 .padding(3.dp)
                 .background(squircleBg, FavoriteSquircleShape)
+                // Crisp 1dp inner highlight (border draws inside the bounds)
+                .border(1.dp, FavoriteSlotHighlight, FavoriteSquircleShape)
                 .clip(FavoriteSquircleShape)
                 .combinedClickable(
                     onClick = onClick,
@@ -958,7 +1036,7 @@ private fun FavoriteFolderSlot(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(max = 66.dp)
+            modifier = Modifier.widthIn(max = 80.dp)
         )
     }
 }

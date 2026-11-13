@@ -76,6 +76,7 @@ import one.crinklecod.mochibun.ui.dialogs.PresetPreviewDialog
 import one.crinklecod.mochibun.ui.dialogs.awaitFocusSafely
 import one.crinklecod.mochibun.ui.dialogs.dialogWidth
 import one.crinklecod.mochibun.ui.screens.AppDrawerScreen
+import one.crinklecod.mochibun.ui.screens.firstFavoriteIndexOfPage
 import one.crinklecod.mochibun.ui.screens.HomeScreen
 import one.crinklecod.mochibun.ui.screens.NotificationsScreen
 import one.crinklecod.mochibun.ui.screens.SettingsDestination
@@ -989,6 +990,13 @@ fun MainLauncher(
                                     savedFavoriteIndexOnHome = selectedFavoriteIndex
                                     pendingTargetPage = 2
                                     scope.launch { pagerState.animateScrollToPage(2) }
+                                },
+                                onFavoritePageChange = { page ->
+                                    // Swipe / page-dot tap: select the first slot of that page so the
+                                    // D-pad continues from where the card is now showing.
+                                    val firstIdx = firstFavoriteIndexOfPage(page, favoriteItems.size)
+                                    selectedFavoriteIndex = firstIdx
+                                    savedFavoriteIndexOnHome = firstIdx
                                 }
                             )
                         }
