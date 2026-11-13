@@ -1,27 +1,18 @@
 # Preserve Android entry points and system services
 -keep public class * extends android.app.Activity
 -keep public class * extends android.app.Service
--keep public class * extends android.content.BroadcastReceiver
 -keep class * extends android.content.BroadcastReceiver { *; }
 -keep public class * extends android.inputmethodservice.InputMethodService
--keep public class * extends android.accessibilityservice.AccessibilityService
 
 # Keep ViewModels and their constructors for reflection instantiation by ViewModelProvider
--keepclassmembers class * extends androidx.lifecycle.ViewModel {
-    <init>(...);
-}
 -keep class * extends androidx.lifecycle.ViewModel {
     <init>(...);
 }
--keep class com.crinklecodone.mochibun.ui.LauncherViewModel {
-    public <init>(android.app.Application);
-}
 
-# Keep Mochibun's Virtual Cursor & Core Services intact
+# Keep Mochibun's services (VirtualCursorService, IME, notification listener) and LSPosed hooks
+# (MochibunKeyHook, MochibunSystemUiHook, ActiveHookTheme) intact
 -keep class com.crinklecodone.mochibun.service.** { *; }
 -keep class com.crinklecodone.mochibun.xposed.** { *; }
--keep class com.crinklecodone.mochibun.service.VirtualCursorService { *; }
--keep class com.crinklecodone.mochibun.xposed.MochibunKeyHook { *; }
 -keep class com.crinklecodone.mochibun.data.repository.HardwareRemapManager { *; }
 -keep class com.crinklecodone.mochibun.core.util.MochibunSystemActions { *; }
 
@@ -67,14 +58,9 @@
 -keep class com.crinklecodone.mochibun.data.model.YamlThemeColors { *; }
 -keep class com.crinklecodone.mochibun.data.model.YamlThemeDecorations { *; }
 -keep class com.crinklecodone.mochibun.data.repository.BackupPreviewSummary { *; }
--keepclassmembers class com.crinklecodone.mochibun.data.model.MochibunBundleManifest { *; }
--keepclassmembers class com.crinklecodone.mochibun.data.model.BundleGreetingConfig { *; }
--keepclassmembers class com.crinklecodone.mochibun.data.model.BundlePaletteConfig { *; }
--keepclassmembers class com.crinklecodone.mochibun.data.model.BundleCursorConfig { *; }
--keepclassmembers class com.crinklecodone.mochibun.data.model.YamlTheme { *; }
--keepclassmembers class com.crinklecodone.mochibun.data.model.YamlThemeColors { *; }
--keepclassmembers class com.crinklecodone.mochibun.data.model.YamlThemeDecorations { *; }
--keepclassmembers class com.crinklecodone.mochibun.data.repository.BackupPreviewSummary { *; }
+
+# Annotations, generics and inner classes are needed by serialization and by reflection
+# across processes (SystemUI theme bridge, LSPosed hooks)
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 
 # kaml (YAML parser)
@@ -85,18 +71,9 @@
 -keep class coil.decode.GifDecoder { *; }
 -keep class coil.decode.AnimatedImageDecoder { *; }
 
-
 # Preserve LSPosed / Xposed Entry Points and Hook Classes
 -keep interface de.robv.android.xposed.** { *; }
 -keep class de.robv.android.xposed.** { *; }
 
-# Preserve SystemUI Theme Bridge and Color Tokens
+# Preserve SystemUI Theme Bridge
 -keep class com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge { *; }
--keep class com.crinklecodone.mochibun.xposed.ActiveHookTheme { *; }
--keepclassmembers class com.crinklecodone.mochibun.xposed.ActiveHookTheme {
-    public static <fields>;
-    public static <methods>;
-}
-
-# Keep any classes accessed via reflection across processes
--keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod

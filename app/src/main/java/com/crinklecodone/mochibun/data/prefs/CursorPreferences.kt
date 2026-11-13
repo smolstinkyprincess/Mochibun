@@ -5,6 +5,13 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.view.KeyEvent
 
+/**
+ * Legacy cursor click setting. It has NO effect at runtime: VirtualCursorService always clicks
+ * through RootTouchInjector (libevinject.so, falling back to `input tap`). It is kept only so JSON
+ * backups and .mochibun bundles stay readable in both directions: the backup validator and
+ * [com.crinklecodone.mochibun.data.model.BundleCursorConfig.clickMethod] require a known value.
+ * Do not remove or rename entries.
+ */
 enum class ClickMethod(val label: String, val description: String) {
     ACCESSIBILITY_GESTURE("Accessibility Gesture", "Native Android dispatchGesture (no root needed)"),
     ROOT_INPUT_TAP("Root Shell", "Direct su -c input tap (fallback for protected surfaces)")

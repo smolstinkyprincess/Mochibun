@@ -32,7 +32,7 @@ class MemoryTrimTest {
 
     @Test
     fun criticalReleasesTheDrawerOnlyWhenTheLauncherIsHidden() {
-        // The a11y-bound process never sees background levels; RUNNING_CRITICAL is its real signal
+        // A process kept up by its foreground service never sees background levels; RUNNING_CRITICAL is its real signal
         assertEquals(MemoryTrimTier.RELEASE_DRAWER,
             memoryTrimTier(ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL, launcherVisible = false))
         assertEquals(MemoryTrimTier.PICKER,

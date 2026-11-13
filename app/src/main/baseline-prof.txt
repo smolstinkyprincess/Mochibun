@@ -32,8 +32,8 @@ HSLcom/crinklecodone/mochibun/core/system/LidLedManager;-><clinit>()V
 HSLcom/crinklecodone/mochibun/core/system/LidLedManager;->buildOffScript$app()Ljava/lang/String;
 HSLcom/crinklecodone/mochibun/core/system/LidLedManager$**;->**(**)**
 HSLcom/crinklecodone/mochibun/core/system/LidLedMode;-><clinit>()V
-HSLcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;->checkAndHeal(Landroid/content/Context;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-HSLcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog$**;->**(**)**
+HSLcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;->checkAndHeal(Landroid/content/Context;ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+HSLcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog$**;->**(**)**
 HSLcom/crinklecodone/mochibun/core/util/BitmapUtilsKt;->compactIfOpaque(Landroid/graphics/Bitmap;)Landroid/graphics/Bitmap;
 HSLcom/crinklecodone/mochibun/core/util/BitmapUtilsKt;->drawableToBitmap(Landroid/graphics/drawable/Drawable;I)Landroid/graphics/Bitmap;
 HSLcom/crinklecodone/mochibun/data/model/AppDrawerSortMode;-><clinit>()V
@@ -91,8 +91,6 @@ HSLcom/crinklecodone/mochibun/data/repository/TypographyManager;-><clinit>()V
 HSLcom/crinklecodone/mochibun/data/repository/TypographyOption;-><init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroidx/compose/ui/text/font/FontFamily;ZLjava/io/File;)V
 HSLcom/crinklecodone/mochibun/data/repository/WidgetRepository;->decodeSlots(Ljava/lang/String;Ljava/lang/String;)Ljava/util/List;
 HSLcom/crinklecodone/mochibun/data/repository/WidgetRepository;->planReconcile(Ljava/util/List;Ljava/util/Set;Ljava/lang/Integer;)Lcom/crinklecodone/mochibun/data/repository/WidgetRepository$ReconcilePlan;
-HSLcom/crinklecodone/mochibun/service/InputArbiter;->cursorTakesPress$app(IIZ)Z
-HSLcom/crinklecodone/mochibun/service/InputArbiter;->cursorTakesPress(Landroid/view/KeyEvent;)Z
 HSLcom/crinklecodone/mochibun/service/InputArbiter;->isInputActive()Z
 HSLcom/crinklecodone/mochibun/service/InputArbiter;->isNewPress(Landroid/view/KeyEvent;)Z
 HSLcom/crinklecodone/mochibun/service/InputArbiter;->ownerOf(I)Lcom/crinklecodone/mochibun/service/InputLayer;
@@ -110,7 +108,6 @@ HSLcom/crinklecodone/mochibun/ui/components/KawaiiCardMotifsKt;->BottomLavenderC
 HSLcom/crinklecodone/mochibun/ui/components/KawaiiCardMotifsKt;->defaultCardMotifs()Ljava/util/List;
 HSLcom/crinklecodone/mochibun/ui/components/KawaiiCardMotifsKt;->drawFourPointSparkle-IfIb9nM$default(Landroidx/compose/ui/graphics/drawscope/DrawScope;JFJZFILjava/lang/Object;)V
 HSLcom/crinklecodone/mochibun/ui/components/KawaiiCardMotifsKt;->drawMiniHeart-IfIb9nM(Landroidx/compose/ui/graphics/drawscope/DrawScope;JFJZF)V
-HSLcom/crinklecodone/mochibun/ui/components/KawaiiCardMotifsKt;->glowingDoubleBorder-eqLRuRQ(Landroidx/compose/ui/Modifier;ZLandroidx/compose/foundation/shape/RoundedCornerShape;F)Landroidx/compose/ui/Modifier;
 HSLcom/crinklecodone/mochibun/ui/components/KawaiiCardMotifsKt;->kawaiiCardMotifs-zNacN8g$default(Landroidx/compose/ui/Modifier;ZFLjava/util/List;Landroidx/compose/ui/graphics/Color;Landroidx/compose/ui/graphics/Color;Landroidx/compose/ui/graphics/Color;ILjava/lang/Object;)Landroidx/compose/ui/Modifier;
 HSLcom/crinklecodone/mochibun/ui/components/KawaiiCardMotifsKt;->kawaiiCardMotifs_zNacN8g$lambda$9$lambda$5$lambda$4(Landroidx/compose/ui/graphics/GraphicsLayerScope;)Lkotlin/Unit;
 HSLcom/crinklecodone/mochibun/ui/components/KawaiiCardMotifsKt;->kawaiiCardMotifs_zNacN8g$lambda$9(Landroidx/compose/ui/graphics/Color;Landroidx/compose/ui/graphics/Color;Landroidx/compose/ui/graphics/Color;FLjava/util/List;ZLandroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;I)Landroidx/compose/ui/Modifier;
@@ -126,7 +123,6 @@ HSLcom/crinklecodone/mochibun/ui/components/KawaiiMotifType;-><clinit>()V
 HSLcom/crinklecodone/mochibun/ui/components/KeitaiEffectsKt;->curtainUnfurl$lambda$8$lambda$7$lambda$6(Landroidx/compose/runtime/MutableFloatState;Landroidx/compose/ui/graphics/GraphicsLayerScope;)Lkotlin/Unit;
 HSLcom/crinklecodone/mochibun/ui/components/KeitaiEffectsKt;->curtainUnfurl$lambda$8(ZLandroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;I)Landroidx/compose/ui/Modifier;
 HSLcom/crinklecodone/mochibun/ui/components/KeitaiEffectsKt;->curtainUnfurl(Landroidx/compose/ui/Modifier;Z)Landroidx/compose/ui/Modifier;
-HSLcom/crinklecodone/mochibun/ui/components/KeitaiEffectsKt;->focusPop-wH6b6FI(Landroidx/compose/ui/Modifier;ZF)Landroidx/compose/ui/Modifier;
 HSLcom/crinklecodone/mochibun/ui/components/KeitaiEffectsKt;->keitaiMascotBob(Landroidx/compose/ui/Modifier;ZLandroidx/compose/runtime/Composer;II)Landroidx/compose/ui/Modifier;
 HSLcom/crinklecodone/mochibun/ui/components/KeitaiLaceContainerKt;-><clinit>()V
 HSLcom/crinklecodone/mochibun/ui/components/KeitaiLaceContainerKt;->KeitaiLaceContainer_qG5A1gU$lambda$9$lambda$8$lambda$7(Lcom/crinklecodone/mochibun/ui/components/CornerBowSpec;Landroidx/compose/ui/graphics/GraphicsLayerScope;)Lkotlin/Unit;
@@ -432,8 +428,8 @@ Lcom/crinklecodone/mochibun/core/system/LidLedManager$WhenMappings;
 Lcom/crinklecodone/mochibun/core/system/LidLedMode;
 Lcom/crinklecodone/mochibun/core/system/MemoryTrimPolicyKt;
 Lcom/crinklecodone/mochibun/core/system/MemoryTrimTier;
-Lcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;
-Lcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog$**;
+Lcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;
+Lcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog$**;
 Lcom/crinklecodone/mochibun/core/system/RootShell;
 Lcom/crinklecodone/mochibun/core/system/RootShell$**;
 Lcom/crinklecodone/mochibun/core/system/RootTouchInjector;
@@ -530,7 +526,6 @@ Lcom/crinklecodone/mochibun/R$drawable;
 Lcom/crinklecodone/mochibun/R$font;
 Lcom/crinklecodone/mochibun/service/InputArbiter;
 Lcom/crinklecodone/mochibun/service/InputLayer;
-Lcom/crinklecodone/mochibun/service/KaomojiOverlayController;
 Lcom/crinklecodone/mochibun/service/MochibunNotificationListenerService;
 Lcom/crinklecodone/mochibun/service/MochibunNotificationListenerService$Companion;
 Lcom/crinklecodone/mochibun/service/VirtualCursorService;
@@ -812,13 +807,13 @@ SLcom/crinklecodone/mochibun/core/system/LidLedManager$WhenMappings;-><clinit>()
 SLcom/crinklecodone/mochibun/core/system/LidLedMode;-><init>(Ljava/lang/String;I)V
 SLcom/crinklecodone/mochibun/core/system/LidLedMode;->$values()[Lcom/crinklecodone/mochibun/core/system/LidLedMode;
 SLcom/crinklecodone/mochibun/core/system/LidLedMode;->values()[Lcom/crinklecodone/mochibun/core/system/LidLedMode;
-SLcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;-><clinit>()V
-SLcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;-><init>()V
-SLcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;->access$getLastCheckTimeMs$p()J
-SLcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;->access$setLastCheckTimeMs$p(J)V
-SLcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;->checkAsync$default(Lcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;Landroid/content/Context;ZLkotlin/jvm/functions/Function1;ILjava/lang/Object;)V
-SLcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;->checkAsync(Landroid/content/Context;ZLkotlin/jvm/functions/Function1;)V
-SLcom/crinklecodone/mochibun/core/system/RootAccessibilityWatchdog;->init(Landroid/content/Context;)V
+SLcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;-><clinit>()V
+SLcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;-><init>()V
+SLcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;->access$getLastCheckTimeMs$p()J
+SLcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;->access$setLastCheckTimeMs$p(J)V
+SLcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;->checkAsync$default(Lcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;Landroid/content/Context;ZLkotlin/jvm/functions/Function1;ILjava/lang/Object;)V
+SLcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;->checkAsync(Landroid/content/Context;ZLkotlin/jvm/functions/Function1;)V
+SLcom/crinklecodone/mochibun/core/system/CursorServiceWatchdog;->init(Landroid/content/Context;)V
 SLcom/crinklecodone/mochibun/core/system/RootShell;-><clinit>()V
 SLcom/crinklecodone/mochibun/core/system/RootShell;-><init>()V
 SLcom/crinklecodone/mochibun/core/system/RootShell;->executeBlocking(Ljava/lang/String;)Lcom/crinklecodone/mochibun/core/shell/RootResult;
@@ -1012,7 +1007,7 @@ SLcom/crinklecodone/mochibun/data/prefs/PreferencesManager;->isLidLedEnabled()Lk
 SLcom/crinklecodone/mochibun/data/prefs/PreferencesManager;->isMediaVolumeLockEnabled(Landroid/content/Context;)Z
 SLcom/crinklecodone/mochibun/data/prefs/PreferencesManager;->isMediaVolumeLockEnabled()Lkotlinx/coroutines/flow/StateFlow;
 SLcom/crinklecodone/mochibun/data/prefs/PreferencesManager;->isPhotoFrameEnabled()Lkotlinx/coroutines/flow/StateFlow;
-SLcom/crinklecodone/mochibun/data/prefs/PreferencesManager;->isRootA11yWatchdogEnabled(Landroid/content/Context;)Z
+SLcom/crinklecodone/mochibun/data/prefs/PreferencesManager;->isCursorWatchdogEnabled(Landroid/content/Context;)Z
 SLcom/crinklecodone/mochibun/data/prefs/PreferencesManager;->isRootQuickSettingsEnabled()Lkotlinx/coroutines/flow/StateFlow;
 SLcom/crinklecodone/mochibun/data/prefs/PreferencesManager;->isSystemMonitorEnabled()Lkotlinx/coroutines/flow/StateFlow;
 SLcom/crinklecodone/mochibun/data/prefs/PreferencesManager;->isWallpaperOverlayEnabled()Lkotlinx/coroutines/flow/StateFlow;
@@ -1121,7 +1116,6 @@ SLcom/crinklecodone/mochibun/MochibunApp;->onCreate()V
 SLcom/crinklecodone/mochibun/MochibunApp$**;->**(**)**
 SLcom/crinklecodone/mochibun/service/InputArbiter;-><clinit>()V
 SLcom/crinklecodone/mochibun/service/InputArbiter;-><init>()V
-SLcom/crinklecodone/mochibun/service/InputArbiter;->setCursorToggleKeyCode(I)V
 SLcom/crinklecodone/mochibun/service/InputArbiter;->setInputActive(Z)V
 SLcom/crinklecodone/mochibun/service/InputLayer;-><init>(Ljava/lang/String;I)V
 SLcom/crinklecodone/mochibun/service/InputLayer;->$values()[Lcom/crinklecodone/mochibun/service/InputLayer;

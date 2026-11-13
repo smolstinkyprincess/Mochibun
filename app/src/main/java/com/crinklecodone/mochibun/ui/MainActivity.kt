@@ -193,7 +193,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         isForeground = true
-        com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog.checkAsync(this, force = false)
+        com.crinklecodone.mochibun.core.system.CursorServiceWatchdog.checkAsync(this, force = false)
         SystemUiThemeBridge.broadcastSavedTheme(this)
     }
 

@@ -35,9 +35,6 @@ object PreferencesManager {
     const val PREFS_NAME = "launcher_preferences"
     const val KEY_WALLPAPER_OVERLAY_ENABLED = "pref_wallpaper_overlay_enabled"
     const val DEFAULT_WALLPAPER_OVERLAY_ENABLED = true
-    const val KEY_WALLPAPER_OVERLAY_ROTATION_MODE = "pref_wallpaper_overlay_rotation_mode"
-    const val ROTATION_MODE_DAILY = "daily"
-    const val DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE = ROTATION_MODE_DAILY
     const val KEY_KAOMOJI_WHEEL_ENABLED = "pref_kaomoji_wheel_enabled"
     const val DEFAULT_KAOMOJI_WHEEL_ENABLED = true
 
@@ -123,8 +120,9 @@ object PreferencesManager {
 
     const val KEY_SPEED_DIAL_PREFIX = "pref_speed_dial_"
 
-    const val KEY_ROOT_A11Y_WATCHDOG_ENABLED = "pref_root_a11y_watchdog_enabled"
-    const val DEFAULT_ROOT_A11Y_WATCHDOG_ENABLED = true
+    // Stored key keeps its pre-LSPosed name so existing installs keep their value
+    const val KEY_CURSOR_WATCHDOG_ENABLED = "pref_root_a11y_watchdog_enabled"
+    const val DEFAULT_CURSOR_WATCHDOG_ENABLED = true
     const val KEY_ROOT_QUICK_SETTINGS_ENABLED = "pref_root_quick_settings_enabled"
     const val DEFAULT_ROOT_QUICK_SETTINGS_ENABLED = true
     const val KEY_HOOK_KEY_ENABLED = "pref_hook_key_enabled"
@@ -167,9 +165,6 @@ object PreferencesManager {
 
     private val _isWallpaperOverlayEnabled = MutableStateFlow(DEFAULT_WALLPAPER_OVERLAY_ENABLED)
     val isWallpaperOverlayEnabled: StateFlow<Boolean> = _isWallpaperOverlayEnabled.asStateFlow()
-
-    private val _wallpaperOverlayRotationMode = MutableStateFlow(DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE)
-    val wallpaperOverlayRotationMode: StateFlow<String> = _wallpaperOverlayRotationMode.asStateFlow()
 
 
     private val _isSystemMonitorEnabled = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_ENABLED)
@@ -257,10 +252,6 @@ object PreferencesManager {
                 KEY_WALLPAPER_OVERLAY_ENABLED,
                 DEFAULT_WALLPAPER_OVERLAY_ENABLED
             )
-            _wallpaperOverlayRotationMode.value = prefs.getString(
-                KEY_WALLPAPER_OVERLAY_ROTATION_MODE,
-                DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE
-            ) ?: DEFAULT_WALLPAPER_OVERLAY_ROTATION_MODE
             _isSystemMonitorEnabled.value = prefs.getBoolean(
                 KEY_SYSTEM_MONITOR_ENABLED,
                 DEFAULT_SYSTEM_MONITOR_ENABLED
@@ -878,12 +869,8 @@ object PreferencesManager {
         getPrefs(context).edit().putBoolean(KEY_HOOK_SYSUI_ENABLED, enabled).apply()
     }
 
-    fun isRootA11yWatchdogEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_ROOT_A11Y_WATCHDOG_ENABLED, DEFAULT_ROOT_A11Y_WATCHDOG_ENABLED)
-    }
-
-    fun setRootA11yWatchdogEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_ROOT_A11Y_WATCHDOG_ENABLED, enabled).apply()
+    fun isCursorWatchdogEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_CURSOR_WATCHDOG_ENABLED, DEFAULT_CURSOR_WATCHDOG_ENABLED)
     }
 
     /** How long a keypad key must be held in MochibunImeService to type its digit. */

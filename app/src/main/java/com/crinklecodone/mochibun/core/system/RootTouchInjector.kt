@@ -24,7 +24,7 @@ import java.util.zip.ZipFile
 import kotlin.math.roundToInt
 
 /**
- * Root touch fallback for windows that block AccessibilityService gestures.
+ * Root touch dispatch for the virtual cursor (taps, swipes, drags, keys and paste).
  *
  * Fast path: a tiny root helper (libevinject.so, see cpp/evinject) that writes evdev frames
  * straight into the touchscreen node. We talk to it through an anonymous pipe (stdin), so a tap

@@ -13,7 +13,7 @@ data class AppInfo(
  * Verified physical keys on Chinoe AT-M120 (mtk-kpd and gpio-keys).
  * Keys with isStaticRemapSafe = true can be statically remapped via Magisk .kl module.
  * Critical system navigation keys (such as KEY_ENTER and APP_SWITCH) have isStaticRemapSafe = false
- * to prevent bricking or lockout, but are fully supported for dynamic accessibility actions.
+ * to prevent bricking or lockout, but are fully supported for dynamic remapping via MochibunKeyHook.
  */
 enum class PhysicalKey(
     val scancode: Int,
@@ -69,7 +69,8 @@ enum class PhysicalKey(
 }
 
 /**
- * High-level system-wide actions handled dynamically via MochibunAccessibilityService.
+ * High-level system-wide actions dispatched by HardwareRemapManager when MochibunKeyHook forwards a
+ * physical key (ACTION_HARDWARE_KEY_TRIGGER).
  * Requires NO reboot and takes effect in real-time across all apps.
  */
 sealed class ActionType {

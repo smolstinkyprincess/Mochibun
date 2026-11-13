@@ -291,7 +291,6 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         isCursorVisible = false
         if (cursorWasVisible) broadcastCursorModeChanged(false)
         instance = null
-        InputArbiter.cursorToggleKeyCode = KeyEvent.KEYCODE_UNKNOWN
         mainHandler.removeCallbacks(toggleRunnable)
 
         try {
@@ -330,7 +329,6 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         if (isCursorVisible) {
             RootTouchInjector.attach(applicationContext)
         }
-        InputArbiter.cursorToggleKeyCode = toggleKeyCode
         overlayView?.reloadConfiguration()
     }
 

@@ -1,7 +1,6 @@
 package com.crinklecodone.mochibun.core.system
 
 import android.content.Context
-import android.provider.Settings
 import android.util.Log
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.service.VirtualCursorService
@@ -16,23 +15,20 @@ sealed class WatchdogResult {
     data class Healed(val message: String) : WatchdogResult()
     data class Failed(val reason: String) : WatchdogResult()
     object Disabled : WatchdogResult()
-    object NoRoot : WatchdogResult()
 }
 
 /**
- * Privileged watchdog coordinator that monitors Mochibun's Accessibility Services.
+ * Keeps the [VirtualCursorService] foreground service alive.
  *
- * On aggressive low-RAM / Android Go OEM firmware (e.g. MediaTek MT6761 on the AT-M120),
- * background services can occasionally be terminated or disabled after long sleep periods.
- *
- * When enabled, the watchdog detects inactive services and ensures
- * [VirtualCursorService] is restored without requiring manual intervention.
+ * On aggressive low-RAM OEM firmware (e.g. MediaTek MT6761 on the AT-M120), background services
+ * can occasionally be terminated after long sleep periods. When enabled, the watchdog checks on
+ * launch, on every launcher resume and on display wake, and restarts the service if it is gone.
+ * No root is needed: restarting our own service is a plain startForegroundService call.
  */
-object RootAccessibilityWatchdog : ClamshellListener {
+object CursorServiceWatchdog : ClamshellListener {
 
-    private const val TAG = "RootA11yWatchdog"
+    private const val TAG = "CursorServiceWatchdog"
 
-    const val SERVICE_A11Y = "com.crinklecodone.mochibun/com.crinklecodone.mochibun.service.MochibunAccessibilityService"
     const val SERVICE_CURSOR = "com.crinklecodone.mochibun/com.crinklecodone.mochibun.service.VirtualCursorService"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -67,11 +63,10 @@ object RootAccessibilityWatchdog : ClamshellListener {
     }
 
     /**
-     * Evaluates whether both services are running and present in [Settings.Secure].
-     * If degraded and root is available, applies self-healing commands.
+     * Returns [WatchdogResult.Healthy] when [VirtualCursorService] is running; otherwise restarts it.
      */
     suspend fun checkAndHeal(context: Context, force: Boolean = false): WatchdogResult = withContext(Dispatchers.IO) {
-        if (!PreferencesManager.isRootA11yWatchdogEnabled(context)) {
+        if (!PreferencesManager.isCursorWatchdogEnabled(context)) {
             return@withContext WatchdogResult.Disabled
         }
 

@@ -362,11 +362,6 @@ object HardwareRemapManager {
     }
 
     /**
-     * Checks whether hardware remapping is active (always true when initialized).
-     */
-    fun isAccessibilityServiceEnabled(context: Context): Boolean = true
-
-    /**
      * Reads configured High-Level Action for a physical key.
      * PhysicalKey.APP_SWITCH defaults to ActionType.GlobalRecents.
      */
@@ -546,24 +541,6 @@ object HardwareRemapManager {
 
         reloadActiveConfig(context)
         return defaultConfig
-    }
-
-    /**
-     * Resets all custom button actions and Speed Dial shortcuts back to system defaults.
-     */
-    fun resetAllButtonActionConfigs(context: Context) {
-        val prefs = getPrefs(context)
-        val editor = prefs.edit()
-        for (k in prefs.all.keys) {
-            if (k.startsWith("action_single_") || k.startsWith("action_double_") || k.startsWith("action_long_") || k.startsWith("scan_")) {
-                editor.remove(k)
-            }
-        }
-        editor.apply()
-        for (digit in 2..9) {
-            PreferencesManager.setSpeedDialPackage(context, digit, null)
-        }
-        reloadActiveConfig(context)
     }
 
     /**

@@ -1,9 +1,6 @@
 package com.crinklecodone.mochibun.ui.screens.settings
 
-import android.content.Intent
-import android.provider.Settings
 import android.view.KeyEvent
-import android.widget.Toast
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -30,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import com.crinklecodone.mochibun.core.sound.SoundEffect
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
-import com.crinklecodone.mochibun.data.repository.HardwareRemapManager
 import com.crinklecodone.mochibun.ui.components.getDigitFromKeyCode
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
 import com.crinklecodone.mochibun.ui.dialogs.requestFocusSafely
@@ -76,22 +72,6 @@ internal fun SoundFeedbackSettingsSubScreen(
     }
 
     fun setMediaVolumeLock(enabled: Boolean) {
-        if (enabled && !HardwareRemapManager.isAccessibilityServiceEnabled(context)) {
-            Toast.makeText(
-                context,
-                "Please enable Mochibun in Accessibility Services ♡",
-                Toast.LENGTH_LONG
-            ).show()
-            try {
-                context.startActivity(
-                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            } catch (error: Exception) {
-                Toast.makeText(context, "Unable to open Accessibility settings: ${error.message}", Toast.LENGTH_LONG).show()
-            }
-            return
-        }
         PreferencesManager.setMediaVolumeLockEnabled(context, enabled)
     }
 

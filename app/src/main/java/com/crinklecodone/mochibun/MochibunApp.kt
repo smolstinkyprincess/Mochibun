@@ -63,7 +63,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
         LidLedManager.init(this)
         SoundEffectManager.init(this)
         WidgetRepository.init(this)
-        com.crinklecodone.mochibun.core.system.RootAccessibilityWatchdog.init(this)
+        com.crinklecodone.mochibun.core.system.CursorServiceWatchdog.init(this)
         com.crinklecodone.mochibun.service.VirtualCursorService.start(this)
     }
 

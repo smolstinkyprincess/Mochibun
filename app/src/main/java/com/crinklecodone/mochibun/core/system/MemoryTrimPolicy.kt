@@ -9,12 +9,11 @@ import android.content.ComponentCallbacks2
  * drops caches nobody sees on the way back home. Coil trims its own memory cache through its own
  * ComponentCallbacks2, so nothing here touches it.
  *
- * While the accessibility services are bound, the system holds this process at a visible OOM adj
- * (verified on device: adj 100 with another app on top), so it never receives the background levels
- * (BACKGROUND / MODERATE / COMPLETE) and is not a low-memory-killer candidate. Under real pressure it
- * gets TRIM_MEMORY_RUNNING_CRITICAL instead, which is when the drawer is released if nobody is
- * looking at it: the memory goes to the app the user is in. COMPLETE still covers setups with the
- * services disabled.
+ * While VirtualCursorService runs in the foreground (or MochibunImeService is the bound keyboard),
+ * the system keeps this process at a raised OOM adj, so it usually never receives the background
+ * levels (BACKGROUND / MODERATE / COMPLETE). Under real pressure it gets TRIM_MEMORY_RUNNING_CRITICAL
+ * instead, which is when the drawer is released if nobody is looking at it: the memory goes to the
+ * app the user is in. COMPLETE still covers setups where neither service is running.
  */
 enum class MemoryTrimTier {
     NONE,
