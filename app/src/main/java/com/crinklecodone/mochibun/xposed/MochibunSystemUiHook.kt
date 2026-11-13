@@ -34,6 +34,7 @@ import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
+import com.crinklecodone.mochibun.ui.theme.ColorContrast
 import java.lang.ref.WeakReference
 import java.util.Collections
 import java.util.WeakHashMap
@@ -56,18 +57,49 @@ object ActiveHookTheme {
         set(value) {
             field = value
             try { primaryColorStateList = ColorStateList.valueOf(value) } catch (_: Throwable) {}
+            recomputeDerivedInks()
         }
     @Volatile var container: Int = DEFAULT_CONTAINER
+        set(value) {
+            field = value
+            recomputeDerivedInks()
+        }
     @Volatile var accentDeep: Int = DEFAULT_ACCENT_DEEP
         set(value) {
             field = value
             try { accentDeepColorStateList = ColorStateList.valueOf(value) } catch (_: Throwable) {}
+            recomputeDerivedInks()
         }
     @Volatile var track: Int = DEFAULT_TRACK
         set(value) {
             field = value
             try { trackColorStateList = ColorStateList.valueOf(value) } catch (_: Throwable) {}
+            recomputeDerivedInks()
         }
+
+    /*
+     * Contrast-safe inks derived from the broadcast colors. Light palettes ink everything with
+     * accentDeep, but dark palettes (e.g. Midnight Mochi) broadcast a *light* accentDeep together
+     * with a light primary fill, so glyphs/labels drawn on primary (active QS tiles, ringer pill,
+     * slider icons, notification actions) switch to the dark container color instead.
+     * Recomputed only when a color changes, never during draw.
+     */
+
+    /** Ink for content drawn on a [primary] fill. Equals accentDeep for the built-in light palettes. */
+    @Volatile var onPrimary: Int = DEFAULT_ACCENT_DEEP
+        private set
+
+    /** Ink for content drawn on the [track] fill (e.g. volume slider icon at low levels). */
+    @Volatile var onTrack: Int = DEFAULT_ACCENT_DEEP
+        private set
+
+    /** Status bar icon tone on light backgrounds (always the darker of accentDeep / container). */
+    @Volatile var statusIconDarkTone: Int = DEFAULT_ACCENT_DEEP
+        private set
+
+    /** Status bar icon tone on dark backgrounds (always the lighter of accentDeep / container). */
+    @Volatile var statusIconLightTone: Int = DEFAULT_CONTAINER
+        private set
     @Volatile var scrim: Int = DEFAULT_SCRIM
         set(value) {
             field = if ((value ushr 24) == 0xFF) {
@@ -88,6 +120,25 @@ object ActiveHookTheme {
         internal set
     @Volatile var accentDeepColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_ACCENT_DEEP) } catch (_: Throwable) { null }
         internal set
+    @Volatile var onPrimaryColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_ACCENT_DEEP) } catch (_: Throwable) { null }
+        internal set
+    @Volatile var onTrackColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_ACCENT_DEEP) } catch (_: Throwable) { null }
+        internal set
+
+    private fun recomputeDerivedInks() {
+        val newOnPrimary = ColorContrast.legibleInk(primary, accentDeep, container)
+        if (newOnPrimary != onPrimary) {
+            onPrimary = newOnPrimary
+            try { onPrimaryColorStateList = ColorStateList.valueOf(newOnPrimary) } catch (_: Throwable) {}
+        }
+        val newOnTrack = ColorContrast.legibleInk(track, accentDeep, container)
+        if (newOnTrack != onTrack) {
+            onTrack = newOnTrack
+            try { onTrackColorStateList = ColorStateList.valueOf(newOnTrack) } catch (_: Throwable) {}
+        }
+        statusIconDarkTone = ColorContrast.darkerOf(accentDeep, container)
+        statusIconLightTone = ColorContrast.lighterOf(accentDeep, container)
+    }
 
     // Alpha-derived dynamic colors for Volume dialog and Quick Settings
     val volumeStroke: Int
@@ -162,6 +213,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
     companion object {
         private const val TAG = "MochibunSysUI"
         private const val TARGET_PACKAGE = "com.android.systemui"
+        /** Notification.COLOR_INVALID: CachingIconView reports this for legacy, non-colorable small icons. */
+        private const val NOTIFICATION_COLOR_INVALID = 1
 
         // Canonical action and extra keys for dynamic theme synchronization
         const val ACTION_THEME_CHANGED = "com.crinklecodone.mochibun.action.THEME_CHANGED"
@@ -238,6 +291,21 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 setColor(ActiveHookTheme.container)
                 val strokeWidth = (1.5f * density).toInt().coerceAtLeast(1)
                 setStroke(strokeWidth, ActiveHookTheme.volumeStroke)
+            }
+        }
+
+        /**
+         * Creates the circular Volume dialog sound-mode (ringer) button background:
+         * - Shape: GradientDrawable.OVAL
+         * - Fill: ActiveHookTheme.primary (replaces stock ?android:attr/colorAccent)
+         * - Stroke: 1.2dp * density of accentDeep at ~30% alpha
+         */
+        internal fun createRingerCircleDrawable(density: Float): GradientDrawable {
+            return GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(ActiveHookTheme.primary)
+                val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
+                setStroke(strokeWidth, (0x4D shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF))
             }
         }
 
@@ -428,8 +496,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 // 1. Status Bar Icons & Clock (DarkIconDispatcherImpl)
                 for (dispatcher in trackedDarkDispatchers) {
                     try {
-                        XposedHelpers.setIntField(dispatcher, "mDarkModeIconColorSingleTone", ActiveHookTheme.accentDeep)
-                        XposedHelpers.setIntField(dispatcher, "mLightModeIconColorSingleTone", ActiveHookTheme.container)
+                        XposedHelpers.setIntField(dispatcher, "mDarkModeIconColorSingleTone", ActiveHookTheme.statusIconDarkTone)
+                        XposedHelpers.setIntField(dispatcher, "mLightModeIconColorSingleTone", ActiveHookTheme.statusIconLightTone)
                         val intensity = try {
                             XposedHelpers.getFloatField(dispatcher, "mDarkIntensity")
                         } catch (_: Throwable) {
@@ -692,8 +760,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
 
         icon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
         icon?.imageAlpha = 255
-        sliderProgressIcon?.setTintList(ActiveHookTheme.accentDeepColorStateList)
-        sliderBgIcon?.setTintList(ActiveHookTheme.accentDeepColorStateList)
+        sliderProgressIcon?.setTintList(ActiveHookTheme.onPrimaryColorStateList)
+        sliderBgIcon?.setTintList(ActiveHookTheme.onTrackColorStateList)
 
         val number = XposedHelpers.getObjectField(row, "number") as? TextView
         number?.setTextColor(ActiveHookTheme.accentDeep)
@@ -729,12 +797,6 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             captionsView.clipToOutline = true
         }
 
-        val ringerView = findView("ringer")
-        if (ringerView != null) {
-            ringerView.background = createSquircleDrawable(density)
-            ringerView.clipToOutline = true
-        }
-
         val isDrawerOpen = try {
             XposedHelpers.getBooleanField(instance, "mIsRingerDrawerOpen")
         } catch (_: Throwable) {
@@ -748,9 +810,6 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
         val settingsIcon = findView("settings") as? ImageButton
         settingsIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
 
-        val ringerIcon = findView("ringer_icon") as? ImageButton
-        ringerIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
-
         val ringerMuteIcon = findView("volume_drawer_mute_icon") as? ImageView
         ringerMuteIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
 
@@ -762,6 +821,51 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
 
         val captionsIcon = findView("odi_captions_icon") as? ImageView
         captionsIcon?.imageTintList = ActiveHookTheme.accentDeepColorStateList
+
+        styleRingerButton(instance)
+    }
+
+    /**
+     * Styles the volume dialog's sound-mode (ringer) button.
+     * On this Android 12 build the visible button is the ringer drawer's
+     * `volume_new_ringer_active_icon_container` (stock: colorAccent circle) holding
+     * `volume_new_ringer_active_icon` (stock: textColorPrimaryInverse glyph). The open drawer's
+     * `volume_drawer_selection_background` uses the same accent circle. The legacy `ringer` /
+     * `ringer_icon` pair is `visibility="gone"` in the stock layout but is styled too in case a
+     * ROM variant shows it. Each view is looked up separately so a missing field is just skipped.
+     * SystemUI never resets these backgrounds after initDialog, so frequent callers
+     * (updateRingerH) pass includeBackgrounds = false and only re-tint the glyphs.
+     */
+    private fun styleRingerButton(instance: Any, includeBackgrounds: Boolean = true) {
+        fun field(name: String): View? = try {
+            XposedHelpers.getObjectField(instance, name) as? View
+        } catch (_: Throwable) {
+            null
+        }
+
+        val circleViews = if (!includeBackgrounds) emptyList() else listOf(
+            field("mSelectedRingerContainer"),
+            field("mRingerDrawerNewSelectionBg"),
+            field("mRinger"),
+        )
+        for (view in circleViews) {
+            if (view == null) continue
+            try {
+                view.background = createRingerCircleDrawable(view.resources.displayMetrics.density)
+                view.backgroundTintList = null
+                view.clipToOutline = true
+            } catch (t: Throwable) {
+                Log.d(TAG, "Failed styling volume ringer circle", t)
+            }
+        }
+
+        for (name in listOf("mSelectedRingerIcon", "mRingerIcon")) {
+            try {
+                (field(name) as? ImageView)?.imageTintList = ActiveHookTheme.onPrimaryColorStateList
+            } catch (t: Throwable) {
+                Log.d(TAG, "Failed tinting volume ringer glyph $name", t)
+            }
+        }
     }
 
     private fun refreshTileView(tileView: View) {
@@ -798,7 +902,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             else -> ActiveHookTheme.container
         }
         val fgColor = when (stateInt) {
-            2 -> ActiveHookTheme.accentDeep
+            2 -> ActiveHookTheme.onPrimary
             1 -> ActiveHookTheme.qsTileInactiveFg
             0 -> ActiveHookTheme.qsTileUnavailableFg
             else -> ActiveHookTheme.qsTileInactiveFg
@@ -885,8 +989,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 val iconId = res.getIdentifier("slider_icon", "id", TARGET_PACKAGE)
                 if (iconId != 0) {
                     val iconDrawable = fullLayer.findDrawableByLayerId(iconId)
-                    iconDrawable?.setTint(ActiveHookTheme.accentDeep)
-                    iconDrawable?.setTintList(ActiveHookTheme.accentDeepColorStateList)
+                    iconDrawable?.setTint(ActiveHookTheme.onPrimary)
+                    iconDrawable?.setTintList(ActiveHookTheme.onPrimaryColorStateList)
                 }
             }
         }
@@ -1459,12 +1563,12 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                                 XposedHelpers.setIntField(
                                     param.thisObject,
                                     "mDarkModeIconColorSingleTone",
-                                    ActiveHookTheme.accentDeep
+                                    ActiveHookTheme.statusIconDarkTone
                                 )
                                 XposedHelpers.setIntField(
                                     param.thisObject,
                                     "mLightModeIconColorSingleTone",
-                                    ActiveHookTheme.container
+                                    ActiveHookTheme.statusIconLightTone
                                 )
                                 Log.d(TAG, "Applied Mochibun icon tint colors to DarkIconDispatcherImpl")
                             } catch (t: Throwable) {
@@ -1862,6 +1966,27 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             }
         }
 
+        // 7a. Hook updateRingerH so ringer mode changes (Ring / Vibrate / Silent) keep the themed button
+        try {
+            XposedHelpers.findAndHookMethod(
+                volumeDialogImplClassName,
+                classLoader,
+                "updateRingerH",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            styleRingerButton(param.thisObject, includeBackgrounds = false)
+                        } catch (t: Throwable) {
+                            Log.d(TAG, "Error in VolumeDialogImpl.updateRingerH hook", t)
+                        }
+                    }
+                }
+            )
+            Log.d(TAG, "Installed hook: VolumeDialogImpl.updateRingerH")
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed to hook VolumeDialogImpl.updateRingerH", t)
+        }
+
         // 7. Hook showH to ensure drawer void remains GONE when dialog opens
         try {
             XposedHelpers.findAndHookMethod(
@@ -1990,6 +2115,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                         override fun afterHookedMethod(param: MethodHookParam) {
                             try {
                                 (param.thisObject as? View)?.let(::styleNotificationExpandButton)
+                                (param.args[0] as? View)?.let(::styleNotificationSmallIcons)
                             } catch (t: Throwable) {
                                 Log.d(TAG, "Failed styling notification expand button after $methodName", t)
                             }
@@ -2122,6 +2248,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             idName.contains("action") ||
             idName.contains("smart_reply")
 
+        if (view is ImageView) styleNotificationSmallIconView(view, idName)
+
         if (view is TextView) {
             when {
                 view.id == android.R.id.title || idName in setOf("title", "notification_title") ->
@@ -2143,7 +2271,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     setColor(ActiveHookTheme.primary)
                 }
                 view.background = actionBackground
-                view.setTextColor(ActiveHookTheme.accentDeep)
+                view.setTextColor(ActiveHookTheme.onPrimary)
             }
         }
 
@@ -2151,6 +2279,67 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             for (index in 0 until view.childCount) {
                 styleNotificationContentTree(view.getChildAt(index), inActions)
             }
+        }
+    }
+
+    /** Walks [root] and themes every notification small app icon badge inside it. */
+    private fun styleNotificationSmallIcons(root: View) {
+        if (root is ImageView) {
+            val idName = try {
+                if (root.id != View.NO_ID) root.resources.getResourceEntryName(root.id).lowercase() else ""
+            } catch (_: Throwable) {
+                ""
+            }
+            styleNotificationSmallIconView(root, idName)
+        }
+        if (root is ViewGroup) {
+            for (index in 0 until root.childCount) {
+                styleNotificationSmallIcons(root.getChildAt(index))
+            }
+        }
+    }
+
+    /**
+     * Themes the small circular app icon badge in the top-left of a notification.
+     * - `android:id/icon` (a framework CachingIconView) in contracted, expanded, heads-up and
+     *   conversation templates: pastel circle background + accentDeep glyph tint. The framework
+     *   applies the per-app accent through RemoteViews when the notification is inflated, so this
+     *   runs again from the row / content-view hooks after every (re)inflation.
+     * - `conversation_icon_badge_bg`: the separate circle drawn behind the badge in conversation
+     *   layouts gets the same fill.
+     * Legacy full-color small icons (getOriginalIconColor() == COLOR_INVALID) keep their pixels;
+     * only the circle behind them is themed so they don't become a solid blob.
+     */
+    private fun styleNotificationSmallIconView(view: ImageView, idName: String) {
+        try {
+            if (idName == "conversation_icon_badge_bg") {
+                view.imageTintList = ActiveHookTheme.primaryColorStateList
+                view.setColorFilter(ActiveHookTheme.primary, PorterDuff.Mode.SRC_IN)
+                return
+            }
+            // Only the framework header/badge icon; app-provided custom layouts may reuse android:id/icon.
+            if (view.id != android.R.id.icon || !view.javaClass.name.endsWith("CachingIconView")) return
+
+            val density = view.resources.displayMetrics.density
+            view.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(ActiveHookTheme.primary)
+                setStroke((1f * density).toInt().coerceAtLeast(1), ActiveHookTheme.onPrimary)
+            }
+            view.backgroundTintList = null
+
+            val originalIconColor = try {
+                XposedHelpers.callMethod(view, "getOriginalIconColor") as? Int
+            } catch (_: Throwable) {
+                null
+            }
+            if (originalIconColor != NOTIFICATION_COLOR_INVALID) {
+                view.imageTintList = ActiveHookTheme.onPrimaryColorStateList
+                view.setColorFilter(ActiveHookTheme.onPrimary, PorterDuff.Mode.SRC_IN)
+            }
+            view.invalidate()
+        } catch (t: Throwable) {
+            Log.d(TAG, "Failed applying pastel notification small-icon styling", t)
         }
     }
 
@@ -2363,7 +2552,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
                         param.result = when (state) {
-                            2 -> ActiveHookTheme.accentDeep
+                            2 -> ActiveHookTheme.onPrimary
                             1 -> ActiveHookTheme.qsTileInactiveFg
                             0 -> ActiveHookTheme.qsTileUnavailableFg
                             else -> ActiveHookTheme.qsTileInactiveFg
@@ -2387,7 +2576,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
                         param.result = when (state) {
-                            2 -> ActiveHookTheme.accentDeep
+                            2 -> ActiveHookTheme.onPrimary
                             1 -> ActiveHookTheme.qsTileInactiveFg
                             0 -> ActiveHookTheme.qsTileUnavailableFg
                             else -> ActiveHookTheme.qsTileInactiveFg
@@ -2411,7 +2600,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
                         param.result = when (state) {
-                            2 -> ActiveHookTheme.accentDeep
+                            2 -> ActiveHookTheme.onPrimary
                             1 -> ActiveHookTheme.qsTileInactiveFg
                             0 -> ActiveHookTheme.qsTileUnavailableFg
                             else -> ActiveHookTheme.qsTileInactiveFg
@@ -2436,7 +2625,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[1] as? Int ?: return
                         param.result = when (state) {
-                            2 -> ActiveHookTheme.accentDeep
+                            2 -> ActiveHookTheme.onPrimary
                             1 -> ActiveHookTheme.qsTileInactiveFg
                             0 -> ActiveHookTheme.qsTileUnavailableFg
                             else -> ActiveHookTheme.qsTileInactiveFg
@@ -2521,7 +2710,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                                 else -> ActiveHookTheme.container
                             }
                             val fgColor = when (stateInt) {
-                                2 -> ActiveHookTheme.accentDeep
+                                2 -> ActiveHookTheme.onPrimary
                                 1 -> ActiveHookTheme.qsTileInactiveFg
                                 0 -> ActiveHookTheme.qsTileUnavailableFg
                                 else -> ActiveHookTheme.qsTileInactiveFg

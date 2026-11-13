@@ -21,27 +21,47 @@ object SystemUiThemeBridge {
     const val EXTRA_TRACK = "EXTRA_TRACK"
     const val EXTRA_SCRIM = "EXTRA_SCRIM"
 
+    /** ARGB colors sent to the SystemUI hook for one palette. */
+    data class SystemUiColors(
+        val primary: Int,
+        val container: Int,
+        val accentDeep: Int,
+        val track: Int,
+        val scrim: Int
+    )
+
     /**
-     * Broadcasts the given [MochibunThemePalette] colors to SystemUI.
+     * Maps a palette to the SystemUI broadcast colors (pure, unit-testable).
+     * The hook derives contrast-safe inks from these (see ActiveHookTheme.onPrimary), so dark
+     * palettes like Midnight Mochi can send their light accentDeep unchanged.
      */
-    fun broadcastTheme(context: Context, palette: MochibunThemePalette) {
-        val primaryInt = palette.primary.toArgb()
-        val containerInt = palette.container.toArgb()
-        val accentDeepInt = palette.deepAccent.toArgb()
+    fun systemUiColors(palette: MochibunThemePalette): SystemUiColors {
         val trackInt = if (palette.squircleSecondary != palette.primary) {
             palette.squircleSecondary.toArgb()
         } else {
             palette.outline.toArgb()
         }
-        val scrimInt = (0xEB shl 24) or (palette.background.toArgb() and 0x00FFFFFF)
+        return SystemUiColors(
+            primary = palette.primary.toArgb(),
+            container = palette.container.toArgb(),
+            accentDeep = palette.deepAccent.toArgb(),
+            track = trackInt,
+            scrim = (0xEB shl 24) or (palette.background.toArgb() and 0x00FFFFFF)
+        )
+    }
 
+    /**
+     * Broadcasts the given [MochibunThemePalette] colors to SystemUI.
+     */
+    fun broadcastTheme(context: Context, palette: MochibunThemePalette) {
+        val colors = systemUiColors(palette)
         broadcastColors(
             context = context,
-            primary = primaryInt,
-            container = containerInt,
-            accentDeep = accentDeepInt,
-            track = trackInt,
-            scrim = scrimInt
+            primary = colors.primary,
+            container = colors.container,
+            accentDeep = colors.accentDeep,
+            track = colors.track,
+            scrim = colors.scrim
         )
     }
 
