@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import com.crinklecodone.mochibun.ui.theme.MochibunSystemBarsEffect
 import com.crinklecodone.mochibun.ui.components.*
 import com.crinklecodone.mochibun.ui.dialogs.isBackDismissKey
 import com.crinklecodone.mochibun.ui.dialogs.isCenterActivateKey
@@ -137,6 +138,7 @@ class RecentsActivity : ComponentActivity() {
 
             MochibunTheme {
                 CompositionLocalProvider(LocalLauncherTheme provides savedTheme) {
+                    MochibunSystemBarsEffect()
                     RecentsScreen(
                         tasksManager = tasksManager,
                         refreshTrigger = refreshTrigger.intValue,

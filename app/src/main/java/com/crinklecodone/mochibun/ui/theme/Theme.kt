@@ -14,6 +14,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -54,25 +55,12 @@ fun MochibunTheme(
 
     val view = LocalView.current
 
-    // Synchronize the window status bar and navigation bar with the launcher surface.
-    // On the AT-M120's 480x800 panel, keeping system bar backgrounds unified with ThemeBackground
-    // eliminates awkward letterbox seams while light foreground icons ensure time/battery legibility.
+    // System bar colors/icon appearance follow the active launcher palette; see
+    // [MochibunSystemBarsEffect], which must run inside the LocalLauncherTheme provider.
     if (!view.isInEditMode) {
         SideEffect {
             view.isSoundEffectsEnabled = false
-            val activity = view.context.findActivity()
-            val window = activity?.window
-            window?.decorView?.isSoundEffectsEnabled = false
-
-            if (window != null) {
-                window.statusBarColor = ThemeBackground.toArgb()
-                window.navigationBarColor = ThemeBackground.toArgb()
-
-                WindowCompat.getInsetsController(window, view).apply {
-                    isAppearanceLightStatusBars = true
-                    isAppearanceLightNavigationBars = true
-                }
-            }
+            view.context.findActivity()?.window?.decorView?.isSoundEffectsEnabled = false
         }
     }
 
@@ -85,5 +73,33 @@ fun MochibunTheme(
             typography = typography,
             content = content
         )
+    }
+}
+
+/**
+ * Syncs the window's status and navigation bars with the active launcher background.
+ * On the AT-M120's 480x800 panel, matching the bar background to the launcher surface avoids
+ * letterbox seams, and the icon appearance flips with the background luminance: light themes get
+ * dark bar icons, dark themes (Midnight Mochi, dark YAML / custom presets) get light bar icons.
+ *
+ * Call this inside the `CompositionLocalProvider(LocalLauncherTheme provides ...)` block,
+ * because [MochibunTheme] sits above that provider and would only ever see the default theme.
+ * Uses the theme's actual `bgColor` (equal to `palette.background` for built-in presets) so
+ * user-edited and custom preset backgrounds are judged by what is really drawn.
+ */
+@Composable
+fun MochibunSystemBarsEffect() {
+    val view = LocalView.current
+    if (view.isInEditMode) return
+    val background = ActiveTheme.current.bgColor
+    SideEffect {
+        val window = view.context.findActivity()?.window ?: return@SideEffect
+        val isLightBackground = background.luminance() > 0.5f
+        window.statusBarColor = background.toArgb()
+        window.navigationBarColor = background.toArgb()
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = isLightBackground
+            isAppearanceLightNavigationBars = isLightBackground
+        }
     }
 }

@@ -12,11 +12,12 @@ import com.crinklecodone.mochibun.data.repository.ExternalThemeManager
 import com.crinklecodone.mochibun.ui.theme.*
 
 /**
- * Unified color scheme model representing the 4 cohesive custom pastel palettes:
+ * Unified color scheme model representing the 5 cohesive custom pastel palettes:
  * 1. Sakura Dream (Default)
  * 2. Lavender Mist
  * 3. Minty Matcha
  * 4. Milky Peach
+ * 5. Midnight Mochi (dark pastel)
  */
 @Immutable
 data class MochibunThemePalette(
@@ -144,6 +145,39 @@ val MilkyPeachPalette = MochibunThemePalette(
     unfocusedCardBorder = Color(0xFFFFE0B2).copy(alpha = 0.5f)
 )
 
+/**
+ * Dark pastel palette for the AT-M120's 480x800 LCD: velvet plum surfaces with luminous
+ * orchid-cream ink. Note `deepAccent` is the *light* ink here, so anything drawn on top of the
+ * light `primary` fill must use a dark ink instead (the SystemUI hook derives this automatically).
+ */
+val MidnightMochiPalette = MochibunThemePalette(
+    id = "midnight_mochi",
+    name = "Midnight Mochi",
+    primary = Color(0xFFD9B4F8),            // Moonlit lavender-rose: active fills
+    container = Color(0xFF281D38),          // Velvet plum: cards & dialogs
+    deepAccent = Color(0xFFF3D9FF),         // Orchid-cream: icons, labels, active borders
+    background = Color(0xFF1A1226),         // Twilight plum-indigo: wallpaper fallback
+    outline = Color(0xFF5A437A),            // Twilight lilac: card borders
+    textColor = Color(0xFFF9F2FF),          // Moonlight cream: primary text
+    squirclePrimary = Color(0xFFD9B4F8),
+    squircleSecondary = Color(0xFF9A7FC4),  // Mid lilac: also the SystemUI slider track
+    cloudBack = Color(0xFF211731),
+    cloudMid = Color(0xFF2C2040),
+    cloudFront = Color(0xFF382A50),
+    catOutline = Color(0xFF6B4F94),
+    catBlush = Color(0xFFF4A6CF),
+    mascotTint = Color(0xFFEDE3FF),
+    selectionGlow = Color(0xFFE6C8FF),
+    focusedCardContainer = Color(0xFF3A2A52),
+    focusedCardContainerEnd = Color(0xFF44305E),
+    focusedCardBorder = Color(0xFFD9B4F8),
+    unfocusedCardBg = Color(0xFF332547),    // Dusk plum: unfocused chips / secondary surface
+    unfocusedCardBorder = Color(0xFF5A437A).copy(alpha = 0.6f)
+)
+
+/** Muted lavender-mist secondary text for Midnight Mochi cards. */
+private val MidnightMochiTextSecondary = Color(0xFFC8B6DF)
+
 fun MochibunThemePalette.toLauncherTheme(roundnessDp: Float = 24f): LauncherTheme = LauncherTheme(
     name = id,
     bgColor = background,
@@ -183,17 +217,8 @@ val MilkyPeachTheme = MilkyPeachPalette.toLauncherTheme(24f)
 val OriginalTheme = SakuraDreamTheme
 val StrawberryMilkTheme = SakuraDreamTheme
 val LavenderDreamTheme = LavenderMistTheme
-val MidnightMochiTheme = LauncherTheme(
-    name = "midnight_mochi",
-    bgColor = Color(0xFF1E1128),
-    fgTextColor = Color(0xFFF3E8FF),
-    cardBgColor = Color(0xFF3B224C),
-    cardTextColor = Color(0xFFD8B4FE),
-    greetingColor = Color(0xFFE879F9),
-    greetingOutlineColor = Color(0xFF6B21A8),
-    greetingBgColor = Color(0xFF2A1638),
-    appActionColor = Color(0xFFE879F9),
-    cardRoundnessDp = 24f
+val MidnightMochiTheme = MidnightMochiPalette.toLauncherTheme(24f).copy(
+    cardTextColor = MidnightMochiTextSecondary
 )
 
 val LauncherTheme.palette: MochibunThemePalette
@@ -201,6 +226,7 @@ val LauncherTheme.palette: MochibunThemePalette
         "lavender_mist", "lavender_dream" -> LavenderMistPalette
         "minty_matcha" -> MintyMatchaPalette
         "milky_peach" -> MilkyPeachPalette
+        "midnight_mochi" -> MidnightMochiPalette
         else -> ExternalThemeManager.findPalette(name) ?: SakuraDreamPalette
     }
 
@@ -217,10 +243,10 @@ val LauncherTheme.cardBorderColor: Color
     get() = palette.focusedCardBorder
 
 val LauncherTheme.unfocusedCardBgColor: Color
-    get() = if (name == "midnight_mochi") Color(0xFF2E1A3C) else palette.unfocusedCardBg
+    get() = palette.unfocusedCardBg
 
 val LauncherTheme.unfocusedCardBorderColor: Color
-    get() = if (name == "midnight_mochi") Color(0xFF4C2A60) else palette.unfocusedCardBorder
+    get() = palette.unfocusedCardBorder
 
 val LauncherTheme.selectedContainerColor: Color
     get() = focusedContainerColor

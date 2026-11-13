@@ -121,6 +121,7 @@ fun getDefaultTimeOfDayMood(): MascotMood {
  * - Lavender Mist -> Color(0xFFF3EDFF)
  * - Minty Matcha  -> Color(0xFFEDF8F1)
  * - Milky Peach   -> Color(0xFFFFF0E6)
+ * - Midnight Mochi -> Color(0xFFEDE3FF)
  * - Default       -> null (natural cream fur)
  */
 fun getMascotTintColorForTheme(themeName: String?): Color? {
@@ -130,6 +131,7 @@ fun getMascotTintColorForTheme(themeName: String?): Color? {
         "lavender_mist", "lavender", "lavender_dream" -> Color(0xFFF3EDFF)
         "minty_matcha", "matcha" -> Color(0xFFEDF8F1)
         "milky_peach", "peach" -> Color(0xFFFFF0E6)
+        "midnight_mochi", "midnight" -> Color(0xFFEDE3FF)
         else -> null
     }
 }

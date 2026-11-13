@@ -293,10 +293,10 @@ fun ThemeStudioDialog(
                                     }
                                 }
                                 2 -> {
-                                    draft = if (focusCol == 0) {
-                                        MintyMatchaPalette.toLauncherTheme(draft.cardRoundnessDp)
-                                    } else {
-                                        MilkyPeachPalette.toLauncherTheme(draft.cardRoundnessDp)
+                                    draft = when (focusCol) {
+                                        0 -> MintyMatchaPalette.toLauncherTheme(draft.cardRoundnessDp)
+                                        1 -> MilkyPeachPalette.toLauncherTheme(draft.cardRoundnessDp)
+                                        else -> MidnightMochiTheme.copy(cardRoundnessDp = draft.cardRoundnessDp)
                                     }
                                 }
                                 3 -> {
@@ -354,11 +354,16 @@ fun ThemeStudioDialog(
                                     focusRow = 13
                                     focusCol = 1
                                 }
+                                // Row 2 col 2 is the Midnight Mochi card under Minty / Peach
+                                2 -> {
+                                    if (focusCol == 2) focusCol = 0 else focusRow = 1
+                                }
                                 3 -> {
                                     if (externalThemeIndex > 0) {
                                         externalThemeIndex--
                                     } else {
                                         focusRow = 2
+                                        focusCol = 2
                                     }
                                 }
                                 4 -> {
@@ -369,6 +374,7 @@ fun ThemeStudioDialog(
                                         externalThemeIndex = externalThemes.lastIndex
                                     } else {
                                         focusRow = 2
+                                        focusCol = 2
                                     }
                                 }
                                 5 -> {
@@ -380,6 +386,7 @@ fun ThemeStudioDialog(
                                         externalThemeIndex = externalThemes.lastIndex
                                     } else {
                                         focusRow = 2
+                                        focusCol = 2
                                     }
                                 }
                                 6 -> focusRow = 5
@@ -393,14 +400,20 @@ fun ThemeStudioDialog(
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
                             when (focusRow) {
                                 2 -> {
-                                    if (externalThemes.isNotEmpty()) {
-                                        focusRow = 3
-                                        externalThemeIndex = 0
-                                    } else if (customPresets.isNotEmpty()) {
-                                        focusRow = 4
-                                        customPresetIndex = 0
+                                    if (focusCol != 2) {
+                                        // Minty / Peach -> Midnight Mochi card below them
+                                        focusCol = 2
                                     } else {
-                                        focusRow = 5
+                                        focusCol = 0
+                                        if (externalThemes.isNotEmpty()) {
+                                            focusRow = 3
+                                            externalThemeIndex = 0
+                                        } else if (customPresets.isNotEmpty()) {
+                                            focusRow = 4
+                                            customPresetIndex = 0
+                                        } else {
+                                            focusRow = 5
+                                        }
                                     }
                                 }
                                 3 -> {
@@ -433,7 +446,8 @@ fun ThemeStudioDialog(
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
                             when (focusRow) {
-                                1, 2, 13 -> focusCol = 0
+                                1, 13 -> focusCol = 0
+                                2 -> if (focusCol != 2) focusCol = 0
                                 4 -> customPresetDeleteCol = 0
                                 5 -> {
                                     draft = draft.copy(
@@ -453,7 +467,8 @@ fun ThemeStudioDialog(
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             when (focusRow) {
-                                1, 2, 13 -> focusCol = 1
+                                1, 13 -> focusCol = 1
+                                2 -> if (focusCol != 2) focusCol = 1
                                 4 -> customPresetDeleteCol = 1
                                 5 -> {
                                     draft = draft.copy(
@@ -658,6 +673,18 @@ fun ThemeStudioDialog(
                             focusCol = 1
                             draft = MilkyPeachPalette.toLauncherTheme(draft.cardRoundnessDp)
                         }
+                    }
+
+                    // Preset row 2 (second line): Midnight Mochi dark pastel
+                    PresetThemeCard(
+                        palette = MidnightMochiPalette,
+                        isSelected = draft.name == MidnightMochiPalette.id,
+                        isFocused = editingColorField == null && focusRow == 2 && focusCol == 2,
+                        theme = draft
+                    ) {
+                        focusRow = 2
+                        focusCol = 2
+                        draft = MidnightMochiTheme.copy(cardRoundnessDp = draft.cardRoundnessDp)
                     }
 
                     // External YAML Themes section

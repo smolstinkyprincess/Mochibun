@@ -71,6 +71,13 @@ object ExternalThemeManager {
             author = "Mochibun",
             palette = MilkyPeachPalette,
             theme = MilkyPeachTheme
+        ),
+        ThemeOption(
+            id = MidnightMochiPalette.id,
+            name = MidnightMochiPalette.name,
+            author = "Mochibun",
+            palette = MidnightMochiPalette,
+            theme = MidnightMochiTheme
         )
     )
 

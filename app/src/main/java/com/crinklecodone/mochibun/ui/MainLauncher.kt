@@ -84,6 +84,7 @@ import com.crinklecodone.mochibun.ui.screens.ThemeStudioDialog
 import com.crinklecodone.mochibun.ui.screens.firstLetterOf
 import com.crinklecodone.mochibun.ui.theme.LauncherTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
+import com.crinklecodone.mochibun.ui.theme.MochibunSystemBarsEffect
 import com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge
 import com.crinklecodone.mochibun.ui.theme.loadSavedTheme
 import com.crinklecodone.mochibun.ui.theme.saveTheme
@@ -739,6 +740,7 @@ fun MainLauncher(
     }
 
     CompositionLocalProvider(LocalLauncherTheme provides currentTheme) {
+        MochibunSystemBarsEffect()
         Box(
             modifier = Modifier
                 .fillMaxSize()
