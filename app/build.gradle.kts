@@ -23,8 +23,8 @@ android {
         applicationId = "com.crinklecodone.mochibun"
         minSdk = 31
         targetSdk = 31
-        versionCode = 9
-        versionName = "1.4.1"
+        versionCode = 10
+        versionName = "1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
