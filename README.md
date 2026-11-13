@@ -19,7 +19,6 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 - **Made for Real Buttons**: I wanted it to feel like the flip phones I grew up wishing I had. Everything works with the d-pad and the center key, and a soft pastel glow shows you what’s selected so you never lose your place.
 - **Snug on Small Screens**: Fitted specifically for 480 × 800 flip-phone displays, so there's no squished text or cut-off buttons.
-- **Physical T9 App Search**: Just start typing numbers on the keypad to filter your apps and launch one in a blink. No tiny search bars to poke at!
 - **Mochibun Keitai Keyboard**: A system-wide multi-tap keypad keyboard, just like the old flip phones. Tap a number key to cycle its letters in a cute floating pill, hold it to type the digit, and use **`*`** for shift and **`#`** for space. The pill hops out of the way when it would cover the box you're typing in, and fades when you pause. Works in every app, with a handy *Keyboard* card in settings to set it up.
 - **Global Kaomoji Wheel**: Long-press **`#`** anywhere on the phone, even inside your messaging apps, to pop up the radial mood wheel and paste cute text faces straight into your chat `( ˶ˆᗜˆ˵ ) ♡`
 - **Virtual Mouse Pointer**: Press the side key to toggle a little mouse cursor for those apps that were only ever made for touchscreens. Dress it up with your own `.png` or animated `.gif` sprite, scroll with `2` & `8` (and sideways with `4` & `6`), and set the speed just how you like it. *(Needs the LSPosed module.)*
