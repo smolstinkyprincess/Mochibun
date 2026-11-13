@@ -185,6 +185,7 @@ This boot script keeps animations snappy and stops Android from killing Mochibun
 Now that you're rooted, check and turn on these features in Mochibun:
 * **Grant Root**: Allow Magisk superuser access when Mochibun asks. That happens when you open it or start the virtual cursor.
 * **Quick Settings Toggles**: Turn on direct root toggles in Mochibun's settings. Wi-Fi and Bluetooth then flip right on the Widget deck, with no stock Android dialogs in the way.
+* **Enable the LSPosed Module**: In LSPosed/Vector, turn on the **Mochibun** module with the *System Framework* and *System UI* scopes, then reboot. That wakes up system-wide keys, the virtual cursor, Media Volume Lock, and SystemUI theming.
 * **Lid LED Notifications**: Make sure notification pulses on the outer lid are going through `/sys/class/leds/aw22xxx_led/` with root.
 * **Disable Stock Simple Mode**:
   ```bash

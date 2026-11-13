@@ -1,10 +1,17 @@
-Mochibun is a lightweight, pastel launcher engineered specifically for T9 keypad Android flip devices (optimized for the ALT Mive Style Folder (AT-M120)).
+Mochibun is a lightweight pastel launcher made for T9 keypad and D-pad Android flip phones, lovingly tuned for the ALT Mive Style Folder (AT-M120).
 
 Features:
 
 - Physical Keypad Support: Move through your apps, folders, and menus using the physical arrow keys and number pad.
 - T9 App Search: Type numbers on your keypad to quickly filter and find apps without tapping the screen.
+- Mochibun Keitai Keyboard: A built-in multi-tap T9 keyboard that works in every app, no extra keyboard app needed. Hold # anywhere to pop open the Kaomoji Wheel.
 - Virtual Mouse Cursor: Turn on a mouse pointer with the side key so you can click things in apps made only for touchscreens.
-- Theme Studio: 4 soft pastel color themes (Sakura Dream, Lavender Mist, Minty Matcha, and Milky Peach).
-- Widget Page & Music Player: A dedicated screen for your widgets, featuring a card that shows what music is playing.
-- Lightweight & Fast: Smooth performance tuned specifically for flip phones and small screens with ~1.8 GB RAM.
+- Theme Studio: 5 built-in palettes (Sakura Dream, Lavender Mist, Minty Matcha, Milky Peach, and the Midnight Mochi dark theme), shareable .mochibun theme bundles, and custom YAML themes.
+- Pastel SystemUI: With the optional LSPosed module, your palette also themes Quick Settings, the volume dialog, notification cards, and the status and navigation bars.
+- Media Volume Lock: The volume rocker always steps media volume, even in Silent Mode.
+- Widgets, Recents & Music: A widget page for your third-party widgets with a Now Playing card, plus a keypad-friendly recents switcher.
+- Clamshell Lid Actions: Choose what happens when you open the lid, and (with root) get notification pulses on the outer lid LEDs.
+- Offline & Private: No internet or camera permissions, and no telemetry.
+- Lightweight & Fast: No heavy GPU blurs, tuned for 480 x 800 screens and ~1.8 GB of RAM.
+
+The launcher and keyboard work out of the box. System-wide key handling, the virtual cursor, Media Volume Lock, and SystemUI theming need the built-in LSPosed module (Magisk root).

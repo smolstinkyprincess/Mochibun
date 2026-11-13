@@ -11,7 +11,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ---
 
-> ♡ **Quick heads up:** Mochibun works out of the box as a launcher and keyboard. The hardware-key magic (side-key mouse pointer, key remapping, system-wide key handling), and MtkSystemUI theming runs through a small **LSPosed module** that lives in the same APK, and LSPosed/Vector needs a Magisk-rooted phone. Full steps are in [Setup](#-downloads--setup).
+> ♡ **Quick heads up:** Mochibun works out of the box as a launcher and keyboard. The hardware-key magic (side-key mouse pointer, key remapping, system-wide key handling, Media Volume Lock) and SystemUI theming run through a small **LSPosed module** that lives in the same APK, and LSPosed/Vector needs a Magisk-rooted phone. Full steps are in [Setup](#-downloads--setup).
 
 ---
 
@@ -25,11 +25,15 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Virtual Mouse Pointer**: Press the side key to toggle a little mouse cursor for those apps that were only ever made for touchscreens. Dress it up with your own `.png` or animated `.gif` sprite, scroll with `2` & `8` (and sideways with `4` & `6`), and set the speed just how you like it. *(Needs the LSPosed module.)*
 - **Nostalgic Keitai Click Sounds**: Retro tactile sound effects that are generated right on your phone, so the app stays tiny. Pick a sound profile in settings (*Kawaii Pop*, *Retro Keitai* 2000s clicks, *8-Bit Chiptune*, *Cyber Pager*, *Soft Thock*, *Water Drop*, or mute).
 - **Key Remapping (LSPosed Module)**: Remap your extra physical buttons to launch your favorite apps or trigger quick shortcuts. A tiny hook in the system handles the keys, so they behave the same in every app, with no accessibility service running in the background.
-- **Widgets & Music Deck**: A cozy widget page with a Now Playing card that pops in while music is playing and tucks itself away when the audio stops, plus room for your own Android widgets.
-- **Theme Studio & Simple YAML**: 4 built-in pastel palettes (*Sakura Dream*, *Lavender Mist*, *Minty Matcha*, and *Milky Peach*) that switch live the moment you pick one, or write your own theme files in clean, readable YAML.
+- **Media Volume Lock**: Flip it on and the physical volume rocker always steps your *media* volume, even when the phone is in Silent Mode, so your music never gets stuck at the wrong loudness. *(Needs the LSPosed module.)*
+- **Widgets & Music Deck**: A cozy widget page with a Now Playing card that pops in while music is playing and tucks itself away when the audio stops, plus room for your own third-party Android widgets.
+- **Keypad Recents Switcher**: Mochibun's own recents screen, so you can hop between open apps with the arrow keys instead of swiping.
+- **Clamshell Lid Magic**: Pick what happens when you flip the phone open (*Home Screen*, *Resume Last App*, or *Notifications*), add a little snap sound when you close it, and (with root) get notification pulses on the outer lid LEDs.
+- **Theme Studio & Simple YAML**: 5 built-in palettes (*Sakura Dream*, *Lavender Mist*, *Minty Matcha*, *Milky Peach*, and the new *Midnight Mochi* dark theme for eepy night owls 🌙) that switch live the moment you pick one, or write your own theme files in clean, readable YAML.
+- **Pastel SystemUI**: With the LSPosed module on, your palette dresses up Android's own bits too: Quick Settings tiles, the volume dialog and its sound-mode ringer pill, notification cards and app icon badges, plus status and navigation bars that keep their icons readable on any background.
 - **Setup Sharing & Backups**: Export your pinned apps, folders, and settings to a quick `.json` backup, or pack your colors, custom cursor, and wallpaper into a shareable `.mochibun` theme bundle to swap with friends.
 - **Icon Pack Support**: Works with standard icon packs (Nova, Apex, ADW), with gentle memory caching to keep things breezy.
-- **Offline & Private**: Mochibun never goes online. No internet permission, no camera access, and no telemetry. Just you and your phone.
+- **Offline & Private**: Mochibun never goes online. No internet permission, no camera permission, and no telemetry. Just you and your phone.
 
 ---
 
@@ -140,8 +144,8 @@ decorations:
   cardRoundnessDp: 24.0
 ```
 
-### 📦 Full Backups (`.json`)
-Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, and cursor tweaks to a simple `.json` file. Restoring shows a preview summary first and reloads everything instantly, no reboot needed.
+### 📦 Full Backups (`.json`) 
+#### Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, and cursor tweaks to a simple `.json` file. Restoring shows a preview summary first and reloads everything instantly, no reboot needed.
 ---
 
 ## 📱 Hardware & Specs
@@ -155,6 +159,7 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 | **Processor** | MediaTek MT6761 (32-bit ARMv7) |
 | **Display** | 480 × 800 |
 | **RAM** | ~1.8 GB |
+| **Network** | 100% offline: no internet or camera permissions |
 
 > **Note on Performance**: Heavy GPU runtime blurs (`Modifier.blur()`) are strictly avoided, so animations stay buttery smooth even on modest flip-phone hardware ♡
 
@@ -174,14 +179,14 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 
 ### 🧩 LSPosed Module (Hardware Keys & Cursor)
 
-Mochibun is one APK that's both the launcher *and* an LSPosed module, so there's nothing extra to download. The module hooks into the system so your physical keys, the side-key mouse pointer, and key remaps work in every app, without any accessibility service.
+Mochibun is one APK that's both the launcher *and* an LSPosed module, so there's nothing extra to download. The module hooks into the system (`system_server` and SystemUI) so your physical keys, key remaps, and Media Volume Lock work in every app, and your palette can paint SystemUI, all without any accessibility service. The mouse pointer itself floats on top as a little foreground overlay service.
 
 1. **Root with Magisk and install LSPosed (or Vector with Zygisk Next)** (the Zygisk version). The [AT-M120 guide](docs/m120_root_setup.md) covers the Magisk side.
 2. **Install Mochibun**, then open LSPosed/Vector and enable the **Mochibun** module.
 3. **Tick both scopes** for the module: *System Framework* (`android`) and *System UI* (`com.android.systemui`).
 4. **Reboot** so the hook loads.
 
-No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backups, and the Keitai Keyboard all work without it. You'll just miss the system-wide key handling and virtual cursor.
+No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backups, and the Keitai Keyboard all work without it. You'll just miss the system-wide key handling, virtual cursor, Media Volume Lock, and SystemUI theming.
 
 ### 🗝️ Quick Permissions Checklist
 
@@ -190,7 +195,7 @@ No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backup
 3. **Mouse Pointer**: Allow *Display over other apps* when asked, so the cursor can float on top of everything.
 4. **Hardware Keys & Remapping**: Enable the Mochibun module in LSPosed (see [above](#-lsposed-module-hardware-keys--cursor)). There's no Accessibility setting to turn on.
 5. **Keitai Keyboard**: Enable **Mochibun Keitai IME** as your keyboard (see [Mochibun Keitai Keyboard](#-mochibun-keitai-keyboard)), or let *Settings > Keyboard* walk you through it.
-6. **Superuser Access (Optional extras)**: Granting Mochibun superuser access in Magisk unlocks privileged touch injection (handy when a screen blocks normal taps, like permission dialogs), root Quick Settings toggles, and hooks into custom recents providers. The LSPosed hook doesn't need it.
+6. **Superuser Access (Optional extras)**: Granting Mochibun superuser access in Magisk unlocks privileged touch injection (handy when a screen blocks normal taps, like permission dialogs), root Quick Settings toggles, exterior lid LED alerts, one-step keyboard setup, and hooks into custom recents providers. The LSPosed hook doesn't need it.
 7. **QuickSwitch (Optional)**: If you use QuickSwitch for hardware multitasking, set Mochibun as your provider:
    ```bash
    su -c "/data/adb/modules/quickswitch/quickswitch --ch=com.crinklecodone.mochibun"
