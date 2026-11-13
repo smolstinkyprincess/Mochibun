@@ -28,7 +28,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -307,15 +306,14 @@ fun CreateFavoriteFolderDialog(
         ResizeWithKeyboard()
         val shape = RoundedCornerShape(22.dp)
 
-        Surface(
+        KawaiiDialogSurface(
             modifier = Modifier
                 .width(dialogWidth)
-                .heightIn(max = 500.dp)
-                .border(1.5.dp, ActiveTheme.cardBorder, shape),
+                .heightIn(max = 500.dp),
             shape = shape,
-            color = ActiveTheme.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+            containerColor = ActiveTheme.surface,
+            borderColor = ActiveTheme.cardBorder,
+            borderWidth = 1.5.dp
         ) {
             Column(
                 modifier = Modifier

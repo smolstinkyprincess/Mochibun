@@ -4,7 +4,6 @@ import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
@@ -56,6 +55,7 @@ import com.crinklecodone.mochibun.core.widget.MochibunWidgetHost
 import com.crinklecodone.mochibun.core.widget.NavDirection
 import com.crinklecodone.mochibun.core.widget.WidgetFrame
 import com.crinklecodone.mochibun.core.system.RootShell
+import com.crinklecodone.mochibun.core.util.findActivity
 import com.crinklecodone.mochibun.core.util.loadDownsampledPhotoBitmap
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.WidgetRepository
@@ -87,12 +87,6 @@ enum class WidgetFocusSection {
     USER_WIDGETS,
     ADD_WIDGET,
     HOME_PILL
-}
-
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
 }
 
 /**
@@ -1079,7 +1073,7 @@ fun WidgetPage(
                     Box(
                         modifier = Modifier
                             .graphicsLayer { clip = false }
-                            .glowingDoubleBorder(isSelected = isAddFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
+                            .softGlowFocus(isSelected = isAddFocused, cornerRadius = 50.dp)
                             .clip(RoundedCornerShape(50))
                             .background(if (isAddFocused) Color(0xFFFFF0F4) else Color(0xFFF6F0FD))
                             .border(1.5.dp, if (isAddFocused) Color(0xFFE06287) else Color(0xFFB5A4CB), RoundedCornerShape(50))

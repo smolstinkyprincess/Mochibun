@@ -128,7 +128,7 @@ fun AppDrawerCard(
         modifier = modifier
             .fillMaxWidth()
             .height(60.dp)
-            .focusPop(isSelected = isSelected, cornerRadius = 22.dp)
+            .softGlowFocus(isSelected = isSelected, cornerRadius = 22.dp)
             .clip(DrawerCardShape)
             .background(cardBrush, DrawerCardShape)
             .then(

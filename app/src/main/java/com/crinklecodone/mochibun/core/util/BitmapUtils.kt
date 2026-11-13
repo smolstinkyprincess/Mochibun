@@ -117,49 +117,11 @@ fun downsampleAndSaveImage(
     bitmap.recycle()
 }
 
-// loads and samples wallpaper bitmap using memory efficient rgb_565 config
+/** Loads the wallpaper so it fits the 480 × 800 screen, as RGB_565. */
 fun loadWallpaperBitmap(
     context: Context,
     uri: Uri
-): Bitmap? {
-    return try {
-        val resolver = context.contentResolver
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-
-        resolver.openInputStream(uri)?.use { rawStream ->
-            BufferedInputStream(rawStream).use { stream ->
-                BitmapFactory.decodeStream(stream, null, bounds)
-            }
-        }
-
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-            return null
-        }
-
-        var sampleSize = 1
-        while (
-            bounds.outWidth / sampleSize > 480 ||
-            bounds.outHeight / sampleSize > 800
-        ) {
-            sampleSize *= 2
-        }
-
-        val options = BitmapFactory.Options().apply {
-            inSampleSize = sampleSize
-            inPreferredConfig = Bitmap.Config.RGB_565
-        }
-
-        resolver.openInputStream(uri)?.use { rawStream ->
-            BufferedInputStream(rawStream).use { stream ->
-                BitmapFactory.decodeStream(stream, null, options)
-            }
-        }?.also { it.prepareToDraw() }
-    } catch (e: Exception) {
-        Log.e("BitmapUtils", "Failed to decode wallpaper from $uri: ${e.message}")
-        null
-    }
-}
-
+): Bitmap? = decodeSampledRgb565(context, uri, maxWidth = 480, maxHeight = 800, label = "wallpaper")
 
 /**
  * Decodes a photo-frame picture so neither side exceeds [targetDim] pixels, as RGB_565.
@@ -169,6 +131,18 @@ fun loadDownsampledPhotoBitmap(
     context: Context,
     uri: Uri,
     targetDim: Int = 300
+): Bitmap? = decodeSampledRgb565(context, uri, maxWidth = targetDim, maxHeight = targetDim, label = "photo frame bitmap")
+
+/**
+ * Two-pass decode of a content [uri]: reads the bounds first, then decodes with the smallest
+ * power-of-two inSampleSize that fits [maxWidth] × [maxHeight], in RGB_565 (2 bytes per pixel).
+ */
+private fun decodeSampledRgb565(
+    context: Context,
+    uri: Uri,
+    maxWidth: Int,
+    maxHeight: Int,
+    label: String
 ): Bitmap? {
     return try {
         val resolver = context.contentResolver
@@ -185,7 +159,7 @@ fun loadDownsampledPhotoBitmap(
         }
 
         var sampleSize = 1
-        while (bounds.outWidth / sampleSize > targetDim || bounds.outHeight / sampleSize > targetDim) {
+        while (bounds.outWidth / sampleSize > maxWidth || bounds.outHeight / sampleSize > maxHeight) {
             sampleSize *= 2
         }
 
@@ -200,7 +174,8 @@ fun loadDownsampledPhotoBitmap(
             }
         }?.also { it.prepareToDraw() }
     } catch (e: Exception) {
-        Log.e("BitmapUtils", "Failed to decode photo frame bitmap from $uri: ${e.message}")
+        Log.e("BitmapUtils", "Failed to decode $label from $uri: ${e.message}")
         null
     }
 }
+

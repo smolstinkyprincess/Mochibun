@@ -837,7 +837,7 @@ private fun FavoriteAppSlot(
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .focusPop(isSelected = isSelected, cornerRadius = 20.dp)
+                .softGlowFocus(isSelected = isSelected, cornerRadius = 20.dp)
                 .padding(3.dp)
                 .background(squircleBg, FavoriteSquircleShape)
                 .clip(FavoriteSquircleShape)
@@ -921,7 +921,7 @@ private fun FavoriteFolderSlot(
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .focusPop(isSelected = isSelected, cornerRadius = 20.dp)
+                .softGlowFocus(isSelected = isSelected, cornerRadius = 20.dp)
                 .padding(3.dp)
                 .background(squircleBg, FavoriteSquircleShape)
                 .clip(FavoriteSquircleShape)

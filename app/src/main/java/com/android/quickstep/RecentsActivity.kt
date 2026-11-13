@@ -469,7 +469,7 @@ fun RecentsScreen(
                     modifier = Modifier
                         .clip(CircleShape)
                         .background(ActiveTheme.accentDeep)
-                        .glowingDoubleBorder(isSelected = isClearAllFocused, shape = RoundedCornerShape(50), cornerRadius = 50.dp)
+                        .softGlowFocus(isSelected = isClearAllFocused, cornerRadius = 50.dp)
                         .clickable { clearAllTasks() }
                         .padding(horizontal = 24.dp, vertical = 9.dp),
                     contentAlignment = Alignment.Center
@@ -579,7 +579,7 @@ fun TaskCard(
                 .fillMaxSize()
                 .clip(cardShape)
                 .background(ActiveTheme.surface) // Frosted theme surface
-                .glowingDoubleBorder(isSelected = isCardFocused && !isDismissFocused, shape = cardShape, cornerRadius = 22.dp)
+                .softGlowFocus(isSelected = isCardFocused && !isDismissFocused, cornerRadius = 22.dp)
                 .border(
                     width = if (isCardFocused && !isDismissFocused) 2.dp else 1.5.dp,
                     color = if (isCardFocused && !isDismissFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
@@ -674,7 +674,7 @@ fun TaskCard(
                         color = if (isDismissFocused) ActiveTheme.selectionGlow else ActiveTheme.cardBorder,
                         shape = RoundedCornerShape(9.dp)
                     )
-                    .glowingDoubleBorder(isSelected = isDismissFocused, shape = RoundedCornerShape(9.dp), cornerRadius = 9.dp)
+                    .softGlowFocus(isSelected = isDismissFocused, cornerRadius = 9.dp)
                     .clickable {
                         isDismissing = true
                     },

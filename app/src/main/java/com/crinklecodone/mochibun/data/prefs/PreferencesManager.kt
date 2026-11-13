@@ -357,7 +357,7 @@ object PreferencesManager {
     ): Boolean = eventKeyCode == KeyEvent.KEYCODE_POUND &&
         (context == null || isKaomojiWheelEnabled(context))
 
-    fun formatKaomojiKeyName(keyCode: Int, scanCode: Int = 0): String {
+    fun formatKeyName(keyCode: Int, scanCode: Int = 0): String {
         val physical = PhysicalKey.fromKeyCode(keyCode)
             ?: if (scanCode > 0) PhysicalKey.fromScancode(scanCode) else null
         if (physical != null) {
@@ -384,7 +384,7 @@ object PreferencesManager {
         }
     }
 
-    fun formatKaomojiKeyBadge(keyCode: Int, scanCode: Int = 0): String {
+    fun formatKeyBadge(keyCode: Int, scanCode: Int = 0): String {
         val physical = PhysicalKey.fromKeyCode(keyCode)
             ?: if (scanCode > 0) PhysicalKey.fromScancode(scanCode) else null
         return when (physical) {

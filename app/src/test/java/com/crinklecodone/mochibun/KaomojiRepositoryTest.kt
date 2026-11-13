@@ -18,12 +18,12 @@ class KaomojiRepositoryTest {
         assertEquals("#", PreferencesManager.getKaomojiTriggerBadge())
 
         // Verify badge and label formatting for physical and arbitrary keys
-        assertEquals("#", PreferencesManager.formatKaomojiKeyBadge(KeyEvent.KEYCODE_POUND))
-        assertEquals("F1", PreferencesManager.formatKaomojiKeyBadge(KeyEvent.KEYCODE_F1))
-        assertEquals("F4", PreferencesManager.formatKaomojiKeyBadge(KeyEvent.KEYCODE_F4, 62))
-        assertEquals("5", PreferencesManager.formatKaomojiKeyBadge(KeyEvent.KEYCODE_5))
-        assertEquals("Key 5", PreferencesManager.formatKaomojiKeyName(KeyEvent.KEYCODE_5))
-        assertEquals("Upper-left (F1)", PreferencesManager.formatKaomojiKeyName(KeyEvent.KEYCODE_F1))
+        assertEquals("#", PreferencesManager.formatKeyBadge(KeyEvent.KEYCODE_POUND))
+        assertEquals("F1", PreferencesManager.formatKeyBadge(KeyEvent.KEYCODE_F1))
+        assertEquals("F4", PreferencesManager.formatKeyBadge(KeyEvent.KEYCODE_F4, 62))
+        assertEquals("5", PreferencesManager.formatKeyBadge(KeyEvent.KEYCODE_5))
+        assertEquals("Key 5", PreferencesManager.formatKeyName(KeyEvent.KEYCODE_5))
+        assertEquals("Upper-left (F1)", PreferencesManager.formatKeyName(KeyEvent.KEYCODE_F1))
     }
 
     @Test

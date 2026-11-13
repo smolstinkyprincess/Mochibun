@@ -584,14 +584,14 @@ object HardwareRemapManager {
             val cfg = getButtonActionConfig(context, key)
             val def = getDefaultActionConfigForKey(key.defaultKeyCode, key.scancode)
             if (cfg != def && cfg.hasAnyAction()) {
-                badges.add(PreferencesManager.formatKaomojiKeyBadge(key.defaultKeyCode, key.scancode))
+                badges.add(PreferencesManager.formatKeyBadge(key.defaultKeyCode, key.scancode))
             }
         }
         val arbitrary = getAllArbitraryKeyActionConfigs(context)
         for ((kc, cfg) in arbitrary.entries.sortedBy { it.key }) {
             val def = getDefaultActionConfigForKey(kc, 0)
             if (cfg != def && cfg.hasAnyAction()) {
-                badges.add(PreferencesManager.formatKaomojiKeyBadge(kc, 0))
+                badges.add(PreferencesManager.formatKeyBadge(kc, 0))
             }
         }
         return badges

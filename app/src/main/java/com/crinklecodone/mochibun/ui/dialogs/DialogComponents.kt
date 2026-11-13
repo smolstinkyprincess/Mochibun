@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -35,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.crinklecodone.mochibun.R
 import com.crinklecodone.mochibun.ui.components.JumpNumberBadge
 import com.crinklecodone.mochibun.ui.components.softGlowFocus
+import com.crinklecodone.mochibun.ui.theme.ActiveTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.destructiveBgColor
 import com.crinklecodone.mochibun.ui.theme.destructiveColor
@@ -86,6 +89,30 @@ fun requestFocusSafely(focusRequester: FocusRequester, key: Any? = Unit) {
     LaunchedEffect(key) {
         focusRequester.awaitFocusSafely()
     }
+}
+
+/**
+ * Shared plain (non-lace) dialog card: a rounded Surface with a 1.5 dp outline, 6 dp tonal and
+ * 8 dp shadow elevation. Size the card through [modifier] (width, heightIn, curtainUnfurl, …);
+ * the border is drawn after it, matching the dialogs this replaced pixel for pixel.
+ */
+@Composable
+fun KawaiiDialogSurface(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(22.dp),
+    containerColor: Color = ActiveTheme.surface,
+    borderColor: Color = ActiveTheme.cardBorder,
+    borderWidth: Dp = 1.5.dp,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = modifier.border(borderWidth, borderColor, shape),
+        shape = shape,
+        color = containerColor,
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+        content = content
+    )
 }
 
 @Composable

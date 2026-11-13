@@ -149,7 +149,7 @@ fun TransportButton(
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
-            .glowingDoubleBorder(isSelected = isFocused, cornerRadius = 14.dp)
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .background(if (isFocused) theme.focusedContainerColor else Color.Transparent)

@@ -5,8 +5,6 @@
  */
 package com.crinklecodone.mochibun.ui.theme
 
-import android.app.Activity
-import android.content.ContextWrapper
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
@@ -19,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.crinklecodone.mochibun.core.util.findActivity
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.data.repository.TypographyManager
 
@@ -61,9 +60,7 @@ fun MochibunTheme(
     if (!view.isInEditMode) {
         SideEffect {
             view.isSoundEffectsEnabled = false
-            val activity = generateSequence(view.context) { (it as? ContextWrapper)?.baseContext }
-                .filterIsInstance<Activity>()
-                .firstOrNull()
+            val activity = view.context.findActivity()
             val window = activity?.window
             window?.decorView?.isSoundEffectsEnabled = false
 

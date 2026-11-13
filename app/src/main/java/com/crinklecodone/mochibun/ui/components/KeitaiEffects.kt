@@ -1,7 +1,5 @@
 package com.crinklecodone.mochibun.ui.components
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.IntState
@@ -19,7 +17,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -145,34 +142,3 @@ fun rememberSteppedTickerText(
         }
     }
 }
-
-/**
- * Ergonomic composable wrapper for the authentic Galakei focus pop bounce.
- * Wraps content with spring scale bounce and tactile haptic feedback on focus transition.
- */
-@Composable
-fun KeitaiFocusPop(
-    isSelected: Boolean,
-    modifier: Modifier = Modifier,
-    cornerRadius: Dp = 22.dp,
-    content: @Composable BoxScope.() -> Unit
-) {
-    Box(
-        modifier = modifier
-            .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isSelected, cornerRadius = cornerRadius),
-        content = content
-    )
-}
-
-/**
- * Modifier alias for [softGlowFocus] providing authentic keitai spring scale bounce
- * and focus glow on selection.
- */
-fun Modifier.focusPop(
-    isSelected: Boolean,
-    cornerRadius: Dp = 22.dp
-): Modifier = softGlowFocus(
-    isSelected = isSelected,
-    cornerRadius = cornerRadius
-)

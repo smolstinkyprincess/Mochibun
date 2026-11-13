@@ -20,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -249,16 +248,15 @@ fun FolderActionDialog(
             }
     ) {
         val shape = RoundedCornerShape(theme.cardRoundnessDp.coerceIn(22f, 24f).dp)
-        Surface(
+        KawaiiDialogSurface(
             modifier = Modifier
                 .width(dialogWidth)
                 .heightIn(max = 460.dp)
-                .curtainUnfurl(visible = true)
-                .border(1.5.dp, theme.greetingOutlineColor, shape),
+                .curtainUnfurl(visible = true),
             shape = shape,
-            color = theme.cardBgColor,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+            containerColor = theme.cardBgColor,
+            borderColor = theme.greetingOutlineColor,
+            borderWidth = 1.5.dp
         ) {
             if (confirmingDelete) {
                 Column(

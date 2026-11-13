@@ -643,19 +643,6 @@ fun Modifier.softGlowFocus(
 }
 
 /**
- * Backward-compatible bridge for existing components previously calling glowingDoubleBorder.
- * Delegates directly to the soft pastel glow focus indicator.
- */
-fun Modifier.glowingDoubleBorder(
-    isSelected: Boolean,
-    shape: RoundedCornerShape = RoundedCornerShape(22.dp),
-    cornerRadius: Dp = 22.dp
-): Modifier = softGlowFocus(
-    isSelected = isSelected,
-    cornerRadius = cornerRadius
-)
-
-/**
  * Standardized Mochibun Section Header formatted as:
  * — ♡ Title ♡ —
  */

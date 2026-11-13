@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -268,14 +267,14 @@ fun HardwareButtonsDialog(
     }
     val keyName = remember(displayKeyCode, displayScanCode) {
         if (displayKeyCode != 0 || displayScanCode != 0) {
-            PreferencesManager.formatKaomojiKeyName(displayKeyCode, displayScanCode)
+            PreferencesManager.formatKeyName(displayKeyCode, displayScanCode)
         } else {
             "Select Button"
         }
     }
     val keyBadge = remember(displayKeyCode, displayScanCode) {
         if (displayKeyCode != 0 || displayScanCode != 0) {
-            PreferencesManager.formatKaomojiKeyBadge(displayKeyCode, displayScanCode)
+            PreferencesManager.formatKeyBadge(displayKeyCode, displayScanCode)
         } else {
             "?"
         }
@@ -408,14 +407,13 @@ fun HardwareButtonsDialog(
             }
     ) {
         val shape = RoundedCornerShape(22.dp)
-        Surface(
+        KawaiiDialogSurface(
             modifier = Modifier
-                .fillMaxWidth()
-                .border(1.5.dp, ActiveTheme.cardBorder, shape),
+                .fillMaxWidth(),
             shape = shape,
-            color = ActiveTheme.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+            containerColor = ActiveTheme.surface,
+            borderColor = ActiveTheme.cardBorder,
+            borderWidth = 1.5.dp
         ) {
             Column(
                 modifier = Modifier
@@ -727,14 +725,13 @@ private fun AppPickerDialog(
             }
     ) {
         val shape = RoundedCornerShape(22.dp)
-        Surface(
+        KawaiiDialogSurface(
             modifier = Modifier
-                .fillMaxSize()
-                .border(1.5.dp, ActiveTheme.cardBorder, shape),
+                .fillMaxSize(),
             shape = shape,
-            color = ActiveTheme.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+            containerColor = ActiveTheme.surface,
+            borderColor = ActiveTheme.cardBorder,
+            borderWidth = 1.5.dp
         ) {
             Column(
                 modifier = Modifier
