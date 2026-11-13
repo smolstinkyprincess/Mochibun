@@ -17,22 +17,29 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ## ✨ Features
 
-- **Made for Real Buttons**: I wanted it to feel like the flip phones I grew up wishing I had. Everything works with the d-pad and the center key, and a soft pastel glow shows you what’s selected so you never lose your place.
-- **Snug on Small Screens**: Fitted specifically for 480 × 800 flip-phone displays, so there's no squished text or cut-off buttons.
-- **Mochibun Keitai Keyboard**: A system-wide multi-tap keypad keyboard, just like the old flip phones. Tap a number key to cycle its letters in a cute floating pill, hold it to type the digit, and use **`*`** for shift and **`#`** for space. The pill hops out of the way when it would cover the box you're typing in, and fades when you pause. Works in every app, with a handy *Keyboard* card in settings to set it up.
-- **Global Kaomoji Wheel**: Long-press **`#`** anywhere on the phone, even inside your messaging apps, to pop up the radial mood wheel and paste cute text faces straight into your chat `( ˶ˆᗜˆ˵ ) ♡`
-- **Virtual Mouse Pointer**: Press the side key to toggle a little mouse cursor for those apps that were only ever made for touchscreens. Dress it up with your own `.png` or animated `.gif` sprite, scroll with `2` & `8` (and sideways with `4` & `6`), and set the speed just how you like it. *(Needs the LSPosed module.)*
-- **Nostalgic Keitai Click Sounds**: Retro tactile sound effects that are generated right on your phone, so the app stays tiny. Pick a sound profile in settings (*Kawaii Pop*, *Retro Keitai* 2000s clicks, *8-Bit Chiptune*, *Cyber Pager*, *Soft Thock*, *Water Drop*, or mute).
-- **Key Remapping (LSPosed Module)**: Remap your extra physical buttons to launch your favorite apps or trigger quick shortcuts. A tiny hook in the system handles the keys, so they behave the same in every app, with no accessibility service running in the background.
-- **Media Volume Lock**: Flip it on and the physical volume rocker always steps your *media* volume, even when the phone is in Silent Mode, so your music never gets stuck at the wrong loudness. *(Needs the LSPosed module.)*
-- **Widgets & Music Deck**: A cozy widget page with a Now Playing card that pops in while music is playing and tucks itself away when the audio stops, plus room for your own third-party Android widgets.
-- **Keypad Recents Switcher**: Mochibun's own recents screen, so you can hop between open apps with the arrow keys instead of swiping.
-- **Clamshell Lid Magic**: Pick what happens when you flip the phone open (*Home Screen*, *Resume Last App*, or *Notifications*), add a little snap sound when you close it, and (with root) get notification pulses on the outer lid LEDs.
-- **Theme Studio & Simple YAML**: 5 built-in palettes (*Sakura Dream*, *Lavender Mist*, *Minty Matcha*, *Milky Peach*, and the new *Midnight Mochi* dark theme for eepy night owls 🌙) that switch live the moment you pick one, or write your own theme files in clean, readable YAML.
-- **Pastel SystemUI**: With the LSPosed module on, your palette dresses up Android's own bits too: Quick Settings tiles, the volume dialog and its sound-mode ringer pill, notification cards and app icon badges, plus status and navigation bars that keep their icons readable on any background.
-- **Setup Sharing & Backups**: Export your pinned apps, folders, and settings to a quick `.json` backup, or pack your colors, custom cursor, and wallpaper into a shareable `.mochibun` theme bundle to swap with friends.
-- **Icon Pack Support**: Works with standard icon packs (Nova, Apex, ADW), with gentle memory caching to keep things breezy.
-- **Offline & Private**: Mochibun never goes online. No internet permission, no camera permission, and no telemetry. Just you and your phone.
+## ✨ Features
+
+### Everyday
+- **Made for real buttons**: Everything works with the d-pad and center key, and a soft pastel glow shows what's selected so you never lose your place.
+- **Keitai keyboard**: A system-wide multi-tap keypad keyboard in a little floating pill. Tap a number to cycle its letters, hold for the digit, `*` for shift, `#` for space. It hops out of the way of what you're typing in.
+- **Kaomoji wheel**: Long-press `#` in any app to pop up a wheel of text faces and paste one into your chat `( ˶ˆᗜˆ˵ ) ♡`
+- **Widgets & music deck**: A widget page with a Now Playing card that appears when music plays and hides when it stops. Third-party widgets work too.
+- **Clamshell tricks**: Choose what opens when you flip the phone open (Home, Resume Last App, or Notifications), plus an optional snap sound when you close it.
+- **Offline & private**: No internet permission, no camera permission, no telemetry.
+
+### Make it yours
+- **5 pastel themes**: *Sakura Dream*, *Lavender Mist*, *Minty Matcha*, *Milky Peach*, and *Midnight Mochi* for night owls 🌙. Switch live, or write your own in simple YAML.
+- **Keitai click sounds**: Generated on-device, so the app stays tiny. Pick *Kawaii Pop*, *Retro Keitai*, *8-Bit Chiptune*, *Cyber Pager*, *Soft Thock*, or *Water Drop*.
+- **Share your setup**: Back up pinned apps, folders, and settings to `.json`, or pack colors, cursor, and wallpaper into a `.mochibun` bundle to swap with friends.
+- **Icon pack support**: Works with Nova, Apex, and ADW icon packs.
+
+### Root / LSPosed extras
+- **Virtual mouse pointer**: Press the side key for a little cursor in touch-only apps. Use your own `.png` or `.gif` sprite and scroll with `2`/`8` and `4`/`6`.
+- **Key remapping**: Remap extra physical buttons to launch apps or shortcuts, in every app, with no accessibility service running.
+- **Keypad recents switcher**: Hop between open apps with the arrow keys.
+- **Media volume lock**: The volume rocker always changes *media* volume, even in Silent Mode.
+- **Pastel SystemUI**: Your palette also colors Quick Settings, the volume dialog, notification cards, and the status and nav bars.
+- **Lid LED pulses**: Notification shimmers on the outer lid lights.
 
 ---
 
