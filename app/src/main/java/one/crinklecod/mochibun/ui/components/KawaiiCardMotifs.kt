@@ -239,6 +239,16 @@ fun headerFlankedCardMotifs(): List<CardMotifSpec> = listOf(
 
 private val SharedMotifPath = Path()
 
+// Motifs are drawn on the main thread only, so like SharedMotifPath a single cached Stroke is
+// safe to share. It is only rebuilt when a caller asks for a different width (rare: widths are
+// a handful of fixed dp values), so steady-state drawing allocates nothing.
+private var cachedMotifStroke = Stroke(width = 1.2f)
+
+private fun motifStroke(widthPx: Float): Stroke {
+    if (cachedMotifStroke.width != widthPx) cachedMotifStroke = Stroke(width = widthPx)
+    return cachedMotifStroke
+}
+
 /**
  * Draws a four-pointed sparkle star (✦ / ✧).
  */
@@ -260,7 +270,7 @@ fun DrawScope.drawFourPointSparkle(
         close()
     }
     if (hollow) {
-        drawPath(path, color, style = Stroke(width = strokeWidthPx))
+        drawPath(path, color, style = motifStroke(strokeWidthPx))
     } else {
         drawPath(path, color, style = Fill)
     }
@@ -330,7 +340,7 @@ fun DrawScope.drawMiniHeart(
         close()
     }
     if (hollow) {
-        drawPath(path, color, style = Stroke(width = strokeWidthPx))
+        drawPath(path, color, style = motifStroke(strokeWidthPx))
     } else {
         drawPath(path, color, style = Fill)
     }
@@ -362,7 +372,7 @@ fun DrawScope.drawStarlet(
     path.close()
 
     if (hollow) {
-        drawPath(path, color, style = Stroke(width = strokeWidthPx))
+        drawPath(path, color, style = motifStroke(strokeWidthPx))
     } else {
         drawPath(path, color, style = Fill)
     }
@@ -521,6 +531,9 @@ fun Modifier.softGlowFocus(
 
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val localDensity = LocalDensity.current
+    // Built once per density instead of on every focused frame.
+    val glowStroke = remember(localDensity) { Stroke(width = 2.0f * localDensity.density) }
+    val borderStroke = remember(localDensity) { Stroke(width = 1.8f * localDensity.density) }
     val componentHeight = remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(isSelected) {
@@ -582,8 +595,6 @@ fun Modifier.softGlowFocus(
                 Modifier.drawWithContent {
                     val cornerPx = cornerRadius.toPx()
                     val d = density
-                    val glowStroke = Stroke(width = 2.0f * d)
-                    val borderStroke = Stroke(width = 1.8f * d)
 
                     // 1. Concentric halo passes extending 0.6dp to 3.5dp beyond the component boundary
                     for (i in 0 until 4) {
