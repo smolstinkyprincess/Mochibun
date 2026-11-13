@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
@@ -878,19 +877,31 @@ fun WidgetPage(
                 ) {
                     // Gradient pill card: — ♡ Widgets ♡ —
                     val isHeaderFocused = focusSection == WidgetFocusSection.HEADER
-                    Box(
+                    val gradientStart = ActiveTheme.palette.squircleSecondary
+                    val gradientEnd = ActiveTheme.primary
+                    val headerBrush = remember(gradientStart, gradientEnd) {
+                        Brush.horizontalGradient(colors = listOf(gradientStart, gradientEnd))
+                    }
+                    // Gradient pill inside the same dainty lace + pearl rim as the Home cards.
+                    // The 6dp frill sits inside the original 56dp height.
+                    KeitaiLaceContainer(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
-                            .graphicsLayer { clip = false }
-                            .softGlowFocus(isSelected = isHeaderFocused, cornerRadius = 32.dp)
+                            .softGlowFocus(isSelected = isHeaderFocused, cornerRadius = 32.dp),
+                        cardCornerRadius = 32.dp,
+                        scallopDepth = 3.dp,
+                        beadDiameter = 4.dp,
+                        contentPadding = 6.dp,
+                        containerBrush = headerBrush,
+                        borderColor = ActiveTheme.cardBorder,
+                        beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
+                        showCornerBows = false
+                    ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
                             .clip(RoundedCornerShape(32.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(ActiveTheme.palette.squircleSecondary, ActiveTheme.primary)
-                                )
-                            )
-                            .border(1.5.dp, if (isHeaderFocused) Color.Transparent else ActiveTheme.cardBorder, RoundedCornerShape(32.dp))
                             .clickable(enabled = isQuickSettingsVisible) {
                                 focusSection = WidgetFocusSection.HEADER
                                 isQuickSettingsExpanded = !isQuickSettingsExpanded
@@ -912,6 +923,7 @@ fun WidgetPage(
                                 color = ActiveTheme.accentDeep
                             )
                         }
+                    }
                     }
 
                     // Overlapping Sub-Badge: ✦ Now Playing ✦

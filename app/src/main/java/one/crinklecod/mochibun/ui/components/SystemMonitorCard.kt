@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,16 +35,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
-import one.crinklecod.mochibun.ui.theme.focusedContainerColor
 import one.crinklecod.mochibun.ui.theme.palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -245,22 +241,31 @@ fun SystemMonitorCard(
         }
     }
 
-    Box(
+    // Same dainty lace + pearl rim as the Home cards. The 6dp frill replaces 6dp of the old
+    // inner padding (16/13 -> 10/7), so the card keeps its exact size.
+    KeitaiLaceContainer(
         modifier = modifier
             .fillMaxWidth()
             .softGlowFocus(isSelected = isFocused, cornerRadius = 22.dp)
-            .kawaiiCardMotifs(isFocused = isFocused, cornerRadius = 22.dp)
+            .kawaiiCardMotifs(isFocused = isFocused, cornerRadius = 22.dp),
+        cardCornerRadius = 22.dp,
+        scallopDepth = 3.dp,
+        beadDiameter = 4.dp,
+        contentPadding = 6.dp,
+        containerColor = palette.container,
+        borderColor = palette.outline,
+        beadBorderColor = palette.deepAccent.copy(alpha = 0.45f),
+        showCornerBows = false
+    ) {
+    // Inner card: same shape as the lace card, so tap ripples stay rounded.
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
             .clip(cardShape)
-            .background(palette.container)
-            .border(
-                width = 1.5.dp,
-                color = if (isFocused) Color.Transparent else palette.outline,
-                shape = cardShape
-            )
             .clickable {
                 onCardClick()
             }
-            .padding(horizontal = 16.dp, vertical = 13.dp)
+            .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -347,6 +352,7 @@ fun SystemMonitorCard(
                 outlineColor = palette.outline
             )
         }
+    }
     }
 }
 

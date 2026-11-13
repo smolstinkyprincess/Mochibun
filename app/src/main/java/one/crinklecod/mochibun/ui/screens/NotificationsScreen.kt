@@ -52,6 +52,7 @@ import one.crinklecod.mochibun.ui.dialogs.awaitFocusSafely
 import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.performBoundaryHaptic
+import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.palette
@@ -126,10 +127,7 @@ fun NotificationsScreen(
                 }
             }
             NotifFocusTarget.HOME_PILL -> {
-                val totalCount = listState.layoutInfo.totalItemsCount
-                if (totalCount > 0) {
-                    listState.animateScrollToItem(totalCount - 1)
-                }
+                // The home pill floats over the list and is always visible: nothing to scroll.
             }
         }
     }
@@ -329,25 +327,37 @@ fun NotificationsScreen(
                         .fillMaxWidth()
                         .padding(top = 8.dp, bottom = 6.dp)
                 ) {
-                    Box(
+                    val gradientStart = palette.squircleSecondary
+                    val gradientEnd = palette.squirclePrimary
+                    val headerBrush = remember(gradientStart, gradientEnd) {
+                        Brush.horizontalGradient(colors = listOf(gradientStart, gradientEnd))
+                    }
+                    // Gradient pill inside the same dainty lace + pearl rim as the Home cards.
+                    // The 6dp frill sits inside the original 56dp height.
+                    KeitaiLaceContainer(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(32.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(palette.squircleSecondary, palette.squirclePrimary)
-                                )
-                            )
-                            .border(1.5.dp, palette.outline, RoundedCornerShape(32.dp)),
-                        contentAlignment = Alignment.Center
+                            .height(56.dp),
+                        cardCornerRadius = 32.dp,
+                        scallopDepth = 3.dp,
+                        beadDiameter = 4.dp,
+                        contentPadding = 6.dp,
+                        containerBrush = headerBrush,
+                        borderColor = palette.outline,
+                        beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
+                        showCornerBows = false
                     ) {
-                        Text(
-                            text = "— ♡ Notifications ♡ —",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = ActiveTheme.accentDeep
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "— ♡ Notifications ♡ —",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = ActiveTheme.accentDeep
+                            )
+                        }
                     }
 
                     // Overlapping Sub-Badge
@@ -533,25 +543,24 @@ fun NotificationsScreen(
                     }
                 }
             }
-
-            // Bottom Navigation Pill: Return to Home
-            item(key = "home_pill") {
-                KawaiiReturnHomePill(
-                    isFocused = focusTarget == NotifFocusTarget.HOME_PILL,
-                    onClick = onNavigateHome,
-                    direction = HomePillDirection.LEFT,
-                    animateAlways = isActivePage,
-                    modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .padding(top = 8.dp)
-                )
-            }
         }
         // Bottom Clouds
         BottomLavenderClouds(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
+        )
+
+        // "Back to Home" pill floating bottom-centre over the clouds, matching the Widgets page.
+        // The list's 90dp bottom content padding keeps the last card clear of it.
+        KawaiiReturnHomePill(
+            isFocused = focusTarget == NotifFocusTarget.HOME_PILL,
+            onClick = onNavigateHome,
+            direction = HomePillDirection.LEFT,
+            animateAlways = isActivePage,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 12.dp)
         )
 
     }
