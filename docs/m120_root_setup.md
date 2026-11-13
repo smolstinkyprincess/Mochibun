@@ -122,7 +122,58 @@ Android 12 on the AT-M120 uses a read-only shared system partition (EROFS/ext4),
 
 ---
 
-#### 4. Essential Magisk Boot Tuning for Mochibun
+#### 4. Installing Vector and Zygisk Next (LSPosed)
+Mochibun uses Xposed hooks (`android` and `com.android.systemui`) to intercept physical keys globally (including the F4 cursor toggle, LSK/RSK soft keys, and custom key remaps) and apply pastel theming across SystemUI—without needing any Android Accessibility Service.
+
+> ⚠️ **Important:** Do **not** install both original `zygisk_lsposed` and `zygisk_vector` at the same time—running two Xposed frameworks concurrently causes `system_server` crashes on the AT-M120. Use **Zygisk Next + Vector** only.
+
+1. **Disable Magisk's Built-In Zygisk**:
+   - Open **Magisk → Settings ⚙️** and make sure built-in **Zygisk** is toggled **OFF** (Zygisk Next provides its own Zygisk runtime engine).
+2. **Download & Flash Both Modules**:
+   - Download the latest release ZIPs on your PC or phone:
+     - **Zygisk Next**: [Dr-TSNG/ZygiskNext Releases](https://github.com/Dr-TSNG/ZygiskNext/releases)
+     - **Vector (LSPosed fork)**: [JingMatrix/Vector Releases](https://github.com/JingMatrix/Vector/releases) *(grab the `zygisk` release)*
+   - Open **Magisk → Modules → Install from storage**, flash **Zygisk Next**, then flash **Vector**, and **reboot** the phone.
+3. **Activate Mochibun in Vector Manager**:
+   - Open the **Vector** (LSPosed) app from your app drawer (or status bar notification) → **Modules** → tap **Mochibun** and toggle it **ON**.
+   - Check **both** target scopes:
+     - **System Framework** (`android`)
+     - **System UI** (`com.android.systemui`)
+   - **Reboot** once more so `system_server` and SystemUI load Mochibun's hooks.
+
+---
+
+#### 5. Installing QuickSwitch
+QuickSwitch allows Mochibun to take over as the system recents provider (so that the existing Launcher3 / Simple Mode launchers can be disabled safely).
+
+1. **Download / Install QuickSwitch Magisk Module**:
+   - Download the latest release ZIP from [skittles9823/QuickSwitch Releases](https://github.com/skittles9823/QuickSwitch/releases).
+   - Open **Magisk → Modules → Install from storage**, select the QuickSwitch ZIP, and **reboot** the phone.
+2. **Bind Mochibun as your system Quickstep / Recents provider**:
+   The QuickSwitch GUI app often fails to elevate root on Android 12, so run the CLI backend directly via ADB (`adb shell su`):
+   ```bash
+   su -c "/data/adb/modules/quickswitch/quickswitch --ch=one.crinklecod.mochibun"
+   ```
+
+   > **Magisk CLI Fix:** Current builds of `skittles9823/QuickSwitch` only resolve `APKPATH` when `$KSU` or `$APATCH` is set, causing `cp: Needs 2 arguments` / `error: No dump apk specified` on Magisk. Patch the script once before running `--ch`:
+   > ```bash
+   > su -c "sed -i 's/\$KSU/1/' /data/adb/modules/quickswitch/quickswitch"
+   > ```
+   > Then re-run `--ch=one.crinklecod.mochibun` and **reboot**.
+
+3. **Disable stock software**:
+   > ⚠️ **Warning:** Only disable stock launchers **after** rebooting and confirming Mochibun functions as both your Home app and your Recents provider!
+
+   Disable stock Launcher3:
+   ```bash
+   adb shell pm disable-user --user 0 com.android.launcher3
+   ```
+   Disable stock Simple Mode (a basic "dumbphone"-like UI) that android will default to w/o Launcher3:
+   ```bash
+   adb shell pm disable-user --user 0 com.hnlens.simplemode
+   ```
+
+#### 6. Essential Magisk Boot Tuning for Mochibun
 
 This boot script keeps animations snappy and stops Android from killing Mochibun when memory gets tight:
 
@@ -162,7 +213,7 @@ This boot script keeps animations snappy and stops Android from killing Mochibun
    fi
 
    # Protect Mochibun from LMKD termination
-   PID=\$(pidof one.crinklecod.mochibun)
+   PID=\$(pidof com.crinklecodone.mochibun)
    if [ -z \"\$PID\" ]; then
        PID=\$(pidof com.tnyemii.mochibun)
    fi
@@ -180,14 +231,10 @@ This boot script keeps animations snappy and stops Android from killing Mochibun
 
 ---
 
-#### 5. Post-Root Feature Checklist for Mochibun
+#### 7. Post-Root Feature Checklist for Mochibun
 
 Now that you're rooted, check and turn on these features in Mochibun:
 * **Grant Root**: Allow Magisk superuser access when Mochibun asks. That happens when you open it or start the virtual cursor.
 * **Quick Settings Toggles**: Turn on direct root toggles in Mochibun's settings. Wi-Fi and Bluetooth then flip right on the Widget deck, with no stock Android dialogs in the way.
 * **Enable the LSPosed Module**: In LSPosed/Vector, turn on the **Mochibun** module with the *System Framework* and *System UI* scopes, then reboot. That wakes up system-wide keys, the virtual cursor, Media Volume Lock, and SystemUI theming.
 * **Lid LED Notifications**: Make sure notification pulses on the outer lid are going through `/sys/class/leds/aw22xxx_led/` with root.
-* **Disable Stock Simple Mode**:
-  ```bash
-  adb shell pm disable-user --user 0 com.hnlens.simplemode
-  ```
