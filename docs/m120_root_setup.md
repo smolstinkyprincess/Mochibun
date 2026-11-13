@@ -1,6 +1,6 @@
 ### 🔓 Advanced Setup: Rooting (Magisk), Performance Tuning & microG
 
-Mochibun works fine as a regular launcher right out of the box. Root your AT-M120, though, and you get the good stuff: Quick Settings toggles that flip in place, virtual cursor clicks with no lag, custom lid LED patterns, and RAM management that runs itself.
+Mochibun works great as a regular launcher right out of the box! (˶ᵔ ᵕ ᵔ˶) But if you root your AT-M120, it unlocks a lot more: key remapping, a virtual cursor, custom lid LED colors, a recents provider, and SystemUI theming.
 
 ---
 
