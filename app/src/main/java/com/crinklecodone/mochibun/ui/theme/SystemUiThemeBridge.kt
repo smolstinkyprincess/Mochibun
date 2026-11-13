@@ -46,13 +46,10 @@ object SystemUiThemeBridge {
             container = palette.container.toArgb(),
             accentDeep = palette.deepAccent.toArgb(),
             track = trackInt,
-            scrim = (0xEB shl 24) or (palette.background.toArgb() and 0x00FFFFFF)
+            scrim = palette.background.toArgb().withAlpha(0xEB)
         )
     }
 
-    /**
-     * Broadcasts the given [MochibunThemePalette] colors to SystemUI.
-     */
     fun broadcastTheme(context: Context, palette: MochibunThemePalette) {
         val colors = systemUiColors(palette)
         broadcastColors(

@@ -35,10 +35,24 @@ import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import com.crinklecodone.mochibun.ui.theme.ColorContrast
+import com.crinklecodone.mochibun.ui.theme.withAlpha
 import java.lang.ref.WeakReference
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+
+private fun cslOrNull(color: Int): ColorStateList? = try {
+    ColorStateList.valueOf(color)
+} catch (_: Throwable) {
+    null
+}
+
+/** Resource entry name of this view's id, or null for NO_ID / ids missing from its resources. */
+private fun View.entryNameOrNull(): String? = try {
+    if (id != View.NO_ID) resources.getResourceEntryName(id) else null
+} catch (_: Throwable) {
+    null
+}
 
 /**
  * In-memory active theme cache for Mochibun's SystemUI hooks running inside com.android.systemui.
@@ -56,7 +70,7 @@ object ActiveHookTheme {
     @Volatile var primary: Int = DEFAULT_PRIMARY
         set(value) {
             field = value
-            try { primaryColorStateList = ColorStateList.valueOf(value) } catch (_: Throwable) {}
+            primaryColorStateList = cslOrNull(value)
             recomputeDerivedInks()
         }
     @Volatile var container: Int = DEFAULT_CONTAINER
@@ -67,13 +81,13 @@ object ActiveHookTheme {
     @Volatile var accentDeep: Int = DEFAULT_ACCENT_DEEP
         set(value) {
             field = value
-            try { accentDeepColorStateList = ColorStateList.valueOf(value) } catch (_: Throwable) {}
+            accentDeepColorStateList = cslOrNull(value)
             recomputeDerivedInks()
         }
     @Volatile var track: Int = DEFAULT_TRACK
         set(value) {
             field = value
-            try { trackColorStateList = ColorStateList.valueOf(value) } catch (_: Throwable) {}
+            trackColorStateList = cslOrNull(value)
             recomputeDerivedInks()
         }
 
@@ -103,7 +117,7 @@ object ActiveHookTheme {
     @Volatile var scrim: Int = DEFAULT_SCRIM
         set(value) {
             field = if ((value ushr 24) == 0xFF) {
-                (0xEB shl 24) or (value and 0x00FFFFFF)
+                value.withAlpha(0xEB)
             } else {
                 value
             }
@@ -114,27 +128,27 @@ object ActiveHookTheme {
         Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<View, Boolean>()))
 
     // Pre-allocated / pre-cached ColorStateLists to avoid allocations on draw
-    @Volatile var primaryColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_PRIMARY) } catch (_: Throwable) { null }
+    @Volatile var primaryColorStateList: ColorStateList? = cslOrNull(DEFAULT_PRIMARY)
         internal set
-    @Volatile var trackColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_TRACK) } catch (_: Throwable) { null }
+    @Volatile var trackColorStateList: ColorStateList? = cslOrNull(DEFAULT_TRACK)
         internal set
-    @Volatile var accentDeepColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_ACCENT_DEEP) } catch (_: Throwable) { null }
+    @Volatile var accentDeepColorStateList: ColorStateList? = cslOrNull(DEFAULT_ACCENT_DEEP)
         internal set
-    @Volatile var onPrimaryColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_ACCENT_DEEP) } catch (_: Throwable) { null }
+    @Volatile var onPrimaryColorStateList: ColorStateList? = cslOrNull(DEFAULT_ACCENT_DEEP)
         internal set
-    @Volatile var onTrackColorStateList: ColorStateList? = try { ColorStateList.valueOf(DEFAULT_ACCENT_DEEP) } catch (_: Throwable) { null }
+    @Volatile var onTrackColorStateList: ColorStateList? = cslOrNull(DEFAULT_ACCENT_DEEP)
         internal set
 
     private fun recomputeDerivedInks() {
         val newOnPrimary = ColorContrast.legibleInk(primary, accentDeep, container)
         if (newOnPrimary != onPrimary) {
             onPrimary = newOnPrimary
-            try { onPrimaryColorStateList = ColorStateList.valueOf(newOnPrimary) } catch (_: Throwable) {}
+            onPrimaryColorStateList = cslOrNull(newOnPrimary)
         }
         val newOnTrack = ColorContrast.legibleInk(track, accentDeep, container)
         if (newOnTrack != onTrack) {
             onTrack = newOnTrack
-            try { onTrackColorStateList = ColorStateList.valueOf(newOnTrack) } catch (_: Throwable) {}
+            onTrackColorStateList = cslOrNull(newOnTrack)
         }
         statusIconDarkTone = ColorContrast.darkerOf(accentDeep, container)
         statusIconLightTone = ColorContrast.lighterOf(accentDeep, container)
@@ -142,28 +156,45 @@ object ActiveHookTheme {
 
     // Alpha-derived dynamic colors for Volume dialog and Quick Settings
     val volumeStroke: Int
-        get() = (0x66 shl 24) or (accentDeep and 0x00FFFFFF)
+        get() = accentDeep.withAlpha(0x66)
 
     val qsTileStroke: Int
-        get() = (0x4D shl 24) or (accentDeep and 0x00FFFFFF)
+        get() = accentDeep.withAlpha(0x4D)
 
     val qsTileUnavailableBg: Int
-        get() = (0x66 shl 24) or (track and 0x00FFFFFF)
+        get() = track.withAlpha(0x66)
 
     val qsTileInactiveFg: Int
-        get() = (0x99 shl 24) or (accentDeep and 0x00FFFFFF)
+        get() = accentDeep.withAlpha(0x99)
 
     val qsTileUnavailableFg: Int
-        get() = (0x4D shl 24) or (accentDeep and 0x00FFFFFF)
+        get() = accentDeep.withAlpha(0x4D)
 
     val qsFooterBtnStroke: Int
-        get() = (0x4D shl 24) or (accentDeep and 0x00FFFFFF)
+        get() = accentDeep.withAlpha(0x4D)
 
     val toastStroke: Int
-        get() = (0x4D shl 24) or (accentDeep and 0x00FFFFFF)
+        get() = accentDeep.withAlpha(0x4D)
 
     val lockPearlStroke: Int
-        get() = (0x4D shl 24) or (accentDeep and 0x00FFFFFF)
+        get() = accentDeep.withAlpha(0x4D)
+
+    // QSTile.State.state values (Tile.STATE_UNAVAILABLE / INACTIVE / ACTIVE)
+    const val QS_STATE_UNAVAILABLE = 0
+    const val QS_STATE_INACTIVE = 1
+    const val QS_STATE_ACTIVE = 2
+
+    fun qsTileFill(state: Int): Int = when (state) {
+        QS_STATE_ACTIVE -> primary
+        QS_STATE_UNAVAILABLE -> qsTileUnavailableBg
+        else -> container
+    }
+
+    fun qsTileFg(state: Int): Int = when (state) {
+        QS_STATE_ACTIVE -> onPrimary
+        QS_STATE_UNAVAILABLE -> qsTileUnavailableFg
+        else -> qsTileInactiveFg
+    }
 
     /**
      * Calculates the target alpha for the lockscreen NotificationPanelView based on bouncer expansion:
@@ -294,18 +325,13 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             }
         }
 
-        /**
-         * Creates the circular Volume dialog sound-mode (ringer) button background:
-         * - Shape: GradientDrawable.OVAL
-         * - Fill: ActiveHookTheme.primary (replaces stock ?android:attr/colorAccent)
-         * - Stroke: 1.2dp * density of accentDeep at ~30% alpha
-         */
+        /** Replaces the stock ?colorAccent ringer circle so it follows the Mochibun palette. */
         internal fun createRingerCircleDrawable(density: Float): GradientDrawable {
             return GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(ActiveHookTheme.primary)
                 val strokeWidth = (1.2f * density).toInt().coerceAtLeast(1)
-                setStroke(strokeWidth, (0x4D shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF))
+                setStroke(strokeWidth, ActiveHookTheme.qsTileStroke)
             }
         }
 
@@ -873,7 +899,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             val s = XposedHelpers.getIntField(tileView, "lastState")
             if (s == -1) {
                 val tileState = try { XposedHelpers.getBooleanField(tileView, "tileState") } catch (_: Throwable) { false }
-                if (tileState) 2 else 1
+                if (tileState) ActiveHookTheme.QS_STATE_ACTIVE else ActiveHookTheme.QS_STATE_INACTIVE
             } else {
                 s
             }
@@ -895,18 +921,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             }
         }
 
-        val fillColor = when (stateInt) {
-            2 -> ActiveHookTheme.primary
-            1 -> ActiveHookTheme.container
-            0 -> ActiveHookTheme.qsTileUnavailableBg
-            else -> ActiveHookTheme.container
-        }
-        val fgColor = when (stateInt) {
-            2 -> ActiveHookTheme.onPrimary
-            1 -> ActiveHookTheme.qsTileInactiveFg
-            0 -> ActiveHookTheme.qsTileUnavailableFg
-            else -> ActiveHookTheme.qsTileInactiveFg
-        }
+        val fillColor = ActiveHookTheme.qsTileFill(stateInt)
+        val fgColor = ActiveHookTheme.qsTileFg(stateInt)
 
         // Cancel any active animator to prevent it from animating back to old colors
         try {
@@ -2179,7 +2195,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             }
 
             if (background != null) {
-                val border = (0x4D shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF)
+                val border = ActiveHookTheme.accentDeep.withAlpha(0x4D)
                 val drawable = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = 19f * density
@@ -2204,7 +2220,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
             val pill = findNotificationViewByName(expandButton, "expand_button_pill")
             val visibleButton = pill ?: expandButton
             val density = root.resources.displayMetrics.density
-            val border = (0x4D shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF)
+            val border = ActiveHookTheme.accentDeep.withAlpha(0x4D)
             visibleButton.background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(ActiveHookTheme.container)
@@ -2223,12 +2239,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
     }
 
     private fun findNotificationViewByName(root: View, targetName: String): View? {
-        val viewName = try {
-            if (root.id != View.NO_ID) root.resources.getResourceEntryName(root.id) else null
-        } catch (_: Throwable) {
-            null
-        }
-        if (viewName == targetName) return root
+        if (root.entryNameOrNull() == targetName) return root
 
         if (root is ViewGroup) {
             for (index in 0 until root.childCount) {
@@ -2239,11 +2250,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
     }
 
     private fun styleNotificationContentTree(view: View, inActionContainer: Boolean) {
-        val idName = try {
-            if (view.id != View.NO_ID) view.resources.getResourceEntryName(view.id).lowercase() else ""
-        } catch (_: Throwable) {
-            ""
-        }
+        val idName = view.entryNameOrNull()?.lowercase().orEmpty()
         val inActions = inActionContainer ||
             idName.contains("action") ||
             idName.contains("smart_reply")
@@ -2257,10 +2264,10 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 idName in setOf(
                     "text", "text_line_1", "big_text", "text2", "notification_text"
                 ) ->
-                    view.setTextColor((0xD9 shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF))
+                    view.setTextColor(ActiveHookTheme.accentDeep.withAlpha(0xD9))
                 idName.contains("app_name") || idName.contains("header") ||
                     idName.contains("time") || idName.contains("chronometer") ->
-                    view.setTextColor((0xA6 shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF))
+                    view.setTextColor(ActiveHookTheme.accentDeep.withAlpha(0xA6))
             }
 
             if (inActions && (view.isClickable || idName.contains("action"))) {
@@ -2285,12 +2292,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
     /** Walks [root] and themes every notification small app icon badge inside it. */
     private fun styleNotificationSmallIcons(root: View) {
         if (root is ImageView) {
-            val idName = try {
-                if (root.id != View.NO_ID) root.resources.getResourceEntryName(root.id).lowercase() else ""
-            } catch (_: Throwable) {
-                ""
-            }
-            styleNotificationSmallIconView(root, idName)
+            styleNotificationSmallIconView(root, root.entryNameOrNull()?.lowercase().orEmpty())
         }
         if (root is ViewGroup) {
             for (index in 0 until root.childCount) {
@@ -2357,7 +2359,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 }
             val button = dismissButton as? TextView ?: return
             val density = resources.displayMetrics.density
-            val border = (0x4D shl 24) or (ActiveHookTheme.accentDeep and 0x00FFFFFF)
+            val border = ActiveHookTheme.accentDeep.withAlpha(0x4D)
             button.background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 16f * density
@@ -2527,12 +2529,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
-                        param.result = when (state) {
-                            2 -> ActiveHookTheme.primary
-                            1 -> ActiveHookTheme.container
-                            0 -> ActiveHookTheme.qsTileUnavailableBg
-                            else -> ActiveHookTheme.container
-                        }
+                        param.result = ActiveHookTheme.qsTileFill(state)
                     }
                 }
             )
@@ -2551,12 +2548,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
-                        param.result = when (state) {
-                            2 -> ActiveHookTheme.onPrimary
-                            1 -> ActiveHookTheme.qsTileInactiveFg
-                            0 -> ActiveHookTheme.qsTileUnavailableFg
-                            else -> ActiveHookTheme.qsTileInactiveFg
-                        }
+                        param.result = ActiveHookTheme.qsTileFg(state)
                     }
                 }
             )
@@ -2575,12 +2567,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
-                        param.result = when (state) {
-                            2 -> ActiveHookTheme.onPrimary
-                            1 -> ActiveHookTheme.qsTileInactiveFg
-                            0 -> ActiveHookTheme.qsTileUnavailableFg
-                            else -> ActiveHookTheme.qsTileInactiveFg
-                        }
+                        param.result = ActiveHookTheme.qsTileFg(state)
                     }
                 }
             )
@@ -2599,12 +2586,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[0] as? Int ?: return
-                        param.result = when (state) {
-                            2 -> ActiveHookTheme.onPrimary
-                            1 -> ActiveHookTheme.qsTileInactiveFg
-                            0 -> ActiveHookTheme.qsTileUnavailableFg
-                            else -> ActiveHookTheme.qsTileInactiveFg
-                        }
+                        param.result = ActiveHookTheme.qsTileFg(state)
                     }
                 }
             )
@@ -2624,12 +2606,7 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val state = param.args[1] as? Int ?: return
-                        param.result = when (state) {
-                            2 -> ActiveHookTheme.onPrimary
-                            1 -> ActiveHookTheme.qsTileInactiveFg
-                            0 -> ActiveHookTheme.qsTileUnavailableFg
-                            else -> ActiveHookTheme.qsTileInactiveFg
-                        }
+                        param.result = ActiveHookTheme.qsTileFg(state)
                     }
                 }
             )
@@ -2703,18 +2680,8 @@ class MochibunSystemUiHook : IXposedHookLoadPackage {
                                 }
                             }
 
-                            val fillColor = when (stateInt) {
-                                2 -> ActiveHookTheme.primary
-                                1 -> ActiveHookTheme.container
-                                0 -> ActiveHookTheme.qsTileUnavailableBg
-                                else -> ActiveHookTheme.container
-                            }
-                            val fgColor = when (stateInt) {
-                                2 -> ActiveHookTheme.onPrimary
-                                1 -> ActiveHookTheme.qsTileInactiveFg
-                                0 -> ActiveHookTheme.qsTileUnavailableFg
-                                else -> ActiveHookTheme.qsTileInactiveFg
-                            }
+                            val fillColor = ActiveHookTheme.qsTileFill(stateInt)
+                            val fgColor = ActiveHookTheme.qsTileFg(stateInt)
 
                             bgDrawable.setColor(fillColor)
                             bgDrawable.setTint(fillColor)

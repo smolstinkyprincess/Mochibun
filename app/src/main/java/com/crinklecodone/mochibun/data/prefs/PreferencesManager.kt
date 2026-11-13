@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.view.KeyEvent
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
+import com.crinklecodone.mochibun.core.system.MediaVolumeLockSync
 import com.crinklecodone.mochibun.data.model.FavoriteFolder
 import com.crinklecodone.mochibun.data.model.PhysicalKey
 import com.crinklecodone.mochibun.data.model.AppDrawerSortMode
@@ -685,7 +686,7 @@ object PreferencesManager {
     fun setMediaVolumeLockEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_MEDIA_VOLUME_LOCK_ENABLED, enabled).apply()
         _isMediaVolumeLockEnabled.value = enabled
-        com.crinklecodone.mochibun.core.system.MediaVolumeLockSync.push(context, enabled)
+        MediaVolumeLockSync.push(context, enabled)
     }
 
     fun getThemeFontFamily(context: Context? = null): String {

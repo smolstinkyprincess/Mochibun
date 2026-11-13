@@ -9,7 +9,9 @@ import coil.decode.ImageDecoderDecoder
 import coil.memory.MemoryCache
 import com.crinklecodone.mochibun.core.sound.SoundEffectManager
 import com.crinklecodone.mochibun.core.system.ClamshellManager
+import com.crinklecodone.mochibun.core.system.CursorServiceWatchdog
 import com.crinklecodone.mochibun.core.system.LidLedManager
+import com.crinklecodone.mochibun.core.system.MediaVolumeLockSync
 import com.crinklecodone.mochibun.core.system.MemoryTrimTier
 import com.crinklecodone.mochibun.core.system.memoryTrimTier
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
@@ -63,8 +65,8 @@ class MochibunApp : Application(), ImageLoaderFactory {
         LidLedManager.init(this)
         SoundEffectManager.init(this)
         WidgetRepository.init(this)
-        com.crinklecodone.mochibun.core.system.CursorServiceWatchdog.init(this)
-        com.crinklecodone.mochibun.core.system.MediaVolumeLockSync.init(this)
+        CursorServiceWatchdog.init(this)
+        MediaVolumeLockSync.init(this)
         com.crinklecodone.mochibun.service.VirtualCursorService.start(this)
     }
 

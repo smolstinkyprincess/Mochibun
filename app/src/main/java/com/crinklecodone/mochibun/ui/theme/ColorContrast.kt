@@ -38,9 +38,10 @@ object ColorContrast {
         return if (ratio(alternate, background) > ratio(preferred, background)) alternate else preferred
     }
 
-    /** Returns the darker of two colors (by relative luminance). */
     fun darkerOf(a: Int, b: Int): Int = if (luminance(a) <= luminance(b)) a else b
 
-    /** Returns the lighter of two colors (by relative luminance). */
     fun lighterOf(a: Int, b: Int): Int = if (luminance(a) > luminance(b)) a else b
 }
+
+/** Replaces the alpha byte of a packed ARGB color. */
+fun Int.withAlpha(alpha: Int): Int = (alpha shl 24) or (this and 0x00FFFFFF)

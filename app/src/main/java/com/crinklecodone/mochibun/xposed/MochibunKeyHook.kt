@@ -60,6 +60,8 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         const val EXTRA_ACTION = MochibunSystemActions.EXTRA_ACTION
         const val EXTRA_REPEAT_COUNT = MochibunSystemActions.EXTRA_REPEAT_COUNT
         const val EXTRA_CURSOR_ACTIVE = MochibunSystemActions.EXTRA_CURSOR_ACTIVE
+        private const val EXTRA_MEDIA_VOLUME_LOCK_ENABLED =
+            MochibunSystemActions.EXTRA_MEDIA_VOLUME_LOCK_ENABLED
 
         // AT-M120 physical scan codes
         private const val SCANCODE_SIDE_F4 = 62
@@ -83,9 +85,9 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         private var isVolumePressRoutedToMedia: Boolean = false
 
         @Volatile
-        private var cursorModeReceiverRegistered = false
+        private var appStateReceiverRegistered = false
 
-        private var cursorModeReceiver: BroadcastReceiver? = null
+        private var appStateReceiver: BroadcastReceiver? = null
 
         @Volatile
         private var keyHookStatusReceiverRegistered = false
@@ -380,19 +382,17 @@ class MochibunKeyHook : IXposedHookLoadPackage {
      * Only senders holding Mochibun's signature permission are accepted.
      */
     private fun ensureAppStateReceiver(context: Context) {
-        if (cursorModeReceiverRegistered) return
+        if (appStateReceiverRegistered) return
         synchronized(MochibunKeyHook::class.java) {
-            if (cursorModeReceiverRegistered) return
+            if (appStateReceiverRegistered) return
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     when (intent?.action) {
                         ACTION_CURSOR_MODE_CHANGED ->
                             isCursorActive = intent.getBooleanExtra(EXTRA_CURSOR_ACTIVE, false)
                         ACTION_MEDIA_VOLUME_LOCK_CHANGED -> {
-                            isMediaVolumeLockEnabled = intent.getBooleanExtra(
-                                MochibunSystemActions.EXTRA_MEDIA_VOLUME_LOCK_ENABLED,
-                                false
-                            )
+                            isMediaVolumeLockEnabled =
+                                intent.getBooleanExtra(EXTRA_MEDIA_VOLUME_LOCK_ENABLED, false)
                             XposedBridge.log("$TAG: Media Volume Lock -> $isMediaVolumeLockEnabled")
                         }
                     }
@@ -409,13 +409,13 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                     MochibunSystemActions.CURSOR_MODE_SYNC_PERMISSION,
                     null
                 )
-                cursorModeReceiver = receiver
-                cursorModeReceiverRegistered = true
+                appStateReceiver = receiver
+                appStateReceiverRegistered = true
                 // Ask the app for its current state; it also pushes on its own start-up and on changes
                 sendBroadcastSafe(context, Intent(ACTION_REQUEST_CURSOR_MODE))
                 sendBroadcastSafe(context, Intent(ACTION_REQUEST_MEDIA_VOLUME_LOCK))
             } catch (t: Throwable) {
-                XposedBridge.log("$TAG: Failed to register cursor state receiver: ${t.message}")
+                XposedBridge.log("$TAG: Failed to register app state receiver: ${t.message}")
             }
         }
     }

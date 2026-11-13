@@ -26,7 +26,12 @@ import org.junit.Test
  */
 class MidnightMochiPaletteTest {
 
-    private fun ratio(fg: Color, bg: Color) = ColorContrast.ratio(fg.toArgb(), bg.toArgb())
+    private fun assertLegible(label: String, fg: Int, bg: Int) {
+        val ratio = ColorContrast.ratio(fg, bg)
+        assertTrue("$label contrast $ratio < ${ColorContrast.MIN_TEXT_CONTRAST}", ratio >= ColorContrast.MIN_TEXT_CONTRAST)
+    }
+
+    private fun assertLegible(label: String, fg: Color, bg: Color) = assertLegible(label, fg.toArgb(), bg.toArgb())
 
     private fun applyToHook(colors: SystemUiThemeBridge.SystemUiColors) {
         ActiveHookTheme.updateColors(
@@ -75,10 +80,10 @@ class MidnightMochiPaletteTest {
     fun launcherTextIsLegibleOnDarkSurfaces() {
         val p = MidnightMochiPalette
         val surfaces = listOf(p.background, p.container, p.unfocusedCardBg, p.focusedCardContainer)
-        for (surface in surfaces) {
-            assertTrue(ratio(p.textColor, surface) >= 4.5)
-            assertTrue(ratio(p.deepAccent, surface) >= 4.5)
-            assertTrue(ratio(MidnightMochiTheme.cardTextColor, surface) >= 4.5)
+        for ((i, surface) in surfaces.withIndex()) {
+            assertLegible("textColor on surface[$i]", p.textColor, surface)
+            assertLegible("deepAccent on surface[$i]", p.deepAccent, surface)
+            assertLegible("cardTextColor on surface[$i]", MidnightMochiTheme.cardTextColor, surface)
         }
     }
 
@@ -90,12 +95,12 @@ class MidnightMochiPaletteTest {
 
         // Active QS tile / ringer pill / notification actions: dark ink on the light primary fill
         assertEquals(colors.container, ActiveHookTheme.onPrimary)
-        assertTrue(ColorContrast.ratio(ActiveHookTheme.onPrimary, ActiveHookTheme.primary) >= 4.5)
+        assertLegible("onPrimary on primary", ActiveHookTheme.onPrimary, ActiveHookTheme.primary)
         // Volume slider icon on the track fill
-        assertTrue(ColorContrast.ratio(ActiveHookTheme.onTrack, ActiveHookTheme.track) >= 4.5)
+        assertLegible("onTrack on track", ActiveHookTheme.onTrack, ActiveHookTheme.track)
         // Inactive QS tiles, notification cards, volume dialog: light ink on the dark container
-        assertTrue(ColorContrast.ratio(ActiveHookTheme.accentDeep, ActiveHookTheme.container) >= 4.5)
-        assertTrue(ColorContrast.ratio(ActiveHookTheme.accentDeep, colors.scrim) >= 4.5)
+        assertLegible("accentDeep on container", ActiveHookTheme.accentDeep, ActiveHookTheme.container)
+        assertLegible("accentDeep on scrim", ActiveHookTheme.accentDeep, colors.scrim)
         // Status bar: the "dark" tone is still the darker one, so icons never invert
         assertEquals(colors.container, ActiveHookTheme.statusIconDarkTone)
         assertEquals(colors.accentDeep, ActiveHookTheme.statusIconLightTone)

@@ -217,16 +217,17 @@ val MilkyPeachTheme = MilkyPeachPalette.toLauncherTheme(24f)
 val OriginalTheme = SakuraDreamTheme
 val StrawberryMilkTheme = SakuraDreamTheme
 val LavenderDreamTheme = LavenderMistTheme
-val MidnightMochiTheme = MidnightMochiPalette.toLauncherTheme(24f).copy(
-    cardTextColor = MidnightMochiTextSecondary
-)
+fun midnightMochiTheme(roundnessDp: Float = 24f): LauncherTheme =
+    MidnightMochiPalette.toLauncherTheme(roundnessDp).copy(cardTextColor = MidnightMochiTextSecondary)
+
+val MidnightMochiTheme = midnightMochiTheme()
 
 val LauncherTheme.palette: MochibunThemePalette
     get() = when (name) {
         "lavender_mist", "lavender_dream" -> LavenderMistPalette
         "minty_matcha" -> MintyMatchaPalette
         "milky_peach" -> MilkyPeachPalette
-        "midnight_mochi" -> MidnightMochiPalette
+        MidnightMochiPalette.id -> MidnightMochiPalette
         else -> ExternalThemeManager.findPalette(name) ?: SakuraDreamPalette
     }
 
@@ -477,7 +478,7 @@ fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
         "lavender_mist", "lavender_dream" -> LavenderMistTheme
         "minty_matcha" -> MintyMatchaTheme
         "milky_peach" -> MilkyPeachTheme
-        "midnight_mochi" -> MidnightMochiTheme
+        MidnightMochiPalette.id -> MidnightMochiTheme
         else -> SakuraDreamTheme
     }
 

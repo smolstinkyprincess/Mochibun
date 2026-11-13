@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -64,6 +65,7 @@ import com.crinklecodone.mochibun.data.repository.MediaSessionTracker
 import com.crinklecodone.mochibun.ui.theme.LauncherTheme
 import com.crinklecodone.mochibun.ui.theme.LocalLauncherTheme
 import com.crinklecodone.mochibun.ui.theme.M3x6FontFamily
+import com.crinklecodone.mochibun.ui.theme.MidnightMochiPalette
 import com.crinklecodone.mochibun.ui.theme.palette
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -121,7 +123,7 @@ fun getDefaultTimeOfDayMood(): MascotMood {
  * - Lavender Mist -> Color(0xFFF3EDFF)
  * - Minty Matcha  -> Color(0xFFEDF8F1)
  * - Milky Peach   -> Color(0xFFFFF0E6)
- * - Midnight Mochi -> Color(0xFFEDE3FF)
+ * - Midnight Mochi -> MidnightMochiPalette.mascotTint
  * - Default       -> null (natural cream fur)
  */
 fun getMascotTintColorForTheme(themeName: String?): Color? {
@@ -131,7 +133,7 @@ fun getMascotTintColorForTheme(themeName: String?): Color? {
         "lavender_mist", "lavender", "lavender_dream" -> Color(0xFFF3EDFF)
         "minty_matcha", "matcha" -> Color(0xFFEDF8F1)
         "milky_peach", "peach" -> Color(0xFFFFF0E6)
-        "midnight_mochi", "midnight" -> Color(0xFFEDE3FF)
+        MidnightMochiPalette.id, "midnight" -> MidnightMochiPalette.mascotTint
         else -> null
     }
 }
@@ -483,9 +485,11 @@ fun MochibunnyWithSpeechBubble(
     var popAnimKey by remember { mutableIntStateOf(0) }
     val popScale = remember { Animatable(1f) }
 
-    val bubbleBgColor = if (theme.name == "midnight_mochi") theme.cardBgColor else Color(0xFFFFFDFE)
+    // Dark themes (Midnight Mochi, dark YAML / custom presets) use their own card colors
+    val isDarkTheme = theme.bgColor.luminance() < 0.5f
+    val bubbleBgColor = if (isDarkTheme) theme.cardBgColor else Color(0xFFFFFDFE)
     val bubbleBorderColor = theme.greetingOutlineColor
-    val bubbleTextColor = if (theme.name == "midnight_mochi") theme.cardTextColor else theme.palette.deepAccent
+    val bubbleTextColor = if (isDarkTheme) theme.cardTextColor else theme.palette.deepAccent
 
     LaunchedEffect(popAnimKey) {
         if (popAnimKey > 0) {

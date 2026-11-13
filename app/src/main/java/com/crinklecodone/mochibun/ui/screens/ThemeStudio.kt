@@ -61,6 +61,9 @@ val kawaiiSwatches = listOf(
     Color(0xFFFFF5FB), Color(0xFFFFFFFF), Color(0xFF703350)
 )
 
+// Preset row 2 holds Minty (col 0) / Peach (col 1) with the Midnight Mochi card on its own line below
+private const val MIDNIGHT_PRESET_COL = 2
+
 private val COLOR_FIELD_DEFS = listOf(
     "bg" to "Main Background",
     "cardBg" to "Card Background",
@@ -296,7 +299,7 @@ fun ThemeStudioDialog(
                                     draft = when (focusCol) {
                                         0 -> MintyMatchaPalette.toLauncherTheme(draft.cardRoundnessDp)
                                         1 -> MilkyPeachPalette.toLauncherTheme(draft.cardRoundnessDp)
-                                        else -> MidnightMochiTheme.copy(cardRoundnessDp = draft.cardRoundnessDp)
+                                        else -> midnightMochiTheme(draft.cardRoundnessDp)
                                     }
                                 }
                                 3 -> {
@@ -347,6 +350,19 @@ fun ThemeStudioDialog(
 
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
+                    fun focusFirstRowBelowPresets() {
+                        focusCol = 0
+                        if (externalThemes.isNotEmpty()) {
+                            focusRow = 3
+                            externalThemeIndex = 0
+                        } else if (customPresets.isNotEmpty()) {
+                            focusRow = 4
+                            customPresetIndex = 0
+                        } else {
+                            focusRow = 5
+                        }
+                    }
+
                     when (native.keyCode) {
                         KeyEvent.KEYCODE_DPAD_UP -> {
                             when (focusRow) {
@@ -354,16 +370,15 @@ fun ThemeStudioDialog(
                                     focusRow = 13
                                     focusCol = 1
                                 }
-                                // Row 2 col 2 is the Midnight Mochi card under Minty / Peach
                                 2 -> {
-                                    if (focusCol == 2) focusCol = 0 else focusRow = 1
+                                    if (focusCol == MIDNIGHT_PRESET_COL) focusCol = 0 else focusRow = 1
                                 }
                                 3 -> {
                                     if (externalThemeIndex > 0) {
                                         externalThemeIndex--
                                     } else {
                                         focusRow = 2
-                                        focusCol = 2
+                                        focusCol = MIDNIGHT_PRESET_COL
                                     }
                                 }
                                 4 -> {
@@ -374,7 +389,7 @@ fun ThemeStudioDialog(
                                         externalThemeIndex = externalThemes.lastIndex
                                     } else {
                                         focusRow = 2
-                                        focusCol = 2
+                                        focusCol = MIDNIGHT_PRESET_COL
                                     }
                                 }
                                 5 -> {
@@ -386,7 +401,7 @@ fun ThemeStudioDialog(
                                         externalThemeIndex = externalThemes.lastIndex
                                     } else {
                                         focusRow = 2
-                                        focusCol = 2
+                                        focusCol = MIDNIGHT_PRESET_COL
                                     }
                                 }
                                 6 -> focusRow = 5
@@ -400,20 +415,10 @@ fun ThemeStudioDialog(
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
                             when (focusRow) {
                                 2 -> {
-                                    if (focusCol != 2) {
-                                        // Minty / Peach -> Midnight Mochi card below them
-                                        focusCol = 2
+                                    if (focusCol != MIDNIGHT_PRESET_COL) {
+                                        focusCol = MIDNIGHT_PRESET_COL
                                     } else {
-                                        focusCol = 0
-                                        if (externalThemes.isNotEmpty()) {
-                                            focusRow = 3
-                                            externalThemeIndex = 0
-                                        } else if (customPresets.isNotEmpty()) {
-                                            focusRow = 4
-                                            customPresetIndex = 0
-                                        } else {
-                                            focusRow = 5
-                                        }
+                                        focusFirstRowBelowPresets()
                                     }
                                 }
                                 3 -> {
@@ -447,7 +452,7 @@ fun ThemeStudioDialog(
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
                             when (focusRow) {
                                 1, 13 -> focusCol = 0
-                                2 -> if (focusCol != 2) focusCol = 0
+                                2 -> if (focusCol != MIDNIGHT_PRESET_COL) focusCol = 0
                                 4 -> customPresetDeleteCol = 0
                                 5 -> {
                                     draft = draft.copy(
@@ -468,7 +473,7 @@ fun ThemeStudioDialog(
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             when (focusRow) {
                                 1, 13 -> focusCol = 1
-                                2 -> if (focusCol != 2) focusCol = 1
+                                2 -> if (focusCol != MIDNIGHT_PRESET_COL) focusCol = 1
                                 4 -> customPresetDeleteCol = 1
                                 5 -> {
                                     draft = draft.copy(
@@ -679,12 +684,12 @@ fun ThemeStudioDialog(
                     PresetThemeCard(
                         palette = MidnightMochiPalette,
                         isSelected = draft.name == MidnightMochiPalette.id,
-                        isFocused = editingColorField == null && focusRow == 2 && focusCol == 2,
+                        isFocused = editingColorField == null && focusRow == 2 && focusCol == MIDNIGHT_PRESET_COL,
                         theme = draft
                     ) {
                         focusRow = 2
-                        focusCol = 2
-                        draft = MidnightMochiTheme.copy(cardRoundnessDp = draft.cardRoundnessDp)
+                        focusCol = MIDNIGHT_PRESET_COL
+                        draft = midnightMochiTheme(draft.cardRoundnessDp)
                     }
 
                     // External YAML Themes section

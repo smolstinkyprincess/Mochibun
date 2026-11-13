@@ -30,27 +30,34 @@ object MediaVolumeLockSync {
         if (!requestReceiverRegistered) {
             synchronized(this) {
                 if (!requestReceiverRegistered) {
-                    val receiver = object : BroadcastReceiver() {
-                        override fun onReceive(ctx: Context?, intent: Intent?) {
-                            if (intent?.action != MochibunSystemActions.ACTION_REQUEST_MEDIA_VOLUME_LOCK) return
-                            push(appContext, PreferencesManager.isMediaVolumeLockEnabled(appContext))
-                        }
-                    }
-                    // Only system_server (holds INTERNAL_SYSTEM_WINDOW) may ask.
-                    ContextCompat.registerReceiver(
-                        appContext,
-                        receiver,
-                        IntentFilter(MochibunSystemActions.ACTION_REQUEST_MEDIA_VOLUME_LOCK),
-                        MochibunSystemActions.SYSTEM_SERVER_BROADCAST_PERMISSION,
-                        null,
-                        ContextCompat.RECEIVER_EXPORTED,
-                    )
+                    registerRequestReceiver(appContext)
                     requestReceiverRegistered = true
                 }
             }
         }
-        push(appContext, PreferencesManager.isMediaVolumeLockEnabled(appContext))
+        pushCurrent(appContext)
     }
+
+    private fun registerRequestReceiver(appContext: Context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                if (intent?.action != MochibunSystemActions.ACTION_REQUEST_MEDIA_VOLUME_LOCK) return
+                pushCurrent(appContext)
+            }
+        }
+        // Only system_server (holds INTERNAL_SYSTEM_WINDOW) may ask.
+        ContextCompat.registerReceiver(
+            appContext,
+            receiver,
+            IntentFilter(MochibunSystemActions.ACTION_REQUEST_MEDIA_VOLUME_LOCK),
+            MochibunSystemActions.SYSTEM_SERVER_BROADCAST_PERMISSION,
+            null,
+            ContextCompat.RECEIVER_EXPORTED,
+        )
+    }
+
+    private fun pushCurrent(context: Context) =
+        push(context, PreferencesManager.isMediaVolumeLockEnabled(context))
 
     fun push(context: Context, enabled: Boolean) {
         val intent = Intent(MochibunSystemActions.ACTION_MEDIA_VOLUME_LOCK_CHANGED)
