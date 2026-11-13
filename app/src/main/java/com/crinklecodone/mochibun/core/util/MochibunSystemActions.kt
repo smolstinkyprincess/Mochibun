@@ -1,5 +1,6 @@
 package com.crinklecodone.mochibun.core.util
 
+import android.media.AudioManager
 import android.view.KeyEvent
 
 object MochibunSystemActions {
@@ -15,6 +16,13 @@ object MochibunSystemActions {
         "com.crinklecodone.mochibun.ACTION_REQUEST_KEY_HOOK_STATUS"
     const val ACTION_KEY_HOOK_STATUS = "com.crinklecodone.mochibun.ACTION_KEY_HOOK_STATUS"
 
+    // App -> system_server: current Media Volume Lock state (guarded by CURSOR_MODE_SYNC_PERMISSION)
+    const val ACTION_MEDIA_VOLUME_LOCK_CHANGED =
+        "com.crinklecodone.mochibun.ACTION_MEDIA_VOLUME_LOCK_CHANGED"
+    // system_server -> app: ask the app to re-send ACTION_MEDIA_VOLUME_LOCK_CHANGED
+    const val ACTION_REQUEST_MEDIA_VOLUME_LOCK =
+        "com.crinklecodone.mochibun.ACTION_REQUEST_MEDIA_VOLUME_LOCK"
+
     const val SYSTEM_SERVER_BROADCAST_PERMISSION = "android.permission.INTERNAL_SYSTEM_WINDOW"
     const val CURSOR_MODE_SYNC_PERMISSION = "com.crinklecodone.mochibun.permission.CURSOR_MODE_SYNC"
 
@@ -24,6 +32,27 @@ object MochibunSystemActions {
     const val EXTRA_REPEAT_COUNT = "repeatCount"
     const val EXTRA_CURSOR_ACTIVE = "isCursorActive"
     const val EXTRA_KEY_HOOK_ACTIVE = "isKeyHookActive"
+    const val EXTRA_MEDIA_VOLUME_LOCK_ENABLED = "isMediaVolumeLockEnabled"
+
+    /** Volume rocker key -> AudioManager adjust direction, or null for any other key. */
+    fun mediaVolumeDirection(keyCode: Int): Int? = when (keyCode) {
+        KeyEvent.KEYCODE_VOLUME_UP -> AudioManager.ADJUST_RAISE
+        KeyEvent.KEYCODE_VOLUME_DOWN -> AudioManager.ADJUST_LOWER
+        else -> null
+    }
+
+    /**
+     * Media Volume Lock only takes over the rocker in normal audio mode. During calls
+     * (MODE_IN_CALL / MODE_IN_COMMUNICATION) and while ringing, stock handling stays in charge
+     * so call volume and "press volume to silence the ringer" keep working.
+     */
+    fun shouldRouteVolumeToMedia(audioMode: Int): Boolean = when (audioMode) {
+        AudioManager.MODE_IN_CALL,
+        AudioManager.MODE_IN_COMMUNICATION,
+        AudioManager.MODE_RINGTONE,
+        AudioManager.MODE_CALL_SCREENING -> false
+        else -> true
+    }
 
     fun cursorKeyCodeForEvent(keyCode: Int, scanCode: Int): Int? {
         // Linux keypad scan codes keep digit identity when a vendor keylayout maps 4/6 to D-pad.

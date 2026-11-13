@@ -685,6 +685,7 @@ object PreferencesManager {
     fun setMediaVolumeLockEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_MEDIA_VOLUME_LOCK_ENABLED, enabled).apply()
         _isMediaVolumeLockEnabled.value = enabled
+        com.crinklecodone.mochibun.core.system.MediaVolumeLockSync.push(context, enabled)
     }
 
     fun getThemeFontFamily(context: Context? = null): String {

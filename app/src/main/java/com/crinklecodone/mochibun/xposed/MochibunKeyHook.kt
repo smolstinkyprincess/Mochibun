@@ -6,6 +6,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioManager
+import android.os.Binder
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.KeyEvent
@@ -24,6 +26,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  * - Directional D-pad & numeric cursor keys: Redirected to Mochibun when the cursor is active.
  * - KEYCODE_APP_SWITCH: Swallows system Recents invocation when Mochibun is in foreground.
  * - KEYCODE_BACK: Prevents OS minimization when on Mochibun's Home screen.
+ * - KEYCODE_VOLUME_UP/DOWN: With Media Volume Lock on, always steps STREAM_MUSIC (outside calls).
  */
 class MochibunKeyHook : IXposedHookLoadPackage {
 
@@ -46,6 +49,10 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         private const val ACTION_REQUEST_KEY_HOOK_STATUS =
             MochibunSystemActions.ACTION_REQUEST_KEY_HOOK_STATUS
         private const val ACTION_KEY_HOOK_STATUS = MochibunSystemActions.ACTION_KEY_HOOK_STATUS
+        private const val ACTION_MEDIA_VOLUME_LOCK_CHANGED =
+            MochibunSystemActions.ACTION_MEDIA_VOLUME_LOCK_CHANGED
+        private const val ACTION_REQUEST_MEDIA_VOLUME_LOCK =
+            MochibunSystemActions.ACTION_REQUEST_MEDIA_VOLUME_LOCK
         private const val HOOK_SETTING_CACHE_TTL_MS = 2_000L
 
         const val EXTRA_KEY_EVENT = MochibunSystemActions.EXTRA_KEY_EVENT
@@ -65,6 +72,15 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         // Volatile internal Home key press state tracked across key events in system_server
         @Volatile
         var isHomePressedOnMochibun: Boolean = false
+
+        // Mirrors PreferencesManager.isMediaVolumeLockEnabled; pushed by the app via
+        // ACTION_MEDIA_VOLUME_LOCK_CHANGED (see MediaVolumeLockSync). Off until the app reports in.
+        @Volatile
+        var isMediaVolumeLockEnabled: Boolean = false
+
+        // True while we own the current volume key press, so its ACTION_UP is swallowed too
+        @Volatile
+        private var isVolumePressRoutedToMedia: Boolean = false
 
         @Volatile
         private var cursorModeReceiverRegistered = false
@@ -144,7 +160,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         val context = XposedHelpers.getObjectField(phoneWindowManager, "mContext") as? Context
         if (context != null && !hookStatusInitialized) initializeHookStatus(context)
         if (!isHookEnabled()) return
-        if (context != null) ensureCursorModeReceiver(context)
+        if (context != null) ensureAppStateReceiver(context)
 
         // 1. F4 Key (KEYCODE_F4 / AT-M120 side key scanCode 62)
         val isF4 = keyCode == KeyEvent.KEYCODE_F4 || event.scanCode == SCANCODE_SIDE_F4
@@ -233,7 +249,15 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             }
         }
 
-        // 4. Physical function keys: F1 (59), F2 (60), F3 (61), CAMERA (212)
+        // 4. Media Volume Lock: route the volume rocker to STREAM_MUSIC instead of the ringer
+        if (MochibunSystemActions.mediaVolumeDirection(keyCode) != null) {
+            if (handleMediaVolumeKey(context, event)) {
+                param.result = 0
+                return
+            }
+        }
+
+        // 5. Physical function keys: F1 (59), F2 (60), F3 (61), CAMERA (212)
         val isFunctionKey = keyCode == KeyEvent.KEYCODE_F1 ||
                 keyCode == KeyEvent.KEYCODE_F2 ||
                 keyCode == KeyEvent.KEYCODE_F3 ||
@@ -275,6 +299,8 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                 heartbeatRecorded = true
             }
             ensureKeyHookStatusReceiver(context)
+            // Register early so the Media Volume Lock state is known before the first volume press
+            ensureAppStateReceiver(context)
             hasHookSettingCheck = false
             hookStatusInitialized = true
         }
@@ -349,32 +375,89 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         sendBroadcastSafe(context, intent)
     }
 
-    private fun ensureCursorModeReceiver(context: Context) {
+    /**
+     * Receives state pushed by the Mochibun app process (cursor mode, Media Volume Lock).
+     * Only senders holding Mochibun's signature permission are accepted.
+     */
+    private fun ensureAppStateReceiver(context: Context) {
         if (cursorModeReceiverRegistered) return
-        synchronized(this) {
+        synchronized(MochibunKeyHook::class.java) {
             if (cursorModeReceiverRegistered) return
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
-                    if (intent?.action == ACTION_CURSOR_MODE_CHANGED) {
-                        isCursorActive = intent.getBooleanExtra(EXTRA_CURSOR_ACTIVE, false)
+                    when (intent?.action) {
+                        ACTION_CURSOR_MODE_CHANGED ->
+                            isCursorActive = intent.getBooleanExtra(EXTRA_CURSOR_ACTIVE, false)
+                        ACTION_MEDIA_VOLUME_LOCK_CHANGED -> {
+                            isMediaVolumeLockEnabled = intent.getBooleanExtra(
+                                MochibunSystemActions.EXTRA_MEDIA_VOLUME_LOCK_ENABLED,
+                                false
+                            )
+                            XposedBridge.log("$TAG: Media Volume Lock -> $isMediaVolumeLockEnabled")
+                        }
                     }
                 }
             }
             try {
+                val filter = IntentFilter().apply {
+                    addAction(ACTION_CURSOR_MODE_CHANGED)
+                    addAction(ACTION_MEDIA_VOLUME_LOCK_CHANGED)
+                }
                 context.registerReceiver(
                     receiver,
-                    IntentFilter(ACTION_CURSOR_MODE_CHANGED),
+                    filter,
                     MochibunSystemActions.CURSOR_MODE_SYNC_PERMISSION,
                     null
                 )
                 cursorModeReceiver = receiver
                 cursorModeReceiverRegistered = true
-                val request = Intent(ACTION_REQUEST_CURSOR_MODE).setPackage(PACKAGE_MOCHIBUN)
-                sendBroadcastSafe(context, request)
+                // Ask the app for its current state; it also pushes on its own start-up and on changes
+                sendBroadcastSafe(context, Intent(ACTION_REQUEST_CURSOR_MODE))
+                sendBroadcastSafe(context, Intent(ACTION_REQUEST_MEDIA_VOLUME_LOCK))
             } catch (t: Throwable) {
                 XposedBridge.log("$TAG: Failed to register cursor state receiver: ${t.message}")
             }
         }
+    }
+
+    /**
+     * Media Volume Lock: steps STREAM_MUSIC on volume key down/repeat and reports whether the key
+     * should be swallowed. Returns false (stock handling) when the lock is off or a call is active.
+     */
+    private fun handleMediaVolumeKey(context: Context?, event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_UP) {
+            // Swallow the release only if we handled the matching press
+            val owned = isVolumePressRoutedToMedia
+            isVolumePressRoutedToMedia = false
+            return owned
+        }
+        if (event.action != KeyEvent.ACTION_DOWN) return false
+
+        if (event.repeatCount == 0) isVolumePressRoutedToMedia = false
+        if (!isMediaVolumeLockEnabled || context == null) return false
+        // A repeat of a press we didn't take (e.g. lock toggled mid-hold) stays with stock handling
+        if (event.repeatCount > 0 && !isVolumePressRoutedToMedia) return false
+
+        val direction = MochibunSystemActions.mediaVolumeDirection(event.keyCode) ?: return false
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            ?: return false
+        if (!MochibunSystemActions.shouldRouteVolumeToMedia(audioManager.mode)) return false
+
+        val token = Binder.clearCallingIdentity()
+        try {
+            audioManager.adjustStreamVolume(
+                AudioManager.STREAM_MUSIC,
+                direction,
+                AudioManager.FLAG_SHOW_UI
+            )
+        } catch (t: Throwable) {
+            XposedBridge.log("$TAG: Media Volume Lock adjust failed: ${t.message}")
+            return false
+        } finally {
+            Binder.restoreCallingIdentity(token)
+        }
+        isVolumePressRoutedToMedia = true
+        return true
     }
 
     private fun forwardCursorKey(context: Context?, event: KeyEvent, cursorKeyCode: Int) {

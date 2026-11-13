@@ -2,9 +2,12 @@ package com.crinklecodone.mochibun
 
 import android.media.AudioManager
 import android.view.KeyEvent
+import com.crinklecodone.mochibun.core.util.MochibunSystemActions
 import com.crinklecodone.mochibun.data.prefs.PreferencesManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MediaVolumeLockTest {
@@ -18,18 +21,18 @@ class MediaVolumeLockTest {
 
     @Test
     fun testVolumeKeyDirectionMapping() {
-        val upDirection = if (KeyEvent.KEYCODE_VOLUME_UP == KeyEvent.KEYCODE_VOLUME_UP) {
-            AudioManager.ADJUST_RAISE
-        } else {
-            AudioManager.ADJUST_LOWER
-        }
-        assertEquals(AudioManager.ADJUST_RAISE, upDirection)
+        assertEquals(AudioManager.ADJUST_RAISE, MochibunSystemActions.mediaVolumeDirection(KeyEvent.KEYCODE_VOLUME_UP))
+        assertEquals(AudioManager.ADJUST_LOWER, MochibunSystemActions.mediaVolumeDirection(KeyEvent.KEYCODE_VOLUME_DOWN))
+        assertNull(MochibunSystemActions.mediaVolumeDirection(KeyEvent.KEYCODE_VOLUME_MUTE))
+        assertNull(MochibunSystemActions.mediaVolumeDirection(KeyEvent.KEYCODE_DPAD_UP))
+    }
 
-        val downDirection = if (KeyEvent.KEYCODE_VOLUME_DOWN == KeyEvent.KEYCODE_VOLUME_UP) {
-            AudioManager.ADJUST_RAISE
-        } else {
-            AudioManager.ADJUST_LOWER
-        }
-        assertEquals(AudioManager.ADJUST_LOWER, downDirection)
+    @Test
+    fun testCallsKeepStockVolumeHandling() {
+        assertTrue(MochibunSystemActions.shouldRouteVolumeToMedia(AudioManager.MODE_NORMAL))
+        assertFalse(MochibunSystemActions.shouldRouteVolumeToMedia(AudioManager.MODE_IN_CALL))
+        assertFalse(MochibunSystemActions.shouldRouteVolumeToMedia(AudioManager.MODE_IN_COMMUNICATION))
+        assertFalse(MochibunSystemActions.shouldRouteVolumeToMedia(AudioManager.MODE_RINGTONE))
+        assertFalse(MochibunSystemActions.shouldRouteVolumeToMedia(AudioManager.MODE_CALL_SCREENING))
     }
 }

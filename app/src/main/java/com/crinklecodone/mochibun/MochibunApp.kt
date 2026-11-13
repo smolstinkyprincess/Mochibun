@@ -64,6 +64,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
         SoundEffectManager.init(this)
         WidgetRepository.init(this)
         com.crinklecodone.mochibun.core.system.CursorServiceWatchdog.init(this)
+        com.crinklecodone.mochibun.core.system.MediaVolumeLockSync.init(this)
         com.crinklecodone.mochibun.service.VirtualCursorService.start(this)
     }
 
