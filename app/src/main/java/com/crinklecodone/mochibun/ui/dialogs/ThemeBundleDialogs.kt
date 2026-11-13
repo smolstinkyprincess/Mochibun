@@ -82,8 +82,8 @@ fun ExportBundleDialog(
         Box(
             modifier = Modifier
                 .width(280.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(theme.cardBgColor)
+                // Shape-aware background instead of clip(): keeps the buttons' focus halos unclipped
+                .background(theme.cardBgColor, RoundedCornerShape(22.dp))
                 .border(2.dp, theme.greetingOutlineColor, RoundedCornerShape(22.dp))
                 .padding(16.dp)
                 .focusRequester(focusRequester)
@@ -228,23 +228,13 @@ fun ExportBundleDialog(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Box(
-                        modifier = Modifier
-                            .weight(1.3f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (focusedIndex == 5) theme.greetingColor else theme.greetingOutlineColor)
-                            .border(1.dp, theme.greetingColor, RoundedCornerShape(12.dp))
-                            .clickable { onExport(bundleName, includeWallpaper, includeCustomCursor, includeDisplayName) }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Create ♡",
-                            color = if (focusedIndex == 5) Color.White else theme.greetingColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    KawaiiDialogPillButton(
+                        text = "Create ♡",
+                        isFocused = focusedIndex == 5,
+                        isPrimary = true,
+                        onClick = { onExport(bundleName, includeWallpaper, includeCustomCursor, includeDisplayName) },
+                        modifier = Modifier.weight(1.3f)
+                    )
                 }
             }
         }
@@ -287,8 +277,8 @@ fun PresetPreviewDialog(
         Box(
             modifier = Modifier
                 .width(280.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(theme.cardBgColor)
+                // Shape-aware background instead of clip(): keeps the buttons' focus halos unclipped
+                .background(theme.cardBgColor, RoundedCornerShape(22.dp))
                 .border(2.dp, theme.greetingOutlineColor, RoundedCornerShape(22.dp))
                 .padding(16.dp)
                 .focusRequester(focusRequester)
@@ -442,27 +432,13 @@ fun PresetPreviewDialog(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Box(
-                        modifier = Modifier
-                            .weight(1.3f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (focusedButton == 1) theme.greetingColor else theme.greetingOutlineColor)
-                            .border(
-                                if (focusedButton == 1) 2.dp else 1.dp,
-                                theme.greetingColor,
-                                RoundedCornerShape(12.dp)
-                            )
-                            .clickable { onApply() }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Apply Setup ♡",
-                            color = if (focusedButton == 1) Color.White else theme.greetingColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    KawaiiDialogPillButton(
+                        text = "Apply Setup ♡",
+                        isFocused = focusedButton == 1,
+                        isPrimary = true,
+                        onClick = { onApply() },
+                        modifier = Modifier.weight(1.3f)
+                    )
                 }
             }
         }

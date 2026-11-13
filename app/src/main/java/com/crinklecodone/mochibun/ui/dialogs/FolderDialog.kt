@@ -745,7 +745,7 @@ fun FavoriteFolderDialog(
                                                 )
                                                 .border(
                                                     width = if (isRowFocused) 1.5.dp else 0.dp,
-                                                    color = if (isRowFocused) Color(0xFFE06287) else Color.Transparent,
+                                                    color = if (isRowFocused) ActiveTheme.palette.focusedCardBorder else Color.Transparent,
                                                     shape = rowShape
                                                 )
                                                 .clickable {
@@ -777,13 +777,13 @@ fun FavoriteFolderDialog(
                                                 modifier = Modifier
                                                     .size(24.dp)
                                                     .clip(RoundedCornerShape(8.dp))
-                                                    .background(if (checked) Color(0xFFE06287) else Color.Transparent)
-                                                    .border(1.5.dp, Color(0xFFE06287), RoundedCornerShape(8.dp)),
+                                                    .background(if (checked) ActiveTheme.accentDeep else Color.Transparent)
+                                                    .border(1.5.dp, ActiveTheme.accentDeep, RoundedCornerShape(8.dp)),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
                                                     text = if (checked) "✓" else "＋",
-                                                    color = if (checked) Color.White else Color(0xFFE06287),
+                                                    color = if (checked) Color.White else ActiveTheme.accentDeep,
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 13.sp
                                                 )

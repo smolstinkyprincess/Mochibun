@@ -84,7 +84,7 @@ private fun KeitaiNavPill(
                 containerTint = ActiveTheme.surfaceTint
             )
             .clip(shape)
-            .background(if (isFocused) ActiveTheme.current.focusedContainerColor else Color(0xFFF7F1FA))
+            .background(if (isFocused) ActiveTheme.current.focusedContainerColor else ActiveTheme.unfocusedCardBg)
             .border(
                 width = if (isFocused) 1.5.dp else 1.2.dp,
                 color = if (isFocused) ActiveTheme.primary else ActiveTheme.cardBorder,

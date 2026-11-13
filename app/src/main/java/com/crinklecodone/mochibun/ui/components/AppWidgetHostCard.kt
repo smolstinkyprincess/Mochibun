@@ -70,6 +70,7 @@ fun AppWidgetHostCard(
     val cardShape = remember { RoundedCornerShape(22.dp) }
     val density = LocalDensity.current
     val highlightArgb = theme.selectionGlowColor.toArgb()
+    val errorTextArgb = palette.textColor.toArgb()
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val availableWidthPx = constraints.maxWidth
@@ -111,7 +112,7 @@ fun AppWidgetHostCard(
                         AndroidView(
                             factory = { ctx ->
                                 WidgetFrame(ctx).also { frame ->
-                                    frame.setContent(createHostViewOrError(ctx, host, slot.appWidgetId, info))
+                                    frame.setContent(createHostViewOrError(ctx, host, slot.appWidgetId, info, errorTextArgb))
                                     onFrameAttached(slot.appWidgetId, frame)
                                 }
                             },
@@ -134,8 +135,8 @@ fun AppWidgetHostCard(
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFFF6F0FD))
-                        .border(1.5.dp, Color(0xFFB5A4CB), RoundedCornerShape(10.dp))
+                        .background(palette.unfocusedCardBg)
+                        .border(1.5.dp, palette.outline, RoundedCornerShape(10.dp))
                         .clickable(onClick = onOptionsClick)
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
@@ -143,7 +144,7 @@ fun AppWidgetHostCard(
                         text = "⋯",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF3E2452)
+                        color = palette.textColor
                     )
                 }
             }
@@ -154,14 +155,14 @@ fun AppWidgetHostCard(
                     text = "✦ ◀▲▼▶ pick · OK tap · ↩ done ✦",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF3E2452),
+                    color = palette.textColor,
                     maxLines = 1,
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
                         .padding(top = 4.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0xF2FFF0F4))
-                        .border(1.dp, Color(0xFFE06287), RoundedCornerShape(50))
+                        .background(palette.focusedCardContainerEnd.copy(alpha = 0.95f))
+                        .border(1.dp, palette.focusedCardBorder, RoundedCornerShape(50))
                         .padding(horizontal = 10.dp, vertical = 2.dp)
                 )
             }
@@ -173,7 +174,8 @@ private fun createHostViewOrError(
     context: Context,
     host: MochibunWidgetHost,
     appWidgetId: Int,
-    info: AppWidgetProviderInfo
+    info: AppWidgetProviderInfo,
+    errorTextArgb: Int
 ): android.view.View = try {
     // createView() also binds the view and applies the provider's latest RemoteViews
     host.createView(context, appWidgetId, info)
@@ -183,7 +185,7 @@ private fun createHostViewOrError(
         text = "♡ Couldn't load this widget ♡"
         gravity = Gravity.CENTER
         textSize = 12f
-        setTextColor(0xFF703350.toInt())
+        setTextColor(errorTextArgb)
     }
 }
 

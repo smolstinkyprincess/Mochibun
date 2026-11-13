@@ -55,6 +55,9 @@ fun HeartScrubberProgressBar(
     val heartPath = remember { Path() }
     val density = LocalDensity.current
     val scrubberStroke = remember(density) { Stroke(width = with(density) { 1.2.dp.toPx() }) }
+    val trackColor = ActiveTheme.container
+    val accentColor = ActiveTheme.palette.focusedCardBorder
+    val heartFillColor = ActiveTheme.primary
 
     Canvas(
         modifier = modifier
@@ -69,7 +72,7 @@ fun HeartScrubberProgressBar(
 
         // 1. Inactive background track
         drawRoundRect(
-            color = Color(0xFFF9D6E0),
+            color = trackColor,
             topLeft = Offset(0f, trackY),
             size = Size(w, trackHeight),
             cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f)
@@ -79,7 +82,7 @@ fun HeartScrubberProgressBar(
         val activeWidth = w * clampedProgress
         if (activeWidth > 0f) {
             drawRoundRect(
-                color = Color(0xFFF4A4B8),
+                color = accentColor,
                 topLeft = Offset(0f, trackY),
                 size = Size(activeWidth, trackHeight),
                 cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f)
@@ -97,8 +100,8 @@ fun HeartScrubberProgressBar(
         heartPath.cubicTo(hx - s * 1.15f, hy + s * 0.1f, hx - s * 1.15f, hy - s * 0.85f, hx, hy - s * 0.35f)
         heartPath.cubicTo(hx + s * 1.15f, hy - s * 0.85f, hx + s * 1.15f, hy + s * 0.1f, hx, hy + s * 0.75f)
         heartPath.close()
-        drawPath(heartPath, Color(0xFFFCD3DE))
-        drawPath(heartPath, Color(0xFFE59AA8), style = scrubberStroke)
+        drawPath(heartPath, heartFillColor)
+        drawPath(heartPath, accentColor, style = scrubberStroke)
     }
 }
 
@@ -107,8 +110,8 @@ fun HeartScrubberProgressBar(
  */
 fun Modifier.nowPlayingCardConcentricBorder(
     cornerRadius: Dp = 22.dp,
-    outerColor: Color = Color(0xFFE5A4B4),
-    innerColor: Color = Color(0xFFECD0D8)
+    outerColor: Color,
+    innerColor: Color
 ): Modifier = this.drawWithContent {
     drawContent()
     val r = cornerRadius.toPx()

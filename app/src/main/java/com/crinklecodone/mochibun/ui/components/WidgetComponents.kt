@@ -887,10 +887,10 @@ fun WidgetPage(
                             .clip(RoundedCornerShape(32.dp))
                             .background(
                                 Brush.horizontalGradient(
-                                    colors = listOf(Color(0xFFD5D4F5), Color(0xFFF7CAD8))
+                                    colors = listOf(ActiveTheme.palette.squircleSecondary, ActiveTheme.primary)
                                 )
                             )
-                            .border(1.5.dp, if (isHeaderFocused) Color.Transparent else Color(0xFFB5A4CB), RoundedCornerShape(32.dp))
+                            .border(1.5.dp, if (isHeaderFocused) Color.Transparent else ActiveTheme.cardBorder, RoundedCornerShape(32.dp))
                             .clickable(enabled = isQuickSettingsVisible) {
                                 focusSection = WidgetFocusSection.HEADER
                                 isQuickSettingsExpanded = !isQuickSettingsExpanded
@@ -920,8 +920,8 @@ fun WidgetPage(
                             .align(Alignment.BottomCenter)
                             .offset(y = 13.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(Color(0xFFEAE8FB))
-                            .border(1.2.dp, Color(0xFFB5A4CB), RoundedCornerShape(50))
+                            .background(ActiveTheme.unfocusedCardBg)
+                            .border(1.2.dp, ActiveTheme.cardBorder, RoundedCornerShape(50))
                             .clickable {
                                 if (!MediaSessionTracker.hasNotificationAccess(context)) {
                                     Toast.makeText(
@@ -951,7 +951,7 @@ fun WidgetPage(
                             text = "✦ Now Playing ✦",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF3E2452)
+                            color = ActiveTheme.textPrimary
                         )
                     }
                 }
@@ -1075,8 +1075,8 @@ fun WidgetPage(
                             .graphicsLayer { clip = false }
                             .softGlowFocus(isSelected = isAddFocused, cornerRadius = 50.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(if (isAddFocused) Color(0xFFFFF0F4) else Color(0xFFF6F0FD))
-                            .border(1.5.dp, if (isAddFocused) Color(0xFFE06287) else Color(0xFFB5A4CB), RoundedCornerShape(50))
+                            .background(if (isAddFocused) ActiveTheme.palette.focusedCardContainerEnd else ActiveTheme.unfocusedCardBg)
+                            .border(1.5.dp, if (isAddFocused) ActiveTheme.palette.focusedCardBorder else ActiveTheme.cardBorder, RoundedCornerShape(50))
                             .clickable {
                                 focusSection = WidgetFocusSection.ADD_WIDGET
                                 showWidgetPicker = true
@@ -1092,7 +1092,7 @@ fun WidgetPage(
                             },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF3E2452)
+                            color = ActiveTheme.textPrimary
                         )
                     }
                 }
