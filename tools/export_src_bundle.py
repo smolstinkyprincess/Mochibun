@@ -7,7 +7,7 @@ Exports Mochibun's source code and key configuration/documentation files into
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC_ROOT = REPO_ROOT / "app/src/main/java/com/crinklecodone/mochibun"
+SRC_ROOT = REPO_ROOT / "app/src/main/java/one/crinklecod/mochibun"
 OUT_DIR = Path.home() / "Desktop"
 
 

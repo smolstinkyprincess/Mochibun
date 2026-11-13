@@ -11,10 +11,10 @@
 
 # Keep Mochibun's services (VirtualCursorService, IME, notification listener) and LSPosed hooks
 # (MochibunKeyHook, MochibunSystemUiHook, ActiveHookTheme) intact
--keep class com.crinklecodone.mochibun.service.** { *; }
--keep class com.crinklecodone.mochibun.xposed.** { *; }
--keep class com.crinklecodone.mochibun.data.repository.HardwareRemapManager { *; }
--keep class com.crinklecodone.mochibun.core.util.MochibunSystemActions { *; }
+-keep class one.crinklecod.mochibun.service.** { *; }
+-keep class one.crinklecod.mochibun.xposed.** { *; }
+-keep class one.crinklecod.mochibun.data.repository.HardwareRemapManager { *; }
+-keep class one.crinklecod.mochibun.core.util.MochibunSystemActions { *; }
 
 # Quickstep Recents & SystemUI interfaces
 -keep class com.android.quickstep.** { *; }
@@ -50,14 +50,14 @@
 -keepclassmembers class * {
     synthetic <init>(...);
 }
--keep class com.crinklecodone.mochibun.data.model.MochibunBundleManifest { *; }
--keep class com.crinklecodone.mochibun.data.model.BundleGreetingConfig { *; }
--keep class com.crinklecodone.mochibun.data.model.BundlePaletteConfig { *; }
--keep class com.crinklecodone.mochibun.data.model.BundleCursorConfig { *; }
--keep class com.crinklecodone.mochibun.data.model.YamlTheme { *; }
--keep class com.crinklecodone.mochibun.data.model.YamlThemeColors { *; }
--keep class com.crinklecodone.mochibun.data.model.YamlThemeDecorations { *; }
--keep class com.crinklecodone.mochibun.data.repository.BackupPreviewSummary { *; }
+-keep class one.crinklecod.mochibun.data.model.MochibunBundleManifest { *; }
+-keep class one.crinklecod.mochibun.data.model.BundleGreetingConfig { *; }
+-keep class one.crinklecod.mochibun.data.model.BundlePaletteConfig { *; }
+-keep class one.crinklecod.mochibun.data.model.BundleCursorConfig { *; }
+-keep class one.crinklecod.mochibun.data.model.YamlTheme { *; }
+-keep class one.crinklecod.mochibun.data.model.YamlThemeColors { *; }
+-keep class one.crinklecod.mochibun.data.model.YamlThemeDecorations { *; }
+-keep class one.crinklecod.mochibun.data.repository.BackupPreviewSummary { *; }
 
 # Annotations, generics and inner classes are needed by serialization and by reflection
 # across processes (SystemUI theme bridge, LSPosed hooks)
@@ -76,4 +76,4 @@
 -keep class de.robv.android.xposed.** { *; }
 
 # Preserve SystemUI Theme Bridge
--keep class com.crinklecodone.mochibun.ui.theme.SystemUiThemeBridge { *; }
+-keep class one.crinklecod.mochibun.ui.theme.SystemUiThemeBridge { *; }

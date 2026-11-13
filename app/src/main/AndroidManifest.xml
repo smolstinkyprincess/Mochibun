@@ -3,9 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <permission
-        android:name="com.crinklecodone.mochibun.permission.CURSOR_MODE_SYNC"
+        android:name="one.crinklecod.mochibun.permission.CURSOR_MODE_SYNC"
         android:protectionLevel="signature" />
-    <uses-permission android:name="com.crinklecodone.mochibun.permission.CURSOR_MODE_SYNC" />
+    <uses-permission android:name="one.crinklecod.mochibun.permission.CURSOR_MODE_SYNC" />
 
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -32,7 +32,7 @@
 
     <!-- Direct app-level queries for specific icon pack packages -->
     <queries>
-        <package android:name="com.crinklecodone.mochibun.icons" />
+        <package android:name="one.crinklecod.mochibun.icons" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
         </intent>

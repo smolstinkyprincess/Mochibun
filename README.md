@@ -119,10 +119,10 @@ Never wrestle with tiny touch keyboards just to send a cute face:
 Want to show off your setup on r/flipphones or Discord? Export a `.mochibun` bundle to pack up your colors, greeting text, wallpaper, and custom mouse cursor (`.gif`/`.png`). Opening a `.mochibun` file on your phone shows a live color swatch card, and it applies in one click!
 
 ### 📝 Hand-Crafted YAML Themes (`kaml`)
-Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom themes—drop your `.yaml` files into `/sdcard/Android/data/com.crinklecodone.mochibun/files/themes/`:
+Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom themes—drop your `.yaml` files into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/`:
 
 ```yaml
-# /sdcard/Android/data/com.crinklecodone.mochibun/files/themes/sweet_sakura.yaml
+# /sdcard/Android/data/one.crinklecod.mochibun/files/themes/sweet_sakura.yaml
 id: "sweet_sakura"
 name: "Sweet Sakura ♡"
 author: "emii"
@@ -198,7 +198,7 @@ No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backup
 6. **Superuser Access (Optional extras)**: Granting Mochibun superuser access in Magisk unlocks privileged touch injection (handy when a screen blocks normal taps, like permission dialogs), root Quick Settings toggles, exterior lid LED alerts, one-step keyboard setup, and hooks into custom recents providers. The LSPosed hook doesn't need it.
 7. **QuickSwitch (Optional)**: If you use QuickSwitch for hardware multitasking, set Mochibun as your provider:
    ```bash
-   su -c "/data/adb/modules/quickswitch/quickswitch --ch=com.crinklecodone.mochibun"
+   su -c "/data/adb/modules/quickswitch/quickswitch --ch=one.crinklecod.mochibun"
    ```
 
 ---

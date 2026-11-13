@@ -14,13 +14,13 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.crinklecodone.mochibun"
+    namespace = "one.crinklecod.mochibun"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.crinklecodone.mochibun"
+        applicationId = "one.crinklecod.mochibun"
         minSdk = 31
         targetSdk = 31
         versionCode = 10

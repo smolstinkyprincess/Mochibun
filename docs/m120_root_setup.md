@@ -162,7 +162,7 @@ This boot script keeps animations snappy and stops Android from killing Mochibun
    fi
 
    # Protect Mochibun from LMKD termination
-   PID=\$(pidof com.crinklecodone.mochibun)
+   PID=\$(pidof one.crinklecod.mochibun)
    if [ -z \"\$PID\" ]; then
        PID=\$(pidof com.tnyemii.mochibun)
    fi

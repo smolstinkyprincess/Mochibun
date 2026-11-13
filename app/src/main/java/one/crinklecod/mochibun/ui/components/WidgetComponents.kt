@@ -1,0 +1,1212 @@
+package one.crinklecod.mochibun.ui.components
+
+import android.app.Activity
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.SystemClock
+import android.provider.Settings
+import android.util.Log
+import android.view.KeyEvent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import one.crinklecod.mochibun.core.haptic.HapticManager
+import one.crinklecod.mochibun.core.widget.MochibunWidgetHost
+import one.crinklecod.mochibun.core.widget.NavDirection
+import one.crinklecod.mochibun.core.widget.WidgetFrame
+import one.crinklecod.mochibun.core.system.RootShell
+import one.crinklecod.mochibun.core.util.findActivity
+import one.crinklecod.mochibun.core.util.loadDownsampledPhotoBitmap
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.WidgetRepository
+import one.crinklecod.mochibun.ui.theme.ActiveTheme
+import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
+import one.crinklecod.mochibun.data.repository.MediaSessionTracker
+import one.crinklecod.mochibun.ui.dialogs.PhotoFrameActionDialog
+import one.crinklecod.mochibun.ui.dialogs.PhotoFrameLabelDialog
+import one.crinklecod.mochibun.ui.dialogs.WidgetOptionsDialog
+import one.crinklecod.mochibun.ui.dialogs.WidgetPickerDialog
+import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
+import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private const val TAG = "WidgetPage"
+
+/** Holding OK this long on a widget opens its options instead of using it. */
+private const val WIDGET_LONG_PRESS_MS = 400L
+
+enum class WidgetFocusSection {
+    HEADER,
+    QUICK_SETTINGS,
+    NOW_PLAYING,
+    SYSTEM_MONITOR,
+    PHOTO_FRAME,
+    USER_WIDGETS,
+    ADD_WIDGET,
+    HOME_PILL
+}
+
+/**
+ * Widget Screen hosting the native "Now Playing" media widget, System Monitor card, and Android AppWidgets.
+ * Faithfully matches the visual styling, component hierarchy, and kawaii aesthetic of Mochibun.
+ *
+ * Hosted app widgets: OK uses the widget (walks its buttons with the D-pad when it has several),
+ * holding OK opens Move / Configure / Remove. Listening for widget updates is tied to
+ * MainActivity's onStart/onStop through [MochibunWidgetHost], not to this composable.
+ */
+@Composable
+fun WidgetPage(
+    context: Context,
+    cardBgColor: Color,
+    cardTextColor: Color,
+    appActionColor: Color,
+    cardRoundness: Dp,
+    modifier: Modifier = Modifier,
+    isActivePage: Boolean = true,
+    onNavigateHome: () -> Unit = {}
+) {
+    val theme = LocalLauncherTheme.current
+    val scope = rememberCoroutineScope()
+
+    val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
+    val isPhotoFrameEnabled by PreferencesManager.isPhotoFrameEnabled.collectAsState()
+    val photoFrameUri by PreferencesManager.photoFrameUri.collectAsState()
+    val photoFrameStyle by PreferencesManager.photoFrameStyle.collectAsState()
+    val photoFrameLabel by PreferencesManager.photoFrameLabel.collectAsState()
+
+    // Decoded here rather than in the card so scrolling the card off and back doesn't re-decode
+    val photoFrameBitmap by produceState<ImageBitmap?>(null, photoFrameUri, isPhotoFrameEnabled) {
+        val uri = photoFrameUri
+        value = if (uri == null || !isPhotoFrameEnabled) null else withContext(Dispatchers.IO) {
+            loadDownsampledPhotoBitmap(context, Uri.parse(uri))?.asImageBitmap()
+        }
+    }
+
+    val appWidgetManager = remember { AppWidgetManager.getInstance(context) }
+    val widgetHost = remember { MochibunWidgetHost.get(context) }
+    val widgetSlots by WidgetRepository.slots.collectAsState()
+    val providersVersion by widgetHost.providersVersion.collectAsState()
+
+    // Provider info per widget; null means the provider is unavailable (uninstalled, updating, disabled)
+    val widgetInfos = remember(widgetSlots, providersVersion) {
+        widgetSlots.associate { slot ->
+            slot.appWidgetId to try {
+                appWidgetManager.getAppWidgetInfo(slot.appWidgetId)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    // Live WidgetFrames by widget ID, registered/unregistered by each card's AndroidView
+    val widgetFrames = remember { HashMap<Int, WidgetFrame>() }
+
+    // When providers change, drop widgets whose app was uninstalled and delete orphaned IDs
+    LaunchedEffect(providersVersion) {
+        if (providersVersion == 0) return@LaunchedEffect // MainActivity already reconciled at startup
+        widgetHost.hostIdsOrNull()?.let { hostIds ->
+            WidgetRepository.reconcile(context, hostIds, keepPending = true)
+                .forEach { widgetHost.deleteAppWidgetIdSafely(it) }
+        }
+    }
+
+    // MediaSession Tracking on Android 12 (API 31)
+    val mediaState by MediaSessionTracker.mediaState.collectAsState()
+
+    DisposableEffect(isActivePage) {
+        if (isActivePage) {
+            MediaSessionTracker.startTracking(context)
+        }
+        onDispose {
+            MediaSessionTracker.stopTracking()
+        }
+    }
+
+    // Quick Settings card only renders with root present and the root toggle enabled
+    val isRootQuickSettingsEnabled by PreferencesManager.isRootQuickSettingsEnabled.collectAsState()
+    val rootAvailable = remember { RootShell.isRootAvailable() }
+    val isQuickSettingsVisible = isRootQuickSettingsEnabled && rootAvailable
+    val qsOffset = if (isQuickSettingsVisible) 1 else 0
+
+    // First section below the Quick Settings grid
+    fun sectionBelowQuickSettings(): WidgetFocusSection =
+        if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
+        else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
+        else if (isPhotoFrameEnabled) WidgetFocusSection.PHOTO_FRAME
+        else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+        else WidgetFocusSection.ADD_WIDGET
+
+    // D-Pad Focus State Management
+    fun defaultFocusSection(): WidgetFocusSection =
+        if (isQuickSettingsVisible) WidgetFocusSection.HEADER else sectionBelowQuickSettings()
+
+    // Quick Settings drawer under the header pill, collapsed by default
+    var isQuickSettingsExpanded by rememberSaveable { mutableStateOf(false) }
+
+    var focusSection by remember { mutableStateOf(defaultFocusSection()) }
+    var nowPlayingCol by remember { mutableIntStateOf(1) } // 0 = Prev, 1 = Play/Pause, 2 = Next
+    var quickSettingsIndex by remember { mutableIntStateOf(0) } // 0 Wi-Fi, 1 BT, 2 Torch, 3 Sound
+    var quickSettingsRefresh by remember { mutableIntStateOf(0) }
+    var focusedWidgetIdx by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+    var centerDownAt by remember { mutableLongStateOf(0L) }
+    var centerLongPressFired by remember { mutableStateOf(false) }
+    var systemMonitorRefreshTrigger by remember { mutableIntStateOf(0) }
+
+    // Hosted widget state
+    var interactingWidgetId by remember { mutableStateOf<Int?>(null) }
+    var optionsWidgetId by remember { mutableStateOf<Int?>(null) }
+    var showWidgetPicker by remember { mutableStateOf(false) }
+    var showPhotoFrameDialog by remember { mutableStateOf(false) }
+    var showPhotoLabelDialog by remember { mutableStateOf(false) }
+    val anyWidgetDialogOpen = optionsWidgetId != null || showWidgetPicker ||
+        showPhotoFrameDialog || showPhotoLabelDialog
+
+    fun endWidgetInteraction() {
+        interactingWidgetId?.let { widgetFrames[it]?.endInteraction() }
+        interactingWidgetId = null
+    }
+
+    fun focusWidget(appWidgetId: Int) {
+        val idx = WidgetRepository.ids().indexOf(appWidgetId)
+        if (idx >= 0) {
+            focusSection = WidgetFocusSection.USER_WIDGETS
+            focusedWidgetIdx = idx
+        }
+    }
+
+    // ── Add-widget flow: allocate -> bind (permission) -> configure -> save ──
+    // The in-flight ID is persisted so startup cleanup can tell it apart from orphans.
+
+    fun cancelPendingWidget(id: Int) {
+        widgetHost.deleteAppWidgetIdSafely(id)
+        WidgetRepository.setPendingWidgetId(context, null)
+    }
+
+    fun finishWidget(id: Int) {
+        WidgetRepository.setPendingWidgetId(context, null)
+        val provider = try {
+            appWidgetManager.getAppWidgetInfo(id)?.provider?.flattenToString()
+        } catch (_: Exception) {
+            null
+        }
+        WidgetRepository.add(context, id, provider)
+        focusWidget(id)
+    }
+
+    fun configureIntent(id: Int, info: AppWidgetProviderInfo): Intent =
+        Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+            // No FLAG_ACTIVITY_NEW_TASK: with it, startActivityForResult returns RESULT_CANCELED at once
+            component = info.configure
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+        }
+
+    /** Fallback for config activities that aren't exported: the host starts them via an IntentSender. */
+    fun startConfigureViaHost(id: Int): Boolean {
+        val activity = context.findActivity() ?: return false
+        return try {
+            widgetHost.startAppWidgetConfigureActivityForResult(activity, id, 0, 0, null)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Host could not open config for id=$id", e)
+            false
+        }
+    }
+
+    val configLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val id = WidgetRepository.pendingWidgetId(context) ?: return@rememberLauncherForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) {
+            finishWidget(id)
+        } else {
+            Log.d(TAG, "Config cancelled for new widget id=$id")
+            cancelPendingWidget(id)
+        }
+    }
+
+    // Reconfiguring an existing widget: the result doesn't matter, the widget stays either way
+    val reconfigureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { }
+
+    fun continueAfterBind(id: Int, retriesLeft: Int = 1) {
+        val info = try {
+            appWidgetManager.getAppWidgetInfo(id)
+        } catch (_: Exception) {
+            null
+        }
+        if (info == null) {
+            if (retriesLeft > 0) {
+                scope.launch {
+                    delay(300)
+                    continueAfterBind(id, retriesLeft - 1)
+                }
+            } else {
+                Log.e(TAG, "Widget id=$id is not bound to a provider")
+                cancelPendingWidget(id)
+            }
+            return
+        }
+        val features = info.widgetFeatures
+        val configOptional =
+            (features and AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL) != 0 &&
+                (features and AppWidgetProviderInfo.WIDGET_FEATURE_RECONFIGURABLE) != 0
+        if (info.configure == null || configOptional) {
+            finishWidget(id)
+            return
+        }
+        try {
+            configLauncher.launch(configureIntent(id, info))
+        } catch (e: Exception) {
+            Log.w(TAG, "Direct config launch failed for id=$id, trying host", e)
+            // We can't observe the result this way, so keep the widget
+            if (startConfigureViaHost(id)) finishWidget(id) else cancelPendingWidget(id)
+        }
+    }
+
+    val bindLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val id = WidgetRepository.pendingWidgetId(context) ?: return@rememberLauncherForActivityResult
+        val bound = result.resultCode == Activity.RESULT_OK ||
+            (try { appWidgetManager.getAppWidgetInfo(id) } catch (_: Exception) { null }) != null
+        Log.d(TAG, "Bind result=${result.resultCode}, id=$id, bound=$bound")
+        if (bound) continueAfterBind(id) else cancelPendingWidget(id)
+    }
+
+    fun addWidget(info: AppWidgetProviderInfo) {
+        showWidgetPicker = false
+        val id = try {
+            widgetHost.allocateAppWidgetId()
+        } catch (e: Exception) {
+            Log.e(TAG, "allocateAppWidgetId failed", e)
+            Toast.makeText(context, "Couldn't add that widget ♡", Toast.LENGTH_SHORT).show()
+            return
+        }
+        WidgetRepository.setPendingWidgetId(context, id)
+        val bound = try {
+            appWidgetManager.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null)
+        } catch (e: Exception) {
+            Log.w(TAG, "bindAppWidgetIdIfAllowed failed for id=$id", e)
+            false
+        }
+        if (bound) {
+            continueAfterBind(id)
+            return
+        }
+        // Not allowed yet: ask the user once (the system dialog offers "always allow")
+        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER_PROFILE, info.profile)
+        }
+        try {
+            bindLauncher.launch(bindIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Bind screen failed for id=$id", e)
+            cancelPendingWidget(id)
+        }
+    }
+
+    fun reconfigureWidget(id: Int) {
+        val info = widgetInfos[id] ?: return
+        if (info.configure == null) return
+        try {
+            reconfigureLauncher.launch(configureIntent(id, info))
+        } catch (e: Exception) {
+            Log.w(TAG, "Direct reconfigure failed for id=$id, trying host", e)
+            if (!startConfigureViaHost(id)) {
+                Toast.makeText(context, "This widget can't be configured ♡", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun removeWidget(id: Int) {
+        if (interactingWidgetId == id) endWidgetInteraction()
+        widgetFrames.remove(id)
+        widgetHost.deleteAppWidgetIdSafely(id)
+        WidgetRepository.remove(context, id)
+        val remaining = WidgetRepository.ids().size
+        if (remaining == 0) {
+            focusSection = WidgetFocusSection.ADD_WIDGET
+            focusedWidgetIdx = 0
+        } else {
+            focusedWidgetIdx = focusedWidgetIdx.coerceIn(0, remaining - 1)
+        }
+    }
+
+    /**
+     * OK on a widget card. One control: tap it. Several: walk them with the D-pad.
+     * None: hint at the options menu.
+     */
+    fun activateWidget(id: Int) {
+        if (widgetInfos[id] == null) {
+            optionsWidgetId = id
+            return
+        }
+        val frame = widgetFrames[id] ?: return
+        when (frame.beginInteraction()) {
+            0 -> {
+                frame.endInteraction()
+                Toast.makeText(context, "This widget has no buttons ♡ Hold OK for options", Toast.LENGTH_SHORT).show()
+            }
+            1 -> {
+                frame.clickSelection()
+                frame.endInteraction()
+            }
+            else -> interactingWidgetId = id
+        }
+    }
+
+    /** Drops our read grant on a photo the frame no longer shows, unless the wallpaper still uses it. */
+    fun releasePhotoFrameUri(uri: String?) {
+        if (uri == null || uri == PreferencesManager.getWallpaperUri(context)) return
+        try {
+            context.contentResolver.releasePersistableUriPermission(
+                Uri.parse(uri),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: Exception) {
+        }
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "No persistable permission for photo $uri", e)
+            }
+            val old = PreferencesManager.photoFrameUri.value
+            PreferencesManager.setPhotoFrameUri(context, uri.toString())
+            if (old != uri.toString()) releasePhotoFrameUri(old)
+        }
+    }
+
+    val pageFocusRequester = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+
+    val navigateHomeAndReset: () -> Unit = {
+        endWidgetInteraction()
+        isQuickSettingsExpanded = false
+        focusSection = defaultFocusSection()
+        nowPlayingCol = 1
+        quickSettingsIndex = 0
+        focusedWidgetIdx = 0
+        sawCenterDown = false
+        onNavigateHome()
+    }
+
+    // Graceful D-pad focus fallback when active music playback stops or a card is toggled off
+    LaunchedEffect(mediaState.isPlaying, isSystemMonitorEnabled, isPhotoFrameEnabled) {
+        if (!mediaState.isPlaying && focusSection == WidgetFocusSection.NOW_PLAYING) {
+            focusSection = if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
+                else if (isPhotoFrameEnabled) WidgetFocusSection.PHOTO_FRAME
+                else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+                else WidgetFocusSection.HOME_PILL
+        } else if (!isSystemMonitorEnabled && focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
+            focusSection = if (isPhotoFrameEnabled) WidgetFocusSection.PHOTO_FRAME
+                else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+                else WidgetFocusSection.HOME_PILL
+        } else if (!isPhotoFrameEnabled && focusSection == WidgetFocusSection.PHOTO_FRAME) {
+            showPhotoFrameDialog = false
+            showPhotoLabelDialog = false
+            focusSection = if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
+                else WidgetFocusSection.HOME_PILL
+        }
+    }
+
+    // Keep the focused widget index valid when widgets disappear (removed or uninstalled)
+    LaunchedEffect(widgetSlots.size) {
+        if (widgetSlots.isEmpty() && focusSection == WidgetFocusSection.USER_WIDGETS) {
+            focusSection = WidgetFocusSection.ADD_WIDGET
+        }
+        focusedWidgetIdx = focusedWidgetIdx.coerceIn(0, (widgetSlots.size - 1).coerceAtLeast(0))
+        if (interactingWidgetId != null && widgetSlots.none { it.appWidgetId == interactingWidgetId }) {
+            interactingWidgetId = null
+        }
+    }
+
+    // Ensure focused item is visible in LazyColumn
+    LaunchedEffect(focusSection, focusedWidgetIdx) {
+        if (focusSection == WidgetFocusSection.USER_WIDGETS && widgetSlots.isNotEmpty()) {
+            val baseOffset = 1 + qsOffset + (if (mediaState.isPlaying) 1 else 0) +
+                (if (isSystemMonitorEnabled) 1 else 0) + (if (isPhotoFrameEnabled) 1 else 0)
+            val targetIdx = baseOffset + focusedWidgetIdx
+            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
+            if (!isVisible) {
+                listState.animateScrollToItem(targetIdx)
+            }
+        } else if (focusSection == WidgetFocusSection.HEADER || focusSection == WidgetFocusSection.QUICK_SETTINGS) {
+            listState.animateScrollToItem(0)
+        } else if (focusSection == WidgetFocusSection.NOW_PLAYING) {
+            listState.animateScrollToItem(qsOffset)
+        } else if (focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
+            val targetIdx = qsOffset + if (mediaState.isPlaying) 1 else 0
+            listState.animateScrollToItem(targetIdx)
+        } else if (focusSection == WidgetFocusSection.PHOTO_FRAME) {
+            // The frame is tall, so scroll only when part of it is off screen
+            val targetIdx = 1 + qsOffset + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
+            val layout = listState.layoutInfo
+            val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
+            val fullyVisible = item != null &&
+                item.offset >= layout.viewportStartOffset &&
+                item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
+            if (!fullyVisible) {
+                listState.animateScrollToItem(targetIdx)
+            }
+        }
+    }
+
+    // Re-take key focus when the page becomes active and after a widget dialog closes
+    LaunchedEffect(isActivePage, anyWidgetDialogOpen) {
+        if (isActivePage) {
+            if (anyWidgetDialogOpen) return@LaunchedEffect
+            repeat(6) {
+                try {
+                    pageFocusRequester.requestFocus()
+                    return@LaunchedEffect
+                } catch (_: Exception) {
+                    delay(35)
+                }
+            }
+        } else {
+            endWidgetInteraction()
+            optionsWidgetId = null
+            showWidgetPicker = false
+            showPhotoFrameDialog = false
+            showPhotoLabelDialog = false
+            isQuickSettingsExpanded = false
+            focusSection = defaultFocusSection()
+            nowPlayingCol = 1
+            quickSettingsIndex = 0
+            focusedWidgetIdx = 0
+            sawCenterDown = false
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Transparent) // Let wallpaper + sticker overlay show through
+            .focusRequester(pageFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (!isActivePage) return@onPreviewKeyEvent false
+
+                if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        if (interactingWidgetId != null) {
+                            endWidgetInteraction()
+                        } else if (isQuickSettingsExpanded) {
+                            isQuickSettingsExpanded = false
+                            focusSection = WidgetFocusSection.HEADER
+                        } else {
+                            navigateHomeAndReset()
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                        centerDownAt = native.eventTime
+                        centerLongPressFired = false
+                    } else if (event.type == KeyEventType.KeyDown) {
+                        // Held OK on a widget card: open its options
+                        val heldMs = native.eventTime - centerDownAt
+                        if (sawCenterDown && !centerLongPressFired &&
+                            focusSection == WidgetFocusSection.USER_WIDGETS &&
+                            heldMs >= WIDGET_LONG_PRESS_MS
+                        ) {
+                            centerLongPressFired = true
+                            sawCenterDown = false
+                            val widgetId = widgetSlots.getOrNull(focusedWidgetIdx)?.appWidgetId
+                            if (widgetId != null) {
+                                endWidgetInteraction()
+                                optionsWidgetId = widgetId
+                            }
+                        }
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        when (focusSection) {
+                            WidgetFocusSection.HEADER -> {
+                                if (isQuickSettingsVisible) isQuickSettingsExpanded = !isQuickSettingsExpanded
+                            }
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                performQuickSettingsAction(context, quickSettingsIndex)
+                                quickSettingsRefresh++
+                            }
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                when (nowPlayingCol) {
+                                    0 -> MediaSessionTracker.skipToPrevious()
+                                    1 -> MediaSessionTracker.togglePlayPause()
+                                    2 -> MediaSessionTracker.skipToNext()
+                                }
+                            }
+                            WidgetFocusSection.SYSTEM_MONITOR -> {
+                                systemMonitorRefreshTrigger++
+                            }
+                            WidgetFocusSection.PHOTO_FRAME -> {
+                                showPhotoFrameDialog = true
+                            }
+                            WidgetFocusSection.USER_WIDGETS -> {
+                                val widgetId = widgetSlots.getOrNull(focusedWidgetIdx)?.appWidgetId
+                                val interacting = interactingWidgetId
+                                if (interacting != null && interacting == widgetId) {
+                                    widgetFrames[interacting]?.clickSelection()
+                                } else if (widgetId != null) {
+                                    activateWidget(widgetId)
+                                }
+                            }
+                            WidgetFocusSection.ADD_WIDGET -> {
+                                showWidgetPicker = true
+                            }
+                            WidgetFocusSection.HOME_PILL -> {
+                                navigateHomeAndReset()
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                // Inside a widget: the D-pad walks its buttons until it runs off the top/bottom
+                val interacting = interactingWidgetId
+                if (interacting != null) {
+                    val direction = when (native.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_UP -> NavDirection.UP
+                        KeyEvent.KEYCODE_DPAD_DOWN -> NavDirection.DOWN
+                        KeyEvent.KEYCODE_DPAD_LEFT -> NavDirection.LEFT
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> NavDirection.RIGHT
+                        else -> null
+                    }
+                    if (direction != null) {
+                        val frame = widgetFrames[interacting]
+                        if (frame != null && frame.moveSelection(direction)) {
+                            return@onPreviewKeyEvent true
+                        }
+                        if (direction == NavDirection.LEFT || direction == NavDirection.RIGHT) {
+                            HapticManager.performBoundaryHaptic(context)
+                            return@onPreviewKeyEvent true
+                        }
+                        // UP/DOWN past the edge: leave the widget and move to the next card
+                        endWidgetInteraction()
+                    }
+                }
+
+                when (native.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        when (focusSection) {
+                            WidgetFocusSection.HEADER -> {
+                                HapticManager.performBoundaryHaptic(context)
+                            }
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                val move = QuickSettingsNav.up(quickSettingsIndex)
+                                if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
+                                else focusSection = WidgetFocusSection.HEADER
+                            }
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                if (isQuickSettingsVisible && isQuickSettingsExpanded) {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = when (nowPlayingCol) {
+                                        0 -> 0
+                                        2 -> 3
+                                        else -> 1
+                                    }
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
+                                }
+                            }
+                            WidgetFocusSection.SYSTEM_MONITOR -> {
+                                if (mediaState.isPlaying) {
+                                    focusSection = WidgetFocusSection.NOW_PLAYING
+                                    nowPlayingCol = 1
+                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
+                                }
+                            }
+                            WidgetFocusSection.PHOTO_FRAME -> {
+                                if (isSystemMonitorEnabled) {
+                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
+                                } else if (mediaState.isPlaying) {
+                                    focusSection = WidgetFocusSection.NOW_PLAYING
+                                    nowPlayingCol = 1
+                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
+                                }
+                            }
+                            WidgetFocusSection.USER_WIDGETS -> {
+                                if (focusedWidgetIdx > 0) {
+                                    focusedWidgetIdx--
+                                } else if (isPhotoFrameEnabled) {
+                                    focusSection = WidgetFocusSection.PHOTO_FRAME
+                                } else if (isSystemMonitorEnabled) {
+                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
+                                } else if (mediaState.isPlaying) {
+                                    focusSection = WidgetFocusSection.NOW_PLAYING
+                                    nowPlayingCol = 1
+                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
+                                }
+                            }
+                            WidgetFocusSection.ADD_WIDGET -> {
+                                if (widgetSlots.isNotEmpty()) {
+                                    focusSection = WidgetFocusSection.USER_WIDGETS
+                                    focusedWidgetIdx = widgetSlots.size - 1
+                                } else if (isPhotoFrameEnabled) {
+                                    focusSection = WidgetFocusSection.PHOTO_FRAME
+                                } else if (isSystemMonitorEnabled) {
+                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
+                                } else if (mediaState.isPlaying) {
+                                    focusSection = WidgetFocusSection.NOW_PLAYING
+                                    nowPlayingCol = 1
+                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
+                                } else if (isQuickSettingsVisible) {
+                                    focusSection = WidgetFocusSection.HEADER
+                                }
+                            }
+                            WidgetFocusSection.HOME_PILL -> {
+                                focusSection = WidgetFocusSection.ADD_WIDGET
+                            }
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        when (focusSection) {
+                            WidgetFocusSection.HEADER -> {
+                                if (isQuickSettingsVisible && isQuickSettingsExpanded) {
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = 0
+                                } else {
+                                    val next = sectionBelowQuickSettings()
+                                    if (next == WidgetFocusSection.NOW_PLAYING) nowPlayingCol = 1
+                                    if (next == WidgetFocusSection.USER_WIDGETS) focusedWidgetIdx = 0
+                                    focusSection = next
+                                }
+                            }
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                when (val move = QuickSettingsNav.down(quickSettingsIndex)) {
+                                    is QuickSettingsNav.Move.To -> quickSettingsIndex = move.index
+                                    else -> {
+                                        val next = sectionBelowQuickSettings()
+                                        if (next == WidgetFocusSection.NOW_PLAYING) {
+                                            nowPlayingCol = when (quickSettingsIndex) {
+                                                0 -> 0
+                                                3 -> 2
+                                                else -> 1
+                                            }
+                                        }
+                                        if (next == WidgetFocusSection.USER_WIDGETS) focusedWidgetIdx = 0
+                                        focusSection = next
+                                    }
+                                }
+                            }
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                if (isSystemMonitorEnabled) {
+                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
+                                } else if (isPhotoFrameEnabled) {
+                                    focusSection = WidgetFocusSection.PHOTO_FRAME
+                                } else if (widgetSlots.isNotEmpty()) {
+                                    focusSection = WidgetFocusSection.USER_WIDGETS
+                                    focusedWidgetIdx = 0
+                                } else {
+                                    focusSection = WidgetFocusSection.ADD_WIDGET
+                                }
+                            }
+                            WidgetFocusSection.SYSTEM_MONITOR -> {
+                                if (isPhotoFrameEnabled) {
+                                    focusSection = WidgetFocusSection.PHOTO_FRAME
+                                } else if (widgetSlots.isNotEmpty()) {
+                                    focusSection = WidgetFocusSection.USER_WIDGETS
+                                    focusedWidgetIdx = 0
+                                } else {
+                                    focusSection = WidgetFocusSection.ADD_WIDGET
+                                }
+                            }
+                            WidgetFocusSection.PHOTO_FRAME -> {
+                                if (widgetSlots.isNotEmpty()) {
+                                    focusSection = WidgetFocusSection.USER_WIDGETS
+                                    focusedWidgetIdx = 0
+                                } else {
+                                    focusSection = WidgetFocusSection.ADD_WIDGET
+                                }
+                            }
+                            WidgetFocusSection.USER_WIDGETS -> {
+                                if (focusedWidgetIdx < widgetSlots.size - 1) {
+                                    focusedWidgetIdx++
+                                } else {
+                                    focusSection = WidgetFocusSection.ADD_WIDGET
+                                }
+                            }
+                            WidgetFocusSection.ADD_WIDGET -> {
+                                focusSection = WidgetFocusSection.HOME_PILL
+                            }
+                            WidgetFocusSection.HOME_PILL -> {
+                                // Already at bottom
+                            }
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        when (focusSection) {
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                val move = QuickSettingsNav.left(quickSettingsIndex)
+                                if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
+                                else HapticManager.performBoundaryHaptic(context)
+                            }
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                nowPlayingCol = (nowPlayingCol - 1).coerceAtLeast(0)
+                            }
+                            WidgetFocusSection.HEADER -> {
+                                HapticManager.performBoundaryHaptic(context)
+                            }
+                            else -> {}
+                        }
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        when (focusSection) {
+                            WidgetFocusSection.QUICK_SETTINGS -> {
+                                val move = QuickSettingsNav.right(quickSettingsIndex)
+                                if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
+                                else navigateHomeAndReset()
+                            }
+                            WidgetFocusSection.NOW_PLAYING -> {
+                                if (nowPlayingCol < 2) {
+                                    nowPlayingCol++
+                                } else {
+                                    navigateHomeAndReset()
+                                }
+                            }
+                            else -> {
+                                navigateHomeAndReset()
+                            }
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        // 1. Top Scalloped Lavender Clouds
+        TopLavenderClouds(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+        )
+
+        // 2. Main Scrollable Content (Header, Now Playing, System Monitor, User Widgets, Add Widget)
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            contentPadding = PaddingValues(top = 44.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Top Header & Overlapping Sub-Badge
+            item(key = "header") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = 12.dp)
+                ) {
+                    // Gradient pill card: — ♡ Widgets ♡ —
+                    val isHeaderFocused = focusSection == WidgetFocusSection.HEADER
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .graphicsLayer { clip = false }
+                            .softGlowFocus(isSelected = isHeaderFocused, cornerRadius = 32.dp)
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(ActiveTheme.palette.squircleSecondary, ActiveTheme.primary)
+                                )
+                            )
+                            .border(1.5.dp, if (isHeaderFocused) Color.Transparent else ActiveTheme.cardBorder, RoundedCornerShape(32.dp))
+                            .clickable(enabled = isQuickSettingsVisible) {
+                                focusSection = WidgetFocusSection.HEADER
+                                isQuickSettingsExpanded = !isQuickSettingsExpanded
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = when {
+                                    !isQuickSettingsVisible -> "— ♡ Widgets ♡ —"
+                                    isQuickSettingsExpanded -> "— ♡ Widgets ▴ ♡ —"
+                                    else -> "— ♡ Widgets ▾ ♡ —"
+                                },
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ActiveTheme.accentDeep
+                            )
+                        }
+                    }
+
+                    // Overlapping Sub-Badge: ✦ Now Playing ✦
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .offset(y = 13.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(ActiveTheme.unfocusedCardBg)
+                            .border(1.2.dp, ActiveTheme.cardBorder, RoundedCornerShape(50))
+                            .clickable {
+                                if (!MediaSessionTracker.hasNotificationAccess(context)) {
+                                    Toast.makeText(
+                                        context,
+                                        "Please allow Notification Access for Mochibun to track media ♡",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    try {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                        )
+                                    } catch (_: Exception) {}
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "Now Playing media service active ♡",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "✦ Now Playing ✦",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ActiveTheme.textPrimary
+                        )
+                    }
+                }
+            }
+
+            if (isQuickSettingsVisible) {
+                item(key = "quick_settings_card") {
+                    AnimatedVisibility(
+                        visible = isQuickSettingsExpanded,
+                        enter = expandVertically(animationSpec = tween(160), clip = false) + fadeIn(animationSpec = tween(120)),
+                        exit = shrinkVertically(animationSpec = tween(140), clip = false) + fadeOut(animationSpec = tween(100))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .curtainUnfurl(visible = isQuickSettingsExpanded)
+                                .graphicsLayer { clip = false }
+                        ) {
+                            QuickSettingsCard(
+                                // Polling only runs while the drawer is open
+                                isActivePage = isActivePage && isQuickSettingsExpanded,
+                                focusedIndex = if (focusSection == WidgetFocusSection.QUICK_SETTINGS) quickSettingsIndex else -1,
+                                onPillClick = { index ->
+                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                    quickSettingsIndex = index
+                                    performQuickSettingsAction(context, index)
+                                    quickSettingsRefresh++
+                                },
+                                refreshKey = quickSettingsRefresh,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Dedicated, Dynamic "Now Playing" Native Card (Active Playback Only)
+            if (mediaState.isPlaying) {
+                item(key = "now_playing_card") {
+                    NowPlayingCard(
+                        mediaState = mediaState,
+                        focusedControl = if (focusSection == WidgetFocusSection.NOW_PLAYING) nowPlayingCol else -1,
+                        onPrevious = { MediaSessionTracker.skipToPrevious() },
+                        onPlayPause = { MediaSessionTracker.togglePlayPause() },
+                        onNext = { MediaSessionTracker.skipToNext() },
+                        onOpenMediaApp = { MediaSessionTracker.openCurrentMediaApp(context) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            // Lightweight, Cute Pastel System Monitor Card (when enabled)
+            if (isSystemMonitorEnabled) {
+                item(key = "system_monitor_card") {
+                    SystemMonitorCard(
+                        isActivePage = isActivePage,
+                        isFocused = focusSection == WidgetFocusSection.SYSTEM_MONITOR,
+                        onCardClick = {
+                            focusSection = WidgetFocusSection.SYSTEM_MONITOR
+                            systemMonitorRefreshTrigger++
+                        },
+                        triggerRefreshKey = systemMonitorRefreshTrigger,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            // Photo frame card (Instax / Purikura / Pearl Lace)
+            if (isPhotoFrameEnabled) {
+                item(key = "photo_frame_card") {
+                    PhotoFrameCard(
+                        photo = photoFrameBitmap,
+                        frameStyle = photoFrameStyle,
+                        label = photoFrameLabel,
+                        isFocused = focusSection == WidgetFocusSection.PHOTO_FRAME,
+                        onClick = {
+                            focusSection = WidgetFocusSection.PHOTO_FRAME
+                            showPhotoFrameDialog = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    )
+                }
+            }
+
+            // User-added Android App Widgets
+            itemsIndexed(widgetSlots, key = { _, slot -> slot.appWidgetId }) { idx, slot ->
+                AppWidgetHostCard(
+                    slot = slot,
+                    info = widgetInfos[slot.appWidgetId],
+                    host = widgetHost,
+                    isFocused = focusSection == WidgetFocusSection.USER_WIDGETS && focusedWidgetIdx == idx,
+                    isInteracting = interactingWidgetId == slot.appWidgetId,
+                    onFrameAttached = { id, frame -> widgetFrames[id] = frame },
+                    onFrameDetached = { id, frame ->
+                        if (widgetFrames[id] === frame) widgetFrames.remove(id)
+                        if (interactingWidgetId == id) interactingWidgetId = null
+                    },
+                    onOptionsClick = {
+                        endWidgetInteraction()
+                        focusSection = WidgetFocusSection.USER_WIDGETS
+                        focusedWidgetIdx = idx
+                        optionsWidgetId = slot.appWidgetId
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // "+ Add Widget" kawaii pill action
+            item(key = "add_widget_button") {
+                val isAddFocused = focusSection == WidgetFocusSection.ADD_WIDGET
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer { clip = false }
+                            .softGlowFocus(isSelected = isAddFocused, cornerRadius = 50.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(if (isAddFocused) ActiveTheme.palette.focusedCardContainerEnd else ActiveTheme.unfocusedCardBg)
+                            .border(1.5.dp, if (isAddFocused) ActiveTheme.palette.focusedCardBorder else ActiveTheme.cardBorder, RoundedCornerShape(50))
+                            .clickable {
+                                focusSection = WidgetFocusSection.ADD_WIDGET
+                                showWidgetPicker = true
+                            }
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (widgetSlots.isEmpty() && !mediaState.isPlaying) {
+                                "+ Add Favorite Widgets ♡"
+                            } else {
+                                "+ Add Widget ♡"
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ActiveTheme.textPrimary
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Bottom Layered Lavender Clouds
+        BottomLavenderClouds(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+        )
+
+        // 4. "Back to Home" Navigation Pill
+        KawaiiReturnHomePill(
+            isFocused = focusSection == WidgetFocusSection.HOME_PILL,
+            onClick = { navigateHomeAndReset() },
+            direction = HomePillDirection.RIGHT,
+            animateAlways = isActivePage,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 12.dp)
+        )
+
+        // 5. Widget dialogs (own windows, so they take keys away from this page while open)
+        if (showWidgetPicker) {
+            val density = LocalDensity.current
+            val cardWidthPx = with(density) { (LocalConfiguration.current.screenWidthDp.dp - 28.dp).roundToPx() }
+            WidgetPickerDialog(
+                availableWidthPx = cardWidthPx,
+                onPick = { info -> addWidget(info) },
+                onDismiss = { showWidgetPicker = false }
+            )
+        }
+
+        if (showPhotoFrameDialog) {
+            PhotoFrameActionDialog(
+                hasPhoto = photoFrameUri != null,
+                styleDisplayName = PhotoFrameStyle.fromId(photoFrameStyle).displayName,
+                label = photoFrameLabel,
+                onPickPhoto = {
+                    showPhotoFrameDialog = false
+                    try {
+                        photoPickerLauncher.launch(arrayOf("image/*"))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Photo picker failed", e)
+                        Toast.makeText(context, "Couldn't open the photo picker ♡", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onCycleStyle = {
+                    PreferencesManager.setPhotoFrameStyle(
+                        context,
+                        PhotoFrameStyle.fromId(photoFrameStyle).next().id
+                    )
+                },
+                onEditLabel = {
+                    showPhotoFrameDialog = false
+                    showPhotoLabelDialog = true
+                },
+                onRemovePhoto = {
+                    showPhotoFrameDialog = false
+                    val old = photoFrameUri
+                    PreferencesManager.setPhotoFrameUri(context, null)
+                    releasePhotoFrameUri(old)
+                },
+                onDismiss = { showPhotoFrameDialog = false }
+            )
+        }
+
+        if (showPhotoLabelDialog) {
+            PhotoFrameLabelDialog(
+                initialLabel = photoFrameLabel,
+                onSave = { newLabel ->
+                    PreferencesManager.setPhotoFrameLabel(context, newLabel)
+                    showPhotoLabelDialog = false
+                },
+                onDismiss = { showPhotoLabelDialog = false }
+            )
+        }
+
+        optionsWidgetId?.let { id ->
+            val idx = widgetSlots.indexOfFirst { it.appWidgetId == id }
+            if (idx >= 0) {
+                val info = widgetInfos[id]
+                val label = remember(id, info) {
+                    info?.loadLabel(context.packageManager)?.takeIf { it.isNotBlank() } ?: "Widget"
+                }
+                WidgetOptionsDialog(
+                    widgetLabel = label,
+                    canMoveUp = idx > 0,
+                    canMoveDown = idx < widgetSlots.lastIndex,
+                    canConfigure = info?.configure != null,
+                    canUseControls = info != null && widgetFrames.containsKey(id),
+                    onMoveUp = {
+                        if (WidgetRepository.move(context, id, -1)) focusWidget(id)
+                    },
+                    onMoveDown = {
+                        if (WidgetRepository.move(context, id, 1)) focusWidget(id)
+                    },
+                    onConfigure = {
+                        optionsWidgetId = null
+                        reconfigureWidget(id)
+                    },
+                    onUseControls = {
+                        optionsWidgetId = null
+                        activateWidget(id)
+                    },
+                    onRemove = {
+                        optionsWidgetId = null
+                        removeWidget(id)
+                    },
+                    onDismiss = { optionsWidgetId = null }
+                )
+            }
+        }
+    }
+}

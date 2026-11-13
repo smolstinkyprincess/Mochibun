@@ -30,7 +30,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
-import com.crinklecodone.mochibun.core.system.RootShell
+import one.crinklecod.mochibun.core.system.RootShell
 import java.io.File
 import java.lang.reflect.Method
 
