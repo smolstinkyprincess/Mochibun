@@ -31,7 +31,8 @@ object LidLedAnimationRepository {
     private const val BUILTIN_PREFIX = "builtin_"
     private const val MAX_IMPORT_BYTES = 64 * 1024
 
-    private val ANIMATION_EXTENSIONS = listOf(".yaml", ".yml", ".json", ".mochibunled")
+    /** Opened from a file manager (VIEW intent). `.yaml` / `.json` import only via the Studio button. */
+    private const val OPENABLE_EXTENSION = ".mochibunled"
 
     // Cached so the LED ladder never parses YAML on a notification
     private val cachedActive = java.util.concurrent.ConcurrentHashMap<LidAnimationSlot, LidLedAnimation>()
@@ -42,7 +43,7 @@ object LidLedAnimationRepository {
 
     fun isAnimationFileName(name: String?): Boolean {
         val lower = name?.lowercase(Locale.US) ?: return false
-        return ANIMATION_EXTENSIONS.any { lower.endsWith(it) }
+        return lower.endsWith(OPENABLE_EXTENSION)
     }
 
     /** Built-ins first, then custom / imported sorted by name. */
@@ -115,7 +116,8 @@ object LidLedAnimationRepository {
             ?: error("Could not open file for writing")
     }
 
-    fun exportFileName(animation: LidLedAnimation): String = "${slug(animation.name)}.yaml"
+    /** YAML content, `.mochibunled` name so the file opens straight into Mochibun when shared. */
+    fun exportFileName(animation: LidLedAnimation): String = "${slug(animation.name)}$OPENABLE_EXTENSION"
 
     /** Display name of a content / file uri, used to route incoming VIEW intents. */
     fun displayName(context: Context, uri: Uri): String? {

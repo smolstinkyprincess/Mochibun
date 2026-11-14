@@ -110,7 +110,7 @@
                 <data android:host="*" />
                 <data android:pathPattern=".*\\.mochibun" />
             </intent-filter>
-            <!-- Lid LED step animations (.yaml / .yml / .mochibunled), routed in MainLauncher -->
+            <!-- Lid LED step animations (.mochibunled only, so Mochibun doesn't claim every YAML file), routed in MainLauncher -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -120,8 +120,6 @@
                 <data android:host="*" />
                 <data android:mimeType="*/*" />
                 <data android:pathPattern=".*\\.mochibunled" />
-                <data android:pathPattern=".*\\.yaml" />
-                <data android:pathPattern=".*\\.yml" />
             </intent-filter>
         </activity>
 

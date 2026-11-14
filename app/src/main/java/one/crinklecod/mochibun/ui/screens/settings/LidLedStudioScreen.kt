@@ -86,7 +86,7 @@ import one.crinklecod.mochibun.ui.theme.destructiveColor
 private const val CLASSIC_ID = "" // classic behavior: notification shimmer / solid charging color
 
 private enum class LibraryAction(val label: String) {
-    SET_NOTIF("Set Notif"), SET_CHARGING("Set Charging"), EDIT("Edit"), EXPORT("Export .yaml"), DELETE("Delete")
+    SET_NOTIF("Set Notif"), SET_CHARGING("Set Charging"), EDIT("Edit"), EXPORT("Export"), DELETE("Delete")
 }
 
 /** Action chips per card row: the two "Set" slots on top, the rest underneath. */
@@ -249,7 +249,7 @@ private fun LidLedLibrary(
         }
     }
     val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/x-yaml")
+        ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         val anim = pendingExport
         pendingExport = null

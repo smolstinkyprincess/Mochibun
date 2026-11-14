@@ -126,8 +126,11 @@ class LidLedAnimationTest {
                 assertTrue(anim.name, step.windows.filter { it != off }.distinct().size <= 1)
             }
         }
-        assertTrue(LidLedAnimationRepository.isAnimationFileName("wave.YAML"))
-        assertTrue(LidLedAnimationRepository.isAnimationFileName("wave.mochibunled"))
+        // Only .mochibunled opens from a file manager; theme / other .yaml files stay with their own apps
+        assertTrue(LidLedAnimationRepository.isAnimationFileName("wave.MochibunLED"))
+        assertFalse(LidLedAnimationRepository.isAnimationFileName("wave.yaml"))
+        assertFalse(LidLedAnimationRepository.isAnimationFileName("sweet_sakura.yml"))
+        assertFalse(LidLedAnimationRepository.isAnimationFileName("wave.json"))
         assertFalse(LidLedAnimationRepository.isAnimationFileName("setup.mochibun"))
     }
 

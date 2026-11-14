@@ -1,5 +1,4 @@
 Mochibun v2.2.0 ♡
-- Lid LED Studio (root): Draw your own light shows for the 5 outer lid windows, step by step with 7 vivid keitai swatches, an on-screen preview, and a live Test Lid button. Comes with 5 presets (Sakura Chase, Keitai Rainbow, Mint Heartbeat, Berry Sparkle, Lemon Ping-Pong).
-- Separate Notification & Charging animations: Each loops for about a minute, then rests on its last frame. Call > notification > charging priority stays the same.
-- Share your lights: Import and export .yaml, .json, and .mochibunled animation files, or just open a .yaml / .mochibunled file to add it to your library.
-- Smoother lid LEDs: Animations now play from one tiny native helper process, so steps no longer skip or flicker, even while charging.
+- Lid LED Studio: build custom 5-window lid light animations right from your keypad with 7 vivid keitai colors, live previews, and instant lid testing.
+- Separate Notification & Charging Lights: assign two different animations for incoming alerts and charging, resting on your final frame.
+- Shareable .mochibunled Packs: export and open custom animations directly from your file manager, or import hand-written .yaml/.json files.

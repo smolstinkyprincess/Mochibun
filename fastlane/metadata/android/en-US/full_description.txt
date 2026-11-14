@@ -12,7 +12,7 @@ Features:
 - Media Volume Lock: The volume rocker always steps media volume, even in Silent Mode.
 - Widgets, Recents & Music: A widget page for your third-party widgets with a Now Playing card, plus a keypad-friendly recents switcher.
 - Clamshell Lid Actions: Choose what happens when you open the lid. Screen-Off Flip Reset brings you back Home when the screen turns off, and with root you get notification pulses on the outer lid LEDs.
-- Lid LED Studio (root): Draw your own 5-window light shows for the outer lid, step by step with 7 vivid keitai swatches. Set one for notifications and one for charging, test it live on the lid, and share it as a .yaml or .mochibunled file.
+- Lid LED Studio (root): Draw your own 5-window light shows for the outer lid, step by step with 7 vivid keitai swatches. Set one for notifications and one for charging, test it live on the lid, and share it as a .mochibunled file.
 - Offline & Private: No internet or camera permissions, and no telemetry.
 - Lightweight & Fast: No heavy GPU blurs, tuned for 480 x 800 screens and ~1.8 GB of RAM.
 

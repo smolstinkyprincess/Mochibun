@@ -41,7 +41,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Media volume lock**: The volume rocker always changes *media* volume, even in Silent Mode.
 - **Pastel SystemUI**: Your palette also colors Quick Settings, the volume dialog, notification cards, and the status and nav bars.
 - **Lid LED pulses**: Notification shimmers and a charging glow on the outer lid lights, in the color you pick.
-- **Lid LED Studio ✨**: Draw your own little light shows for the five windows on the outer lid! Build them step by step (500 ms per step, up to 16 steps) with 7 vivid keitai swatches, preview them on screen, then hit **Test Lid ♡** to watch them play for real. Pick one animation for **notifications** and another for **charging**: each loops for about a minute, then rests on its last frame. Comes with 5 cute presets (*Sakura Chase ♡*, *Keitai Rainbow*, *Mint Heartbeat*, *Berry Sparkle*, *Lemon Ping-Pong*), and you can import or export `.yaml`, `.json`, or `.mochibunled` files to trade with friends. Find it in *Settings > Behavior*.
+- **Lid LED Studio ✨**: Draw your own little light shows for the five windows on the outer lid! Build them step by step (500 ms per step, up to 16 steps) with 7 vivid keitai swatches, preview them on screen, then hit **Test Lid ♡** to watch them play for real. Pick one animation for **notifications** and another for **charging**: each loops for about a minute, then rests on its last frame. Comes with 5 cute presets (*Sakura Chase ♡*, *Keitai Rainbow*, *Mint Heartbeat*, *Berry Sparkle*, *Lemon Ping-Pong*), and you can share them as `.mochibunled` files (or import plain `.yaml` / `.json`) to trade with friends. Find it in *Settings > Behavior*.
 
 ---
 
@@ -157,7 +157,7 @@ decorations:
 ```
 
 ### 💡 Lid Light Animations (`.yaml`)
-Lid LED Studio animations are plain little YAML files too, so you can hand-write one or share it. Each step lists the five lid windows (`W1`–`W5`, left to right); `#000000` means off. The lid lights each step in one color (the most-used one in that step):
+Lid LED Studio animations are little YAML files too, so you can hand-write one or share it. Each step lists the five lid windows (`W1`–`W5`, left to right); `#000000` means off. The lid lights each step in one color (the most-used one in that step):
 
 ```yaml
 name: "Sakura Chase ♡"
@@ -170,7 +170,7 @@ steps:              # up to 16
   - windows: ["#000000", "#000000", "#FF1493", "#000000", "#000000"]
 ```
 
-Open a `.yaml`, `.yml`, or `.mochibunled` file on your phone and it pops straight into your Studio library ♡ (JSON with the same fields works too, via **Import** in the Studio.)
+Exports are saved as `.mochibunled` files (it's the same YAML inside, just with a cute extension). Open one on your phone and it pops straight into your Studio library ♡ Plain `.yaml` or `.json` files with the same fields work too, through **Import** in the Studio.
 
 ### 📦 Full Backups (`.json`) 
 #### Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, and cursor tweaks to a simple `.json` file. Restoring shows a preview summary first and reloads everything instantly, no reboot needed.
