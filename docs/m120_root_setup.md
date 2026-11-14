@@ -1,4 +1,4 @@
-### 🔓 Advanced Setup: Rooting (Magisk), Performance Tuning & microG
+### 🔓 Advanced Setup: Rooting (Magisk, Vector, and Zygisk), Performance Tuning & microG Google Replacement
 
 Mochibun works great as a launcher, t9 keyboard, and virtual cursor right out of the box! (˶ᵔ ᵕ ᵔ˶) But if you root your AT-M120, it unlocks a lot more: key remapping, custom lid LED animations, a recents provider, and SystemUI theming.
 
