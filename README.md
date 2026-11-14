@@ -41,7 +41,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Media volume lock**: The volume rocker always changes *media* volume, even in Silent Mode.
 - **Pastel SystemUI**: Your palette also colors Quick Settings, the volume dialog, notification cards, and the status and nav bars.
 - **Lid LED pulses**: Notification shimmers and a charging glow on the outer lid lights, in the color you pick.
-- **Lid LED Studio ✨**: Draw your own little light shows for the five windows on the outer lid! Build them step by step (500 ms per step, up to 16 steps) with 7 vivid keitai swatches, preview them on screen, then hit **Test Lid ♡** to watch them play for real. Pick one animation for **notifications** and another for **charging**: each loops for about a minute, then rests on its last frame. Comes with 5 cute presets (*Sakura Chase ♡*, *Keitai Rainbow*, *Mint Heartbeat*, *Berry Sparkle*, *Lemon Ping-Pong*), and you can share them as `.mochibunled` files (or import plain `.yaml` / `.json`) to trade with friends. Find it in *Settings > Behavior*.
+- **Lid LED Studio ✨**: Draw your own little light shows for the five windows on the outer lid! Build them step by step (500 ms per step, up to 16 steps) with 7 vivid keitai swatches, preview them on screen, then hit **Test Lid ♡** to watch them play for real. Pick one animation for **notifications** and another for **charging**: each loops for about a minute, then rests on its last frame. Comes with 5 cute presets (*Sakura Chase ♡*, *Keitai Rainbow*, *Mint Heartbeat*, *Berry Sparkle*, *Lemon Ping-Pong*), and you can share them as `.mochibunled` files  to trade with friends. Find it in *Settings > Behavior*.
 
 ---
 
