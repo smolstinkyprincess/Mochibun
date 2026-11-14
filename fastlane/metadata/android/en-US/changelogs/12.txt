@@ -1,0 +1,4 @@
+Mochibun v2.1.0 ♡
+- Standard (Non-Root) Mode: Added optional Mochibun Accessibility Service for non-root virtual cursor tapping/scrolling, Recents & Quick Settings fallbacks, Screen-Off Flip Reset, and a streamlined Setup & Diagnostics checklist with root-only options hidden by default.
+- Settings Hub Polish: Added T9 Auto-Commit Delay stepper (300–1500 ms), Soft-Key Navigation (LSK/RSK) toggle, fixed all 7 Keypad Sound Profiles, and removed redundant T9 Search and Kaomoji toggles.
+- Bug Fixes: Fixed Home '0' key flashlight toggle state tracking, live T9 keyboard theme updates, custom-colored lid charging LED glow, on-demand Virtual Cursor foreground notification, and immediate preference reload on backup restore/reset.

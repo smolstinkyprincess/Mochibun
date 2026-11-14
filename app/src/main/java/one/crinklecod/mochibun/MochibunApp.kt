@@ -69,7 +69,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
         MediaVolumeLockSync.init(this)
         PreferencesManager.syncSoftKeyNavToGlobal(this)
         one.crinklecod.mochibun.core.system.TorchManager.init(this)
-        one.crinklecod.mochibun.service.VirtualCursorService.start(this)
+        // VirtualCursorService is started on demand (F4 / cursor toggle) and stops when hidden.
     }
 
     // Process-wide caches. The drawer list itself is released by MainActivity, which owns the ViewModel.

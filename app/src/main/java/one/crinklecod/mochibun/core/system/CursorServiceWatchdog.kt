@@ -76,14 +76,15 @@ object CursorServiceWatchdog : ClamshellListener {
         }
         lastCheckTimeMs = now
 
-        val cursorRunning = VirtualCursorService.isServiceRunning
-        if (cursorRunning) {
+        // The service only runs while the cursor is visible; a stopped service with a hidden
+        // cursor is the normal idle state, so only a lost-while-visible cursor needs healing.
+        if (VirtualCursorService.isServiceRunning || !VirtualCursorService.isCursorVisible) {
             return@withContext WatchdogResult.Healthy
         }
 
         Log.i(TAG, "Watchdog detected inactive VirtualCursorService. Restarting...")
         try {
-            VirtualCursorService.start(context)
+            VirtualCursorService.start(context, showCursor = true)
             WatchdogResult.Healed("VirtualCursorService restarted successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start VirtualCursorService", e)

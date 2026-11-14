@@ -103,7 +103,7 @@ internal fun PermissionsRootSettingsSubScreen(
     var accessibilityEnabled by remember { mutableStateOf(false) }
     val showRootOptions by PreferencesManager.showRootOptions.collectAsState()
     val suPresent = remember { RootShell.isSuBinaryPresent() }
-    var cursorServiceRunning by remember { mutableStateOf(VirtualCursorService.isServiceRunning) }
+    var cursorVisible by remember { mutableStateOf(VirtualCursorService.isCursorVisible) }
     var rootStatus by remember {
         mutableStateOf(
             when {
@@ -160,7 +160,7 @@ internal fun PermissionsRootSettingsSubScreen(
         notificationAccessGranted =
             NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
         accessibilityEnabled = MochibunAccessibilityService.isEnabled(context)
-        cursorServiceRunning = VirtualCursorService.isServiceRunning
+        cursorVisible = VirtualCursorService.isCursorVisible
         rootRecentsEnabled = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
         rootQuickSettingsEnabled = PreferencesManager.isRootQuickSettingsEnabled(context)
         keyHookEnabled = PreferencesManager.isKeyHookEnabled(context)
@@ -441,7 +441,7 @@ internal fun PermissionsRootSettingsSubScreen(
                 }
 
                 val startResult = RootShell.execute(
-                    "am start-foreground-service --user current -n $serviceComponent"
+                    "am start-foreground-service --user current -n $serviceComponent -a ${VirtualCursorService.ACTION_TOGGLE_CURSOR} --ez ${VirtualCursorService.EXTRA_CURSOR_ACTIVE} true"
                 )
                 if (!startResult.isSuccess) {
                     val detail = startResult.errorString.ifBlank {
@@ -496,12 +496,10 @@ internal fun PermissionsRootSettingsSubScreen(
                         Toast.LENGTH_SHORT
                     ).show()
                     openOverlaySettings()
-                } else if (!VirtualCursorService.isServiceRunning) {
-                    VirtualCursorService.start(context, showCursor = true)
-                    cursorServiceRunning = true
                 } else {
-                    VirtualCursorService.toggleCursor()
-                    cursorServiceRunning = VirtualCursorService.isServiceRunning
+                    val wasVisible = VirtualCursorService.isCursorVisible
+                    VirtualCursorService.toggleCursor(context)
+                    cursorVisible = !wasVisible
                 }
             }
             "recents" -> toggleRecents()
@@ -672,12 +670,12 @@ internal fun PermissionsRootSettingsSubScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Virtual Cursor Service",
-                        subtitle = if (cursorServiceRunning) {
-                            "✓ Running • tap to toggle cursor"
-                        } else {
-                            "! Stopped • tap to start"
+                        subtitle = when {
+                            !overlayGranted -> "! Overlay permission needed • tap to grant"
+                            cursorVisible -> "✓ Cursor on • tap or F4 to hide"
+                            else -> "✓ Ready • tap or F4 to show cursor"
                         },
-                        icon = if (cursorServiceRunning) "✓" else "○",
+                        icon = if (overlayGranted) "✓" else "○",
                         isFocused = isFocused("cursor"),
                         jumpNumber = jump("cursor"),
                         onClick = { activatePermissionItem(rowIds.indexOf("cursor")) }

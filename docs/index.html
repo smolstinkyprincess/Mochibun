@@ -259,6 +259,27 @@
     }
     .tiny-note a { color: var(--strawberry-deep); font-weight: 700; }
 
+    /* 🌷 setup cards */
+    .setup-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.2rem;
+      margin-top: 2rem;
+    }
+    .setup-card {
+      background: var(--card);
+      border: 2px solid var(--whisper-pink);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-soft);
+      padding: 1.3rem 1.5rem;
+      color: var(--cocoa);
+    }
+    .setup-card:nth-child(even) { border-color: var(--powder-blue); }
+    .setup-card h3 { font-family: var(--font-display); margin: 0 0 0.6rem; }
+    .setup-card ol, .setup-card p { margin: 0.4rem 0; font-size: 0.95rem; line-height: 1.5; }
+    .setup-card li { margin-bottom: 0.35rem; }
+    .setup-card a { color: var(--strawberry-deep); font-weight: 700; }
+
     /* 🌙 footer */
     .site-footer {
       position: relative;
@@ -409,7 +430,24 @@
           </figure></li>
         </ul>
 
-        <p class="tiny-note">no root needed! just open settings › permissions &amp; root and follow the checklist. want the extra perks? the <a href="https://github.com/smolstinkyprincess/Mochibun/blob/main/docs/m120_root_setup.md">AT-M120 root setup guide</a> walks you through it ♡</p>
+        <div class="setup-cards">
+          <article class="setup-card">
+            <h3>🌷 standard setup (no root, the default)</h3>
+            <p>mochibun works right out of the box on a stock flip phone. root-only settings stay hidden so things stay tidy. open <b>settings › permissions &amp; root</b> and walk the little checklist:</p>
+            <ol>
+              <li><b>default home app</b>: pick mochibun as your home.</li>
+              <li><b>display over other apps</b>: lets the cursor float above everything.</li>
+              <li><b>mochibun cursor &amp; keys</b> (optional accessibility helper): cursor clicks &amp; scrolls in touch-only apps, plus keypad shortcuts for recents &amp; quick settings.</li>
+              <li><b>notification access</b> (optional): powers now playing and the notifications page.</li>
+            </ol>
+            <p><b>screen-off flip reset</b> tidies everything back to home whenever the screen goes dark, so closing the flip feels clean even without root ♡</p>
+          </article>
+          <article class="setup-card">
+            <h3>🔮 optional root &amp; lsposed perks</h3>
+            <p>rooted with magisk + lsposed? turn on <b>show root &amp; lsposed options</b> at the bottom of settings › permissions &amp; root to wake up key remapping in every app, media volume lock, in-place wi-fi/bluetooth toggles, outer lid leds, and pastel systemui.</p>
+            <p>the <a href="https://github.com/smolstinkyprincess/Mochibun/blob/main/docs/m120_root_setup.md">AT-M120 root setup guide</a> walks you through it ✨</p>
+          </article>
+        </div>
       </div>
 
       <div class="divider" aria-hidden="true">

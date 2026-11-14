@@ -70,6 +70,49 @@ class BackupRestoreTest {
         assertFalse(BackupRestoreManager.previewBackupJson(incomplete.toString()).isSuccess)
     }
 
+    @Test
+    fun reloadRefreshesCachedFlowsFromSharedPreferences() {
+        val context = RuntimeEnvironment.getApplication()
+        PreferencesManager.init(context)
+        PreferencesManager.getPrefs(context).edit()
+            .putString(PreferencesManager.KEY_CUSTOM_USER_NAME, "Mochi")
+            .putString(PreferencesManager.KEY_THEME_FONT_FAMILY, "reload_font")
+            .commit()
+        assertFalse(PreferencesManager.themeFontFamily.value == "reload_font")
+
+        PreferencesManager.reload(context)
+
+        assertEquals("Mochi", PreferencesManager.customUserName.value)
+        assertEquals("reload_font", PreferencesManager.themeFontFamily.value)
+    }
+
+    @Test
+    fun restoreReloadsCachedFlows() {
+        val context = RuntimeEnvironment.getApplication()
+        PreferencesManager.init(context)
+        // Written behind the setters, so only a reload at the end of restore picks it up.
+        PreferencesManager.getPrefs(context).edit()
+            .putString(PreferencesManager.KEY_THEME_FONT_FAMILY, "restored_font")
+            .commit()
+
+        BackupRestoreManager.restoreBackupJson(context, validBackupJson().toString()).getOrThrow()
+
+        assertEquals("restored_font", PreferencesManager.themeFontFamily.value)
+    }
+
+    @Test
+    fun resetToDefaultsReloadsCachedFlows() {
+        val context = RuntimeEnvironment.getApplication()
+        PreferencesManager.init(context)
+        PreferencesManager.setCustomUserName(context, "Mochi")
+        PreferencesManager.setDpadWrapAround(context, !PreferencesManager.DEFAULT_DPAD_WRAP_AROUND)
+
+        BackupRestoreManager.resetToDefaults(context)
+
+        assertEquals(PreferencesManager.DEFAULT_CUSTOM_USER_NAME, PreferencesManager.customUserName.value)
+        assertEquals(PreferencesManager.DEFAULT_DPAD_WRAP_AROUND, PreferencesManager.isDpadWrapAround.value)
+    }
+
     private fun validBackupJson(): JSONObject = JSONObject()
         .put("version", BackupRestoreManager.CURRENT_BACKUP_VERSION)
         .put("timestamp", 1_700_000_000_000L)

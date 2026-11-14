@@ -407,6 +407,26 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             setPackage(PACKAGE_MOCHIBUN)
             putExtra(EXTRA_CURSOR_ACTIVE, active)
         }
+        if (active) {
+            // VirtualCursorService only runs while the cursor is visible, so its receiver is not
+            // registered yet: start it (system_server may start our non-exported service).
+            val serviceIntent = Intent(intent).setComponent(
+                ComponentName(PACKAGE_MOCHIBUN, "$PACKAGE_MOCHIBUN.service.VirtualCursorService")
+            )
+            try {
+                val userCurrent = XposedHelpers.getStaticObjectField(
+                    android.os.UserHandle::class.java, "CURRENT"
+                )
+                XposedHelpers.callMethod(context, "startForegroundServiceAsUser", serviceIntent, userCurrent)
+                return
+            } catch (t: Throwable) {
+                XposedBridge.log("$TAG: Failed to start cursor service: ${t.message}")
+                try {
+                    context.startForegroundService(serviceIntent)
+                    return
+                } catch (_: Throwable) {}
+            }
+        }
         sendBroadcastSafe(context, intent)
     }
 

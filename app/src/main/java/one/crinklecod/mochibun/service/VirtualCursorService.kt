@@ -66,8 +66,20 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
 
         private var instance: VirtualCursorService? = null
 
-        fun toggleCursor() {
-            instance?.toggleCursorVisibility()
+        /** Running instance, for in-module tests. */
+        internal val runningInstance: VirtualCursorService? get() = instance
+
+        /**
+         * Toggles the cursor. The service only runs while the cursor is visible, so when it is
+         * not running, toggling means starting it with the cursor shown.
+         */
+        fun toggleCursor(context: Context) {
+            val service = instance
+            if (service != null) {
+                service.toggleCursorVisibility()
+            } else {
+                start(context, showCursor = true)
+            }
         }
 
         /**
@@ -86,14 +98,21 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
             service.mainHandler.post { service.handleLidClosed() }
         }
 
-        fun start(context: Context, showCursor: Boolean = false) {
-            val intent = Intent(context, VirtualCursorService::class.java)
-            if (showCursor) {
-                intent.action = ACTION_TOGGLE_CURSOR
-                intent.putExtra(EXTRA_CURSOR_ACTIVE, true)
-            }
-            context.startForegroundService(intent)
+        /**
+         * Starts the service with the cursor shown. A start that would leave the cursor hidden
+         * stops the service again immediately (no idle foreground notification).
+         */
+        fun start(context: Context, showCursor: Boolean = true) {
+            context.startForegroundService(showIntent(context, showCursor))
         }
+
+        internal fun showIntent(context: Context, showCursor: Boolean = true): Intent =
+            Intent(context, VirtualCursorService::class.java)
+                .setAction(ACTION_TOGGLE_CURSOR)
+                .putExtra(EXTRA_CURSOR_ACTIVE, showCursor)
+
+        /** True when the service should stay alive: it only runs while the cursor is visible. */
+        internal fun shouldKeepRunning(cursorVisible: Boolean): Boolean = cursorVisible
 
         fun stop(context: Context) {
             val intent = Intent(context, VirtualCursorService::class.java)
@@ -170,8 +189,6 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
 
         RootTouchInjector.attach(this)
 
-        startInForeground()
-
         ClamshellManager.init(this)
         ClamshellManager.addListener(clamshellListener)
 
@@ -218,6 +235,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // startForegroundService() requires startForeground() even if we stop right away.
         startInForeground()
         when (intent?.action) {
             ACTION_TOGGLE_CURSOR -> {
@@ -237,7 +255,15 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
                 handleCursorKey(keyCode, action, repeatCount)
             }
         }
-        return START_STICKY
+        stopIfHidden()
+        return START_NOT_STICKY
+    }
+
+    /** Removes the notification and stops the service whenever the cursor is off. */
+    private fun stopIfHidden() {
+        if (shouldKeepRunning(isCursorVisible)) return
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -285,6 +311,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
             RootTouchInjector.release()
             broadcastCursorModeChanged(false)
         }
+        stopIfHidden()
     }
 
     private fun handleLidOpened() {
@@ -348,6 +375,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         val view = overlayView ?: run {
             isCursorVisible = false
             broadcastCursorModeChanged(false)
+            stopIfHidden()
             return
         }
 
@@ -363,6 +391,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
                     Log.e(TAG, "Failed to attach cursor overlay window: ${e.message}")
                     isCursorVisible = false
                     broadcastCursorModeChanged(false)
+                    stopIfHidden()
                     return
                 }
             }
@@ -379,6 +408,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
             Log.d(TAG, "Virtual cursor hidden")
         }
         broadcastCursorModeChanged(isCursorVisible)
+        stopIfHidden()
     }
 
     private fun broadcastCursorModeChanged(active: Boolean) {

@@ -177,7 +177,7 @@ class MochibunAccessibilityService : AccessibilityService(), RootTouchInjector.G
 
     private fun toggleCursor() {
         if (VirtualCursorService.isServiceRunning) {
-            VirtualCursorService.toggleCursor()
+            VirtualCursorService.toggleCursor(this)
             return
         }
         if (!Settings.canDrawOverlays(this)) {

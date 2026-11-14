@@ -257,6 +257,19 @@ object PreferencesManager {
 
     fun init(context: Context) {
         if (!initialized) {
+            reload(context)
+            initialized = true
+        }
+        // Outside the guard so restore / reset-to-defaults (which call init again) refresh it
+        _showRootOptions.value = isShowRootOptions(context)
+    }
+
+    /**
+     * Re-reads every cached StateFlow from SharedPreferences. Call after anything that rewrites
+     * prefs behind the setters (backup restore, factory reset) so observers update immediately.
+     */
+    fun reload(context: Context) {
+        run {
             val prefs = getPrefs(context)
             _isRootQuickSettingsEnabled.value = prefs.getBoolean(
                 KEY_ROOT_QUICK_SETTINGS_ENABLED,
@@ -353,9 +366,7 @@ object PreferencesManager {
                 KEY_PHOTO_FRAME_ENABLED,
                 DEFAULT_PHOTO_FRAME_ENABLED
             )
-            initialized = true
         }
-        // Outside the guard so restore / reset-to-defaults (which call init again) refresh it
         _showRootOptions.value = isShowRootOptions(context)
     }
 

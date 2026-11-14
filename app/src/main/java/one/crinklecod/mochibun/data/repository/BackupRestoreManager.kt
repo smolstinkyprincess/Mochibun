@@ -840,7 +840,7 @@ object BackupRestoreManager {
             }
 
             // Refresh in-memory reactive state
-            PreferencesManager.init(context)
+            PreferencesManager.reload(context)
             one.crinklecod.mochibun.ui.theme.SystemUiThemeBridge.broadcastSavedTheme(context)
 
             Result.success(
@@ -867,7 +867,7 @@ object BackupRestoreManager {
         HardwareRemapManager.getPrefs(context).edit().clear().apply()
         CursorPreferences.getPrefs(context).edit().clear().apply()
 
-        PreferencesManager.init(context)
+        PreferencesManager.reload(context)
         HardwareRemapManager.reloadActiveConfig(context)
         one.crinklecod.mochibun.ui.theme.SystemUiThemeBridge.broadcastSavedTheme(context)
     }

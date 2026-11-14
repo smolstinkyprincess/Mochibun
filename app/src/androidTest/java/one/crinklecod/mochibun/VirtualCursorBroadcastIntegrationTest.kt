@@ -26,17 +26,22 @@ class VirtualCursorBroadcastIntegrationTest {
     @Before
     fun startCursorService() {
         HardwareRemapManager.init(context)
-        context.startForegroundService(Intent(context, VirtualCursorService::class.java))
-        waitUntil { VirtualCursorService.isServiceRunning }
+        // The service only runs while the cursor is visible, which needs the overlay window.
+        instrumentation.uiAutomation.executeShellCommand(
+            "appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow"
+        ).close()
+        VirtualCursorService.start(context, showCursor = true)
+        waitUntil { VirtualCursorService.isServiceRunning && VirtualCursorService.isCursorVisible }
+        // The flags flip mid-way through the start command; let the main thread finish it.
+        settleMainThread()
         service = getServiceInstance()
     }
 
     @After
     fun stopCursorService() {
-        instrumentation.runOnMainSync {
-            service?.setCursorVisibility(false)
-        }
         context.stopService(Intent(context, VirtualCursorService::class.java))
+        waitUntil { !VirtualCursorService.isServiceRunning }
+        service = null
     }
 
     @Test
@@ -47,32 +52,40 @@ class VirtualCursorBroadcastIntegrationTest {
             MochibunSystemActions.SYSTEM_SERVER_BROADCAST_PERMISSION
         )
 
-        sendAuthorizedBroadcast(Intent(MochibunSystemActions.ACTION_TOGGLE_CURSOR))
-        val afterToggle = VirtualCursorService.isCursorVisible
+        // Started visible: foreground service running with the overlay attached.
         assertTrue(VirtualCursorService.isServiceRunning)
+        assertTrue(VirtualCursorService.isCursorVisible)
+        val isOverlayAttached = currentService.javaClass
+            .getDeclaredField("isOverlayAttached")
+            .apply { isAccessible = true }
+            .getBoolean(currentService)
+        assertTrue(isOverlayAttached)
 
-        sendAuthorizedBroadcast(Intent(MochibunSystemActions.ACTION_TOGGLE_CURSOR))
-        assertFalse(VirtualCursorService.isCursorVisible)
-
-        val stateBeforeUnauthorized = VirtualCursorService.isCursorVisible
+        // Unauthorized senders cannot toggle the cursor.
         context.sendBroadcast(Intent(MochibunSystemActions.ACTION_TOGGLE_CURSOR).setPackage(context.packageName))
         context.sendBroadcast(
             Intent(MochibunSystemActions.ACTION_HARDWARE_KEY_TRIGGER).setPackage(context.packageName)
         )
-        instrumentation.waitForIdleSync()
-        assertEquals(stateBeforeUnauthorized, VirtualCursorService.isCursorVisible)
+        settleMainThread()
+        assertTrue(VirtualCursorService.isCursorVisible)
 
+        // Malformed authorized input is ignored without killing the service.
         sendAuthorizedBroadcast(Intent(MochibunSystemActions.ACTION_CURSOR_KEY))
         sendAuthorizedBroadcast(Intent(MochibunSystemActions.ACTION_HARDWARE_KEY_TRIGGER))
         assertTrue(VirtualCursorService.isServiceRunning)
+        assertTrue(VirtualCursorService.isCursorVisible)
 
-        if (afterToggle) {
-            val isOverlayAttached = currentService.javaClass
-                .getDeclaredField("isOverlayAttached")
-                .apply { isAccessible = true }
-                .getBoolean(currentService)
-            assertTrue(isOverlayAttached)
-        }
+        // Hiding the cursor stops the foreground service (and removes its notification).
+        sendAuthorizedBroadcast(Intent(MochibunSystemActions.ACTION_TOGGLE_CURSOR))
+        assertFalse(VirtualCursorService.isCursorVisible)
+        waitUntil { !VirtualCursorService.isServiceRunning }
+        assertFalse(VirtualCursorService.isServiceRunning)
+
+        // Toggling again starts it back up with the cursor shown.
+        VirtualCursorService.toggleCursor(context)
+        waitUntil { VirtualCursorService.isServiceRunning && VirtualCursorService.isCursorVisible }
+        assertTrue(VirtualCursorService.isServiceRunning)
+        assertTrue(VirtualCursorService.isCursorVisible)
     }
 
     @Test
@@ -84,8 +97,7 @@ class VirtualCursorBroadcastIntegrationTest {
         physics.javaClass.getMethod("setBounds", Float::class.javaPrimitiveType, Float::class.javaPrimitiveType)
             .invoke(physics, 480f, 800f)
 
-        // Keep this receiver-path check independent of overlay/window permission availability.
-        setCursorVisibleForTest(true)
+        assertTrue(VirtualCursorService.isCursorVisible)
         physics.javaClass.getMethod("setPosition", Float::class.javaPrimitiveType, Float::class.javaPrimitiveType)
             .invoke(physics, 470f, 790f)
 
@@ -129,20 +141,20 @@ class VirtualCursorBroadcastIntegrationTest {
         } finally {
             instrumentation.uiAutomation.dropShellPermissionIdentity()
         }
-        instrumentation.waitForIdleSync()
+        settleMainThread()
     }
 
-    private fun setCursorVisibleForTest(visible: Boolean) {
-        val field = VirtualCursorService.Companion.javaClass.getDeclaredField("isCursorVisible")
-            .apply { isAccessible = true }
-        field.setBoolean(VirtualCursorService.Companion, visible)
+    /**
+     * Lets an async broadcast reach the main thread. Not waitForIdleSync(): the visible cursor
+     * overlay animates continuously, so the main looper never goes idle.
+     */
+    private fun settleMainThread() {
+        SystemClock.sleep(150)
+        instrumentation.runOnMainSync {}
     }
 
-    private fun getServiceInstance(): VirtualCursorService {
-        val field = VirtualCursorService.Companion.javaClass.getDeclaredField("instance")
-            .apply { isAccessible = true }
-        return requireNotNull(field.get(VirtualCursorService.Companion)) as VirtualCursorService
-    }
+    private fun getServiceInstance(): VirtualCursorService =
+        requireNotNull(VirtualCursorService.runningInstance)
 
     private fun waitUntil(condition: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 5_000
