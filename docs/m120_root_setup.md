@@ -1,6 +1,6 @@
 ### 🔓 Advanced Setup: Rooting (Magisk), Performance Tuning & microG
 
-Mochibun works great as a regular launcher right out of the box! (˶ᵔ ᵕ ᵔ˶) But if you root your AT-M120, it unlocks a lot more: key remapping, a virtual cursor, custom lid LED colors, a recents provider, and SystemUI theming.
+Mochibun works great as a launcher, t9 keyboard, and virtual cursor right out of the box! (˶ᵔ ᵕ ᵔ˶) But if you root your AT-M120, it unlocks a lot more: key remapping, custom lid LED animations, a recents provider, and SystemUI theming.
 
 ---
 
@@ -241,4 +241,4 @@ Now that you're rooted, check and turn on these features in Mochibun:
 * **Lid LED Studio**: With root granted, *Settings > Behavior > Lid LED Studio* lets you pick separate animations for notifications and charging, and **Test Lid ♡** plays one right away (the lid windows light up even with the flip open). Animations play through Mochibun's tiny native `lidled` helper, which it unpacks from the APK on its own:
   * `lidled frames <step_ms> <loops> <last|off> <mask:hex>...` plays a whole step animation in one background process, then holds the last frame or switches off.
   * `lidled pattern <mask> <hex>` lights a single frame (like `10101` for windows 1, 3 and 5), and `lidled off` resets the chip.
-  * Charging tip 🔌: when you plug in, the stock software loads its own breathing program onto the LED chip. Mochibun resets the chip and locks the stock charging light while its animation plays, so you don't need to do anything, but it's why tests can look different on and off the charger.
+  * Charging tip 🔌: when you plug in, the stock software loads its own breathing program onto the LED chip. Mochibun resets the chip and locks the stock charging light while its animation plays, so you don't need to do anything, but it's why animations can look different on and off the charger.
