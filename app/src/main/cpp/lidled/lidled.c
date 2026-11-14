@@ -3,7 +3,7 @@
 // lidled: Mochibun's native clamshell lid LED controller (˶ᵔ ᵕ ᵔ˶)
 //
 // Direct register programming for the Awinic AW22127 LED controller on the
-// Chinoe AT-M120 flip phone (Android 12 API 31, MediaTek MT6761 quad-core 32-bit).
+// ALT Mive Style Folder AT-M120 flip phone (Android 12 API 31, MediaTek MT6761 quad-core 32-bit).
 //
 // Replaces multi-line shell scripts, subshell while-loops, and shell-side PID tracking.
 //
