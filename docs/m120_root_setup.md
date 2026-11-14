@@ -58,6 +58,7 @@ sudo udevadm trigger
      ```bash
      fastboot reboot
      ```
+   - The wipe puts the phone back to factory state, so you'll land in the setup wizard. Click through it, then turn **Developer options** and **USB debugging** back on (same steps as above) before moving on. ADB won't see the phone otherwise.
 
 3. **Patch `boot.img` with Magisk**:
    - Copy your dumped `boot.img` to the phone:
@@ -86,46 +87,14 @@ sudo udevadm trigger
      ```
    - Open the Magisk app and let it finish its first-time setup.
 
----
-
-#### 3. Installing microG (Replacing Heavy Google Play Services)
-
-The MT6761 only has about 1.8 GB of RAM. Swapping Google Play Services (GMS) for microG frees up a lot of memory and keeps the Low Memory Killer (LMK) from closing your apps in the background.
-
-Android 12 on the AT-M120 uses a read-only shared system partition (EROFS/ext4), so don't try to write to `/system` directly.
-
-1. **Enable Zygisk**:
-   - Open Magisk > Settings ⚙️ and turn **Zygisk** on.
-   - Reboot.
-
-2. **Enable Signature Spoofing**:
-   - Flash **FakeGApps** or **LSPosed (Zygisk release)** from Magisk Modules.
-   - Going the LSPosed route? Install and enable the **FakeGApps** module there to get signature spoofing.
-
-3. **Install microG Components**:
-   - Grab the latest microG builds from [microg.org](https://microg.org/download.html):
-     - `Services Core` (GmsCore)
-     - `Services Framework Proxy` (GsfProxy)
-   - Install both over ADB:
-     ```bash
-     adb install com.google.android.gms-*.apk
-     adb install com.google.android.gsf-*.apk
-     ```
-   - Open **microG Settings** on the phone and run **Self-Check**. Every spoofing and permission box should be ticked.
-
-4. **Install Aurora Store**:
-   - Install Aurora Store (ARMv7 32-bit / universal APK):
-     ```bash
-     adb install -r AuroraStore.apk
-     ```
-   - With Aurora Store and microG together, you can install Play Store apps without running Google's official services.
+   > On my M120, flashing just the patched `boot.img` was enough. I didn't have to touch `vbmeta`. Other MediaTek phones sometimes need that, but this one didn't.
 
 ---
 
-#### 4. Installing Vector and Zygisk Next (LSPosed)
-Mochibun uses Xposed hooks (`android` and `com.android.systemui`) to intercept physical keys globally (including the F4 cursor toggle, LSK/RSK soft keys, and custom key remaps) and apply pastel theming across SystemUI—without needing any Android Accessibility Service.
+#### 3. Installing Zygisk Next and Vector (LSPosed)
+Mochibun uses Xposed hooks (`android` and `com.android.systemui`) to intercept physical keys globally (including the F4 cursor toggle, LSK/RSK soft keys, and custom key remaps) and apply pastel theming across SystemUI, without needing any Android Accessibility Service. It's also what microG's signature spoofing hangs off of in the next section, so do this part first.
 
-> ⚠️ **Important:** Do **not** install both original `zygisk_lsposed` and `zygisk_vector` at the same time—running two Xposed frameworks concurrently causes `system_server` crashes on the AT-M120. Use **Zygisk Next + Vector** only.
+> ⚠️ **Important:** Do **not** install both original `zygisk_lsposed` and `zygisk_vector` at the same time. Running two Xposed frameworks concurrently causes `system_server` crashes on the AT-M120. Use **Zygisk Next + Vector** only.
 
 1. **Disable Magisk's Built-In Zygisk**:
    - Open **Magisk → Settings ⚙️** and make sure built-in **Zygisk** is toggled **OFF** (Zygisk Next provides its own Zygisk runtime engine).
@@ -140,6 +109,40 @@ Mochibun uses Xposed hooks (`android` and `com.android.systemui`) to intercept p
      - **System Framework** (`android`)
      - **System UI** (`com.android.systemui`)
    - **Reboot** once more so `system_server` and SystemUI load Mochibun's hooks.
+
+---
+
+#### 4. Installing microG (Replacing Heavy Google Play Services)
+
+The MT6761 only has about 1.8 GB of RAM. Swapping Google Play Services (GMS) for microG frees up a lot of memory and keeps the Low Memory Killer (LMK) from closing your apps in the background.
+
+Android 12 on the AT-M120 uses a read-only shared system partition (EROFS/ext4), so don't try to write to `/system` directly.
+
+Finish section 3 (Zygisk Next + Vector) first. You don't need to turn Magisk's own Zygisk back on for this.
+
+1. **Enable Signature Spoofing**:
+   - microG needs signature spoofing to pass as Google Play Services. With Vector set up, that means a spoofing module enabled in Vector Manager with the **System Framework** scope, followed by a reboot. **FakeGApps** is the one I'd try first.
+   - ⚠️ I haven't confirmed FakeGApps actually works on the AT-M120 on Android 12. microG's **Self-Check** (step 3) will tell you right away whether spoofing took, so if it fails, try a different spoofing module.
+
+2. **Install microG Components**:
+   - Grab the latest microG builds from [microg.org](https://microg.org/download.html):
+     - `Services Core` (GmsCore)
+     - `Services Framework Proxy` (GsfProxy)
+   - Install both over ADB:
+     ```bash
+     adb install com.google.android.gms-*.apk
+     adb install com.google.android.gsf-*.apk
+     ```
+
+3. **Run microG Self-Check**:
+   - Open **microG Settings** on the phone and run **Self-Check**. Every spoofing and permission box should be ticked.
+
+4. **Install Aurora Store**:
+   - Install Aurora Store (ARMv7 32-bit / universal APK):
+     ```bash
+     adb install -r AuroraStore.apk
+     ```
+   - With Aurora Store and microG together, you can install Play Store apps without running Google's official services.
 
 ---
 
@@ -173,17 +176,25 @@ QuickSwitch allows Mochibun to take over as the system recents provider (so that
    adb shell pm disable-user --user 0 com.hnlens.simplemode
    ```
 
+   > **Stuck with no home screen?** You can undo both over ADB:
+   > ```bash
+   > adb shell pm enable com.android.launcher3
+   > adb shell pm enable com.hnlens.simplemode
+   > ```
+
+---
+
 #### 6. Essential Magisk Boot Tuning for Mochibun
 
-This boot script keeps animations snappy and stops Android from killing Mochibun when memory gets tight:
+This boot script keeps animations snappy and stops Android from killing Mochibun when memory gets tight. Write it on your PC, push it over, then copy it into Magisk's boot-script folder.
 
-1. Create `/data/adb/service.d/01_m120_tune.sh`:
+1. Create `01_m120_tune.sh` on your PC:
    ```bash
-   adb shell su -c "cat << 'EOF' > /data/adb/service.d/01_m120_tune.sh
+   cat << 'EOF' > 01_m120_tune.sh
    #!/system/bin/sh
 
    # Wait until boot finishes
-   until [ \"\$(getprop sys.boot_completed)\" = \"1\" ]; do
+   until [ "$(getprop sys.boot_completed)" = "1" ]; do
        sleep 2
    done
 
@@ -213,18 +224,26 @@ This boot script keeps animations snappy and stops Android from killing Mochibun
    fi
 
    # Protect Mochibun from LMKD termination
-   PID=\$(pidof one.crinklecod.mochibun)
-   if [ -z \"\$PID\" ]; then
-       PID=\$(pidof com.crinklecodone.mochibun)
+   PID=$(pidof one.crinklecod.mochibun)
+   if [ -z "$PID" ]; then
+       PID=$(pidof com.crinklecodone.mochibun)
    fi
 
-   if [ -n \"\$PID\" ]; then
-       echo -1000 > /proc/\$PID/oom_score_adj
+   if [ -n "$PID" ]; then
+       echo -1000 > /proc/$PID/oom_score_adj
    fi
-   EOF"
+   EOF
    ```
 
-2. Make it executable:
+   > 📝 The last block only protects Mochibun **if it's already running** when the script fires. If the process isn't up yet, `PID` is empty and nothing happens. Since Mochibun is your home app it's usually there by then, but if you ever see it get killed anyway, this is the first place to look.
+
+2. Push it to the phone and move it into place as root:
+   ```bash
+   adb push 01_m120_tune.sh /sdcard/Download/
+   adb shell su -c "cp /sdcard/Download/01_m120_tune.sh /data/adb/service.d/01_m120_tune.sh"
+   ```
+
+3. Make it executable:
    ```bash
    adb shell su -c "chmod 755 /data/adb/service.d/01_m120_tune.sh"
    ```
