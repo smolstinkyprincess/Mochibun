@@ -3,6 +3,7 @@ package one.crinklecod.mochibun.service
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
@@ -62,6 +63,8 @@ import one.crinklecod.mochibun.ui.components.KeitaiCandidatePools
 import one.crinklecod.mochibun.ui.components.KeitaiCandidateState
 import one.crinklecod.mochibun.ui.components.KeitaiCandidateStrip
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
+import one.crinklecod.mochibun.ui.theme.SakuraDreamTheme
+import one.crinklecod.mochibun.ui.theme.isThemePrefKey
 import one.crinklecod.mochibun.ui.theme.loadSavedTheme
 
 /**
@@ -153,10 +156,24 @@ class MochibunImeService : InputMethodService() {
         }
     }
 
+    // Active launcher palette for the pill / Kaomoji Wheel. Reloaded on every onStartInputView and
+    // whenever a theme pref changes, so the IME never keeps showing a previous theme.
+    private var imeTheme by mutableStateOf(SakuraDreamTheme)
+    private val themePrefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == null || isThemePrefKey(key)) refreshTheme()
+    }
+
+    private fun refreshTheme() {
+        val latest = loadSavedTheme(PreferencesManager.getPrefs(this))
+        if (latest != imeTheme) imeTheme = latest
+    }
+
     override fun onCreate() {
         super.onCreate()
         displayDensity = resources.displayMetrics.density
         owner.start()
+        refreshTheme()
+        PreferencesManager.getPrefs(this).registerOnSharedPreferenceChangeListener(themePrefListener)
     }
 
     override fun onDestroy() {
@@ -168,6 +185,7 @@ class MochibunImeService : InputMethodService() {
         kaomojiWheelState = null
         moveAnimator?.cancel()
         moveAnimator = null
+        PreferencesManager.getPrefs(this).unregisterOnSharedPreferenceChangeListener(themePrefListener)
         owner.destroy()
         super.onDestroy()
     }
@@ -241,7 +259,7 @@ class MochibunImeService : InputMethodService() {
         // Compose resolves its owners from the root view, so the IME window's decor needs them too
         window?.window?.decorView?.let { attachOwners(it) }
         window?.window?.let { applyFloatingWindowStyle(it) }
-        val theme = loadSavedTheme(PreferencesManager.getPrefs(this))
+        refreshTheme()
         return ComposeView(this).apply {
             attachOwners(this)
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
@@ -259,7 +277,7 @@ class MochibunImeService : InputMethodService() {
             setContent {
                 val density = LocalDensity.current.density
                 displayDensity = density
-                CompositionLocalProvider(LocalLauncherTheme provides theme) {
+                CompositionLocalProvider(LocalLauncherTheme provides imeTheme) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -316,6 +334,7 @@ class MochibunImeService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        refreshTheme()
         cancelHold()
         handler.removeCallbacks(poundHoldRunnable)
         kaomojiWheelState = null
@@ -500,9 +519,7 @@ class MochibunImeService : InputMethodService() {
                 poundRepeated = false
                 poundWheelTriggered = false
                 handler.removeCallbacks(poundHoldRunnable)
-                if (PreferencesManager.isKaomojiWheelEnabled(this)) {
-                    handler.postDelayed(poundHoldRunnable, POUND_HOLD_MS)
-                }
+                handler.postDelayed(poundHoldRunnable, POUND_HOLD_MS)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
@@ -615,7 +632,7 @@ class MochibunImeService : InputMethodService() {
     }
 
     private fun openKaomojiWheel() {
-        if (!PreferencesManager.isKaomojiWheelEnabled(this) || kaomojiWheelState != null) return
+        if (kaomojiWheelState != null) return
         poundWheelTriggered = true
         batchEdit {
             candidateState.commitActive(commit)

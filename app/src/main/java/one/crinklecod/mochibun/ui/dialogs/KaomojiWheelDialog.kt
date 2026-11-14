@@ -161,7 +161,7 @@ fun KaomojiWheelDialog(
                     return@onPreviewKeyEvent true
                 }
 
-                if (PreferencesManager.matchesKaomojiTrigger(native.keyCode, native.scanCode, context)) {
+                if (PreferencesManager.matchesKaomojiTrigger(native.keyCode)) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         sawTriggerDown = true
                     } else if (event.type == KeyEventType.KeyUp) {

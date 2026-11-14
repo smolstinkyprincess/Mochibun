@@ -13,8 +13,8 @@ class KaomojiRepositoryTest {
     @Test
     fun testKaomojiTriggerIsPoundAndKeyFormatting() {
         // Trigger is permanently bound to '#'
-        assertTrue(PreferencesManager.matchesKaomojiTrigger(KeyEvent.KEYCODE_POUND, 0))
-        assertFalse(PreferencesManager.matchesKaomojiTrigger(KeyEvent.KEYCODE_STAR, 0))
+        assertTrue(PreferencesManager.matchesKaomojiTrigger(KeyEvent.KEYCODE_POUND))
+        assertFalse(PreferencesManager.matchesKaomojiTrigger(KeyEvent.KEYCODE_STAR))
         assertEquals("#", PreferencesManager.getKaomojiTriggerBadge())
 
         // Verify badge and label formatting for physical and arbitrary keys

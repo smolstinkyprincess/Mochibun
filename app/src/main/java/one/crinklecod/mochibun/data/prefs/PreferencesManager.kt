@@ -36,8 +36,6 @@ object PreferencesManager {
     const val PREFS_NAME = "launcher_preferences"
     const val KEY_WALLPAPER_OVERLAY_ENABLED = "pref_wallpaper_overlay_enabled"
     const val DEFAULT_WALLPAPER_OVERLAY_ENABLED = true
-    const val KEY_KAOMOJI_WHEEL_ENABLED = "pref_kaomoji_wheel_enabled"
-    const val DEFAULT_KAOMOJI_WHEEL_ENABLED = true
 
 
     const val KEY_SYSTEM_MONITOR_ENABLED = "pref_system_monitor_enabled"
@@ -46,9 +44,6 @@ object PreferencesManager {
 
     const val KEY_FOLDER_GRID_MODE = "pref_folder_grid_mode"
     const val DEFAULT_FOLDER_GRID_MODE = false // Compact List by default
-
-    const val KEY_T9_SEARCH_ENABLED = "pref_t9_search_enabled"
-    const val DEFAULT_T9_SEARCH_ENABLED = true
 
     const val KEY_SYSTEM_MONITOR_INTERVAL = "pref_system_monitor_interval_sec"
     const val DEFAULT_SYSTEM_MONITOR_INTERVAL = 2
@@ -144,10 +139,18 @@ object PreferencesManager {
     const val KEY_IME_AUTO_COMMIT_ENABLED = "pref_ime_auto_commit_enabled"
     const val DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED = true
     const val DEFAULT_IME_AUTO_COMMIT_ENABLED = true
+    // T9 multi-tap auto-commit delay (Keyboard → Input Behavior → T9 Auto-Commit Delay)
     const val KEY_IME_IDLE_COMMIT_MS = "pref_ime_idle_commit_ms"
-    const val DEFAULT_IME_IDLE_COMMIT_MS = 1500
-    const val MIN_IME_IDLE_COMMIT_MS = 500
-    const val MAX_IME_IDLE_COMMIT_MS = 3000
+    const val DEFAULT_IME_IDLE_COMMIT_MS = 700
+    const val MIN_IME_IDLE_COMMIT_MS = 300
+    const val MAX_IME_IDLE_COMMIT_MS = 1500
+    const val STEP_IME_IDLE_COMMIT_MS = 100
+
+    // Recents → LSK and Back → RSK remapping on Home / App Drawer. Mirrored into Settings.Global
+    // so MochibunKeyHook (system_server, can't read our prefs) knows whether to swallow the keys.
+    const val KEY_SOFT_KEY_NAV_ENABLED = "pref_soft_key_nav_enabled"
+    const val DEFAULT_SOFT_KEY_NAV_ENABLED = true
+    const val GLOBAL_SOFT_KEY_NAV_ENABLED = "mochibun_soft_key_nav_enabled"
     const val DEFAULT_IME_HOLD_VIBRATION = true
 
     const val KEY_WALLPAPER_URI = "wallpaper_uri"
@@ -174,8 +177,6 @@ object PreferencesManager {
     private val _isFolderGridMode = MutableStateFlow(DEFAULT_FOLDER_GRID_MODE)
     val isFolderGridMode: StateFlow<Boolean> = _isFolderGridMode.asStateFlow()
 
-    private val _isT9SearchEnabled = MutableStateFlow(DEFAULT_T9_SEARCH_ENABLED)
-    val isT9SearchEnabled: StateFlow<Boolean> = _isT9SearchEnabled.asStateFlow()
 
     private val _isDpadWrapAround = MutableStateFlow(DEFAULT_DPAD_WRAP_AROUND)
     val isDpadWrapAround: StateFlow<Boolean> = _isDpadWrapAround.asStateFlow()
@@ -188,6 +189,9 @@ object PreferencesManager {
 
     private val _isLidCloseSnapSoundEnabled = MutableStateFlow(DEFAULT_LID_CLOSE_SNAP_SOUND)
     val isLidCloseSnapSoundEnabled: StateFlow<Boolean> = _isLidCloseSnapSoundEnabled.asStateFlow()
+
+    private val _isSoftKeyNavEnabled = MutableStateFlow(DEFAULT_SOFT_KEY_NAV_ENABLED)
+    val isSoftKeyNavEnabled: StateFlow<Boolean> = _isSoftKeyNavEnabled.asStateFlow()
 
     private val _keypadSoundMode = MutableStateFlow(DEFAULT_KEYPAD_SOUND_MODE)
     val keypadSoundMode: StateFlow<String> = _keypadSoundMode.asStateFlow()
@@ -261,10 +265,6 @@ object PreferencesManager {
                 KEY_FOLDER_GRID_MODE,
                 DEFAULT_FOLDER_GRID_MODE
             )
-            _isT9SearchEnabled.value = prefs.getBoolean(
-                KEY_T9_SEARCH_ENABLED,
-                DEFAULT_T9_SEARCH_ENABLED
-            )
             _systemMonitorInterval.value = prefs.getInt(
                 KEY_SYSTEM_MONITOR_INTERVAL,
                 DEFAULT_SYSTEM_MONITOR_INTERVAL
@@ -291,6 +291,10 @@ object PreferencesManager {
             _isDpadBoundaryHaptics.value = prefs.getBoolean(
                 KEY_DPAD_BOUNDARY_HAPTICS,
                 DEFAULT_DPAD_BOUNDARY_HAPTICS
+            )
+            _isSoftKeyNavEnabled.value = prefs.getBoolean(
+                KEY_SOFT_KEY_NAV_ENABLED,
+                DEFAULT_SOFT_KEY_NAV_ENABLED
             )
             _keypadSoundMode.value = prefs.getString(
                 KEY_KEYPAD_SOUND_MODE,
@@ -344,19 +348,8 @@ object PreferencesManager {
         }
     }
 
-    fun isKaomojiWheelEnabled(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_KAOMOJI_WHEEL_ENABLED, DEFAULT_KAOMOJI_WHEEL_ENABLED)
-
-    fun setKaomojiWheelEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_KAOMOJI_WHEEL_ENABLED, enabled).apply()
-    }
-
-    fun matchesKaomojiTrigger(
-        eventKeyCode: Int,
-        eventScanCode: Int = 0,
-        context: Context? = null
-    ): Boolean = eventKeyCode == KeyEvent.KEYCODE_POUND &&
-        (context == null || isKaomojiWheelEnabled(context))
+    /** `#` is the fixed, always-on Kaomoji Wheel trigger (hold). */
+    fun matchesKaomojiTrigger(eventKeyCode: Int): Boolean = eventKeyCode == KeyEvent.KEYCODE_POUND
 
     fun formatKeyName(keyCode: Int, scanCode: Int = 0): String {
         val physical = PhysicalKey.fromKeyCode(keyCode)
@@ -478,18 +471,6 @@ object PreferencesManager {
     fun setFolderGridMode(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_FOLDER_GRID_MODE, enabled).apply()
         _isFolderGridMode.value = enabled
-    }
-
-    fun isT9SearchEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_T9_SEARCH_ENABLED,
-            DEFAULT_T9_SEARCH_ENABLED
-        )
-    }
-
-    fun setT9SearchEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_T9_SEARCH_ENABLED, enabled).apply()
-        _isT9SearchEnabled.value = enabled
     }
 
     fun getSystemMonitorInterval(context: Context): Int {
@@ -891,6 +872,11 @@ object PreferencesManager {
         getPrefs(context).getInt(KEY_IME_IDLE_COMMIT_MS, DEFAULT_IME_IDLE_COMMIT_MS)
             .coerceIn(MIN_IME_IDLE_COMMIT_MS, MAX_IME_IDLE_COMMIT_MS)
 
+    /** Next auto-commit delay one [STEP_IME_IDLE_COMMIT_MS] notch in [direction] (-1 / +1), clamped. */
+    fun stepImeIdleCommitMs(currentMs: Int, direction: Int): Int =
+        (currentMs + direction * STEP_IME_IDLE_COMMIT_MS)
+            .coerceIn(MIN_IME_IDLE_COMMIT_MS, MAX_IME_IDLE_COMMIT_MS)
+
     fun setImeIdleCommitMs(context: Context, delayMs: Int) {
         getPrefs(context).edit()
             .putInt(KEY_IME_IDLE_COMMIT_MS, delayMs.coerceIn(MIN_IME_IDLE_COMMIT_MS, MAX_IME_IDLE_COMMIT_MS))
@@ -917,5 +903,44 @@ object PreferencesManager {
 
     fun setImeHoldVibrationEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_IME_HOLD_VIBRATION, enabled).apply()
+    }
+
+    fun isSoftKeyNavEnabled(context: Context): Boolean =
+        if (initialized) {
+            _isSoftKeyNavEnabled.value
+        } else {
+            getPrefs(context).getBoolean(KEY_SOFT_KEY_NAV_ENABLED, DEFAULT_SOFT_KEY_NAV_ENABLED)
+        }
+
+    fun setSoftKeyNavEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SOFT_KEY_NAV_ENABLED, enabled).apply()
+        _isSoftKeyNavEnabled.value = enabled
+        syncSoftKeyNavToGlobal(context)
+    }
+
+    /**
+     * Mirrors the Soft-Key Navigation pref into Settings.Global for MochibunKeyHook. Writes only
+     * when the stored global differs. Tries a direct write first (works once WRITE_SECURE_SETTINGS
+     * is granted), then falls back to root. Without either, the in-app handler still honours the pref.
+     */
+    fun syncSoftKeyNavToGlobal(context: Context) {
+        val value = if (isSoftKeyNavEnabled(context)) 1 else 0
+        val resolver = context.contentResolver
+        val current = try {
+            android.provider.Settings.Global.getInt(resolver, GLOBAL_SOFT_KEY_NAV_ENABLED, 1)
+        } catch (_: Exception) {
+            -1
+        }
+        if (current == value) return
+        val written = try {
+            android.provider.Settings.Global.putInt(resolver, GLOBAL_SOFT_KEY_NAV_ENABLED, value)
+        } catch (_: SecurityException) {
+            false
+        }
+        if (!written) {
+            one.crinklecod.mochibun.core.system.RootShell.submit(
+                "settings put global $GLOBAL_SOFT_KEY_NAV_ENABLED $value"
+            )
+        }
     }
 }

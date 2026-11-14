@@ -319,7 +319,7 @@ internal class LauncherKeyHandler(
                 return true
             }
 
-            if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode, nativeEvent.scanCode, context)) {
+            if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode)) {
                 val pendingHold = poundHoldJob
                 if (pendingHold != null) {
                     pendingHold.cancel()
@@ -469,6 +469,20 @@ internal class LauncherKeyHandler(
         nativeEvent: KeyEvent,
         state: LauncherKeypadState
     ): Boolean? {
+        // Soft-Key Navigation off: Recents and Back keep their stock Android meaning. Back still
+        // closes the drawer (instead of cycling its sort mode) like any launcher.
+        if (!PreferencesManager.isSoftKeyNavEnabled(context)) {
+            if (isAppSwitchKey(nativeEvent)) return false
+            if (nativeEvent.keyCode == KeyEvent.KEYCODE_BACK) {
+                if (!state.isDrawerActive) return false
+                if (nativeEvent.action == KeyEvent.ACTION_DOWN && nativeEvent.repeatCount == 0) {
+                    SoundEffectManager.play(context, SoundEffect.BACK)
+                    actions.setDrawerOpen(false)
+                }
+                return true
+            }
+        }
+
         val isLeftSoftKey = nativeEvent.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
             nativeEvent.scanCode == 580 ||
             nativeEvent.keyCode == KeyEvent.KEYCODE_MENU
@@ -570,7 +584,7 @@ internal class LauncherKeyHandler(
     }
 
     private fun handleActionDown(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
-        if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode, nativeEvent.scanCode, context)) {
+        if (PreferencesManager.matchesKaomojiTrigger(nativeEvent.keyCode)) {
             if (nativeEvent.repeatCount == 0) {
                 SoundEffectManager.play(context, SoundEffect.CLICK)
                 actions.setPoundKeyState(1)
@@ -672,15 +686,7 @@ internal class LauncherKeyHandler(
                     }
                 }
                 is ActionType.ToggleFlashlight -> {
-                    val isTorchOn = TorchManager.toggleTorch(context)
-                    performBoundaryHaptic(context)
-                    if (isTorchOn == true) {
-                        SoundEffectManager.play(context, SoundEffect.SELECT)
-                        Toast.makeText(context, "🔦 Flashlight On", Toast.LENGTH_SHORT).show()
-                    } else if (isTorchOn == false) {
-                        SoundEffectManager.play(context, SoundEffect.BACK)
-                        Toast.makeText(context, "🔦 Flashlight Off", Toast.LENGTH_SHORT).show()
-                    }
+                    toggleFlashlight()
                     return true
                 }
                 is ActionType.GlobalRecents,
@@ -731,15 +737,7 @@ internal class LauncherKeyHandler(
 
         if (nativeEvent.keyCode == KeyEvent.KEYCODE_0 || nativeEvent.keyCode == KeyEvent.KEYCODE_NUMPAD_0) {
             if (nativeEvent.repeatCount == 1 && state.isHomeScreenActive) {
-                val isTorchOn = TorchManager.toggleTorch(context)
-                performBoundaryHaptic(context)
-                if (isTorchOn == true) {
-                    SoundEffectManager.play(context, SoundEffect.SELECT)
-                    Toast.makeText(context, "🔦 Flashlight On", Toast.LENGTH_SHORT).show()
-                } else if (isTorchOn == false) {
-                    SoundEffectManager.play(context, SoundEffect.BACK)
-                    Toast.makeText(context, "🔦 Flashlight Off", Toast.LENGTH_SHORT).show()
-                }
+                toggleFlashlight()
             }
             return true
         }
@@ -1004,6 +1002,14 @@ internal class LauncherKeyHandler(
             }
         }
         return true
+    }
+
+    /** Toggles the rear torch with haptic, sound and a kawaii toast. */
+    private fun toggleFlashlight() {
+        val isTorchOn = TorchManager.toggleTorch(context)
+        performBoundaryHaptic(context)
+        SoundEffectManager.play(context, if (isTorchOn == true) SoundEffect.SELECT else SoundEffect.BACK)
+        Toast.makeText(context, TorchManager.toastText(isTorchOn), Toast.LENGTH_SHORT).show()
     }
 
     private fun isAppSwitchKey(event: KeyEvent): Boolean =

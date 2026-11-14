@@ -91,6 +91,7 @@ internal fun KeyboardSettingsSubScreen(
     var imeState by remember { mutableStateOf(MochibunImeStatus.state(context)) }
     var holdForDigit by remember { mutableStateOf(PreferencesManager.isImeHoldForDigitEnabled(context)) }
     var autoCommit by remember { mutableStateOf(PreferencesManager.isImeAutoCommitEnabled(context)) }
+    var autoCommitMs by remember { mutableIntStateOf(PreferencesManager.getImeIdleCommitMs(context)) }
     var holdVibration by remember { mutableStateOf(PreferencesManager.isImeHoldVibrationEnabled(context)) }
     var showKeyGuide by remember { mutableStateOf(false) }
 
@@ -104,12 +105,26 @@ internal fun KeyboardSettingsSubScreen(
                 autoCommit = !autoCommit
                 PreferencesManager.setImeAutoCommitEnabled(context, autoCommit)
             }
-            4 -> {
+            5 -> {
                 holdVibration = !holdVibration
                 PreferencesManager.setImeHoldVibrationEnabled(context, holdVibration)
             }
-            5 -> showKeyGuide = true
+            6 -> showKeyGuide = true
         }
+    }
+
+    // T9 Auto-Commit Delay stepper; inert while Letter Auto-commit is off. Returns true if it moved.
+    fun stepAutoCommitMs(direction: Int, wrap: Boolean = false): Boolean {
+        if (!autoCommit) return false
+        val next = if (wrap && direction > 0 && autoCommitMs >= PreferencesManager.MAX_IME_IDLE_COMMIT_MS) {
+            PreferencesManager.MIN_IME_IDLE_COMMIT_MS
+        } else {
+            PreferencesManager.stepImeIdleCommitMs(autoCommitMs, direction)
+        }
+        if (next == autoCommitMs) return false
+        autoCommitMs = next
+        PreferencesManager.setImeIdleCommitMs(context, next)
+        return true
     }
 
     fun refresh() {
@@ -132,7 +147,8 @@ internal fun KeyboardSettingsSubScreen(
         snapshotFlow { windowInfo.isWindowFocused }.collect { focused -> if (focused) refresh() }
     }
 
-    val totalItems = 6
+    // 0-1 keyboard setup, 2 hold for digit, 3 auto-commit, 4 auto-commit delay, 5 haptic, 6 key guide
+    val totalItems = 7
 
     LaunchedEffect(focusedIndex) {
         val target = if (focusedIndex <= 1) 0 else 1
@@ -145,6 +161,7 @@ internal fun KeyboardSettingsSubScreen(
         when (index) {
             0 -> activateMochibunKeyboard(context, scope, imeState, ::refresh)
             1 -> MochibunImeStatus.showPicker(context)
+            4 -> stepAutoCommitMs(1, wrap = true)
             else -> toggleSetting(index)
         }
     }
@@ -200,12 +217,17 @@ internal fun KeyboardSettingsSubScreen(
                 }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     if (event.type == KeyEventType.KeyDown) {
-                        if (focusedIndex in 2..4) {
-                            toggleSetting(focusedIndex)
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                        } else {
-                            val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
-                            focusedIndex = (focusedIndex + direction + totalItems) % totalItems
+                        val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                        when (focusedIndex) {
+                            2, 3, 5 -> {
+                                toggleSetting(focusedIndex)
+                                SoundEffectManager.play(context, SoundEffect.NAV)
+                            }
+                            4 -> SoundEffectManager.play(
+                                context,
+                                if (stepAutoCommitMs(direction)) SoundEffect.NAV else SoundEffect.BOUNDARY
+                            )
+                            else -> focusedIndex = (focusedIndex + direction + totalItems) % totalItems
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -266,12 +288,26 @@ internal fun KeyboardSettingsSubScreen(
                         }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "T9 Auto-Commit Delay",
+                        subtitle = if (autoCommit) {
+                            "Pause before a multi-tap letter is committed"
+                        } else {
+                            "Turn on Letter Auto-commit to use"
+                        },
+                        valueDisplay = if (autoCommit) "$autoCommitMs ms" else "Off",
+                        isFocused = focusedIndex == 4,
+                        jumpNumber = 5,
+                        onDecrement = { stepAutoCommitMs(-1) },
+                        onIncrement = { stepAutoCommitMs(1) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "Key Hold Haptic",
                         subtitle = "Buzz when a hold types a number",
                         checked = holdVibration,
-                        isFocused = focusedIndex == 4,
-                        jumpNumber = 5,
+                        isFocused = focusedIndex == 5,
+                        jumpNumber = 6,
                         onCheckedChange = {
                             holdVibration = it
                             PreferencesManager.setImeHoldVibrationEnabled(context, it)
@@ -282,8 +318,8 @@ internal fun KeyboardSettingsSubScreen(
                         title = "Key Guide",
                         subtitle = "View physical keypad and hardware key mappings",
                         icon = "ⓘ",
-                        isFocused = focusedIndex == 5,
-                        jumpNumber = 6,
+                        isFocused = focusedIndex == 6,
+                        jumpNumber = 7,
                         onClick = { showKeyGuide = true }
                     )
                 }

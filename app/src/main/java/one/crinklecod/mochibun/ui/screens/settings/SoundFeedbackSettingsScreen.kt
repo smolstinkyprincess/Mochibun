@@ -63,12 +63,13 @@ internal fun SoundFeedbackSettingsSubScreen(
         PreferencesManager.setLauncherAudioStream(context, next)
     }
 
+    // Cycles every SoundEffectManager theme (incl. Muted). Reads the pref directly rather than the
+    // collected state, which lags a frame and made quick repeated presses land on the same theme.
     fun changeSoundProfile(direction: Int) {
-        val profiles = listOf("retro", "kawaii", "chiptune")
-        val index = profiles.indexOf(keypadSoundMode).coerceAtLeast(0)
-        val nextIndex = (index + direction + profiles.size) % profiles.size
-        PreferencesManager.setKeypadSoundMode(context, profiles[nextIndex])
-        SoundEffectManager.play(context, SoundEffect.SELECT)
+        val current = PreferencesManager.getKeypadSoundMode(context)
+        PreferencesManager.setKeypadSoundMode(context, SoundEffectManager.nextThemeId(current, direction))
+        // Live preview with the newly selected profile (silent for Muted)
+        SoundEffectManager.play(context, SoundEffect.CLICK)
     }
 
     fun setMediaVolumeLock(enabled: Boolean) {
@@ -138,7 +139,7 @@ internal fun SoundFeedbackSettingsSubScreen(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         activate(focusedIndex)
-                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        if (focusedIndex != 3) SoundEffectManager.play(context, SoundEffect.SELECT)
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -211,12 +212,8 @@ internal fun SoundFeedbackSettingsSubScreen(
                 SettingsCard(categoryTitle = "Sound Effects") {
                     SettingsStepperRow(
                         title = "Keypad Sound Profile",
-                        subtitle = "Choose Keitai, Pop, or Chiptune effects",
-                        valueDisplay = when (keypadSoundMode) {
-                            "retro" -> "Keitai"
-                            "chiptune" -> "Chiptune"
-                            else -> "Pop"
-                        },
+                        subtitle = "Pick a keypad sound theme (plays a preview)",
+                        valueDisplay = SoundEffectManager.themeName(keypadSoundMode),
                         isFocused = focusedIndex == 3,
                         jumpNumber = 4,
                         onDecrement = { changeSoundProfile(-1) },

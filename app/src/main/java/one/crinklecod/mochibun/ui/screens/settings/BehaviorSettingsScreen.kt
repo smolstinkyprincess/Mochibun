@@ -49,7 +49,6 @@ internal fun BehaviorSettingsSubScreen(
     var showLidLedColorPicker by remember { mutableStateOf(false) }
 
     val folderGrid by PreferencesManager.isFolderGridMode.collectAsState()
-    val t9Search by PreferencesManager.isT9SearchEnabled.collectAsState()
     val lidAction by PreferencesManager.lidOpenAction.collectAsState()
     val lidLed by PreferencesManager.isLidLedEnabled.collectAsState()
     val lidLedCharging by PreferencesManager.isLidLedChargingEnabled.collectAsState()
@@ -58,7 +57,7 @@ internal fun BehaviorSettingsSubScreen(
     val items = remember(onCreateFolderClick) {
         buildList {
             if (onCreateFolderClick != null) add("create_folder")
-            addAll(listOf("folder_grid", "t9_search", "hidden_apps", "lid_open", "lid_led", "led_color", "led_charging"))
+            addAll(listOf("folder_grid", "hidden_apps", "lid_open", "lid_led", "led_color", "led_charging"))
         }
     }
     val totalItems = items.size
@@ -93,7 +92,6 @@ internal fun BehaviorSettingsSubScreen(
         when (items.getOrNull(index)) {
             "create_folder" -> onCreateFolderClick?.invoke()
             "folder_grid" -> PreferencesManager.setFolderGridMode(context, !folderGrid)
-            "t9_search" -> PreferencesManager.setT9SearchEnabled(context, !t9Search)
             "hidden_apps" -> onOpenHiddenApps?.invoke()
             "lid_open" -> stepLidAction(1)
             "lid_led" -> {
@@ -122,7 +120,7 @@ internal fun BehaviorSettingsSubScreen(
     LaunchedEffect(focusedIndex, items) {
         val target = when (items.getOrNull(focusedIndex)) {
             "create_folder", "folder_grid" -> 0
-            "t9_search", "hidden_apps" -> 1
+            "hidden_apps" -> 1
             else -> 2
         }
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
@@ -217,15 +215,6 @@ internal fun BehaviorSettingsSubScreen(
             }
             item {
                 SettingsCard(categoryTitle = "App Drawer") {
-                    SettingsToggleRow(
-                        title = "T9 Keyboard Search",
-                        subtitle = "Filter applications using the physical keypad",
-                        checked = t9Search,
-                        isFocused = items.getOrNull(focusedIndex) == "t9_search",
-                        jumpNumber = jumpNumber("t9_search"),
-                        onCheckedChange = { PreferencesManager.setT9SearchEnabled(context, it) }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Hidden Apps",
                         subtitle = "Manage hidden launcher applications",

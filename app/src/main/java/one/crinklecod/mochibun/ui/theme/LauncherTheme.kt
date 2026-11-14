@@ -458,6 +458,13 @@ fun deleteCustomPreset(prefs: SharedPreferences, id: String) {
 
 val LocalLauncherTheme = compositionLocalOf { SakuraDreamTheme }
 
+/** True for SharedPreferences keys that feed [loadSavedTheme] (preset, overrides, custom presets). */
+fun isThemePrefKey(key: String): Boolean =
+    key.startsWith("theme_") ||
+        key.startsWith("preset_custom_") ||
+        key.startsWith("custom_preset_") ||
+        key == "pref_theme_font_family"
+
 fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
     val presetName = prefs.getString("theme_preset", "sakura_dream") ?: "sakura_dream"
 

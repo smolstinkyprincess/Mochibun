@@ -49,9 +49,7 @@ internal fun CursorHardwareSettingsSubScreen(
     var cursorSizeDp by remember { mutableIntStateOf(CursorPreferences.getCursorSizeDp(context)) }
     var scrollStepPx by remember { mutableIntStateOf(CursorPreferences.getScrollStepPx(context)) }
     var customUri by remember { mutableStateOf(CursorPreferences.getCustomCursorUri(context)) }
-    var kaomojiEnabled by remember {
-        mutableStateOf(PreferencesManager.isKaomojiWheelEnabled(context))
-    }
+    val softKeyNav by PreferencesManager.isSoftKeyNavEnabled.collectAsState()
     val dpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
     val boundaryHaptics by PreferencesManager.isDpadBoundaryHaptics.collectAsState()
 
@@ -125,10 +123,7 @@ internal fun CursorHardwareSettingsSubScreen(
                 focusedIndex = 5
             }
             7 -> onOpenHardwareButtons?.invoke()
-            8 -> {
-                kaomojiEnabled = !kaomojiEnabled
-                PreferencesManager.setKaomojiWheelEnabled(context, kaomojiEnabled)
-            }
+            8 -> PreferencesManager.setSoftKeyNavEnabled(context, !softKeyNav)
             9 -> PreferencesManager.setDpadWrapAround(context, !dpadWrapAround)
             10 -> PreferencesManager.setDpadBoundaryHaptics(context, !boundaryHaptics)
         }
@@ -303,15 +298,12 @@ internal fun CursorHardwareSettingsSubScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Kaomoji Trigger Key (# Long-press)",
-                        subtitle = "Open the Kaomoji Wheel when holding #",
-                        checked = kaomojiEnabled,
+                        title = "Soft-Key Navigation (LSK / RSK)",
+                        subtitle = "Recents & Back act as soft keys on Home and the Drawer",
+                        checked = softKeyNav,
                         isFocused = focusedIndex == 8,
                         jumpNumber = 9,
-                        onCheckedChange = {
-                            kaomojiEnabled = it
-                            PreferencesManager.setKaomojiWheelEnabled(context, it)
-                        }
+                        onCheckedChange = { PreferencesManager.setSoftKeyNavEnabled(context, it) }
                     )
                 }
             }

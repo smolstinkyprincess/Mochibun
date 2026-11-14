@@ -102,6 +102,15 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         private var hasHookSettingCheck = false
 
         @Volatile
+        private var cachedSoftKeyNavEnabled = true
+
+        @Volatile
+        private var lastSoftKeyNavCheckElapsed = 0L
+
+        @Volatile
+        private var hasSoftKeyNavCheck = false
+
+        @Volatile
         private var heartbeatRecorded = false
 
         @Volatile
@@ -226,7 +235,8 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         val isAppSwitch = keyCode == KeyEvent.KEYCODE_APP_SWITCH || event.scanCode == SCANCODE_APP_SWITCH
         val isBack = keyCode == KeyEvent.KEYCODE_BACK
 
-        if (isAppSwitch || isBack) {
+        // Soft-Key Navigation off in Mochibun settings: leave Recents / Back to the OS
+        if ((isAppSwitch || isBack) && isSoftKeyNavEnabled()) {
             val topActivity = getTopActivity(phoneWindowManager, context)
             val isMochibunForeground = topActivity?.packageName == PACKAGE_MOCHIBUN
 
@@ -335,6 +345,29 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             }
         }
         return cachedHookEnabled
+    }
+
+    /** Settings.Global mirror of PreferencesManager.isSoftKeyNavEnabled, cached like [isHookEnabled]. */
+    private fun isSoftKeyNavEnabled(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (hasSoftKeyNavCheck && now - lastSoftKeyNavCheckElapsed < HOOK_SETTING_CACHE_TTL_MS) {
+            return cachedSoftKeyNavEnabled
+        }
+        val resolver = systemServerResolver
+        if (resolver != null) {
+            cachedSoftKeyNavEnabled = try {
+                Settings.Global.getInt(
+                    resolver,
+                    PreferencesManager.GLOBAL_SOFT_KEY_NAV_ENABLED,
+                    1
+                ) == 1
+            } catch (_: Throwable) {
+                true
+            }
+        }
+        lastSoftKeyNavCheckElapsed = now
+        hasSoftKeyNavCheck = true
+        return cachedSoftKeyNavEnabled
     }
 
     private fun ensureKeyHookStatusReceiver(context: Context) {

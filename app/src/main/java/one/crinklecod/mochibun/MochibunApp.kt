@@ -67,6 +67,8 @@ class MochibunApp : Application(), ImageLoaderFactory {
         WidgetRepository.init(this)
         CursorServiceWatchdog.init(this)
         MediaVolumeLockSync.init(this)
+        PreferencesManager.syncSoftKeyNavToGlobal(this)
+        one.crinklecod.mochibun.core.system.TorchManager.init(this)
         one.crinklecod.mochibun.service.VirtualCursorService.start(this)
     }
 

@@ -57,6 +57,17 @@ object SoundEffectManager {
 
     private val ALL_SYNTHESIZED_THEMES = listOf("kawaii", "retro", "chiptune", "pager", "thock", "water")
 
+    /** Theme id one step from [currentId] in [SoundThemes] order, wrapping; unknown ids start at the first theme. */
+    fun nextThemeId(currentId: String, direction: Int): String {
+        val index = SoundThemes.indexOfFirst { it.id == currentId }
+        if (index < 0) return SoundThemes.first().id
+        return SoundThemes[Math.floorMod(index + direction, SoundThemes.size)].id
+    }
+
+    /** Display name for a theme id, e.g. "retro" -> "Retro Keitai". */
+    fun themeName(id: String): String =
+        SoundThemes.firstOrNull { it.id == id }?.name ?: SoundThemes.first().name
+
     private var soundPool: SoundPool? = null
     private val soundMap = mutableMapOf<Pair<String, SoundEffect>, Int>()
     @Volatile

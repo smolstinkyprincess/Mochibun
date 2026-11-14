@@ -184,8 +184,7 @@ object BackupRestoreManager {
         behaviorObj.put("keypad_sound_mode", PreferencesManager.getKeypadSoundMode(context))
         behaviorObj.put("media_volume_lock_enabled", PreferencesManager.isMediaVolumeLockEnabled(context))
         behaviorObj.put("lid_close_snap_sound_enabled", PreferencesManager.isLidCloseSnapSoundEnabled(context))
-        behaviorObj.put("kaomoji_wheel_enabled", PreferencesManager.isKaomojiWheelEnabled(context))
-        behaviorObj.put("t9_search_enabled", PreferencesManager.isT9SearchEnabled(context))
+        behaviorObj.put("soft_key_nav_enabled", PreferencesManager.isSoftKeyNavEnabled(context))
         behaviorObj.put("system_monitor_enabled", PreferencesManager.isSystemMonitorEnabled(context))
         behaviorObj.put("system_monitor_interval_sec", PreferencesManager.getSystemMonitorInterval(context))
         behaviorObj.put("ime_hold_delay_ms", PreferencesManager.getImeHoldDelayMs(context))
@@ -730,11 +729,13 @@ object BackupRestoreManager {
                 if (behaviorObj.has("lid_close_snap_sound_enabled")) {
                     PreferencesManager.setLidCloseSnapSoundEnabled(context, behaviorObj.optBoolean("lid_close_snap_sound_enabled", PreferencesManager.DEFAULT_LID_CLOSE_SNAP_SOUND))
                 }
-                if (behaviorObj.has("kaomoji_wheel_enabled")) {
-                    PreferencesManager.setKaomojiWheelEnabled(context, behaviorObj.optBoolean("kaomoji_wheel_enabled", PreferencesManager.DEFAULT_KAOMOJI_WHEEL_ENABLED))
-                }
-                if (behaviorObj.has("t9_search_enabled")) {
-                    PreferencesManager.setT9SearchEnabled(context, behaviorObj.optBoolean("t9_search_enabled", true))
+                // Older backups may still carry "kaomoji_wheel_enabled" / "t9_search_enabled"; both
+                // features are now always on, so those keys are ignored.
+                if (behaviorObj.has("soft_key_nav_enabled")) {
+                    PreferencesManager.setSoftKeyNavEnabled(
+                        context,
+                        behaviorObj.optBoolean("soft_key_nav_enabled", PreferencesManager.DEFAULT_SOFT_KEY_NAV_ENABLED)
+                    )
                 }
                 if (behaviorObj.has("ime_hold_delay_ms")) {
                     PreferencesManager.setImeHoldDelayMs(
