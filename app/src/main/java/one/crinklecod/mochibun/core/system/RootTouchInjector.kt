@@ -31,7 +31,10 @@ import kotlin.math.roundToInt
  * costs one pipe write instead of booting `input` (app_process) every time.
  *
  * Slow path: the old `input tap` / `input swipe` shell commands. We drop to it whenever the
- * helper can't run (no root, helper failed, display rotated), so callers never notice.
+ * helper can't run (helper failed, display rotated), so callers never notice.
+ *
+ * Non-root path: taps and scroll swipes go to the optional MochibunAccessibilityService
+ * (dispatchGesture) when su is missing or denied and the user has enabled that service.
  *
  * Lifecycle: call [attach] when the cursor turns on and [release] when it turns off. The helper
  * is only launched lazily on the first native tap/swipe/drag, quits on [release], and also exits
@@ -98,6 +101,44 @@ object RootTouchInjector {
     private var legacyX1 = 0f; private var legacyY1 = 0f
     private var legacyT0 = 0L
 
+    // ------------------------------------------------------------------ non-root fallback
+
+    /** Gesture backend used when root is unavailable (MochibunAccessibilityService). */
+    interface GestureFallback {
+        fun dispatchTap(x: Float, y: Float): Boolean
+        fun dispatchSwipe(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long): Boolean
+    }
+
+    /** Where a tap/scroll goes. */
+    enum class TouchRoute { ROOT, ACCESSIBILITY, NONE }
+
+    /**
+     * Root wins whenever su exists and hasn't been denied, so rooted setups behave exactly as
+     * before. Without root (or with root denied) the accessibility gesture backend takes over
+     * when the user has enabled it. Pure, unit-tested.
+     */
+    fun chooseRoute(suPresent: Boolean, rootGranted: Boolean?, accessibilityConnected: Boolean): TouchRoute =
+        when {
+            suPresent && rootGranted != false -> TouchRoute.ROOT
+            accessibilityConnected -> TouchRoute.ACCESSIBILITY
+            suPresent -> TouchRoute.ROOT
+            else -> TouchRoute.NONE
+        }
+
+    // Swappable for unit tests
+    @Volatile internal var suPresentProbe: () -> Boolean = { RootShell.isSuBinaryPresent() }
+    @Volatile internal var rootGrantedProbe: () -> Boolean? = { RootShell.isGranted() }
+    @Volatile internal var gestureFallbackProvider: () -> GestureFallback? = {
+        one.crinklecod.mochibun.service.MochibunAccessibilityService.instance
+    }
+
+    /** The gesture backend to use instead of root right now, or null to stay on the root path. */
+    private fun nonRootFallback(): GestureFallback? {
+        val fallback = gestureFallbackProvider()
+        val route = chooseRoute(suPresentProbe(), rootGrantedProbe(), fallback != null)
+        return if (route == TouchRoute.ACCESSIBILITY) fallback else null
+    }
+
     // ------------------------------------------------------------------ public API
 
     /** Cursor turned on. Cheap: stores a context, spawns nothing, asks for no root. */
@@ -126,6 +167,7 @@ object RootTouchInjector {
     }
 
     fun tapAsync(x: Float, y: Float, holdMs: Int = TAP_HOLD_MS) {
+        nonRootFallback()?.let { it.dispatchTap(x, y); return }
         io.execute {
             if (!nativeSend(OP_TAP, px(x), px(y), holdMs)) legacyTap(x, y)
         }
@@ -136,6 +178,7 @@ object RootTouchInjector {
     }
 
     fun swipeAsync(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long = 200L) {
+        nonRootFallback()?.let { it.dispatchSwipe(x1, y1, x2, y2, durationMs); return }
         io.execute {
             val ok = nativeSend(OP_SWIPE, px(x1), px(y1), px(x2), px(y2), durationMs.toInt())
             if (!ok) legacySwipe(x1, y1, x2, y2, durationMs)

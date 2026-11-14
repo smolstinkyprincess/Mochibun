@@ -148,7 +148,8 @@ fun performQuickSettingsAction(context: Context, index: Int) {
             rootToggleCount.intValue++
             HapticManager.performBoundaryHaptic(context)
         } else {
-            openPanel(context, "android.settings.panel.action.BLUETOOTH", Settings.ACTION_BLUETOOTH_SETTINGS)
+            // Android 12 has no Bluetooth panel, so open the Bluetooth settings page
+            openPanel(context, Settings.ACTION_BLUETOOTH_SETTINGS, Settings.ACTION_SETTINGS)
         }
         QuickSettingsNav.TORCH -> {
             if (TorchManager.toggleTorch(context) == null) HapticManager.performBoundaryHaptic(context)

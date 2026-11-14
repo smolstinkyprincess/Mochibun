@@ -53,7 +53,6 @@ import one.crinklecod.mochibun.core.haptic.HapticManager
 import one.crinklecod.mochibun.core.widget.MochibunWidgetHost
 import one.crinklecod.mochibun.core.widget.NavDirection
 import one.crinklecod.mochibun.core.widget.WidgetFrame
-import one.crinklecod.mochibun.core.system.RootShell
 import one.crinklecod.mochibun.core.util.findActivity
 import one.crinklecod.mochibun.core.util.loadDownsampledPhotoBitmap
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
@@ -164,10 +163,10 @@ fun WidgetPage(
         }
     }
 
-    // Quick Settings card only renders with root present and the root toggle enabled
+    // Quick Settings card renders while the toggle is on. Without root, Wi-Fi / Bluetooth taps
+    // open the matching Android Settings panel instead of toggling in place.
     val isRootQuickSettingsEnabled by PreferencesManager.isRootQuickSettingsEnabled.collectAsState()
-    val rootAvailable = remember { RootShell.isRootAvailable() }
-    val isQuickSettingsVisible = isRootQuickSettingsEnabled && rootAvailable
+    val isQuickSettingsVisible = isRootQuickSettingsEnabled
     val qsOffset = if (isQuickSettingsVisible) 1 else 0
 
     // First section below the Quick Settings grid

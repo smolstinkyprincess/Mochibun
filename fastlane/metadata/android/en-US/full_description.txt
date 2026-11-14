@@ -4,14 +4,15 @@ Features:
 
 - Physical Keypad Support: Move through your apps, folders, and menus using the physical arrow keys and number pad.
 - T9 App Search: Type numbers on your keypad to quickly filter and find apps without tapping the screen.
-- Mochibun Keitai Keyboard: A built-in multi-tap T9 keyboard that works in every app, no extra keyboard app needed. Hold # anywhere to pop open the Kaomoji Wheel.
-- Virtual Mouse Cursor: Turn on a mouse pointer with the side key so you can click things in apps made only for touchscreens.
+- Mochibun Keitai Keyboard: A built-in multi-tap T9 keyboard that works in every app, no extra keyboard app needed, with an adjustable T9 auto-commit delay. Hold # anywhere to pop open the Kaomoji Wheel.
+- Virtual Mouse Cursor: Turn on a mouse pointer with the side key so you can click and scroll in apps made only for touchscreens. Works without root through an optional Accessibility helper.
+- Keypad Sounds & Soft Keys: 7 keypad sound profiles (including Muted), LSK / RSK soft-key navigation you can toggle, and hold 0 on Home for the flashlight.
 - Theme Studio: 5 built-in palettes (Sakura Dream, Lavender Mist, Minty Matcha, Milky Peach, and the Midnight Mochi dark theme), shareable .mochibun theme bundles, and custom YAML themes.
 - Pastel SystemUI: With the optional LSPosed module, your palette also themes Quick Settings, the volume dialog, notification cards, and the status and navigation bars.
 - Media Volume Lock: The volume rocker always steps media volume, even in Silent Mode.
 - Widgets, Recents & Music: A widget page for your third-party widgets with a Now Playing card, plus a keypad-friendly recents switcher.
-- Clamshell Lid Actions: Choose what happens when you open the lid, and (with root) get notification pulses on the outer lid LEDs.
+- Clamshell Lid Actions: Choose what happens when you open the lid. Screen-Off Flip Reset brings you back Home when the screen turns off, and with root you get notification pulses on the outer lid LEDs.
 - Offline & Private: No internet or camera permissions, and no telemetry.
 - Lightweight & Fast: No heavy GPU blurs, tuned for 480 x 800 screens and ~1.8 GB of RAM.
 
-The launcher and keyboard work out of the box. System-wide key handling, the virtual cursor, Media Volume Lock, and SystemUI theming need the built-in LSPosed module (Magisk root).
+No root needed: the launcher, keyboard, Kaomoji Wheel, themes, and virtual cursor all work on a stock phone, and a simple setup checklist in Settings > Permissions & Root walks you through it. Root-only settings stay hidden until you turn on "Show Root & LSPosed Options". With Magisk + the built-in LSPosed module you also get key remapping in every app, Media Volume Lock, in-place Wi-Fi/Bluetooth toggles, outer lid LEDs, and SystemUI theming.

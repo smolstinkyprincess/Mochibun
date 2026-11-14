@@ -153,6 +153,11 @@ object PreferencesManager {
     const val GLOBAL_SOFT_KEY_NAV_ENABLED = "mochibun_soft_key_nav_enabled"
     const val DEFAULT_IME_HOLD_VIBRATION = true
 
+    // Non-Root Mode (v2.1.0 batch 2). Both defaults depend on the device, so they are computed
+    // on read until the user changes the switch (see defaultShowRootOptions / defaultNonRootScreenOffReset).
+    const val KEY_SHOW_ROOT_OPTIONS = "pref_show_root_options"
+    const val KEY_NON_ROOT_SCREEN_OFF_RESET = "pref_non_root_screen_off_reset"
+
     const val KEY_WALLPAPER_URI = "wallpaper_uri"
 
     const val KEY_PHOTO_FRAME_URI = "pref_photo_frame_uri"
@@ -243,6 +248,10 @@ object PreferencesManager {
 
     private val _isPhotoFrameEnabled = MutableStateFlow(DEFAULT_PHOTO_FRAME_ENABLED)
     val isPhotoFrameEnabled: StateFlow<Boolean> = _isPhotoFrameEnabled.asStateFlow()
+
+    private val _showRootOptions = MutableStateFlow(false)
+    /** Whether root / LSPosed rows are shown in settings. Loaded in [init]. */
+    val showRootOptions: StateFlow<Boolean> = _showRootOptions.asStateFlow()
 
     private var initialized = false
 
@@ -346,6 +355,8 @@ object PreferencesManager {
             )
             initialized = true
         }
+        // Outside the guard so restore / reset-to-defaults (which call init again) refresh it
+        _showRootOptions.value = isShowRootOptions(context)
     }
 
     /** `#` is the fixed, always-on Kaomoji Wheel trigger (hold). */
@@ -836,6 +847,43 @@ object PreferencesManager {
     fun setRootQuickSettingsEnabled(context: Context, enabled: Boolean) {
         _isRootQuickSettingsEnabled.value = enabled
         getPrefs(context).edit().putBoolean(KEY_ROOT_QUICK_SETTINGS_ENABLED, enabled).apply()
+    }
+
+    /** Root options start visible only when a su binary is present. */
+    fun defaultShowRootOptions(suPresent: Boolean): Boolean = suPresent
+
+    fun isShowRootOptions(
+        context: Context,
+        suPresent: Boolean = one.crinklecod.mochibun.core.system.RootShell.isSuBinaryPresent()
+    ): Boolean = getPrefs(context).getBoolean(KEY_SHOW_ROOT_OPTIONS, defaultShowRootOptions(suPresent))
+
+    fun setShowRootOptions(context: Context, show: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SHOW_ROOT_OPTIONS, show).apply()
+        _showRootOptions.value = show
+    }
+
+    /**
+     * Root's hall-switch reader or the LSPosed key hook already resets the UI on a real flip
+     * close, so the screen-off reset defaults on only when neither is around.
+     */
+    fun defaultNonRootScreenOffReset(lidDetectionActive: Boolean): Boolean = !lidDetectionActive
+
+    /** True when root (hall-switch reader) or the LSPosed key hook can see the flip close. */
+    fun isLidDetectionActive(context: Context): Boolean =
+        one.crinklecod.mochibun.core.system.RootShell.isSuBinaryPresent() ||
+            one.crinklecod.mochibun.core.system.KeyHookStatus.isActive(context)
+
+    /** [lidDetectionActive] overrides the device probe (tests); it is only consulted while unset. */
+    fun isNonRootScreenOffResetEnabled(context: Context, lidDetectionActive: Boolean? = null): Boolean {
+        val prefs = getPrefs(context)
+        if (prefs.contains(KEY_NON_ROOT_SCREEN_OFF_RESET)) {
+            return prefs.getBoolean(KEY_NON_ROOT_SCREEN_OFF_RESET, true)
+        }
+        return defaultNonRootScreenOffReset(lidDetectionActive ?: isLidDetectionActive(context))
+    }
+
+    fun setNonRootScreenOffResetEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_NON_ROOT_SCREEN_OFF_RESET, enabled).apply()
     }
 
     fun isKeyHookEnabled(context: Context): Boolean =

@@ -11,7 +11,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ---
 
-> ♡ **Quick heads up:** Mochibun works out of the box as a launcher and keyboard. The hardware-key magic (side-key mouse pointer, key remapping, system-wide key handling, Media Volume Lock) and SystemUI theming run through a small **LSPosed module** that lives in the same APK, and LSPosed/Vector needs a Magisk-rooted phone. Full steps are in [Setup](#-downloads--setup).
+> ♡ **Quick heads up:** No root needed! As of **v2.1.0**, Mochibun runs happily on a stock, unrooted flip phone: launcher, T9 search, Keitai keyboard, Kaomoji wheel, themes, and even the side-key mouse pointer (through an optional Accessibility helper). Root-only settings stay tucked away until you ask for them. Rooted with LSPosed? A few extra perks wake up. Full steps are in [Setup](#-downloads--setup).
 
 ---
 
@@ -22,22 +22,25 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Keitai keyboard**: A system-wide multi-tap keypad keyboard in a little floating pill. Tap a number to cycle its letters, hold for the digit, `*` for shift, `#` for space. It hops out of the way of what you're typing in.
 - **Kaomoji wheel**: Long-press `#` in any app to pop up a wheel of text faces and paste one into your chat `( ˶ˆᗜˆ˵ ) ♡`
 - **Widgets & music deck**: A widget page with a Now Playing card that appears when music plays and hides when it stops. Third-party widgets work too.
-- **Clamshell tricks**: Choose what opens when you flip the phone open (Home, Resume Last App, or Notifications), plus an optional snap sound when you close it.
+- **Virtual mouse pointer**: Press the side key (F4) for a little cursor in touch-only apps. Click with the center key, scroll with `2`/`8` and `4`/`6`, and use your own `.png` or `.gif` sprite. No root? Turn on the optional Accessibility helper and it taps and scrolls anyway.
+- **Clamshell tricks**: Choose what opens when you flip the phone open (Home, Resume Last App, or Notifications), plus an optional snap sound when you close it. **Screen-Off Flip Reset** tidies up (back to Home, menus closed, cursor hidden) whenever the screen goes dark, so unrooted phones get a clean flip-shut too.
+- **Soft-key navigation**: Recents and Back act as little LSK / RSK soft keys on Home and in the drawer, and you can switch that off in *Settings > Virtual Cursor*.
 - **Offline & private**: No internet permission, no camera permission, no telemetry.
 
 ### Make it yours
 - **5 pastel themes**: *Sakura Dream*, *Lavender Mist*, *Minty Matcha*, *Milky Peach*, and *Midnight Mochi* for night owls 🌙. Switch live, or write your own in simple YAML.
-- **Keitai click sounds**: Generated on-device, so the app stays tiny. Pick *Kawaii Pop*, *Retro Keitai*, *8-Bit Chiptune*, *Cyber Pager*, *Soft Thock*, or *Water Drop*.
+- **7 keypad sound profiles**: Generated on-device, so the app stays tiny. Pick *Kawaii Pop*, *Retro Keitai*, *8-Bit Chiptune*, *Cyber Pager*, *Tactile Thock*, *Water Drop*, or *Muted* for library mode.
 - **Share your setup**: Back up pinned apps, folders, and settings to `.json`, or pack colors, cursor, and wallpaper into a `.mochibun` bundle to swap with friends.
 - **Icon pack support**: Works with Nova, Apex, and ADW icon packs.
 
 ### Root / LSPosed extras
-- **Virtual mouse pointer**: Press the side key for a little cursor in touch-only apps. Use your own `.png` or `.gif` sprite and scroll with `2`/`8` and `4`/`6`.
 - **Key remapping**: Remap extra physical buttons to launch apps or shortcuts, in every app, with no accessibility service running.
-- **Keypad recents switcher**: Hop between open apps with the arrow keys.
+- **QuickSwitch recents**: Make Mochibun's keypad recents switcher your system Recents provider.
+- **In-place toggles**: Wi-Fi and Bluetooth flip right inside the Quick Settings card (without root, they open the Android settings panel instead).
+- **Speedy root clicks**: The cursor taps through a tiny native helper, even on screens that ignore normal taps.
 - **Media volume lock**: The volume rocker always changes *media* volume, even in Silent Mode.
 - **Pastel SystemUI**: Your palette also colors Quick Settings, the volume dialog, notification cards, and the status and nav bars.
-- **Lid LED pulses**: Notification shimmers on the outer lid lights.
+- **Lid LED pulses**: Notification shimmers and a charging glow on the outer lid lights, in the color you pick.
 
 ---
 
@@ -65,7 +68,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 | **Center Key** | Open app, select item, or click | Quick menu (pin, edit icon, app info) |
 | **`#` (Pound)** | Open settings & theme switcher | **Kaomoji Wheel 🌸** |
 | **`*` (Star)** | Context actions | Toggle silent / vibrate |
-| **`0`** | Jump to top / input | **Flashlight 🔦** |
+| **`0`** | Jump to top / input | **Flashlight 🔦** (on Home) |
 | **`2`–`9`** | T9 search (in drawer) | **Speed dial** |
 | *(while typing)* | See the [Keitai Keyboard](#-mochibun-keitai-keyboard) keys | — |
 | **Side Key (F4)** | Mouse pointer on / off | Dismiss popup / dialog |
@@ -74,7 +77,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 | **Home** | Return Home from anywhere; on Home, open the app drawer | — |
 | **Recents (LSK)** | On Home, go to the Stats page | On Home, open Recents |
 
-> 🗝️ The system-wide parts of this map (grabbing the side key, remapping, keys working in every app) come from the [LSPosed module](#-lsposed-module-hardware-keys--cursor).
+> 🗝️ Without root, the side key and cursor keys work everywhere through the optional [Accessibility helper](#-standard-non-root-setup). Remapping extra buttons in every app comes from the [LSPosed module](#-lsposed-module-hardware-keys--cursor).
 
 ---
 
@@ -95,13 +98,13 @@ Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai
 - The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` badge.
 - **It dodges your text box.** If the box you're typing in is down at the bottom of the screen (hi, Discord), the pill hops to the top so you can see your words, then hops back down when the coast is clear. Some apps don't tell Android where the cursor is, and in those the pill just stays at the bottom.
 - **It fades when you pause.** After a moment with no key presses the pill turns soft and see-through, then comes back to full strength on your next press.
-- A pending letter commits on its own after a short pause (1.5 s by default, adjustable from 0.5 to 3 s), so you can just keep typing.
+- A pending letter commits on its own after a short pause (**T9 Auto-Commit Delay**: 0.7 s by default, adjustable from 0.3 to 1.5 s), so you can just keep typing.
 - Sentences auto-capitalize.
 - Number, phone, and date fields get plain digits, so dialing works the way you'd expect.
 - Works in terminals like **Termux** too. Delete and Enter go straight to the terminal as plain keys.
 - Tune the **hold delay** (250–800 ms), **letter auto-commit** timer, and **hold vibration** under **Settings > Keyboard**. Both are saved in your backups.
 
-**Setup**: Open **Settings > Keyboard** and follow the steps there, or go to *Settings > System > Languages & input > On-screen keyboard* and enable **Mochibun Keitai IME**. Rooted? **Settings > Permissions & Root** can switch it on in one step.
+**Setup**: Open **Settings > Keyboard** and follow the steps there, or go to *Settings > System > Languages & input > On-screen keyboard* and enable **Mochibun Keitai IME**.
 
 ---
 
@@ -177,30 +180,42 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 | **Obtainium** | One-click update tracking | [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun) |
 
 > 💡 **Using an ALT Mive Style Folder (AT-M120)?**
-> Mochibun works great right out of the box! (˶ᵔ ᵕ ᵔ˶) But if you want key remapping, a virtual cursor, custom lid LED colors, a recents provider, and SystemUI theming, our **[AT-M120 Root, Magisk & Tuning Guide](docs/m120_root_setup.md)** walks you through getting root ✨
+> Mochibun works great right out of the box, no root required! (˶ᵔ ᵕ ᵔ˶) Start with the [Standard (Non-Root) Setup](#-standard-non-root-setup) below. Want the extra perks later? Hop to [Optional Root & LSPosed Perks](#-optional-root--lsposed-perks) ✨
+
+### 🌷 Standard (Non-Root) Setup
+
+This is the default, and it's how most flip phones will run Mochibun. Root-only settings are hidden so the Settings Hub stays tidy. Open **Settings > Permissions & Root** and walk the little checklist; each row says **✓ Active** or **Tap to Enable** and jumps straight to the right Android page:
+
+1. **Default Home App**: *Settings > Apps > Default Apps > Home app*, then pick Mochibun.
+2. **Display Over Other Apps** (`SYSTEM_ALERT_WINDOW`): lets the virtual mouse pointer float on top of every app.
+3. **Mochibun Accessibility Service (Optional)**: *Settings > Accessibility > Mochibun Cursor & Keys*. This lets the cursor tap and scroll in touch-only apps, makes the side key (F4) toggle the cursor anywhere, and lets keypad shortcuts open Recents, notifications, and Quick Settings, all without root. It never reads what's on your screen, and it steps aside automatically if the LSPosed hook is running.
+4. **Notification Access (Optional)**: *Settings > Apps > Special app access > Notification access*. Powers the Now Playing music card and the notifications page.
+
+The checklist also has rows for the **Mochibun Keitai IME** (see [Mochibun Keitai Keyboard](#-mochibun-keitai-keyboard)) and starting the cursor service.
+
+> 🌙 **Screen-Off Flip Reset**: Without root, Android can't see the flip's hall sensor, so Mochibun treats "screen off" as "flip shut": it closes menus and the drawer, hides the cursor, and puts focus back on Home. It's on by default for unrooted phones; toggle it in *Settings > Behavior*.
+
+### 🔮 Optional Root & LSPosed Perks
+
+Rooted with Magisk and LSPosed? Flip on **Show Root & LSPosed Options** at the bottom of *Settings > Permissions & Root* (it starts on automatically when Mochibun spots `su`). That unlocks system-wide key remapping without Accessibility, QuickSwitch recents, in-place Wi-Fi/Bluetooth toggles, outer lid LED alerts with a charging LED and custom color, real hall-sensor lid detection, and pastel SystemUI theming. The **[AT-M120 Root, Magisk & Tuning Guide](docs/m120_root_setup.md)** covers bootloader, Magisk, and microG.
 
 > **Boot animation bonus 🎀**: Got root now? Grab the optional `mochibun-bootanimation.zip` from [Releases](https://github.com/smolstinkyprincess/Mochibun/releases/latest) for a matching pastel boot screen!
 
 ### 🧩 LSPosed Module (Hardware Keys & Cursor)
 
-Mochibun is one APK that's both the launcher *and* an LSPosed module, so there's nothing extra to download. The module hooks into the system (`system_server` and SystemUI) so your physical keys, key remaps, and Media Volume Lock work in every app, and your palette can paint SystemUI, all without any accessibility service. The mouse pointer itself floats on top as a little foreground overlay service.
+Mochibun is one APK that's both the launcher *and* an LSPosed module, so there's nothing extra to download. The module hooks into the system (`system_server` and SystemUI) so your physical keys, key remaps, and Media Volume Lock work in every app, and your palette can paint SystemUI, all without the Accessibility helper. The mouse pointer itself floats on top as a little foreground overlay service.
 
 1. **Root with Magisk and install LSPosed (or Vector with Zygisk Next)** (the Zygisk version). The [AT-M120 guide](docs/m120_root_setup.md) covers the Magisk side.
 2. **Install Mochibun**, then open LSPosed/Vector and enable the **Mochibun** module.
 3. **Tick both scopes** for the module: *System Framework* (`android`) and *System UI* (`com.android.systemui`).
 4. **Reboot** so the hook loads.
 
-No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backups, and the Keitai Keyboard all work without it. You'll just miss the system-wide key handling, virtual cursor, Media Volume Lock, and SystemUI theming.
+No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backups, the Keitai Keyboard, and the virtual cursor (via the Accessibility helper) all work without it. You'll just miss remapping extra buttons, Media Volume Lock, and SystemUI theming.
 
-### 🗝️ Quick Permissions Checklist
+### 🗝️ Root Extras Checklist
 
-1. **Default Home**: Set Mochibun as your home app in *Settings > Apps > Default Apps > Home app*.
-2. **Now Playing Card**: Enable notification access in *Settings > Apps > Special app access > Notification access* so the media widget can show your currently playing song and album art.
-3. **Mouse Pointer**: Allow *Display over other apps* when asked, so the cursor can float on top of everything.
-4. **Hardware Keys & Remapping**: Enable the Mochibun module in LSPosed (see [above](#-lsposed-module-hardware-keys--cursor)). There's no Accessibility setting to turn on.
-5. **Keitai Keyboard**: Enable **Mochibun Keitai IME** as your keyboard (see [Mochibun Keitai Keyboard](#-mochibun-keitai-keyboard)), or let *Settings > Keyboard* walk you through it.
-6. **Superuser Access (Optional extras)**: Granting Mochibun superuser access in Magisk unlocks privileged touch injection (handy when a screen blocks normal taps, like permission dialogs), root Quick Settings toggles, exterior lid LED alerts, one-step keyboard setup, and hooks into custom recents providers. The LSPosed hook doesn't need it.
-7. **QuickSwitch (Optional)**: If you use QuickSwitch for hardware multitasking, set Mochibun as your provider:
+1. **Superuser Access**: Granting Mochibun superuser access in Magisk unlocks fast native touch injection (handy when a screen blocks normal taps, like permission dialogs), root Quick Settings toggles, exterior lid LED alerts, and hall-sensor lid detection. The LSPosed hook doesn't need it.
+2. **QuickSwitch (Optional)**: If you use QuickSwitch for hardware multitasking, set Mochibun as your provider:
    ```bash
    su -c "/data/adb/modules/quickswitch/quickswitch --ch=one.crinklecod.mochibun"
    ```

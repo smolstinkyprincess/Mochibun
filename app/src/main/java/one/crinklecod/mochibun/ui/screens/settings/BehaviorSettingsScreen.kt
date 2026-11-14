@@ -34,6 +34,29 @@ import one.crinklecod.mochibun.ui.dialogs.LidLedColorPickerDialog
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 
+/**
+ * Visible rows of the Layout & Features screen, in on-screen order. Focus index = list index,
+ * jump number = index + 1, so hiding rows never leaves a gap.
+ */
+internal fun behaviorRowIds(
+    hasCreateFolder: Boolean,
+    showRootOptions: Boolean,
+    showScreenOffReset: Boolean
+): List<String> = buildList {
+    if (hasCreateFolder) add("create_folder")
+    addAll(listOf("folder_grid", "hidden_apps", "lid_open"))
+    if (showScreenOffReset) add("screen_off_reset")
+    // Outer LED rows write vendor sysfs nodes, which needs root
+    if (showRootOptions) addAll(listOf("lid_led", "led_color", "led_charging"))
+}
+
+/**
+ * Screen-Off Flip Reset is offered unless root options are shown and the flip close is already
+ * detected (root hall reader / LSPosed key hook).
+ */
+internal fun showScreenOffResetRow(showRootOptions: Boolean, lidDetectionActive: Boolean): Boolean =
+    !showRootOptions || !lidDetectionActive
+
 @Composable
 internal fun BehaviorSettingsSubScreen(
     onBack: () -> Unit,
@@ -53,14 +76,30 @@ internal fun BehaviorSettingsSubScreen(
     val lidLed by PreferencesManager.isLidLedEnabled.collectAsState()
     val lidLedCharging by PreferencesManager.isLidLedChargingEnabled.collectAsState()
     val lidLedColor by PreferencesManager.lidLedColor.collectAsState()
+    val showRootOptions by PreferencesManager.showRootOptions.collectAsState()
+    val lidDetectionActive = remember { PreferencesManager.isLidDetectionActive(context) }
+    var screenOffReset by remember {
+        mutableStateOf(PreferencesManager.isNonRootScreenOffResetEnabled(context, lidDetectionActive))
+    }
 
-    val items = remember(onCreateFolderClick) {
-        buildList {
-            if (onCreateFolderClick != null) add("create_folder")
-            addAll(listOf("folder_grid", "hidden_apps", "lid_open", "lid_led", "led_color", "led_charging"))
-        }
+    val items = remember(onCreateFolderClick, showRootOptions, lidDetectionActive) {
+        behaviorRowIds(
+            hasCreateFolder = onCreateFolderClick != null,
+            showRootOptions = showRootOptions,
+            showScreenOffReset = showScreenOffResetRow(showRootOptions, lidDetectionActive)
+        )
     }
     val totalItems = items.size
+
+    // Keep focus on a real row if the list shrinks
+    LaunchedEffect(totalItems) {
+        focusedIndex = focusedIndex.coerceIn(0, (totalItems - 1).coerceAtLeast(0))
+    }
+
+    fun toggleScreenOffReset() {
+        screenOffReset = !screenOffReset
+        PreferencesManager.setNonRootScreenOffResetEnabled(context, screenOffReset)
+    }
 
     fun jumpNumber(id: String): Int? =
         (items.indexOf(id) + 1).takeIf { it in 1..9 }
@@ -94,6 +133,7 @@ internal fun BehaviorSettingsSubScreen(
             "folder_grid" -> PreferencesManager.setFolderGridMode(context, !folderGrid)
             "hidden_apps" -> onOpenHiddenApps?.invoke()
             "lid_open" -> stepLidAction(1)
+            "screen_off_reset" -> toggleScreenOffReset()
             "lid_led" -> {
                 val enabled = !lidLed
                 PreferencesManager.setLidLedEnabled(context, enabled)
@@ -236,41 +276,54 @@ internal fun BehaviorSettingsSubScreen(
                         onDecrement = { stepLidAction(-1) },
                         onIncrement = { stepLidAction(1) }
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsToggleRow(
-                        title = "Outer Notification LED",
-                        subtitle = "Pulse the exterior LED while the lid is closed",
-                        checked = lidLed,
-                        isFocused = items.getOrNull(focusedIndex) == "lid_led",
-                        jumpNumber = jumpNumber("lid_led"),
-                        onCheckedChange = {
-                            PreferencesManager.setLidLedEnabled(context, it)
-                            if (it) LidLedManager.updateLedState() else LidLedManager.clearAllLeds()
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsStepperRow(
-                        title = "Outer LED Color",
-                        subtitle = "Choose the exterior light accent",
-                        valueDisplay = LidLedManager.getColorLabel(lidLedColor),
-                        isFocused = items.getOrNull(focusedIndex) == "led_color",
-                        jumpNumber = jumpNumber("led_color"),
-                        onClick = { showLidLedColorPicker = true },
-                        onDecrement = { stepLedColor(-1) },
-                        onIncrement = { stepLedColor(1) }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsToggleRow(
-                        title = "Outer Charging Indicator",
-                        subtitle = "Light the exterior LED when charging",
-                        checked = lidLedCharging,
-                        isFocused = items.getOrNull(focusedIndex) == "led_charging",
-                        jumpNumber = jumpNumber("led_charging"),
-                        onCheckedChange = {
-                            PreferencesManager.setLidLedChargingEnabled(context, it)
-                            LidLedManager.updateLedState()
-                        }
-                    )
+                    if ("screen_off_reset" in items) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsToggleRow(
+                            title = "Screen-Off Flip Reset",
+                            subtitle = "Return to Home and close menus when the screen turns off",
+                            checked = screenOffReset,
+                            isFocused = items.getOrNull(focusedIndex) == "screen_off_reset",
+                            jumpNumber = jumpNumber("screen_off_reset"),
+                            onCheckedChange = { toggleScreenOffReset() }
+                        )
+                    }
+                    if (showRootOptions) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsToggleRow(
+                            title = "Outer Notification LED",
+                            subtitle = "Pulse the exterior LED while the lid is closed",
+                            checked = lidLed,
+                            isFocused = items.getOrNull(focusedIndex) == "lid_led",
+                            jumpNumber = jumpNumber("lid_led"),
+                            onCheckedChange = {
+                                PreferencesManager.setLidLedEnabled(context, it)
+                                if (it) LidLedManager.updateLedState() else LidLedManager.clearAllLeds()
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsStepperRow(
+                            title = "Outer LED Color",
+                            subtitle = "Choose the exterior light accent",
+                            valueDisplay = LidLedManager.getColorLabel(lidLedColor),
+                            isFocused = items.getOrNull(focusedIndex) == "led_color",
+                            jumpNumber = jumpNumber("led_color"),
+                            onClick = { showLidLedColorPicker = true },
+                            onDecrement = { stepLedColor(-1) },
+                            onIncrement = { stepLedColor(1) }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsToggleRow(
+                            title = "Outer Charging Indicator",
+                            subtitle = "Light the exterior LED when charging",
+                            checked = lidLedCharging,
+                            isFocused = items.getOrNull(focusedIndex) == "led_charging",
+                            jumpNumber = jumpNumber("led_charging"),
+                            onCheckedChange = {
+                                PreferencesManager.setLidLedChargingEnabled(context, it)
+                                LidLedManager.updateLedState()
+                            }
+                        )
+                    }
                 }
             }
         }

@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import one.crinklecod.mochibun.core.system.ClamshellListener
 import one.crinklecod.mochibun.core.system.ClamshellManager
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.core.system.ClamshellState
 import one.crinklecod.mochibun.core.system.MemoryTrimTier
 import one.crinklecod.mochibun.core.system.memoryTrimTier
@@ -84,6 +85,10 @@ class MainActivity : ComponentActivity() {
     var unlockCount by mutableIntStateOf(0)
         private set
 
+    // Screen turned off with the Screen-Off Flip Reset pref on (non-root flip-shut stand-in)
+    var screenOffResetCount by mutableIntStateOf(0)
+        private set
+
     /** Bumped when the keyboard's settings entry (ImeSettingsActivity alias) starts us. */
     var settingsRequestCount by mutableIntStateOf(0)
         private set
@@ -112,6 +117,18 @@ class MainActivity : ComponentActivity() {
             if (intent?.action == Intent.ACTION_USER_PRESENT) {
                 lastWakeOrUnlockUptime = SystemClock.uptimeMillis()
                 unlockCount++
+            }
+        }
+    }
+
+    // Without root the hall switch is unreadable, so a screen-off is the best "flip shut" signal.
+    // Skipped when the lid close was already detected (lidClosedCount handles that case).
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != Intent.ACTION_SCREEN_OFF) return
+            if (ClamshellManager.state.value.isClosed) return
+            if (PreferencesManager.isNonRootScreenOffResetEnabled(this@MainActivity)) {
+                screenOffResetCount++
             }
         }
     }
@@ -257,6 +274,9 @@ class MainActivity : ComponentActivity() {
             unregisterReceiver(userPresentReceiver)
         } catch (_: IllegalArgumentException) {}
         try {
+            unregisterReceiver(screenOffReceiver)
+        } catch (_: IllegalArgumentException) {}
+        try {
             unregisterReceiver(softKeyReceiver)
         } catch (_: IllegalArgumentException) {}
         super.onDestroy()
@@ -334,6 +354,7 @@ class MainActivity : ComponentActivity() {
 
         registerReceiver(packageChangeReceiver, packageFilter)
         registerReceiver(userPresentReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
+        registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
 
         val softKeyFilter = IntentFilter().apply {
             addAction(MochibunSystemActions.ACTION_LSK_TRIGGER)
@@ -375,6 +396,7 @@ class MainActivity : ComponentActivity() {
                         appListRefreshCount = appListRefreshCount,
                         lidOpenCount = lidOpenCount,
                         lidClosedCount = lidClosedCount,
+                        screenOffResetCount = screenOffResetCount,
                         unlockCount = unlockCount,
                         settingsRequestCount = settingsRequestCount,
                         requestedPage = requestedPage,

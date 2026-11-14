@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import com.android.quickstep.RecentsActivity
+import one.crinklecod.mochibun.service.MochibunAccessibilityService
 import one.crinklecod.mochibun.BuildConfig
 import one.crinklecod.mochibun.core.system.RootShell
 import one.crinklecod.mochibun.core.system.TorchManager
@@ -261,8 +262,12 @@ object HardwareRemapManager {
                 }
             }
             is ActionType.GlobalBack -> {
-                // Sent via root touch injector if available
-                one.crinklecod.mochibun.core.system.RootTouchInjector.keyAsync(KeyEvent.KEYCODE_BACK)
+                // Without root, the optional accessibility service can press Back for us
+                val handled = !RootShell.isSuBinaryPresent() && MochibunAccessibilityService.goBack()
+                if (!handled) {
+                    // Sent via root touch injector if available
+                    one.crinklecod.mochibun.core.system.RootTouchInjector.keyAsync(KeyEvent.KEYCODE_BACK)
+                }
             }
             is ActionType.GlobalRecents -> {
                 handleRecentsAction(context)
@@ -271,12 +276,16 @@ object HardwareRemapManager {
                 executeRootRecents(context)
             }
             is ActionType.GlobalNotifications -> {
-                // Sent via root or status bar expansion
-                try {
+                // Status bar expansion; the optional accessibility service covers ROMs that refuse it
+                val expanded = try {
                     val sbs = context.getSystemService("statusbar")
                     val method = sbs?.javaClass?.getMethod("expandNotificationsPanel")
                     method?.invoke(sbs)
-                } catch (_: Exception) {}
+                    method != null
+                } catch (_: Exception) {
+                    false
+                }
+                if (!expanded) MochibunAccessibilityService.openNotifications()
             }
             is ActionType.ToggleFlashlight -> {
                 TorchManager.toggleTorch(context)
@@ -308,6 +317,8 @@ object HardwareRemapManager {
             Log.d(TAG, "Successfully started native RecentsActivity")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch native RecentsActivity", e)
+            // Last resort without root: the system Recents via the optional accessibility service
+            MochibunAccessibilityService.openRecents()
         }
     }
 

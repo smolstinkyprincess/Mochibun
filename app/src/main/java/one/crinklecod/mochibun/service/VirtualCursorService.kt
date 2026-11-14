@@ -70,6 +70,16 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
             instance?.toggleCursorVisibility()
         }
 
+        /**
+         * Feeds a cursor key from the optional non-root [MochibunAccessibilityService] (same path
+         * the LSPosed hook's ACTION_CURSOR_KEY broadcast takes). Main thread only.
+         */
+        fun dispatchCursorKey(keyCode: Int, action: Int, repeatCount: Int): Boolean {
+            val service = instance ?: return false
+            service.handleCursorKey(keyCode, action, repeatCount)
+            return true
+        }
+
         fun hideCursor() {
             val service = instance ?: return
             if (!isCursorVisible) return

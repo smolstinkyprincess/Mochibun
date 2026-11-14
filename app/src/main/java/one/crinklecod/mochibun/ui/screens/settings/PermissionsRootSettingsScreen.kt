@@ -18,7 +18,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,7 +38,10 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -48,12 +54,36 @@ import one.crinklecod.mochibun.core.system.RootShell
 import one.crinklecod.mochibun.core.util.MochibunSystemActions
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.HardwareRemapManager
+import one.crinklecod.mochibun.service.MochibunAccessibilityService
+import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.service.MochibunImeStatus
 import one.crinklecod.mochibun.service.VirtualCursorService
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 import kotlinx.coroutines.launch
+
+/** Rows of the essential (non-root) setup checklist, always visible. */
+internal val ESSENTIAL_PERMISSION_ROWS = listOf("home", "ime", "overlay", "a11y", "notifications", "cursor")
+
+/** Rows of the Magisk Root & Superuser card, shown only with root options revealed. */
+internal val ROOT_PERMISSION_ROWS = listOf(
+    "root", "key_hook", "key_hook_enabled", "sysui_hook_enabled", "recents", "quick_settings", "self_heal"
+)
+
+/**
+ * Visible rows of the Setup & Diagnostics screen in on-screen order. Focus index = list index and
+ * jump number = index + 1, so hiding the root card never leaves a gap.
+ */
+internal fun permissionsRowIds(showRootOptions: Boolean): List<String> = buildList {
+    addAll(ESSENTIAL_PERMISSION_ROWS)
+    if (showRootOptions) addAll(ROOT_PERMISSION_ROWS)
+    add("show_root")
+}
+
+/** Keypad jump for a row: keys 1–9, then 0 for the tenth row (as before). */
+internal fun settingsJumpNumber(rows: List<String>, id: String): Int? =
+    (rows.indexOf(id) + 1).takeIf { it in 1..10 }
 
 @Composable
 internal fun PermissionsRootSettingsSubScreen(
@@ -70,6 +100,9 @@ internal fun PermissionsRootSettingsSubScreen(
     var imeState by remember { mutableStateOf(MochibunImeStatus.State.NOT_ENABLED) }
     var overlayGranted by remember { mutableStateOf(false) }
     var notificationAccessGranted by remember { mutableStateOf(false) }
+    var accessibilityEnabled by remember { mutableStateOf(false) }
+    val showRootOptions by PreferencesManager.showRootOptions.collectAsState()
+    val suPresent = remember { RootShell.isSuBinaryPresent() }
     var cursorServiceRunning by remember { mutableStateOf(VirtualCursorService.isServiceRunning) }
     var rootStatus by remember {
         mutableStateOf(
@@ -97,21 +130,16 @@ internal fun PermissionsRootSettingsSubScreen(
     }
     var healing by remember { mutableStateOf(false) }
 
-    val rowIds = listOf(
-        "home",
-        "ime",
-        "overlay",
-        "notifications",
-        "root",
-        "key_hook",
-        "key_hook_enabled",
-        "sysui_hook_enabled",
-        "cursor",
-        "recents",
-        "quick_settings",
-        "self_heal"
-    )
+    val rowIds = remember(showRootOptions) { permissionsRowIds(showRootOptions) }
     val totalItems = rowIds.size
+
+    fun isFocused(id: String): Boolean = rowIds.getOrNull(focusedIndex) == id
+    fun jump(id: String): Int? = settingsJumpNumber(rowIds, id)
+
+    // Keep focus on a real row when the root card is hidden / revealed
+    LaunchedEffect(totalItems) {
+        focusedIndex = focusedIndex.coerceIn(0, (totalItems - 1).coerceAtLeast(0))
+    }
 
     val readGlobalHookEnabled: (String) -> Boolean = { setting ->
         try {
@@ -131,6 +159,7 @@ internal fun PermissionsRootSettingsSubScreen(
         overlayGranted = Settings.canDrawOverlays(context)
         notificationAccessGranted =
             NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+        accessibilityEnabled = MochibunAccessibilityService.isEnabled(context)
         cursorServiceRunning = VirtualCursorService.isServiceRunning
         rootRecentsEnabled = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
         rootQuickSettingsEnabled = PreferencesManager.isRootQuickSettingsEnabled(context)
@@ -438,11 +467,17 @@ internal fun PermissionsRootSettingsSubScreen(
         }
     }
 
+    fun toggleShowRootOptions() {
+        PreferencesManager.setShowRootOptions(context, !showRootOptions)
+    }
+
     fun activatePermissionItem(index: Int) {
         when (rowIds.getOrNull(index)) {
             "home" -> launchSettings(Intent(Settings.ACTION_HOME_SETTINGS))
             "ime" -> openImeSettings()
             "overlay" -> openOverlaySettings()
+            "a11y" -> launchSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            "show_root" -> toggleShowRootOptions()
             "notifications" -> launchSettings(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             "root" -> requestRoot()
             "key_hook" -> {
@@ -481,6 +516,7 @@ internal fun PermissionsRootSettingsSubScreen(
             "sysui_hook_enabled" -> toggleSystemUiHook()
             "recents" -> toggleRecents()
             "quick_settings" -> toggleQuickSettings()
+            "show_root" -> toggleShowRootOptions()
             else -> return false
         }
         return true
@@ -491,9 +527,18 @@ internal fun PermissionsRootSettingsSubScreen(
         SoundEffectManager.play(context, SoundEffect.NAV)
     }
 
-    LaunchedEffect(focusedIndex) {
-        val targetCardIndex = if (focusedIndex < 4) 0 else 1
-        listState.animateScrollToItem(targetCardIndex)
+    // LazyColumn items: [non-root banner], essential card, [root card], advanced card
+    val showBanner = !showRootOptions && !suPresent
+    LaunchedEffect(focusedIndex, rowIds, showBanner) {
+        val id = rowIds.getOrNull(focusedIndex) ?: return@LaunchedEffect
+        val bannerOffset = if (showBanner) 1 else 0
+        val targetItem = when (id) {
+            in ESSENTIAL_PERMISSION_ROWS ->
+                if (ESSENTIAL_PERMISSION_ROWS.indexOf(id) < 4) 0 else bannerOffset
+            in ROOT_PERMISSION_ROWS -> bannerOffset + 1
+            else -> bannerOffset + if (showRootOptions) 2 else 1
+        }
+        listState.animateScrollToItem(targetItem)
     }
 
     requestFocusSafely(focusRequester)
@@ -564,15 +609,20 @@ internal fun PermissionsRootSettingsSubScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            if (showBanner) {
+                item {
+                    NonRootModeBanner()
+                }
+            }
             item {
                 SettingsCard(categoryTitle = "Essential Setup • Core Launcher & Keypad") {
                     SettingsNavigationRow(
                         title = "Default Home Launcher",
                         subtitle = if (isDefaultHome) "✓ Active" else "! Tap to Enable • choose Mochibun Home",
                         icon = if (isDefaultHome) "✓" else "!",
-                        isFocused = focusedIndex == 0,
-                        jumpNumber = 1,
-                        onClick = { activatePermissionItem(0) }
+                        isFocused = isFocused("home"),
+                        jumpNumber = jump("home"),
+                        onClick = { activatePermissionItem(rowIds.indexOf("home")) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
@@ -583,89 +633,41 @@ internal fun PermissionsRootSettingsSubScreen(
                             MochibunImeStatus.State.NOT_ENABLED -> "! Tap to Enable"
                         },
                         icon = if (imeState == MochibunImeStatus.State.NOT_ENABLED) "!" else "✓",
-                        isFocused = focusedIndex == 1,
-                        jumpNumber = 2,
-                        onClick = { activatePermissionItem(1) }
+                        isFocused = isFocused("ime"),
+                        jumpNumber = jump("ime"),
+                        onClick = { activatePermissionItem(rowIds.indexOf("ime")) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Display Over Other Apps",
                         subtitle = if (overlayGranted) "✓ Active" else "! Tap to Enable",
                         icon = if (overlayGranted) "✓" else "!",
-                        isFocused = focusedIndex == 2,
-                        jumpNumber = 3,
-                        onClick = { activatePermissionItem(2) }
+                        isFocused = isFocused("overlay"),
+                        jumpNumber = jump("overlay"),
+                        onClick = { activatePermissionItem(rowIds.indexOf("overlay")) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Notification Access",
+                        title = "Non-Root Cursor & Key Service (Optional)",
+                        subtitle = when {
+                            accessibilityEnabled -> "✓ Active • cursor taps, scroll & F4 toggle"
+                            keyHookActive || rootStatus is RootStatus.Granted ->
+                                "○ Not needed • root / LSPosed handles the cursor"
+                            else -> "Tap to Enable • Accessibility › Mochibun Cursor & Keys"
+                        },
+                        icon = if (accessibilityEnabled) "✓" else "○",
+                        isFocused = isFocused("a11y"),
+                        jumpNumber = jump("a11y"),
+                        onClick = { activatePermissionItem(rowIds.indexOf("a11y")) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "Notification Access (Now Playing Widget)",
                         subtitle = if (notificationAccessGranted) "✓ Active" else "! Tap to Enable",
                         icon = if (notificationAccessGranted) "✓" else "!",
-                        isFocused = focusedIndex == 3,
-                        jumpNumber = 4,
-                        onClick = { activatePermissionItem(3) }
-                    )
-                }
-            }
-            item {
-                SettingsCard(categoryTitle = "Hardware Hooks & Root Diagnostics") {
-                    val rootLabel = when (rootStatus) {
-                        is RootStatus.Granted -> "Granted • root shell authorized"
-                        is RootStatus.Denied -> "Unrooted — Fallback Mode • access denied"
-                        is RootStatus.Requesting -> "Requesting Magisk root permission…"
-                        is RootStatus.NotAvailable -> "Unrooted — Fallback Mode"
-                        else -> "Root available • tap to verify access"
-                    }
-                    SettingsNavigationRow(
-                        title = "Magisk Root Access",
-                        subtitle = rootLabel,
-                        icon = if (rootStatus is RootStatus.Granted) "✓" else "⚡",
-                        isFocused = focusedIndex == 4,
-                        jumpNumber = 5,
-                        onClick = { activatePermissionItem(4) }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsNavigationRow(
-                        title = "LSPosed / Vector Key Hook",
-                        subtitle = if (keyHookActive) {
-                            "✓ Loaded this boot • system_server hook responded"
-                        } else {
-                            "! Not active • in-app LSK/RSK and T9 fallback remains available"
-                        },
-                        icon = if (keyHookActive) "✓" else "!",
-                        isFocused = focusedIndex == 5,
-                        jumpNumber = 6,
-                        onClick = { activatePermissionItem(5) }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsToggleRow(
-                        title = "Enable system_server Key Hook",
-                        subtitle = when {
-                            !keyHookEnabled && keyHookGlobalEnabled ->
-                                "Root sync pending • hook may still intercept hardware keys"
-                            !keyHookEnabled -> "Disabled • in-app LSK/RSK and T9 fallback active"
-                            !keyHookGlobalEnabled -> "Awaiting root sync • switch may still be active"
-                            else -> "Enabled • checked at a 2-second interval"
-                        },
-                        checked = keyHookEnabled,
-                        isFocused = focusedIndex == 6,
-                        jumpNumber = 7,
-                        onCheckedChange = { toggleKeyHook() }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsToggleRow(
-                        title = "Enable SystemUI Hook",
-                        subtitle = when {
-                            !systemUiHookEnabled && systemUiHookGlobalEnabled ->
-                                "Root sync pending • current hooks remain until SystemUI restarts"
-                            !systemUiHookEnabled -> "Disabled • applies after SystemUI restart"
-                            !systemUiHookGlobalEnabled -> "Awaiting root sync • SystemUI restart required"
-                            else -> "Enabled • installed when SystemUI starts"
-                        },
-                        checked = systemUiHookEnabled,
-                        isFocused = focusedIndex == 7,
-                        jumpNumber = 8,
-                        onCheckedChange = { toggleSystemUiHook() }
+                        isFocused = isFocused("notifications"),
+                        jumpNumber = jump("notifications"),
+                        onClick = { activatePermissionItem(rowIds.indexOf("notifications")) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
@@ -676,41 +678,147 @@ internal fun PermissionsRootSettingsSubScreen(
                             "! Stopped • tap to start"
                         },
                         icon = if (cursorServiceRunning) "✓" else "○",
-                        isFocused = focusedIndex == 8,
-                        jumpNumber = 9,
-                        onClick = { activatePermissionItem(8) }
+                        isFocused = isFocused("cursor"),
+                        jumpNumber = jump("cursor"),
+                        onClick = { activatePermissionItem(rowIds.indexOf("cursor")) }
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                }
+            }
+            if (showRootOptions) {
+                item {
+                    SettingsCard(categoryTitle = "Magisk Root & Superuser") {
+                        val rootLabel = when (rootStatus) {
+                            is RootStatus.Granted -> "Granted • root shell authorized"
+                            is RootStatus.Denied -> "Unrooted — Fallback Mode • access denied"
+                            is RootStatus.Requesting -> "Requesting Magisk root permission…"
+                            is RootStatus.NotAvailable -> "Unrooted — Fallback Mode"
+                            else -> "Root available • tap to verify access"
+                        }
+                        SettingsNavigationRow(
+                            title = "Magisk Root Access",
+                            subtitle = rootLabel,
+                            icon = if (rootStatus is RootStatus.Granted) "✓" else "⚡",
+                            isFocused = isFocused("root"),
+                            jumpNumber = jump("root"),
+                            onClick = { activatePermissionItem(rowIds.indexOf("root")) }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsNavigationRow(
+                            title = "LSPosed / Vector Key Hook",
+                            subtitle = if (keyHookActive) {
+                                "✓ Loaded this boot • system_server hook responded"
+                            } else {
+                                "! Not active • in-app LSK/RSK and T9 fallback remains available"
+                            },
+                            icon = if (keyHookActive) "✓" else "!",
+                            isFocused = isFocused("key_hook"),
+                            jumpNumber = jump("key_hook"),
+                            onClick = { activatePermissionItem(rowIds.indexOf("key_hook")) }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsToggleRow(
+                            title = "Enable system_server Key Hook",
+                            subtitle = when {
+                                !keyHookEnabled && keyHookGlobalEnabled ->
+                                    "Root sync pending • hook may still intercept hardware keys"
+                                !keyHookEnabled -> "Disabled • in-app LSK/RSK and T9 fallback active"
+                                !keyHookGlobalEnabled -> "Awaiting root sync • switch may still be active"
+                                else -> "Enabled • checked at a 2-second interval"
+                            },
+                            checked = keyHookEnabled,
+                            isFocused = isFocused("key_hook_enabled"),
+                            jumpNumber = jump("key_hook_enabled"),
+                            onCheckedChange = { toggleKeyHook() }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsToggleRow(
+                            title = "Enable SystemUI Hook",
+                            subtitle = when {
+                                !systemUiHookEnabled && systemUiHookGlobalEnabled ->
+                                    "Root sync pending • current hooks remain until SystemUI restarts"
+                                !systemUiHookEnabled -> "Disabled • applies after SystemUI restart"
+                                !systemUiHookGlobalEnabled -> "Awaiting root sync • SystemUI restart required"
+                                else -> "Enabled • installed when SystemUI starts"
+                            },
+                            checked = systemUiHookEnabled,
+                            isFocused = isFocused("sysui_hook_enabled"),
+                            jumpNumber = jump("sysui_hook_enabled"),
+                            onCheckedChange = { toggleSystemUiHook() }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsToggleRow(
+                            title = "Root-Shell Recents Fallback",
+                            subtitle = "Use root shell if standard Recents activation fails",
+                            checked = rootRecentsEnabled,
+                            isFocused = isFocused("recents"),
+                            jumpNumber = jump("recents"),
+                            onCheckedChange = { toggleRecents() }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsToggleRow(
+                            title = "Root Quick Settings Toggles",
+                            subtitle = "Toggle Wi-Fi and Bluetooth through root shell",
+                            checked = rootQuickSettingsEnabled,
+                            isFocused = isFocused("quick_settings"),
+                            jumpNumber = jump("quick_settings"),
+                            onCheckedChange = { toggleQuickSettings() }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsNavigationRow(
+                            title = "Self-Heal & Restart Services",
+                            subtitle = if (healing) {
+                                "Granting overlay access and restarting cursor service…"
+                            } else {
+                                "Grant overlay access and restart cursor service with root"
+                            },
+                            icon = if (healing) "⏳" else "♡",
+                            isFocused = isFocused("self_heal"),
+                            jumpNumber = jump("self_heal"),
+                            onClick = { selfHeal() }
+                        )
+                    }
+                }
+            }
+            item {
+                SettingsCard(categoryTitle = "Advanced") {
                     SettingsToggleRow(
-                        title = "Root-Shell Recents Fallback",
-                        subtitle = "Use root shell if standard Recents activation fails",
-                        checked = rootRecentsEnabled,
-                        isFocused = focusedIndex == 9,
-                        jumpNumber = 10,
-                        onCheckedChange = { toggleRecents() }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsToggleRow(
-                        title = "Root Quick Settings Toggles",
-                        subtitle = "Toggle Wi-Fi and Bluetooth through root shell",
-                        checked = rootQuickSettingsEnabled,
-                        isFocused = focusedIndex == 10,
-                        onCheckedChange = { toggleQuickSettings() }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsNavigationRow(
-                        title = "Self-Heal & Restart Services",
-                        subtitle = if (healing) {
-                            "Granting overlay access and restarting cursor service…"
+                        title = "Show Root & LSPosed Options",
+                        subtitle = if (showRootOptions) {
+                            "Magisk, LSPosed hooks and outer LED settings are shown"
                         } else {
-                            "Grant overlay access and restart cursor service with root"
+                            "Reveal Magisk, LSPosed and outer LED settings"
                         },
-                        icon = if (healing) "⏳" else "♡",
-                        isFocused = focusedIndex == 11,
-                        onClick = { selfHeal() }
+                        checked = showRootOptions,
+                        isFocused = isFocused("show_root"),
+                        jumpNumber = jump("show_root"),
+                        onCheckedChange = { toggleShowRootOptions() }
                     )
                 }
             }
         }
+    }
+}
+
+/** Friendly pastel note shown to unrooted users while root options are hidden. Not focusable. */
+@Composable
+private fun NonRootModeBanner() {
+    SettingsCard(categoryTitle = "Welcome") {
+        Text(
+            text = "♡ Standard (Non-Root) Mode ♡",
+            color = ActiveTheme.accentDeep,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = "No root needed: the launcher, T9 search, themes, Kaomoji wheel and the " +
+                "Accessibility virtual cursor all work out of the box. Finish the checklist below ♡",
+            color = ActiveTheme.textPrimary,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

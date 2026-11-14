@@ -143,6 +143,21 @@
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 
+        <!-- Optional non-root cursor taps/scrolls, F4 cursor toggle and global actions.
+             Only active if the user enables it in Android Settings > Accessibility. -->
+        <service
+            android:name=".service.MochibunAccessibilityService"
+            android:label="@string/a11y_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
         <!-- Mochibun Media Session Notification Listener Service -->
         <!-- Keyboard settings entry (method.xml): MainActivity opens the Settings Hub when started through this alias -->
         <activity-alias

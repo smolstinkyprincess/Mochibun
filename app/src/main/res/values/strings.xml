@@ -2,4 +2,6 @@
     <string name="app_name">Mochibun</string>
     <string name="ime_service_label">Mochibun Keitai IME</string>
     <string name="ime_subtype_keitai">English (Keitai Multi-tap)</string>
+    <string name="a11y_service_label">Mochibun Cursor &amp; Keys (Non-Root)</string>
+    <string name="a11y_service_description">Optional, for phones without root. Lets the Mochibun virtual cursor tap and scroll in any app, lets the side key (F4) toggle the cursor, and opens Recents, notifications and Quick Settings from keypad shortcuts. Not needed when root or the LSPosed key hook is active. Mochibun does not read or store screen content.</string>
 </resources>

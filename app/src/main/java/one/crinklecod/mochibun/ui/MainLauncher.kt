@@ -133,6 +133,7 @@ fun MainLauncher(
     appListRefreshCount: Int = 0,
     lidOpenCount: Int = 0,
     lidClosedCount: Int = 0,
+    screenOffResetCount: Int = 0,
     unlockCount: Int = 0,
     settingsRequestCount: Int = 0,
     requestedPage: Int? = null,
@@ -329,6 +330,24 @@ fun MainLauncher(
             VirtualCursorService.hideCursor()
             activeModal = null
             drawerOpen = false
+            centerKeyState = 0
+            poundKeyState = 0
+            t9State.t9Key = null
+            t9State.t9Time = 0L
+            homeFocusArea = if (favoriteItemCount > 0) 0 else 1
+            pendingTargetPage = 1
+            pagerState.scrollToPage(1)
+        }
+    }
+
+    // Non-root Screen-Off Flip Reset: same clean slate as a detected flip close, minus the snap
+    // sound and the Lid Open Action (a screen-off may just be a display timeout)
+    LaunchedEffect(screenOffResetCount) {
+        if (screenOffResetCount > 0) {
+            VirtualCursorService.hideCursor()
+            activeModal = null
+            drawerOpen = false
+            drawerRailFocused = false
             centerKeyState = 0
             poundKeyState = 0
             t9State.t9Key = null

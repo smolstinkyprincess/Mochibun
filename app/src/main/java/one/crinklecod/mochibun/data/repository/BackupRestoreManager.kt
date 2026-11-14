@@ -192,6 +192,8 @@ object BackupRestoreManager {
         behaviorObj.put("ime_hold_vibration", PreferencesManager.isImeHoldVibrationEnabled(context))
         behaviorObj.put("ime_idle_commit_ms", PreferencesManager.getImeIdleCommitMs(context))
         behaviorObj.put("ime_auto_commit_enabled", PreferencesManager.isImeAutoCommitEnabled(context))
+        behaviorObj.put("show_root_options", PreferencesManager.isShowRootOptions(context))
+        behaviorObj.put("non_root_screen_off_reset", PreferencesManager.isNonRootScreenOffResetEnabled(context))
         root.put("behavior", behaviorObj)
 
         // ── 5. Virtual Cursor Physics & Pointer ──────────────────────
@@ -408,7 +410,7 @@ object BackupRestoreManager {
     private fun validateBehavior(value: JSONObject) {
         listOf(
             "dpad_wrap_around", "dpad_boundary_haptics", "media_volume_lock_enabled",
-            "lid_close_snap_sound_enabled", "kaomoji_wheel_enabled", "t9_search_enabled",
+            "lid_close_snap_sound_enabled",
             "system_monitor_enabled", "ime_hold_for_digit_enabled", "ime_hold_vibration",
             "ime_auto_commit_enabled"
         ).forEach { value.requiredBoolean(it) }
@@ -418,6 +420,14 @@ object BackupRestoreManager {
         value.requiredIntInRange("system_monitor_interval_sec", 1..60)
         value.requiredIntInRange("ime_hold_delay_ms", 100..5000)
         value.requiredIntInRange("ime_idle_commit_ms", 100..10000)
+        // Optional: legacy keys no longer exported (features now always on) and keys added in
+        // v2.1.0. Validate the type only when present, so old and new backups both restore.
+        listOf(
+            "kaomoji_wheel_enabled", "t9_search_enabled",
+            "show_root_options", "non_root_screen_off_reset"
+        ).forEach {
+            if (value.has(it)) value.requiredBoolean(it)
+        }
     }
 
     private fun validateCursor(value: JSONObject) {
@@ -765,6 +775,19 @@ object BackupRestoreManager {
                     PreferencesManager.setImeHoldVibrationEnabled(
                         context,
                         behaviorObj.optBoolean("ime_hold_vibration", PreferencesManager.DEFAULT_IME_HOLD_VIBRATION)
+                    )
+                }
+                // Non-Root Mode switches (v2.1.0); absent from older backups
+                if (behaviorObj.has("show_root_options")) {
+                    PreferencesManager.setShowRootOptions(
+                        context,
+                        behaviorObj.optBoolean("show_root_options", false)
+                    )
+                }
+                if (behaviorObj.has("non_root_screen_off_reset")) {
+                    PreferencesManager.setNonRootScreenOffResetEnabled(
+                        context,
+                        behaviorObj.optBoolean("non_root_screen_off_reset", true)
                     )
                 }
                 if (behaviorObj.has("system_monitor_enabled")) {
