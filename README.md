@@ -11,7 +11,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ---
 
-> ♡ **Quick heads up:** No root needed! As of **v2.1.0**, Mochibun runs happily on a stock, unrooted flip phone: launcher, T9 search, Keitai keyboard, Kaomoji wheel, themes, and even the side-key mouse pointer (through an optional Accessibility helper). Root-only settings stay tucked away until you ask for them. Rooted with LSPosed? A few extra perks wake up. Full steps are in [Setup](#-downloads--setup).
+> ♡ **Quick heads up:** No root needed! As of **v2.1.0**, Mochibun runs happily on a stock, unrooted flip phone: launcher, T9 search, Keitai keyboard, Kaomoji wheel, themes, and even the side-key mouse pointer (through an optional Accessibility helper). Root-only settings stay tucked away until you ask for them. Rooted with Magisk + LSPosed? The extra magic wakes up: pastel SystemUI theming, speedy native taps, key remapping in every app, and the new **Lid LED Studio ✨** for the outer lid lights. Full steps are in [Setup](#-downloads--setup).
 
 ---
 
