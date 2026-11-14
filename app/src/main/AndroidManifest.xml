@@ -110,6 +110,19 @@
                 <data android:host="*" />
                 <data android:pathPattern=".*\\.mochibun" />
             </intent-filter>
+            <!-- Lid LED step animations (.yaml / .yml / .mochibunled), routed in MainLauncher -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.mochibunled" />
+                <data android:pathPattern=".*\\.yaml" />
+                <data android:pathPattern=".*\\.yml" />
+            </intent-filter>
         </activity>
 
         <!-- Quickstep Service -->

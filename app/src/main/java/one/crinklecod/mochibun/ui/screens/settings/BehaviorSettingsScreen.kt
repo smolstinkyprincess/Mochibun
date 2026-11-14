@@ -47,7 +47,7 @@ internal fun behaviorRowIds(
     addAll(listOf("folder_grid", "hidden_apps", "lid_open"))
     if (showScreenOffReset) add("screen_off_reset")
     // Outer LED rows write vendor sysfs nodes, which needs root
-    if (showRootOptions) addAll(listOf("lid_led", "led_color", "led_charging"))
+    if (showRootOptions) addAll(listOf("lid_led", "led_color", "led_studio", "led_charging"))
 }
 
 /**
@@ -62,6 +62,7 @@ internal fun BehaviorSettingsSubScreen(
     onBack: () -> Unit,
     onOpenHiddenApps: (() -> Unit)?,
     onCreateFolderClick: (() -> Unit)?,
+    onOpenLidLedStudio: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -140,6 +141,7 @@ internal fun BehaviorSettingsSubScreen(
                 if (enabled) LidLedManager.updateLedState() else LidLedManager.clearAllLeds()
             }
             "led_color" -> showLidLedColorPicker = true
+            "led_studio" -> onOpenLidLedStudio()
             "led_charging" -> {
                 PreferencesManager.setLidLedChargingEnabled(context, !lidLedCharging)
                 LidLedManager.updateLedState()
@@ -310,6 +312,15 @@ internal fun BehaviorSettingsSubScreen(
                             onClick = { showLidLedColorPicker = true },
                             onDecrement = { stepLedColor(-1) },
                             onIncrement = { stepLedColor(1) }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsNavigationRow(
+                            title = "Lid LED Studio",
+                            subtitle = "Notification animations, import & step maker",
+                            icon = "✨",
+                            isFocused = items.getOrNull(focusedIndex) == "led_studio",
+                            jumpNumber = jumpNumber("led_studio"),
+                            onClick = onOpenLidLedStudio
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsToggleRow(

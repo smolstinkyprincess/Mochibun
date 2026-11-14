@@ -140,13 +140,13 @@ class SettingsBatch2Test {
 
         val rooted = behaviorRowIds(hasCreateFolder = false, showRootOptions = true, showScreenOffReset = false)
         assertEquals(
-            listOf("folder_grid", "hidden_apps", "lid_open", "lid_led", "led_color", "led_charging"),
+            listOf("folder_grid", "hidden_apps", "lid_open", "lid_led", "led_color", "led_studio", "led_charging"),
             rooted
         )
         assertContiguous(rooted)
 
         val both = behaviorRowIds(hasCreateFolder = true, showRootOptions = true, showScreenOffReset = true)
-        assertEquals(8, both.size)
+        assertEquals(9, both.size)
         assertContiguous(both)
     }
 

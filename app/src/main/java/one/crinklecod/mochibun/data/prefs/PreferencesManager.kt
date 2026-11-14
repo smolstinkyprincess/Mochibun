@@ -108,6 +108,10 @@ object PreferencesManager {
     const val KEY_LID_LED_COLOR = "pref_lid_led_color"
     const val DEFAULT_LID_LED_COLOR = "pink" // "pink", "purple", "white", "green"
 
+    /** Lid step animation per slot; blank = classic behavior (notification shimmer / solid charging). */
+    const val KEY_LID_LED_NOTIFICATION_ANIMATION_ID = "pref_lid_led_animation_id" // pre-slot key, kept
+    const val KEY_LID_LED_CHARGING_ANIMATION_ID = "pref_lid_led_charging_animation_id"
+
     const val KEY_MEDIA_VOLUME_LOCK_ENABLED = "pref_media_volume_lock_enabled"
     const val DEFAULT_MEDIA_VOLUME_LOCK_ENABLED = false
 
@@ -677,6 +681,20 @@ object PreferencesManager {
     fun setLidLedColor(context: Context, color: String) {
         getPrefs(context).edit().putString(KEY_LID_LED_COLOR, color).apply()
         _lidLedColor.value = color
+    }
+
+    fun getLidLedNotificationAnimationId(context: Context): String =
+        getPrefs(context).getString(KEY_LID_LED_NOTIFICATION_ANIMATION_ID, "") ?: ""
+
+    fun setLidLedNotificationAnimationId(context: Context, id: String) {
+        getPrefs(context).edit().putString(KEY_LID_LED_NOTIFICATION_ANIMATION_ID, id).apply()
+    }
+
+    fun getLidLedChargingAnimationId(context: Context): String =
+        getPrefs(context).getString(KEY_LID_LED_CHARGING_ANIMATION_ID, "") ?: ""
+
+    fun setLidLedChargingAnimationId(context: Context, id: String) {
+        getPrefs(context).edit().putString(KEY_LID_LED_CHARGING_ANIMATION_ID, id).apply()
     }
 
     fun isMediaVolumeLockEnabled(context: Context): Boolean {

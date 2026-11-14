@@ -238,3 +238,7 @@ Now that you're rooted, check and turn on these features in Mochibun:
 * **Quick Settings Toggles**: Turn on direct root toggles in Mochibun's settings. Wi-Fi and Bluetooth then flip right on the Widget deck, with no stock Android dialogs in the way.
 * **Enable the LSPosed Module**: In LSPosed/Vector, turn on the **Mochibun** module with the *System Framework* and *System UI* scopes, then reboot. That wakes up system-wide keys, the virtual cursor, Media Volume Lock, and SystemUI theming.
 * **Lid LED Notifications**: Make sure notification pulses on the outer lid are going through `/sys/class/leds/aw22xxx_led/` with root.
+* **Lid LED Studio**: With root granted, *Settings > Behavior > Lid LED Studio* lets you pick separate animations for notifications and charging, and **Test Lid ♡** plays one right away (the lid windows light up even with the flip open). Animations play through Mochibun's tiny native `lidled` helper, which it unpacks from the APK on its own:
+  * `lidled frames <step_ms> <loops> <last|off> <mask:hex>...` plays a whole step animation in one background process, then holds the last frame or switches off.
+  * `lidled pattern <mask> <hex>` lights a single frame (like `10101` for windows 1, 3 and 5), and `lidled off` resets the chip.
+  * Charging tip 🔌: when you plug in, the stock software loads its own breathing program onto the LED chip. Mochibun resets the chip and locks the stock charging light while its animation plays, so you don't need to do anything, but it's why tests can look different on and off the charger.

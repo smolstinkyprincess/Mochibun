@@ -41,6 +41,7 @@ sealed class SettingsDestination {
     object BackupRestore : SettingsDestination()
     object About : SettingsDestination()
     object Keyboard : SettingsDestination()
+    object LidLedStudio : SettingsDestination()
 }
 
 /**
@@ -66,14 +67,20 @@ fun SettingsHubScreen(
     var currentDestination by remember { mutableStateOf(initialDestination) }
     var rootFocusedIndex by remember { mutableIntStateOf(0) }
     var backupPreviewBackHandler by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var lidStudioBackHandler by remember { mutableStateOf<(() -> Unit)?>(null) }
     val rootListState = rememberLazyListState()
     val context = LocalContext.current
 
     fun handleBack() {
         SoundEffectManager.play(context, SoundEffect.BACK)
         val dismissBackupPreview = backupPreviewBackHandler
+        val closeLidStudioEditor = lidStudioBackHandler
         if (dismissBackupPreview != null) {
             dismissBackupPreview()
+        } else if (closeLidStudioEditor != null) {
+            closeLidStudioEditor()
+        } else if (currentDestination == SettingsDestination.LidLedStudio) {
+            currentDestination = SettingsDestination.Behavior
         } else if (currentDestination == SettingsDestination.Hub) {
             onClose()
         } else {
@@ -151,6 +158,14 @@ fun SettingsHubScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onOpenHiddenApps = onOpenHiddenApps,
                 onCreateFolderClick = onCreateFolderClick,
+                onOpenLidLedStudio = { currentDestination = SettingsDestination.LidLedStudio },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.LidLedStudio -> {
+            LidLedStudioSubScreen(
+                onBack = { currentDestination = SettingsDestination.Behavior },
+                onNestedBackHandlerChanged = { lidStudioBackHandler = it },
                 modifier = settingsModifier
             )
         }

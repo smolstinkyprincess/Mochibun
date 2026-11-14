@@ -10,13 +10,21 @@ import android.os.PowerManager
 import android.system.Os
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import one.crinklecod.mochibun.data.model.LID_OFF_HEX
+import one.crinklecod.mochibun.data.model.LidLedAnimation
+import one.crinklecod.mochibun.data.model.LidLedStep
 import one.crinklecod.mochibun.data.model.MochibunNotificationItem
+import one.crinklecod.mochibun.data.model.isLidHexOff
+import one.crinklecod.mochibun.data.model.normalizeLidHex
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.LidAnimationSlot
+import one.crinklecod.mochibun.data.repository.LidLedAnimationRepository
 import one.crinklecod.mochibun.data.repository.NotificationTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -112,6 +120,11 @@ object LidLedManager : ClamshellListener {
 
     private const val CASE_CHARGE_MODE_SAVE = "/data/local/tmp/lidled.case_charge.mode"
 
+    // Step animations run inside one `lidled frames` daemon (like shimmer)
+    private const val NOTIFICATION_STEP_TARGET_MS = 60_000L // match the classic ~60 s shimmer
+    private const val MAX_STEP_LOOPS = 120 // same cap as lidled.c MAX_FRAME_LOOPS
+    private const val TEST_PREVIEW_TARGET_MS = 5_000L
+
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var notificationJob: Job? = null
@@ -126,6 +139,14 @@ object LidLedManager : ClamshellListener {
     private var appliedMode = LidLedMode.OFF
     private var appliedColorHex: String? = null
     private var lastShimmeredPostTime = 0L
+
+
+    // Studio "Test Lid" runs with the flip open; the ladder must not cancel it mid-preview
+    @Volatile
+    private var testPreviewUntilMs = 0L
+    private var testPreviewEndJob: Job? = null
+
+    val testPreviewActive: Boolean get() = System.currentTimeMillis() < testPreviewUntilMs
 
     @Volatile
     private var shimmerStartTime = 0L
@@ -397,6 +418,7 @@ object LidLedManager : ClamshellListener {
      */
     @Synchronized
     fun stopLeds() {
+        endTestPreview()
         invalidateApplied()
         notificationLedActive = false
         chargingLedActive = false
@@ -516,6 +538,7 @@ object LidLedManager : ClamshellListener {
     @Synchronized
     fun updateLedState() {
         val context = appContext ?: return
+        if (testPreviewActive) return // re-evaluated when the preview ends
         val items = NotificationTracker.notifications.value
         val mode = resolveMode(
             lidClosed = ClamshellManager.isLidClosed.value,
@@ -554,16 +577,37 @@ object LidLedManager : ClamshellListener {
                 shimmerStartTime = 0L
                 shimmerActiveUntilMs = 0L
                 shimmerPostTime = 0L
-                releaseShimmerWakeLock()
-                runCommand(buildChargingCommand(hex))
+                val custom = appContext?.let { ctx ->
+                    runCatching {
+                        LidLedAnimationRepository.getActiveAnimation(ctx, LidAnimationSlot.CHARGING)
+                    }.getOrNull()
+                }
+                if (custom != null && custom.steps.isNotEmpty()) {
+                    startChargingStepAnimation(custom)
+                } else {
+                    releaseShimmerWakeLock()
+                    runCommand(buildChargingCommand(hex))
+                }
             }
-            LidLedMode.NOTIFICATION -> startShimmer(
-                hexColor = hex,
-                frameSeconds = NOTIFICATION_FRAME_SECONDS,
-                cycles = NOTIFICATION_SHIMMER_CYCLES,
-                settleMode = "10101",
-                postTime = postTime
-            )
+            LidLedMode.NOTIFICATION -> {
+                // A selected step animation replaces the shimmer; none selected = classic behavior
+                val custom = appContext?.let { ctx ->
+                    runCatching {
+                        LidLedAnimationRepository.getActiveAnimation(ctx, LidAnimationSlot.NOTIFICATION)
+                    }.getOrNull()
+                }
+                if (custom != null && custom.steps.isNotEmpty()) {
+                    startNotificationStepAnimation(custom, postTime)
+                } else {
+                    startShimmer(
+                        hexColor = hex,
+                        frameSeconds = NOTIFICATION_FRAME_SECONDS,
+                        cycles = NOTIFICATION_SHIMMER_CYCLES,
+                        settleMode = "10101",
+                        postTime = postTime
+                    )
+                }
+            }
             LidLedMode.CALL -> startShimmer(
                 hexColor = hex,
                 frameSeconds = CALL_FRAME_SECONDS,
@@ -597,6 +641,139 @@ object LidLedManager : ClamshellListener {
         val cmd = if (isChargingState) "${buildSuppressStockChargeCommand()}; $shimmer" else shimmer
         // Keep the SoC up just long enough for the loop to reach its static frame; with the flip
         // closed the display is off and the loop's nanosleep would otherwise stall mid-pattern
+        holdShimmerWakeLock(durationMs + 1_000L)
+        runCommand(cmd)
+    }
+
+    /** One step in the helper's own `pattern <mask> <hex>` vocabulary; null [hex] = all windows off. */
+    internal data class StepFrame(val mask: String, val hex: String?)
+
+    /**
+     * The helper lights a frame in a single color, so a step becomes a 5-window mask (every
+     * non-black window) plus its most common lit color (ties: leftmost window wins).
+     */
+    @VisibleForTesting
+    internal fun stepFrame(step: LidLedStep): StepFrame {
+        val windows = List(5) { i -> normalizeLidHex(step.windows.getOrNull(i) ?: "") }
+        val lit = windows.filterNot(::isLidHexOff)
+        if (lit.isEmpty()) return StepFrame("00000", null)
+        val mask = windows.joinToString("") { if (isLidHexOff(it)) "0" else "1" }
+        val color = lit.groupingBy { it }.eachCount().maxByOrNull { it.value }!!.key
+        return StepFrame(mask, color)
+    }
+
+    /** `<mask>:<0xrrggbb>` argument for `lidled frames`; all-off steps are `00000:0x000000`. */
+    @VisibleForTesting
+    internal fun frameArg(frame: StepFrame): String = "${frame.mask}:${getHexColor(frame.hex ?: LID_OFF_HEX)}"
+
+    /** Resting frame held after a notification / charging animation: the last step. */
+    @VisibleForTesting
+    internal fun settleFrame(animation: LidLedAnimation): StepFrame? =
+        animation.steps.lastOrNull()?.let(::stepFrame)
+
+    /**
+     * `lidled frames <step_ms> <loops> <last|off> <mask:hex>...`: one helper daemon writes each
+     * step once with the same `write_channel_pattern()` as `pattern`, then holds the resting
+     * (last) frame or switches off. One writer per animation is what latches reliably on the
+     * AT-M120; separate `pattern` calls per step drop frames and flicker (verified on device).
+     * Any later helper call (teardown, pattern, shimmer) stops the daemon, so no extra cancel
+     * logic is needed.
+     */
+    @VisibleForTesting
+    internal fun buildFramesCommand(
+        animation: LidLedAnimation,
+        loops: Int,
+        settle: Boolean,
+        helperPath: String = getHelperPath()
+    ): String =
+        "'$helperPath' frames ${animation.stepMs} ${loops.coerceIn(1, MAX_STEP_LOOPS)} " +
+            (if (settle) "last" else "off") + " " +
+            animation.steps.joinToString(" ") { frameArg(stepFrame(it)) }
+
+    /**
+     * Full program: the existing [buildOffCommand] first (its chip reset clears any on-chip stock
+     * program, e.g. the charging breath loaded at plug-in), then the frames daemon.
+     */
+    @VisibleForTesting
+    internal fun buildStepAnimationCommand(
+        animation: LidLedAnimation,
+        loops: Int,
+        settle: Boolean,
+        helperPath: String = getHelperPath()
+    ): String = "${buildOffCommand(helperPath)}; ${buildFramesCommand(animation, loops, settle, helperPath)}"
+
+    @VisibleForTesting
+    internal fun stepAnimationDurationMs(animation: LidLedAnimation, loops: Int): Long =
+        loops * animation.durationMs
+
+    /** Loops a notification / charging animation for about a minute, or once if `loop` is off. */
+    @VisibleForTesting
+    internal fun notificationStepLoops(animation: LidLedAnimation): Int = loopsFor(animation, NOTIFICATION_STEP_TARGET_MS)
+
+    /** Studio "Test Lid": about 5 seconds of animation (at least one full pass). */
+    @VisibleForTesting
+    internal fun previewStepLoops(animation: LidLedAnimation): Int = loopsFor(animation.copy(loop = true), TEST_PREVIEW_TARGET_MS)
+
+    private fun loopsFor(animation: LidLedAnimation, targetMs: Long): Int {
+        if (!animation.loop) return 1
+        val cycleMs = animation.durationMs.coerceAtLeast(1L)
+        return ((targetMs + cycleMs - 1) / cycleMs).toInt().coerceIn(1, MAX_STEP_LOOPS)
+    }
+
+    /**
+     * Plays a step animation on the lid right now (Studio "Test Lid"; the windows work with the
+     * flip open), then switches it off. While it runs [updateLedState] is a no-op so power /
+     * notification / preference events can't cancel it; the ladder re-applies when it ends.
+     * [stopLeds] (lid opened / LEDs disabled) still cancels it.
+     */
+    @Synchronized
+    fun playStepAnimation(animation: LidLedAnimation, loopCount: Int = previewStepLoops(animation)) {
+        val clean = animation.sanitized()
+        if (clean.steps.isEmpty()) return
+        invalidateApplied()
+        val loops = loopCount.coerceIn(1, MAX_STEP_LOOPS)
+        val durationMs = stepAnimationDurationMs(clean, loops)
+        holdShimmerWakeLock(durationMs + 1_000L)
+        val program = buildStepAnimationCommand(clean, loops, settle = false)
+        // Same as startShimmer: while plugged in, keep HLS_LsLedLights' stock charger program off the lid
+        runCommand(if (isChargingState) "${buildSuppressStockChargeCommand()}; $program" else program)
+        testPreviewUntilMs = System.currentTimeMillis() + durationMs
+        testPreviewEndJob?.cancel()
+        testPreviewEndJob = scope.launch {
+            delay(durationMs)
+            testPreviewUntilMs = 0L
+            updateLedState()
+        }
+        Log.d(TAG, "Playing lid step animation '${clean.name}' x$loops")
+    }
+
+    private fun endTestPreview() {
+        testPreviewUntilMs = 0L
+        testPreviewEndJob?.cancel()
+        testPreviewEndJob = null
+    }
+
+    private fun startChargingStepAnimation(animation: LidLedAnimation) {
+        shimmerStartTime = 0L
+        shimmerActiveUntilMs = 0L
+        shimmerPostTime = 0L
+        val loops = notificationStepLoops(animation)
+        val program = buildStepAnimationCommand(animation, loops, settle = true)
+        // Keep HLS_LsLedLights from loading the stock green charging program over the animation
+        holdShimmerWakeLock(stepAnimationDurationMs(animation, loops) + 1_000L)
+        runCommand("${buildSuppressStockChargeCommand()}; $program")
+    }
+
+    private fun startNotificationStepAnimation(animation: LidLedAnimation, postTime: Long) {
+        val loops = notificationStepLoops(animation)
+        val durationMs = stepAnimationDurationMs(animation, loops)
+        val now = System.currentTimeMillis()
+        shimmerStartTime = now
+        shimmerActiveUntilMs = now + durationMs
+        shimmerPostTime = postTime
+        val program = buildStepAnimationCommand(animation, loops, settle = true)
+        // Same as startShimmer: keep HLS_LsLedLights from stomping on the alert while plugged in
+        val cmd = if (isChargingState) "${buildSuppressStockChargeCommand()}; $program" else program
         holdShimmerWakeLock(durationMs + 1_000L)
         runCommand(cmd)
     }

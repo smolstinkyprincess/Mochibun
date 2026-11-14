@@ -12,6 +12,7 @@
 //   lidled solid <hex_rgb> [-f|--foreground]
 //   lidled pattern <channels_mask> <hex_rgb> [-f|--foreground]
 //   lidled shimmer <hex_rgb> <frame_seconds> <cycles> <settle_mode> [-f|--foreground]
+//   lidled frames <step_ms> <loops> <last|off> <mask:hex_rgb>... [-f|--foreground]
 
 #define _GNU_SOURCE
 #include <errno.h>
@@ -324,6 +325,87 @@ static void run_shimmer_loop(int reg_fd, uint8_t r, uint8_t g, uint8_t b,
     remove_pid_if_ours(getpid());
 }
 
+// ---- Step animations (Mochibun Lid LED Studio) ----
+//
+// Every step is written once with write_channel_pattern() from this one daemon. Separate
+// `pattern` calls per step re-spawn the daemon and re-init the chip each time, which on the
+// AT-M120 drops frames (the previous frame stays lit) and flickers; one writer per animation
+// is reliable for every mask (verified on device).
+
+#define MAX_FRAMES      16
+#define MAX_FRAME_LOOPS 120
+#define MIN_STEP_MS     50
+#define MAX_STEP_MS     5000
+
+typedef struct {
+    uint32_t mask;
+    uint8_t r, g, b;
+} led_frame_t;
+
+// "<5-char window mask>:<hex_rgb>", e.g. "10101:0xff1493". "00000" = all windows dark.
+static int parse_frame(const char *arg, led_frame_t *out) {
+    const char *colon = strchr(arg, ':');
+    if (!colon || colon == arg || colon - arg >= 16) return -1;
+    char mask_str[16];
+    memcpy(mask_str, arg, (size_t)(colon - arg));
+    mask_str[colon - arg] = '\0';
+    out->mask = parse_channels_mask(mask_str);
+    return parse_rgb(colon + 1, &out->r, &out->g, &out->b);
+}
+
+static void timespec_add_ms(struct timespec *ts, long ms) {
+    ts->tv_sec += ms / 1000;
+    ts->tv_nsec += (ms % 1000) * 1000000L;
+    if (ts->tv_nsec >= 1000000000L) {
+        ts->tv_sec += 1;
+        ts->tv_nsec -= 1000000000L;
+    }
+}
+
+// Absolute deadlines keep the step rate steady regardless of how long a write takes.
+static int sleep_until(const struct timespec *deadline) {
+    while (!g_stop) {
+        int rc = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, deadline, NULL);
+        if (rc == 0) return 0;
+        if (rc != EINTR) return -1;
+    }
+    return -1;
+}
+
+static void run_frames_loop(int reg_fd, const led_frame_t *frames, int count,
+                            int step_ms, int loops, int settle_last) {
+    setup_signal_handlers();
+    acquire_kernel_wake_lock();
+
+    struct timespec next;
+    clock_gettime(CLOCK_MONOTONIC, &next);
+    for (int loop = 0; loop < loops && !g_stop; loop++) {
+        for (int i = 0; i < count && !g_stop; i++) {
+            write_channel_pattern(reg_fd, frames[i].mask, frames[i].r, frames[i].g, frames[i].b);
+            timespec_add_ms(&next, step_ms);
+            if (sleep_until(&next) != 0) break;
+        }
+    }
+
+    // Same as shimmer: let the SoC sleep while the chip holds the resting frame.
+    release_kernel_wake_lock();
+
+    if (!g_stop) {
+        if (settle_last) {
+            const led_frame_t *last = &frames[count - 1];
+            write_channel_pattern(reg_fd, last->mask, last->r, last->g, last->b);
+            struct timespec hold_ts = { .tv_sec = 1, .tv_nsec = 0 };
+            while (!g_stop) {
+                interruptible_sleep(&hold_ts);
+            }
+        } else {
+            write_off(reg_fd);
+        }
+    }
+
+    remove_pid_if_ours(getpid());
+}
+
 static int spawn_daemon_or_run(int lock_fd, int foreground) {
     if (foreground) {
         FILE *pfp = fopen(PID_FILE, "w");
@@ -391,7 +473,10 @@ static void print_usage(const char *prog) {
         "  pattern <channels_mask> <hex_rgb> [-f|--foreground]\n"
         "                                             Light selected windows (e.g. 10101, 01010, all)\n"
         "  shimmer <hex_rgb> <frame_sec> <cycles> <settle_mode> [-f|--foreground]\n"
-        "                                             Alternating 10101 <-> 01010 shimmer\n",
+        "                                             Alternating 10101 <-> 01010 shimmer\n"
+        "  frames <step_ms> <loops> <last|off> <mask:hex_rgb>... [-f|--foreground]\n"
+        "                                             Step animation (up to 16 frames), then hold\n"
+        "                                             the last frame or switch off\n",
         prog);
 }
 
@@ -503,6 +588,44 @@ int main(int argc, char **argv) {
         int reg_fd = spawn_daemon_or_run(lock_fd, foreground);
         if (reg_fd < 0) return 1;
         run_shimmer_loop(reg_fd, r, g, b, frame_sec, cycles, settle_mode);
+        close(reg_fd);
+        return 0;
+    }
+
+    if (strcmp(cmd, "frames") == 0) {
+        int end = argc;
+        int foreground = 0;
+        if (argc >= 2 && (strcmp(argv[argc - 1], "-f") == 0 || strcmp(argv[argc - 1], "--foreground") == 0)) {
+            foreground = 1;
+            end--;
+        }
+        if (end < 6) {
+            fprintf(stderr, "Usage: %s frames <step_ms> <loops> <last|off> <mask:hex_rgb>... [-f|--foreground]\n", argv[0]);
+            if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
+            return 1;
+        }
+        int step_ms = atoi(argv[2]);
+        if (step_ms < MIN_STEP_MS) step_ms = MIN_STEP_MS;
+        if (step_ms > MAX_STEP_MS) step_ms = MAX_STEP_MS;
+        int loops = atoi(argv[3]);
+        if (loops < 1) loops = 1;
+        if (loops > MAX_FRAME_LOOPS) loops = MAX_FRAME_LOOPS;
+        int settle_last = strcmp(argv[4], "last") == 0;
+
+        led_frame_t frames[MAX_FRAMES];
+        int count = 0;
+        for (int a = 5; a < end && count < MAX_FRAMES; a++) {
+            if (parse_frame(argv[a], &frames[count]) != 0) {
+                fprintf(stderr, "lidled: invalid frame '%s' (want <mask>:<hex_rgb>)\n", argv[a]);
+                if (lock_fd >= 0) { flock(lock_fd, LOCK_UN); close(lock_fd); }
+                return 1;
+            }
+            count++;
+        }
+
+        int reg_fd = spawn_daemon_or_run(lock_fd, foreground);
+        if (reg_fd < 0) return 1;
+        run_frames_loop(reg_fd, frames, count, step_ms, loops, settle_last);
         close(reg_fd);
         return 0;
     }

@@ -59,6 +59,7 @@ import one.crinklecod.mochibun.data.model.FavoriteSlotItem
 import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.BundlePreviewData
+import one.crinklecod.mochibun.data.repository.LidLedAnimationRepository
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
 import one.crinklecod.mochibun.service.InputArbiter
@@ -176,7 +177,22 @@ fun MainLauncher(
     // Inspect incoming theme bundles completely on Dispatchers.IO to avoid blocking the main UI thread
     LaunchedEffect(incomingBundleUri) {
         val uri = incomingBundleUri
-        if (uri != null) {
+        // Lid LED animation files import straight into the Lid LED Studio library
+        val isLidAnimation = uri != null && withContext(Dispatchers.IO) {
+            LidLedAnimationRepository.isAnimationFileName(LidLedAnimationRepository.displayName(context, uri))
+        }
+        if (uri != null && isLidAnimation) {
+            val imported = withContext(Dispatchers.IO) { LidLedAnimationRepository.importFromUri(context, uri) }
+            Toast.makeText(
+                context,
+                imported.fold(
+                    onSuccess = { "Lid animation \"${it.name}\" added to Lid LED Studio ♡" },
+                    onFailure = { "Failed to import lid animation: ${it.message ?: "invalid file"}" }
+                ),
+                Toast.LENGTH_SHORT
+            ).show()
+            onConsumeIncomingBundleUri()
+        } else if (uri != null) {
             val result = withContext(Dispatchers.IO) {
                 try {
                     context.contentResolver.openInputStream(uri)?.use { stream ->

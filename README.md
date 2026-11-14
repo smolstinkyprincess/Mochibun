@@ -41,6 +41,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Media volume lock**: The volume rocker always changes *media* volume, even in Silent Mode.
 - **Pastel SystemUI**: Your palette also colors Quick Settings, the volume dialog, notification cards, and the status and nav bars.
 - **Lid LED pulses**: Notification shimmers and a charging glow on the outer lid lights, in the color you pick.
+- **Lid LED Studio ✨**: Draw your own little light shows for the five windows on the outer lid! Build them step by step (500 ms per step, up to 16 steps) with 7 vivid keitai swatches, preview them on screen, then hit **Test Lid ♡** to watch them play for real. Pick one animation for **notifications** and another for **charging**: each loops for about a minute, then rests on its last frame. Comes with 5 cute presets (*Sakura Chase ♡*, *Keitai Rainbow*, *Mint Heartbeat*, *Berry Sparkle*, *Lemon Ping-Pong*), and you can import or export `.yaml`, `.json`, or `.mochibunled` files to trade with friends. Find it in *Settings > Behavior*.
 
 ---
 
@@ -55,6 +56,10 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 | 📊 System Stats | 💌 Notifications | 🌸 Kaomoji Wheel | ⚙️ Settings Hub |
 | :---: | :---: | :---: | :---: |
 | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_stats.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="System Stats" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_notifs.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Notifications" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7_wheel.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Kaomoji Wheel" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/8_settings.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Settings Hub" /> |
+
+| ✨ Lid LED Studio | 💡 Step Maker | 🎨 Pastel SystemUI |
+| :---: | :---: | :---: |
+| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/9_lidledstudio1.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Lid LED Studio" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/10_lidledstudio2.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Lid LED Step Maker" /> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/11_systemui.png" width="165" style="border-radius: 16px; border: 1.5px solid #ecd0d8;" alt="Pastel SystemUI" /> |
 
 </div>
 
@@ -151,6 +156,22 @@ decorations:
   cardRoundnessDp: 24.0
 ```
 
+### 💡 Lid Light Animations (`.yaml`)
+Lid LED Studio animations are plain little YAML files too, so you can hand-write one or share it. Each step lists the five lid windows (`W1`–`W5`, left to right); `#000000` means off. The lid lights each step in one color (the most-used one in that step):
+
+```yaml
+name: "Sakura Chase ♡"
+author: "emii"
+step_ms: 500        # 100–5000 ms per step
+loop: true          # false = play once
+steps:              # up to 16
+  - windows: ["#FF1493", "#000000", "#000000", "#000000", "#000000"]
+  - windows: ["#000000", "#FF1493", "#000000", "#000000", "#000000"]
+  - windows: ["#000000", "#000000", "#FF1493", "#000000", "#000000"]
+```
+
+Open a `.yaml`, `.yml`, or `.mochibunled` file on your phone and it pops straight into your Studio library ♡ (JSON with the same fields works too, via **Import** in the Studio.)
+
 ### 📦 Full Backups (`.json`) 
 #### Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, and cursor tweaks to a simple `.json` file. Restoring shows a preview summary first and reloads everything instantly, no reboot needed.
 ---
@@ -197,7 +218,7 @@ The checklist also has rows for the **Mochibun Keitai IME** (see [Mochibun Keita
 
 ### 🔮 Optional Root & LSPosed Perks
 
-Rooted with Magisk and LSPosed? Flip on **Show Root & LSPosed Options** at the bottom of *Settings > Permissions & Root* (Setup & Diagnostics) (it starts on automatically when Mochibun spots `su`). That unlocks system-wide key remapping without Accessibility, QuickSwitch recents, in-place Wi-Fi/Bluetooth toggles, outer lid LED alerts with a charging LED and custom color, real hall-sensor lid detection, and pastel SystemUI theming. The **[AT-M120 Root, Magisk & Tuning Guide](docs/m120_root_setup.md)** covers bootloader, Magisk, and microG.
+Rooted with Magisk and LSPosed? Flip on **Show Root & LSPosed Options** at the bottom of *Settings > Permissions & Root* (Setup & Diagnostics) (it starts on automatically when Mochibun spots `su`). That unlocks system-wide key remapping without Accessibility, QuickSwitch recents, in-place Wi-Fi/Bluetooth toggles, outer lid LED alerts with a charging LED and custom color, the Lid LED Studio, real hall-sensor lid detection, and pastel SystemUI theming. The **[AT-M120 Root, Magisk & Tuning Guide](docs/m120_root_setup.md)** covers bootloader, Magisk, and microG.
 
 > **Boot animation bonus 🎀**: Got root now? Grab the optional `mochibun-bootanimation.zip` from [Releases](https://github.com/smolstinkyprincess/Mochibun/releases/latest) for a matching pastel boot screen!
 
@@ -240,7 +261,7 @@ Mochibun stays tiny, breezy, and cute thanks to these awesome projects:
 
 - **[Coil](https://github.com/coil-kt/coil)**: Keeps animated `.gif` and `.png` cursors (and Mochibunny!) dancing smoothly without chewing up precious RAM! (˶ᵔ ᵕ ᵔ˶)
 - **[libsu](https://github.com/topjohnwu/libsu)** by [@topjohnwu](https://github.com/topjohnwu): Handles fast background root clicks and clean recents switching. (•̀ᴗ•́)و
-- **[kaml](https://github.com/charleskorn/kaml)**: Friendly, human-readable YAML parsing for custom themes. ♡
+- **[kaml](https://github.com/charleskorn/kaml)**: Friendly, human-readable YAML parsing for custom themes and lid light animations. ♡
 - **[MaruMinya (マルミーニャ)](https://www.freejapanesefont.com/maruminya-cute-free-font/)**: The darling rounded dot-matrix font powering Mochibun's nostalgic keitai typography! ♡
 
 ---
