@@ -14,6 +14,8 @@ import one.crinklecod.mochibun.core.system.KeyHookStatus
 import one.crinklecod.mochibun.core.system.RootTouchInjector
 import one.crinklecod.mochibun.core.util.MochibunSystemActions
 import one.crinklecod.mochibun.data.prefs.CursorPreferences
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.ui.MainActivity
 
 /**
  * Optional helper for phones without root (enabled by the user in Android Settings >
@@ -24,7 +26,9 @@ import one.crinklecod.mochibun.data.prefs.CursorPreferences
  *    [RootTouchInjector] when root is unavailable).
  *  - Global actions: Recents, notification shade, Quick Settings, Back.
  *  - Key filtering, only while the LSPosed key hook is NOT active: the cursor toggle key flips
- *    the cursor, and D-pad / Center / 2 / 4 / 6 / 8 drive it while it is visible.
+ *    the cursor, and D-pad / Center / 2 / 4 / 6 / 8 drive it while it is visible. With
+ *    Soft-Key Navigation on, LSK (Recents / scan 580) and RSK (Back) are handed to
+ *    [MainActivity] while Mochibun is foreground, so stock Recents doesn't open over Home.
  *
  * No accessibility event types are requested and window content is never read.
  */
@@ -36,6 +40,7 @@ class MochibunAccessibilityService : AccessibilityService(), RootTouchInjector.G
         private const val NOT_TAKEN: Byte = 0
         private const val TAKEN_TOGGLE: Byte = 1
         private const val TAKEN_CURSOR: Byte = 2
+        private const val TAKEN_SOFT_KEY: Byte = 3
 
         /** Finger-on-glass time of a gesture tap (a 1 ms stroke is a plain down + up). */
         const val TAP_DURATION_MS = 1L
@@ -146,12 +151,32 @@ class MochibunAccessibilityService : AccessibilityService(), RootTouchInjector.G
             if (event.action == KeyEvent.ACTION_UP) taken[keyCode] = NOT_TAKEN
             if (owner == TAKEN_CURSOR) {
                 VirtualCursorService.dispatchCursorKey(cursorKey, event.action, event.repeatCount)
+            } else if (owner == TAKEN_SOFT_KEY) {
+                MainActivity.dispatchSoftKeyFromService(event)
             }
             return true
         }
 
         // LSPosed hook present: it already routes these keys inside system_server
         if (KeyHookStatus.isActive(this)) return false
+
+        // LSK / RSK on Home / Drawer: take them before PhoneWindowManager opens stock Recents
+        if (KeyRouting.isSoftKey(keyCode, event.scanCode) &&
+            KeyRouting.shouldTakeSoftKey(
+                keyCode = keyCode,
+                scanCode = event.scanCode,
+                hookActive = false,
+                softKeyNavEnabled = PreferencesManager.isSoftKeyNavEnabled(this),
+                launcherForeground = MainActivity.isForeground,
+                cursorVisible = VirtualCursorService.isCursorVisible
+            )
+        ) {
+            if (MainActivity.dispatchSoftKeyFromService(event)) {
+                taken[keyCode] = TAKEN_SOFT_KEY
+                return true
+            }
+            return false
+        }
 
         val route = KeyRouting.route(
             keyCode = keyCode,
@@ -198,6 +223,27 @@ class MochibunAccessibilityService : AccessibilityService(), RootTouchInjector.G
         enum class Route { PASS, TOGGLE_CURSOR, CURSOR_KEY }
 
         private const val SIDE_KEY_SCAN_CODE = 62
+
+        private const val LSK_SCAN_CODE = 580
+
+        fun isSoftKey(keyCode: Int, scanCode: Int): Boolean =
+            keyCode == KeyEvent.KEYCODE_APP_SWITCH || keyCode == KeyEvent.KEYCODE_BACK ||
+                scanCode == LSK_SCAN_CODE
+
+        /**
+         * Should the service take an LSK / RSK press and hand it to MainActivity? Only without
+         * the LSPosed hook, with Soft-Key Navigation on, while Mochibun is foreground and the
+         * virtual cursor isn't claiming keys. Elsewhere Recents / Back stay stock.
+         */
+        fun shouldTakeSoftKey(
+            keyCode: Int,
+            scanCode: Int,
+            hookActive: Boolean,
+            softKeyNavEnabled: Boolean,
+            launcherForeground: Boolean,
+            cursorVisible: Boolean
+        ): Boolean = isSoftKey(keyCode, scanCode) && !hookActive && softKeyNavEnabled &&
+            launcherForeground && !cursorVisible
 
         fun isToggleKey(keyCode: Int, scanCode: Int, toggleKeyCode: Int): Boolean =
             keyCode == toggleKeyCode || keyCode == KeyEvent.KEYCODE_F4 || scanCode == SIDE_KEY_SCAN_CODE

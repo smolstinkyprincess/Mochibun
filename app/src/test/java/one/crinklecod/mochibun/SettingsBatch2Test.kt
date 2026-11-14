@@ -285,4 +285,37 @@ class SettingsBatch2Test {
         json.getJSONObject("behavior").put("show_root_options", "yes")
         assertFalse(BackupRestoreManager.restoreBackupJson(context, json.toString()).isSuccess)
     }
+
+    @Test
+    fun softKeys_routedToLauncherOnlyWhenForegroundWithoutHook() {
+        fun take(key: Int, scan: Int = 0, hook: Boolean = false, enabled: Boolean = true,
+                 fg: Boolean = true, cursor: Boolean = false) =
+            KeyRouting.shouldTakeSoftKey(key, scan, hook, enabled, fg, cursor)
+
+        // Mochibun foreground, no LSPosed: LSK (keycode or scan 580) and RSK go to MainActivity
+        assertTrue(take(KeyEvent.KEYCODE_APP_SWITCH))
+        assertTrue(take(KeyEvent.KEYCODE_UNKNOWN, scan = 580))
+        assertTrue(take(KeyEvent.KEYCODE_BACK))
+
+        // Third-party app in front: stock Recents / Back
+        assertFalse(take(KeyEvent.KEYCODE_APP_SWITCH, fg = false))
+        assertFalse(take(KeyEvent.KEYCODE_BACK, fg = false))
+
+        // LSPosed hook active: the service yields, rooted behaviour unchanged
+        assertFalse(take(KeyEvent.KEYCODE_APP_SWITCH, hook = true))
+        assertFalse(take(KeyEvent.KEYCODE_BACK, hook = true))
+
+        // Soft-Key Navigation off, or the virtual cursor owns the keys
+        assertFalse(take(KeyEvent.KEYCODE_APP_SWITCH, enabled = false))
+        assertFalse(take(KeyEvent.KEYCODE_APP_SWITCH, cursor = true))
+
+        // Non soft keys are never taken here
+        assertFalse(take(KeyEvent.KEYCODE_DPAD_UP))
+    }
+
+    @Test
+    fun softKeyDispatch_withoutLauncher_isNotConsumed() {
+        val event = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_APP_SWITCH)
+        assertFalse(one.crinklecod.mochibun.ui.MainActivity.dispatchSoftKeyFromService(event))
+    }
 }

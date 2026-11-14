@@ -210,6 +210,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         isForeground = true
+        activeInstance = java.lang.ref.WeakReference(this)
         one.crinklecod.mochibun.core.system.CursorServiceWatchdog.checkAsync(this, force = false)
         SystemUiThemeBridge.broadcastSavedTheme(this)
     }
@@ -231,6 +232,21 @@ class MainActivity : ComponentActivity() {
         var settingsBackKeyHandler: ((KeyEvent) -> Boolean)? = null
 
         private const val WAKE_SETTLE_MS = 1000L
+
+        @Volatile
+        private var activeInstance: java.lang.ref.WeakReference<MainActivity>? = null
+
+        /**
+         * Non-root soft keys: [one.crinklecod.mochibun.service.MochibunAccessibilityService]
+         * filters LSK / RSK before PhoneWindowManager and hands them here. Must be called on
+         * the main thread (accessibility key callbacks already are).
+         */
+        fun dispatchSoftKeyFromService(event: KeyEvent): Boolean {
+            val activity = activeInstance?.get() ?: return false
+            if (activity.isFinishing || activity.isDestroyed) return false
+            activity.dispatchKeyEvent(event)
+            return true
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -261,6 +277,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if (activeInstance?.get() === this) activeInstance = null
         // Drop the host's references to widget views, which hold this activity
         widgetHost.releaseViews(this)
         keyEventInterceptor = null
