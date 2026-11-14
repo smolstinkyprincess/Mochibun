@@ -22,6 +22,9 @@ enum class HotspotAlignment(val label: String, val description: String) {
     CENTER("Center", "Pointer clicks at the center of the cursor (ideal for crosshairs/paws)")
 }
 
+/** One choice in the Cursor & Hardware "Cursor Toggle Key" picker. */
+data class CursorToggleKeyOption(val keyCode: Int, val label: String)
+
 object CursorPreferences {
     const val PREFS_NAME = "virtual_cursor_preferences"
 
@@ -39,6 +42,15 @@ object CursorPreferences {
     private const val KEY_ACCEL_RAMP_MS = "cursor_accel_ramp_ms"
 
     val DEFAULT_TOGGLE_KEYCODE = KeyEvent.KEYCODE_F4 // Chinoe AT-M120 physical side key
+
+    /** Keys offered as the cursor toggle. F4 always toggles too (see MochibunSystemActions). */
+    val TOGGLE_KEY_OPTIONS = listOf(
+        CursorToggleKeyOption(KeyEvent.KEYCODE_F4, "Side Key (F4)"),
+        CursorToggleKeyOption(KeyEvent.KEYCODE_MENU, "Menu / LSK"),
+        CursorToggleKeyOption(KeyEvent.KEYCODE_SEARCH, "Search"),
+        CursorToggleKeyOption(KeyEvent.KEYCODE_CAMERA, "Camera"),
+        CursorToggleKeyOption(KeyEvent.KEYCODE_STAR, "* Key")
+    )
     // Legacy physics values. The cursor no longer uses them, but backups and .mochibun bundles
     // still carry them so older app versions can read files made by this one.
     const val DEFAULT_MOVE_SPEED = 10f
@@ -67,12 +79,37 @@ object CursorPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
+    /** Unknown / unsupported key codes (e.g. from an old backup) fall back to F4. */
+    fun sanitizeToggleKeyCode(keyCode: Int): Int =
+        if (TOGGLE_KEY_OPTIONS.any { it.keyCode == keyCode }) keyCode else DEFAULT_TOGGLE_KEYCODE
+
+    fun toggleKeyLabel(keyCode: Int): String =
+        TOGGLE_KEY_OPTIONS.first { it.keyCode == sanitizeToggleKeyCode(keyCode) }.label
+
+    /** Next option in [TOGGLE_KEY_OPTIONS] ([direction] -1 / +1), wrapping at both ends. */
+    fun stepToggleKeyCode(current: Int, direction: Int): Int {
+        val size = TOGGLE_KEY_OPTIONS.size
+        val index = TOGGLE_KEY_OPTIONS.indexOfFirst { it.keyCode == sanitizeToggleKeyCode(current) }
+        return TOGGLE_KEY_OPTIONS[((index + direction) % size + size) % size].keyCode
+    }
+
     fun getToggleKeyCode(context: Context): Int {
-        return getPrefs(context).getInt(KEY_TOGGLE_KEYCODE, DEFAULT_TOGGLE_KEYCODE)
+        return sanitizeToggleKeyCode(getPrefs(context).getInt(KEY_TOGGLE_KEYCODE, DEFAULT_TOGGLE_KEYCODE))
     }
 
     fun setToggleKeyCode(context: Context, keyCode: Int) {
-        getPrefs(context).edit().putInt(KEY_TOGGLE_KEYCODE, keyCode).apply()
+        getPrefs(context).edit().putInt(KEY_TOGGLE_KEYCODE, sanitizeToggleKeyCode(keyCode)).apply()
+        syncToggleKeyToGlobal(context)
+    }
+
+    /** Mirrors the toggle key into Settings.Global so MochibunKeyHook (system_server) can read it. */
+    fun syncToggleKeyToGlobal(context: Context) {
+        PreferencesManager.mirrorIntToGlobal(
+            context,
+            PreferencesManager.GLOBAL_CURSOR_TOGGLE_KEYCODE,
+            getToggleKeyCode(context),
+            DEFAULT_TOGGLE_KEYCODE
+        )
     }
 
     fun getMoveSpeed(context: Context): Float {

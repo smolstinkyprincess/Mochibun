@@ -12,6 +12,7 @@ import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
@@ -197,7 +198,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
             inner = inner.child
         }
 
-        if (inner is AnimatedImageDrawable) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && inner is AnimatedImageDrawable) {
             inner.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
         }
 

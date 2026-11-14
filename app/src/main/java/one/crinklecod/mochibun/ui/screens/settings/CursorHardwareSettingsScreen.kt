@@ -22,6 +22,7 @@ import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.CursorPreferences
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.service.InputArbiter
 import one.crinklecod.mochibun.service.VirtualCursorService
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
@@ -49,6 +50,7 @@ internal fun CursorHardwareSettingsSubScreen(
     var cursorSizeDp by remember { mutableIntStateOf(CursorPreferences.getCursorSizeDp(context)) }
     var scrollStepPx by remember { mutableIntStateOf(CursorPreferences.getScrollStepPx(context)) }
     var customUri by remember { mutableStateOf(CursorPreferences.getCustomCursorUri(context)) }
+    var toggleKeyCode by remember { mutableIntStateOf(CursorPreferences.getToggleKeyCode(context)) }
     val softKeyNav by PreferencesManager.isSoftKeyNavEnabled.collectAsState()
     val dpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
     val boundaryHaptics by PreferencesManager.isDpadBoundaryHaptics.collectAsState()
@@ -67,16 +69,23 @@ internal fun CursorHardwareSettingsSubScreen(
     }
 
     // Keep every row's focus index stable even when the default cursor sprite is active.
-    val totalItems = 11
+    val totalItems = 12
 
     val targetCardIndex = remember(focusedIndex) {
         when (focusedIndex) {
             in 0..4 -> 0
             5, 6 -> 1
-            7, 8 -> 2
-            9, 10 -> 3
+            7, 8, 9 -> 2
+            10, 11 -> 3
             else -> 0
         }
+    }
+
+    fun stepToggleKey(direction: Int) {
+        toggleKeyCode = CursorPreferences.stepToggleKeyCode(toggleKeyCode, direction)
+        CursorPreferences.setToggleKeyCode(context, toggleKeyCode)
+        // The key hook may hold a stale typing state from before `*` was chosen
+        if (toggleKeyCode == KeyEvent.KEYCODE_STAR) InputArbiter.pushInputActiveToKeyHook(context)
     }
 
     // Moves the stepper at [index] one notch; [direction] is -1 (left) or +1 (right).
@@ -108,6 +117,7 @@ internal fun CursorHardwareSettingsSubScreen(
                     .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
                 CursorPreferences.setScrollStepPx(context, scrollStepPx)
             }
+            9 -> stepToggleKey(direction)
             else -> return false
         }
         return true
@@ -124,8 +134,9 @@ internal fun CursorHardwareSettingsSubScreen(
             }
             7 -> onOpenHardwareButtons?.invoke()
             8 -> PreferencesManager.setSoftKeyNavEnabled(context, !softKeyNav)
-            9 -> PreferencesManager.setDpadWrapAround(context, !dpadWrapAround)
-            10 -> PreferencesManager.setDpadBoundaryHaptics(context, !boundaryHaptics)
+            9 -> stepToggleKey(1)
+            10 -> PreferencesManager.setDpadWrapAround(context, !dpadWrapAround)
+            11 -> PreferencesManager.setDpadBoundaryHaptics(context, !boundaryHaptics)
         }
     }
 
@@ -305,6 +316,20 @@ internal fun CursorHardwareSettingsSubScreen(
                         jumpNumber = 9,
                         onCheckedChange = { PreferencesManager.setSoftKeyNavEnabled(context, it) }
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Cursor Toggle Key",
+                        subtitle = if (toggleKeyCode == KeyEvent.KEYCODE_STAR) {
+                            "Shows / hides the cursor (types * in text fields)"
+                        } else {
+                            "Shows / hides the cursor (the F4 side key always works)"
+                        },
+                        valueDisplay = CursorPreferences.toggleKeyLabel(toggleKeyCode),
+                        isFocused = focusedIndex == 9,
+                        jumpNumber = null,
+                        onDecrement = { stepToggleKey(-1) },
+                        onIncrement = { stepToggleKey(1) }
+                    )
                 }
             }
 
@@ -314,7 +339,7 @@ internal fun CursorHardwareSettingsSubScreen(
                         title = "D-Pad Wrap Around",
                         subtitle = "Loop focus at navigation boundaries",
                         checked = dpadWrapAround,
-                        isFocused = focusedIndex == 9,
+                        isFocused = focusedIndex == 10,
                         jumpNumber = null,
                         onCheckedChange = { PreferencesManager.setDpadWrapAround(context, it) }
                     )
@@ -323,7 +348,7 @@ internal fun CursorHardwareSettingsSubScreen(
                         title = "Boundary Haptics",
                         subtitle = "Subtle feedback when focus reaches an edge",
                         checked = boundaryHaptics,
-                        isFocused = focusedIndex == 10,
+                        isFocused = focusedIndex == 11,
                         jumpNumber = null,
                         onCheckedChange = { PreferencesManager.setDpadBoundaryHaptics(context, it) }
                     )

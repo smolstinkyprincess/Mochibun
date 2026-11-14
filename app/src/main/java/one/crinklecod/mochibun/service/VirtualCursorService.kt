@@ -427,7 +427,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
     }
 
     private fun handleCursorKey(keyCode: Int, action: Int, repeatCount: Int) {
-        val isToggle = (keyCode == toggleKeyCode) || (keyCode == KeyEvent.KEYCODE_F4)
+        val isToggle = MochibunSystemActions.isCursorToggleKey(keyCode, 0, toggleKeyCode, InputArbiter.isInputActive)
 
         if (isToggle) {
             if ((action == KeyEvent.ACTION_DOWN) && (repeatCount == 0)) {

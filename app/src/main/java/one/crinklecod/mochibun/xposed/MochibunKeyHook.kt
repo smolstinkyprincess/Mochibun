@@ -22,7 +22,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
 /**
  * LSPosed / Xposed hook inside system_server (target package: "android").
  * Intercepts low-level hardware keys before they reach the window manager dispatcher:
- * - F4 / Side key: Toggles virtual cursor state and notifies VirtualCursorService.
+ * - F4 / Side key (plus the Cursor Toggle Key chosen in settings): Toggles virtual cursor state
+ *   and notifies VirtualCursorService.
  * - Directional D-pad & numeric cursor keys: Redirected to Mochibun when the cursor is active.
  * - KEYCODE_APP_SWITCH: Swallows system Recents invocation when Mochibun is in foreground.
  * - KEYCODE_BACK: Prevents OS minimization when on Mochibun's Home screen.
@@ -64,7 +65,6 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             MochibunSystemActions.EXTRA_MEDIA_VOLUME_LOCK_ENABLED
 
         // AT-M120 physical scan codes
-        private const val SCANCODE_SIDE_F4 = 62
         private const val SCANCODE_APP_SWITCH = 580
 
         // Volatile internal cursor state tracked across key events in system_server
@@ -103,6 +103,20 @@ class MochibunKeyHook : IXposedHookLoadPackage {
 
         @Volatile
         private var cachedSoftKeyNavEnabled = true
+
+        // Settings.Global mirror of the Cursor Toggle Key pref (2 s cache, like soft-key nav)
+        @Volatile
+        private var cachedCursorToggleKeyCode = KeyEvent.KEYCODE_F4
+
+        @Volatile
+        private var lastCursorToggleKeyCheckElapsed = 0L
+
+        @Volatile
+        private var hasCursorToggleKeyCheck = false
+
+        // Mochibun IME is typing in a text field; pushed by the app only while `*` is the toggle key
+        @Volatile
+        var isAppInputActive: Boolean = false
 
         @Volatile
         private var lastSoftKeyNavCheckElapsed = 0L
@@ -173,12 +187,17 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         if (!isHookEnabled()) return
         if (context != null) ensureAppStateReceiver(context)
 
-        // 1. F4 Key (KEYCODE_F4 / AT-M120 side key scanCode 62)
-        val isF4 = keyCode == KeyEvent.KEYCODE_F4 || event.scanCode == SCANCODE_SIDE_F4
-        if (isF4) {
+        // 1. Cursor toggle: F4 side key (scanCode 62) always, plus the user's chosen toggle key
+        val isToggleKey = MochibunSystemActions.isCursorToggleKey(
+            keyCode,
+            event.scanCode,
+            cursorToggleKeyCode(),
+            isAppInputActive
+        )
+        if (isToggleKey) {
             if (isDown && event.repeatCount == 0) {
                 isCursorActive = !isCursorActive
-                XposedBridge.log("$TAG: F4 pressed, toggling cursor -> isCursorActive=$isCursorActive")
+                XposedBridge.log("$TAG: toggle key $keyCode pressed -> isCursorActive=$isCursorActive")
                 broadcastCursorToggle(context, isCursorActive)
             }
 
@@ -370,6 +389,31 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         return cachedSoftKeyNavEnabled
     }
 
+    /** Settings.Global mirror of CursorPreferences.getToggleKeyCode, cached like [isSoftKeyNavEnabled]. */
+    private fun cursorToggleKeyCode(): Int {
+        val now = SystemClock.elapsedRealtime()
+        if (hasCursorToggleKeyCheck &&
+            now - lastCursorToggleKeyCheckElapsed < HOOK_SETTING_CACHE_TTL_MS
+        ) {
+            return cachedCursorToggleKeyCode
+        }
+        val resolver = systemServerResolver
+        if (resolver != null) {
+            cachedCursorToggleKeyCode = try {
+                Settings.Global.getInt(
+                    resolver,
+                    PreferencesManager.GLOBAL_CURSOR_TOGGLE_KEYCODE,
+                    KeyEvent.KEYCODE_F4
+                )
+            } catch (_: Throwable) {
+                KeyEvent.KEYCODE_F4
+            }
+        }
+        lastCursorToggleKeyCheckElapsed = now
+        hasCursorToggleKeyCheck = true
+        return cachedCursorToggleKeyCode
+    }
+
     private fun ensureKeyHookStatusReceiver(context: Context) {
         synchronized(MochibunKeyHook::class.java) {
             if (keyHookStatusReceiverRegistered) return
@@ -443,6 +487,11 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                     when (intent?.action) {
                         ACTION_CURSOR_MODE_CHANGED ->
                             isCursorActive = intent.getBooleanExtra(EXTRA_CURSOR_ACTIVE, false)
+                        MochibunSystemActions.ACTION_INPUT_ACTIVE_CHANGED ->
+                            isAppInputActive = intent.getBooleanExtra(
+                                MochibunSystemActions.EXTRA_INPUT_ACTIVE,
+                                false
+                            )
                         ACTION_MEDIA_VOLUME_LOCK_CHANGED -> {
                             isMediaVolumeLockEnabled =
                                 intent.getBooleanExtra(EXTRA_MEDIA_VOLUME_LOCK_ENABLED, false)
@@ -455,6 +504,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                 val filter = IntentFilter().apply {
                     addAction(ACTION_CURSOR_MODE_CHANGED)
                     addAction(ACTION_MEDIA_VOLUME_LOCK_CHANGED)
+                    addAction(MochibunSystemActions.ACTION_INPUT_ACTIVE_CHANGED)
                 }
                 context.registerReceiver(
                     receiver,

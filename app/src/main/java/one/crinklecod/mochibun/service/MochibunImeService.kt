@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
 import android.inputmethodservice.InputMethodService
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
@@ -365,7 +366,7 @@ class MochibunImeService : InputMethodService() {
             autoCapSuppressed = false
         }
         refreshAutoCap()
-        if (hasTextEditor()) InputArbiter.isInputActive = true
+        if (hasTextEditor()) InputArbiter.updateInputActive(this, true)
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -383,7 +384,7 @@ class MochibunImeService : InputMethodService() {
         manualSelection = false
         resolvePendingTap()
         candidateState.commitActive(commit)
-        InputArbiter.isInputActive = false
+        InputArbiter.updateInputActive(this, false)
         super.onFinishInputView(finishingInput)
     }
 
@@ -578,7 +579,7 @@ class MochibunImeService : InputMethodService() {
         if (isNumericField) return false
         if (isMultiTapKey) {
             // Typing after the strip was hidden (e.g. BACK) would leave candidates invisible
-            if (!isInputViewShown) requestShowSelf(0)
+            if (!isInputViewShown && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) requestShowSelf(0)
             handler.removeCallbacks(holdRunnable)
             holdKeyCode = keyCode
             holdFired = false

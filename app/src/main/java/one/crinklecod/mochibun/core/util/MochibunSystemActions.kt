@@ -23,6 +23,10 @@ object MochibunSystemActions {
     const val ACTION_REQUEST_MEDIA_VOLUME_LOCK =
         "one.crinklecod.mochibun.ACTION_REQUEST_MEDIA_VOLUME_LOCK"
 
+    // App -> system_server: Mochibun IME started / stopped typing in a text field (guarded by
+    // CURSOR_MODE_SYNC_PERMISSION). Only sent while `*` is the cursor toggle key.
+    const val ACTION_INPUT_ACTIVE_CHANGED = "one.crinklecod.mochibun.ACTION_INPUT_ACTIVE_CHANGED"
+
     const val SYSTEM_SERVER_BROADCAST_PERMISSION = "android.permission.INTERNAL_SYSTEM_WINDOW"
     const val CURSOR_MODE_SYNC_PERMISSION = "one.crinklecod.mochibun.permission.CURSOR_MODE_SYNC"
 
@@ -33,6 +37,23 @@ object MochibunSystemActions {
     const val EXTRA_CURSOR_ACTIVE = "isCursorActive"
     const val EXTRA_KEY_HOOK_ACTIVE = "isKeyHookActive"
     const val EXTRA_MEDIA_VOLUME_LOCK_ENABLED = "isMediaVolumeLockEnabled"
+    const val EXTRA_INPUT_ACTIVE = "isInputActive"
+
+    /** AT-M120 side key scan code (reported as KEYCODE_F4, or UNKNOWN on some keylayouts). */
+    const val SIDE_KEY_SCAN_CODE = 62
+
+    /**
+     * Does this key toggle the virtual cursor? Shared by MochibunKeyHook (system_server) and the
+     * non-root accessibility key filter so both agree.
+     * - The F4 side key (scan 62) always toggles, so the AT-M120 keeps working whatever is chosen.
+     * - [toggleKeyCode] (user's choice in Cursor & Hardware) toggles too, except `*` while
+     *   [inputActive]: there it types into the focused text field instead.
+     */
+    fun isCursorToggleKey(keyCode: Int, scanCode: Int, toggleKeyCode: Int, inputActive: Boolean): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_F4 || scanCode == SIDE_KEY_SCAN_CODE) return true
+        if (keyCode == KeyEvent.KEYCODE_UNKNOWN || keyCode != toggleKeyCode) return false
+        return !(keyCode == KeyEvent.KEYCODE_STAR && inputActive)
+    }
 
     /** Volume rocker key -> AudioManager adjust direction, or null for any other key. */
     fun mediaVolumeDirection(keyCode: Int): Int? = when (keyCode) {

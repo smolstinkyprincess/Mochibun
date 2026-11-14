@@ -1,5 +1,6 @@
 package one.crinklecod.mochibun
 
+import android.app.ActivityManager
 import android.app.Application
 import android.os.Build
 import coil.ImageLoader
@@ -14,6 +15,7 @@ import one.crinklecod.mochibun.core.system.LidLedManager
 import one.crinklecod.mochibun.core.system.MediaVolumeLockSync
 import one.crinklecod.mochibun.core.system.MemoryTrimTier
 import one.crinklecod.mochibun.core.system.memoryTrimTier
+import one.crinklecod.mochibun.data.prefs.CursorPreferences
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.data.repository.HardwareRemapManager
@@ -68,6 +70,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
         CursorServiceWatchdog.init(this)
         MediaVolumeLockSync.init(this)
         PreferencesManager.syncSoftKeyNavToGlobal(this)
+        CursorPreferences.syncToggleKeyToGlobal(this)
         one.crinklecod.mochibun.core.system.TorchManager.init(this)
         // VirtualCursorService is started on demand (F4 / cursor toggle) and stops when hidden.
     }
@@ -81,22 +84,45 @@ class MochibunApp : Application(), ImageLoaderFactory {
     }
 
     override fun newImageLoader(): ImageLoader {
+        val tinyRam = isOneGbClassDevice(totalRamBytes())
         return ImageLoader.Builder(this)
             .components {
-                if (Build.VERSION.SDK_INT >= 28) {
-                    add(ImageDecoderDecoder.Factory())
-                } else {
-                    add(GifDecoder.Factory())
+                // ~1 GB phones skip animated GIF decoding: Coil then shows the first frame as a still
+                if (!tinyRam) {
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        add(ImageDecoderDecoder.Factory())
+                    } else {
+                        add(GifDecoder.Factory())
+                    }
                 }
             }
             .memoryCache {
                 MemoryCache.Builder(this)
-                    // Low memory budget (~1.8 GB RAM / MT6761): limit cache to 5% of app memory
-                    .maxSizePercent(0.05)
+                    // Low memory budget (~1.8 GB RAM / MT6761): limit cache to 5% of app memory;
+                    // ~1 GB phones get half that to stay clear of the low memory killer
+                    .maxSizePercent(if (tinyRam) 0.025 else 0.05)
                     .build()
             }
             .allowHardware(false) // Use software bitmap allocation to prevent GPU memory exhaustion
             .crossfade(false)
             .build()
     }
+
+    private fun totalRamBytes(): Long {
+        val am = getSystemService(ActivityManager::class.java) ?: return 0L
+        val info = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(info)
+        return info.totalMem
+    }
 }
+
+/** Phones below this total RAM (e.g. 1 GB Kyocera keitai) get the tighter image budget. */
+internal const val ONE_GB_CLASS_RAM_BYTES = 1_500_000_000L
+
+/**
+ * True for ~1 GB devices. Uses total RAM rather than `isLowRamDevice`, because 2 GB Android Go
+ * builds (like the AT-M120 class) also report low-RAM and must keep their current behavior.
+ * Unknown (0) counts as not tiny.
+ */
+internal fun isOneGbClassDevice(totalRamBytes: Long): Boolean =
+    totalRamBytes in 1 until ONE_GB_CLASS_RAM_BYTES

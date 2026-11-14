@@ -1,6 +1,11 @@
 package one.crinklecod.mochibun.service
 
+import android.content.Context
+import android.content.Intent
+import android.util.Log
 import android.view.KeyEvent
+import one.crinklecod.mochibun.core.util.MochibunSystemActions
+import one.crinklecod.mochibun.data.prefs.CursorPreferences
 
 /** Who took a key press. The owner also receives that press's auto-repeats and its release. */
 enum class InputLayer {
@@ -34,6 +39,30 @@ object InputArbiter {
      */
     @Volatile
     var isInputActive = false
+
+    /**
+     * Sets [isInputActive] and, while `*` is the cursor toggle key, tells MochibunKeyHook so `*`
+     * types into the field instead of toggling the cursor. Other toggle keys send nothing.
+     */
+    fun updateInputActive(context: Context, active: Boolean) {
+        if (isInputActive == active) return
+        isInputActive = active
+        if (CursorPreferences.getToggleKeyCode(context) == KeyEvent.KEYCODE_STAR) {
+            pushInputActiveToKeyHook(context, active)
+        }
+    }
+
+    /** App -> system_server; only Mochibun (signature permission) may send it. */
+    fun pushInputActiveToKeyHook(context: Context, active: Boolean = isInputActive) {
+        val intent = Intent(MochibunSystemActions.ACTION_INPUT_ACTIVE_CHANGED)
+            .setPackage("android")
+            .putExtra(MochibunSystemActions.EXTRA_INPUT_ACTIVE, active)
+        try {
+            context.sendBroadcast(intent)
+        } catch (e: Exception) {
+            Log.w("InputArbiter", "Failed to sync input state with system_server", e)
+        }
+    }
 
     fun isNewPress(event: KeyEvent): Boolean =
         event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0

@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
@@ -289,8 +290,9 @@ fun WidgetPage(
             }
             return
         }
-        val features = info.widgetFeatures
-        val configOptional =
+        // widgetFeatures is Android 9+, and CONFIGURATION_OPTIONAL is only honoured from Android 12
+        val features = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.widgetFeatures else 0
+        val configOptional = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             (features and AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL) != 0 &&
                 (features and AppWidgetProviderInfo.WIDGET_FEATURE_RECONFIGURABLE) != 0
         if (info.configure == null || configOptional) {

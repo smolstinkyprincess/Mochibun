@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.compose.foundation.background
@@ -141,7 +142,12 @@ fun performQuickSettingsAction(context: Context, index: Int) {
             rootToggleCount.intValue++
             HapticManager.performBoundaryHaptic(context)
         } else {
-            openPanel(context, Settings.Panel.ACTION_WIFI, Settings.ACTION_WIFI_SETTINGS)
+            // Settings panels arrived in Android 10; older phones go straight to Wi-Fi settings
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                openPanel(context, Settings.Panel.ACTION_WIFI, Settings.ACTION_WIFI_SETTINGS)
+            } else {
+                openPanel(context, Settings.ACTION_WIFI_SETTINGS, Settings.ACTION_SETTINGS)
+            }
         }
         QuickSettingsNav.BLUETOOTH -> if (useRoot) {
             toggleBluetoothWithRoot(sampleQuickSettings(context).bluetoothOn)

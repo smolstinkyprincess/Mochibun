@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.util.SizeF
@@ -128,7 +129,15 @@ class WidgetFrame(context: Context) : FrameLayout(context) {
             val widthDp = (w - host.paddingLeft - host.paddingRight).coerceAtLeast(1) / density
             val heightDp = (h - host.paddingTop - host.paddingBottom).coerceAtLeast(1) / density
             try {
-                host.updateAppWidgetSize(Bundle(), listOf(SizeF(widthDp, heightDp)))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    host.updateAppWidgetSize(Bundle(), listOf(SizeF(widthDp, heightDp)))
+                } else {
+                    // Pre-Android 12 API: min and max are the same fixed cell size
+                    val wDp = widthDp.toInt()
+                    val hDp = heightDp.toInt()
+                    @Suppress("DEPRECATION")
+                    host.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "updateAppWidgetSize failed for id=${host.appWidgetId}", e)
             }

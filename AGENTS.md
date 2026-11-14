@@ -56,7 +56,7 @@ The launcher currently supports:
   - `#` key: space on tap, Kaomoji Wheel (`ui/dialogs/KaomojiWheelDialog.kt`) on hold.
   - `*` key: context actions / shift.
   - `0` key: space / symbols.
-  - `F4` key: virtual cursor toggle (`VirtualCursorService` via `MochibunKeyHook` / broadcasts).
+  - `F4` key: virtual cursor toggle (`VirtualCursorService` via `MochibunKeyHook` / broadcasts). F4 / scan 62 always toggles; an extra **Cursor Toggle Key** (F4 / Menu / Search / Camera / `*`) is chosen in Cursor & Hardware (`CursorPreferences.TOGGLE_KEY_OPTIONS`), mirrored to `Settings.Global` `mochibun_cursor_toggle_keycode` (2 s cache in the hook) and matched by `MochibunSystemActions.isCursorToggleKey` in both the hook and the accessibility filter. `*` never toggles while the Mochibun IME is typing (`InputArbiter.updateInputActive` pushes `ACTION_INPUT_ACTIVE_CHANGED` to the hook only when `*` is chosen).
 - **Built-in Keitai IME (`MochibunImeService`):**
   - System-wide multi-tap keyboard with floating candidate pill (`KeitaiCandidateStrip`), auto-scrolling candidate track, and symbol pools (`1` for conversational, `0` for programming/shell).
   - Uses a transparent, full-height IME input view while reporting full-height content/visible insets so the app underneath is not resized or panned. The IME declares an empty touchable region: screen taps pass through the pill to the foreground app; all text entry is via hardware keys.
@@ -75,6 +75,7 @@ The launcher currently supports:
     - Never drive animations with per-step `lidled pattern` calls or shell loops, and never alter the AW22xxx register sequence: re-spawning the helper per step drops frames / flickers on the AT-M120 (verified on device).
     - Test Lid: `playStepAnimation()` plays ~5 s immediately (windows work with the flip open); `updateLedState()` is a no-op until it ends; `stopLeds()` still cancels.
     - Only `.mochibunled` opens via ACTION_VIEW (manifest `pathPattern` filter; deliberately not `.yaml`/`.yml`, which would hijack every YAML file and route theme YAMLs into the animation importer). It reaches `MainActivity.pendingThemeBundleUri`; `MainLauncher` routes it by display name to `LidLedAnimationRepository.importFromUri` instead of the `.mochibun` bundle preview. Exports are YAML content named `*.mochibunled`; `.yaml` / `.json` import only via the Studio's Import button.
+    - Hardware gate: `LidLedManager.hasLedHardware` (`/sys/class/leds/aw22xxx_led`; a root `[ -e ]` probe confirms when SELinux hides the node). Only a root answer of "missing" hides the LED rows and skips `lidled` commands; unknown behaves like present.
     - The app prefers `/data/local/tmp/lidled` (dev copy) over the APK-bundled helper; keep it in sync after native changes.
   - `HardwareRemapManager` (pure repository/manager for physical function key remapping and action dispatch).
   - `MochibunKeyHook` (LSPosed framework hook inside `system_server` for low-level hardware key interception and OS event cancellation).
@@ -116,7 +117,7 @@ Do not optimize based solely on theoretical concerns. Prefer measurable improvem
 ## Architecture
 
 - **Single activity, mostly singletons:** No DI framework. Cross-cutting state lives in Kotlin `object` singletons initialized in `MochibunApp.onCreate()` (`PreferencesManager`, `ClamshellManager`, `LidLedManager`, `SoundEffectManager`, `ExternalThemeManager`, `TypographyManager`, `CursorServiceWatchdog`).
-- **Coil Image Loader:** Use the app-wide bounded memory loader from `MochibunApp` rather than creating new image loaders.
+- **Coil Image Loader:** Use the app-wide bounded memory loader from `MochibunApp` rather than creating new image loaders. On ~1 GB devices (`isOneGbClassDevice`, total RAM < 1.5 GB; deliberately not `isLowRamDevice`, which 2 GB Go builds also report) the cache drops from 5% to 2.5% and GIF decoders are not registered (GIFs show their first frame).
 - **Event flow:** `ui/MainActivity.kt` is the HOME activity. It communicates state changes to Compose (`MainLauncher.kt`) via observed counters (`homePressCount`, `appListRefreshCount`, `lidOpenCount`, `unlockCount`, `requestedPage`).
 - **Key Interceptors:** Physical key events flow from `MainActivity.dispatchKeyEvent` to `MainActivity.keyEventInterceptor`. `MainLauncher` installs `LauncherKeyHandler` (`ui/LauncherKeyHandler.kt`). Dialogs and sub-screens swap interceptors in and out as needed. Low-level global hardware keys are captured via `MochibunKeyHook` in `system_server`.
 - **UI Tree:** `ui/MainLauncher.kt` owns the 3-page `HorizontalPager` (0 = Widgets, 1 = Home, 2 = Notifications) and modal states. Sub-screens live in `ui/screens/` and dialogs live in `ui/dialogs/`.
@@ -132,7 +133,7 @@ Do not optimize based solely on theoretical concerns. Prefer measurable improvem
 
 ## Build & Verification
 
-- **Build constraints:** `minSdk = targetSdk = 31` (Android 12 only). `abiFilters` is locked to `armeabi-v7a`. AGP 9 + Kotlin 2.2 with Compose compiler plugin + CMake 3.22 for `evinject`.
+- **Build constraints:** `minSdk = 27` (Android 8.1+), `targetSdk = 31`. The AT-M120 (Android 12) is the primary target; older non-M120 phones (e.g. Kyocera `902KC` / `KYF42`) install but are community-untested. Guard any API 28+ call with `Build.VERSION.SDK_INT` (keep `./gradlew lintDebug` at 0 `NewApi`); Android 12-only theme attributes live in `res/values-v31/`. `abiFilters` is locked to `armeabi-v7a`. AGP 9 + Kotlin 2.2 with Compose compiler plugin + CMake 3.22 for `evinject`.
 - **Verification rule:** After code or resource changes, always compile and run tests to verify:
   ```bash
   ./gradlew app:compileDebugKotlin       # Fast Kotlin compile verification

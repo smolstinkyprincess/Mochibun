@@ -24,6 +24,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.Log
 import android.util.LruCache
 import androidx.compose.runtime.Immutable
@@ -403,6 +404,8 @@ class RecentTasksManager(context: Context) {
 
     @SuppressLint("BlockedPrivateApi")
     private fun getTaskThumbnailViaReflection(taskId: Int): ImageBitmap? {
+        // Bitmap.wrapHardwareBuffer is Android 10+; older phones use the screenshot fallback
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         return try {
             val service = getAtmService() ?: return null
             val getTaskSnapshotMethod = getTaskSnapshotMethod ?: return null

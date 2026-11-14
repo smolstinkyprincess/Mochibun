@@ -25,6 +25,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -68,6 +71,8 @@ object LidLedManager : ClamshellListener {
     private const val TAG = "LidLedManager"
 
     // Canonical sysfs paths exposed by the AT-M120 kernel driver
+    /** AW22xxx outer-lid LED driver directory (AT-M120). Missing on other flip phones. */
+    const val LED_SYSFS_DIR = "/sys/class/leds/aw22xxx_led"
     const val LED_PATH_REG = "/sys/class/leds/aw22xxx_led/reg"
     const val LED_PATH_NOTIFICATION = "/sys/class/leds/aw22xxx_led/case_notification"
     const val LED_PATH_CHARGE = "/sys/class/leds/aw22xxx_led/case_charge"
@@ -129,6 +134,16 @@ object LidLedManager : ClamshellListener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var notificationJob: Job? = null
     private var preferencesJob: Job? = null
+
+    /**
+     * Whether the AW22xxx outer LED exists: `true` = seen, `false` = root confirmed it is
+     * missing (non-AT-M120 phone), `null` = unknown. SELinux can hide vendor sysfs from apps,
+     * so only a root check that actually ran may answer `false`; unknown behaves like present.
+     */
+    private val _hasLedHardware = MutableStateFlow<Boolean?>(
+        if (File(LED_SYSFS_DIR).exists()) true else null
+    )
+    val hasLedHardware: StateFlow<Boolean?> = _hasLedHardware.asStateFlow()
 
     private var appContext: Context? = null
     private var isInitialized = false
@@ -446,6 +461,7 @@ object LidLedManager : ClamshellListener {
 
         ensureHelperInstalled(app)
         ClamshellManager.addListener(this)
+        probeLedHardware()
 
         // Query initial charging state
         try {
@@ -800,9 +816,27 @@ object LidLedManager : ClamshellListener {
         lastShimmeredPostTime = lastPostTime
     }
 
+    /** Asks root whether the LED node exists when the app itself can't see it. */
+    private fun probeLedHardware() {
+        if (_hasLedHardware.value != null || !RootShell.isRootAvailable()) return
+        scope.launch {
+            val result = RootShell.execute("[ -e $LED_SYSFS_DIR ] && echo yes || echo no", 5_000L)
+            when (result.stdout.lastOrNull()?.trim()) {
+                "yes" -> _hasLedHardware.value = true
+                "no" -> {
+                    _hasLedHardware.value = false
+                    Log.i(TAG, "No AW22xxx lid LED on this device; outer LED features disabled")
+                }
+                // Root denied or timed out: stay unknown (same as before this check existed)
+            }
+        }
+    }
+
     private fun runCommand(cmd: String) {
         // Unit tests have no context; never run LED programs in the host shell
         if (appContext == null && helperBinaryPath == null) return
+        // Phones without the AW22xxx chip (e.g. Kyocera keitai) have nothing to drive
+        if (_hasLedHardware.value == false) return
         try {
             RootShell.submit(cmd)
         } catch (e: Throwable) {

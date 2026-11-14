@@ -21,10 +21,10 @@ android {
 
     defaultConfig {
         applicationId = "one.crinklecod.mochibun"
-        minSdk = 31
+        minSdk = 27
         targetSdk = 31
-        versionCode = 13
-        versionName = "2.2.0"
+        versionCode = 14
+        versionName = "2.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

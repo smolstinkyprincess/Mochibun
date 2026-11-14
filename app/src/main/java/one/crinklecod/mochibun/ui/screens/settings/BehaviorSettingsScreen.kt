@@ -41,13 +41,14 @@ import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 internal fun behaviorRowIds(
     hasCreateFolder: Boolean,
     showRootOptions: Boolean,
-    showScreenOffReset: Boolean
+    showScreenOffReset: Boolean,
+    showLidLedRows: Boolean = showRootOptions
 ): List<String> = buildList {
     if (hasCreateFolder) add("create_folder")
     addAll(listOf("folder_grid", "hidden_apps", "lid_open"))
     if (showScreenOffReset) add("screen_off_reset")
-    // Outer LED rows write vendor sysfs nodes, which needs root
-    if (showRootOptions) addAll(listOf("lid_led", "led_color", "led_studio", "led_charging"))
+    // Outer LED rows write vendor sysfs nodes, which needs root and the AT-M120 LED chip
+    if (showRootOptions && showLidLedRows) addAll(listOf("lid_led", "led_color", "led_studio", "led_charging"))
 }
 
 /**
@@ -78,16 +79,19 @@ internal fun BehaviorSettingsSubScreen(
     val lidLedCharging by PreferencesManager.isLidLedChargingEnabled.collectAsState()
     val lidLedColor by PreferencesManager.lidLedColor.collectAsState()
     val showRootOptions by PreferencesManager.showRootOptions.collectAsState()
+    val lidLedHardware by LidLedManager.hasLedHardware.collectAsState()
+    val showLidLedRows = showRootOptions && lidLedHardware != false
     val lidDetectionActive = remember { PreferencesManager.isLidDetectionActive(context) }
     var screenOffReset by remember {
         mutableStateOf(PreferencesManager.isNonRootScreenOffResetEnabled(context, lidDetectionActive))
     }
 
-    val items = remember(onCreateFolderClick, showRootOptions, lidDetectionActive) {
+    val items = remember(onCreateFolderClick, showRootOptions, lidDetectionActive, showLidLedRows) {
         behaviorRowIds(
             hasCreateFolder = onCreateFolderClick != null,
             showRootOptions = showRootOptions,
-            showScreenOffReset = showScreenOffResetRow(showRootOptions, lidDetectionActive)
+            showScreenOffReset = showScreenOffResetRow(showRootOptions, lidDetectionActive),
+            showLidLedRows = showLidLedRows
         )
     }
     val totalItems = items.size
@@ -289,7 +293,7 @@ internal fun BehaviorSettingsSubScreen(
                             onCheckedChange = { toggleScreenOffReset() }
                         )
                     }
-                    if (showRootOptions) {
+                    if (showLidLedRows) {
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsToggleRow(
                             title = "Outer Notification LED",

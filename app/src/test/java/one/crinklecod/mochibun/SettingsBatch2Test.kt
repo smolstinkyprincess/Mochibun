@@ -148,6 +148,16 @@ class SettingsBatch2Test {
         val both = behaviorRowIds(hasCreateFolder = true, showRootOptions = true, showScreenOffReset = true)
         assertEquals(9, both.size)
         assertContiguous(both)
+
+        // Rooted phone without the AW22xxx lid LED (e.g. Kyocera keitai): no LED rows at all
+        val noLedChip = behaviorRowIds(
+            hasCreateFolder = false,
+            showRootOptions = true,
+            showScreenOffReset = false,
+            showLidLedRows = false
+        )
+        assertEquals(listOf("folder_grid", "hidden_apps", "lid_open"), noLedChip)
+        assertContiguous(noLedChip)
     }
 
     @Test

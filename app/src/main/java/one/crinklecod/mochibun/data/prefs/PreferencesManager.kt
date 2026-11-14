@@ -155,6 +155,8 @@ object PreferencesManager {
     const val KEY_SOFT_KEY_NAV_ENABLED = "pref_soft_key_nav_enabled"
     const val DEFAULT_SOFT_KEY_NAV_ENABLED = true
     const val GLOBAL_SOFT_KEY_NAV_ENABLED = "mochibun_soft_key_nav_enabled"
+    /** Settings.Global mirror of CursorPreferences.getToggleKeyCode for MochibunKeyHook. */
+    const val GLOBAL_CURSOR_TOGGLE_KEYCODE = "mochibun_cursor_toggle_keycode"
     const val DEFAULT_IME_HOLD_VIBRATION = true
 
     // Non-Root Mode (v2.1.0 batch 2). Both defaults depend on the device, so they are computed
@@ -1001,23 +1003,29 @@ object PreferencesManager {
      * is granted), then falls back to root. Without either, the in-app handler still honours the pref.
      */
     fun syncSoftKeyNavToGlobal(context: Context) {
-        val value = if (isSoftKeyNavEnabled(context)) 1 else 0
+        mirrorIntToGlobal(context, GLOBAL_SOFT_KEY_NAV_ENABLED, if (isSoftKeyNavEnabled(context)) 1 else 0, 1)
+    }
+
+    /**
+     * Writes [value] to Settings.Global [name] for MochibunKeyHook, only when it differs from the
+     * stored value ([defaultValue] when unset). Direct write first (needs WRITE_SECURE_SETTINGS),
+     * then root. Without either the hook keeps reading [defaultValue].
+     */
+    internal fun mirrorIntToGlobal(context: Context, name: String, value: Int, defaultValue: Int) {
         val resolver = context.contentResolver
         val current = try {
-            android.provider.Settings.Global.getInt(resolver, GLOBAL_SOFT_KEY_NAV_ENABLED, 1)
+            android.provider.Settings.Global.getInt(resolver, name, defaultValue)
         } catch (_: Exception) {
-            -1
+            Int.MIN_VALUE
         }
         if (current == value) return
         val written = try {
-            android.provider.Settings.Global.putInt(resolver, GLOBAL_SOFT_KEY_NAV_ENABLED, value)
+            android.provider.Settings.Global.putInt(resolver, name, value)
         } catch (_: SecurityException) {
             false
         }
         if (!written) {
-            one.crinklecod.mochibun.core.system.RootShell.submit(
-                "settings put global $GLOBAL_SOFT_KEY_NAV_ENABLED $value"
-            )
+            one.crinklecod.mochibun.core.system.RootShell.submit("settings put global $name $value")
         }
     }
 }

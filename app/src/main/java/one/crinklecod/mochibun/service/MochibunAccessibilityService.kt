@@ -222,8 +222,6 @@ class MochibunAccessibilityService : AccessibilityService(), RootTouchInjector.G
 
         enum class Route { PASS, TOGGLE_CURSOR, CURSOR_KEY }
 
-        private const val SIDE_KEY_SCAN_CODE = 62
-
         private const val LSK_SCAN_CODE = 580
 
         fun isSoftKey(keyCode: Int, scanCode: Int): Boolean =
@@ -245,8 +243,8 @@ class MochibunAccessibilityService : AccessibilityService(), RootTouchInjector.G
         ): Boolean = isSoftKey(keyCode, scanCode) && !hookActive && softKeyNavEnabled &&
             launcherForeground && !cursorVisible
 
-        fun isToggleKey(keyCode: Int, scanCode: Int, toggleKeyCode: Int): Boolean =
-            keyCode == toggleKeyCode || keyCode == KeyEvent.KEYCODE_F4 || scanCode == SIDE_KEY_SCAN_CODE
+        fun isToggleKey(keyCode: Int, scanCode: Int, toggleKeyCode: Int, inputActive: Boolean = false): Boolean =
+            MochibunSystemActions.isCursorToggleKey(keyCode, scanCode, toggleKeyCode, inputActive)
 
         /** Cursor key code for an event, keeping digit identity for remapped keypad scan codes. */
         fun cursorKeyFor(keyCode: Int, scanCode: Int): Int =
@@ -259,7 +257,7 @@ class MochibunAccessibilityService : AccessibilityService(), RootTouchInjector.G
             cursorVisible: Boolean,
             inputActive: Boolean
         ): Route {
-            if (isToggleKey(keyCode, scanCode, toggleKeyCode)) return Route.TOGGLE_CURSOR
+            if (isToggleKey(keyCode, scanCode, toggleKeyCode, inputActive)) return Route.TOGGLE_CURSOR
             if (!cursorVisible) return Route.PASS
             val cursorKey = MochibunSystemActions.cursorKeyCodeForEvent(keyCode, scanCode)
                 ?: return Route.PASS

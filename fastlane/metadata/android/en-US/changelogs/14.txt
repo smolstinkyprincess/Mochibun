@@ -1,0 +1,5 @@
+Mochibun v2.2.1 ♡
+- Android 8.1+: now installs on older flip phones (minSdk 27). The AT-M120 (Android 12) stays the main target; other phones are community-untested.
+- Lid LED settings hide automatically on phones without the AT-M120 outer LED chip.
+- 1 GB RAM safeguard: smaller image cache and still GIFs on tiny-RAM phones.
+- Cursor Toggle Key: pick Side Key (F4), Menu, Search, Camera or * in Cursor & Hardware.

@@ -5,6 +5,7 @@ import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
+import android.os.Build
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -84,7 +85,12 @@ private fun loadWidgetProviders(context: Context, availableWidthPx: Int): List<W
         .filter { (it.widgetCategory and AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN) != 0 }
         .mapNotNull { info ->
             try {
-                val appLabel = pm.getApplicationLabel(info.activityInfo.applicationInfo).toString()
+                val appInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    info.activityInfo.applicationInfo
+                } else {
+                    pm.getApplicationInfo(info.provider.packageName, 0)
+                }
+                val appLabel = pm.getApplicationLabel(appInfo).toString()
                 val label = info.loadLabel(pm)?.takeIf { it.isNotBlank() } ?: appLabel
                 val widthDp = info.minWidth / density
                 val heightDp = info.minHeight / density

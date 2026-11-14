@@ -183,11 +183,13 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 | Specification | Target Details |
 | :--- | :--- |
 | **Target Device** | ALT Mive Style Folder (AT-M120) |
-| **Android Version** | Android 12 (API 31) |
+| **Android Version** | Android 12 (API 31) on the AT-M120; installs on Android 8.1+ (API 27) |
 | **Processor** | MediaTek MT6761 (32-bit ARMv7) |
 | **Display** | 480 × 800 |
 | **RAM** | ~1.8 GB |
 | **Network** | 100% offline: no internet or camera permissions |
+
+> **Other flip phones**: Since v2.2.1 Mochibun installs on Android 8.1+ (`minSdk 27`), e.g. Kyocera DIGNO Keitai 3 (`902KC` / `903KC`) or `KYF42`. These are community-untested: AT-M120-only extras (outer lid LEDs, pastel SystemUI hooks) hide or quietly do nothing, and 1 GB RAM phones get a smaller image cache with still GIFs. Pick a **Cursor Toggle Key** in *Settings > Cursor & Hardware* if your phone has no F4 side key.
 
 > **Note on Performance**: Heavy GPU runtime blurs (`Modifier.blur()`) are strictly avoided, so animations stay buttery smooth even on modest flip-phone hardware ♡
 
