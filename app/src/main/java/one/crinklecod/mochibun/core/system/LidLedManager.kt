@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.zip.ZipFile
@@ -49,7 +50,10 @@ enum class LidLedMode { CALL, NOTIFICATION, CHARGING, OFF }
  * a static frame through SoC suspend with zero CPU:
  *  - Call: fast shimmer for up to [CALL_SHIMMER_CYCLES], then all windows solid.
  *  - Notification: shimmer on each new post, then a steady `1 0 1 0 1` glyph.
- *  - Charging: all windows solid.
+ *  - Charging: all windows solid in the user's color.
+ *    `HLS_LsLedLights` in system_server writes `case_charge` on power events, which starts the
+ *    kernel sequencer (stock green / rainbow). While the ladder owns the lid, `case_charge` is made
+ *    read-only and `effect` is zeroed; [stopLeds] / OFF restore the original mode.
  */
 object LidLedManager : ClamshellListener {
 
@@ -106,6 +110,9 @@ object LidLedManager : ClamshellListener {
     private const val CALL_SHIMMER_CYCLES = 56 // ~45 s, longer than a typical ring
     const val SHIMMER_DEBOUNCE_MS = 1_500L
 
+    private const val CASE_CHARGE_MODE_SAVE = "/data/local/tmp/lidled.case_charge.mode"
+
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var notificationJob: Job? = null
     private var preferencesJob: Job? = null
@@ -149,6 +156,8 @@ object LidLedManager : ClamshellListener {
             when (intent?.action) {
                 Intent.ACTION_POWER_CONNECTED -> {
                     isChargingState = true
+                    // HLS_LsLedLights reacts to the same event; force a fresh charging program
+                    if (appliedMode == LidLedMode.CHARGING) invalidateApplied()
                     updateLedState()
                 }
                 Intent.ACTION_POWER_DISCONNECTED -> {
@@ -320,6 +329,35 @@ object LidLedManager : ClamshellListener {
     ): String =
         "'$helperPath' shimmer $hexColor $frameSeconds $cycles $settleMode"
 
+    /**
+     * Halts the kernel sequencer and makes `case_charge` read-only so HLS_LsLedLights can't load
+     * the stock green charging program over our frame.
+     * The original mode is saved once so [buildReleaseChargeOverrideCommand] can restore it.
+     */
+    @VisibleForTesting
+    internal fun buildSuppressStockChargeCommand(): String =
+        "[ -f $CASE_CHARGE_MODE_SAVE ] || stat -c %a $LED_PATH_CHARGE > $CASE_CHARGE_MODE_SAVE 2>/dev/null; " +
+            "chmod 0444 $LED_PATH_CHARGE 2>/dev/null; " +
+            "echo 0 > $LED_PATH_EFFECT 2>/dev/null"
+
+
+    /** Restores `case_charge` so the stock indicator works again when Mochibun isn't driving the lid. */
+    @VisibleForTesting
+    internal fun buildReleaseChargeOverrideCommand(): String =
+        "if [ -f $CASE_CHARGE_MODE_SAVE ]; then chmod \$(cat $CASE_CHARGE_MODE_SAVE) $LED_PATH_CHARGE 2>/dev/null; " +
+            "rm -f $CASE_CHARGE_MODE_SAVE; fi"
+
+    /** Full teardown: zero the chip, stop the sequencer, release `case_charge`. */
+    @VisibleForTesting
+    internal fun buildTeardownCommand(helperPath: String = getHelperPath()): String =
+        "${buildOffCommand(helperPath)}; echo 0 > $LED_PATH_EFFECT 2>/dev/null; " +
+            buildReleaseChargeOverrideCommand()
+
+    /** Charging program in one root shell submission: suppress stock, then hold all windows solid. */
+    @VisibleForTesting
+    internal fun buildChargingCommand(hexColor: String, helperPath: String = getHelperPath()): String =
+        "${buildSuppressStockChargeCommand()}; ${buildSolidCommand(hexColor, helperPath)}"
+
     @VisibleForTesting
     internal fun shimmerDurationMs(frameSeconds: String, cycles: Int): Long =
         (frameSeconds.toDouble() * 2 * cycles * 1000).toLong()
@@ -363,7 +401,7 @@ object LidLedManager : ClamshellListener {
         notificationLedActive = false
         chargingLedActive = false
         releaseShimmerWakeLock()
-        runCommand(buildOffCommand())
+        runCommand(buildTeardownCommand())
         Log.d(TAG, "Stopped all exterior LEDs cleanly via native helper")
     }
 
@@ -424,9 +462,12 @@ object LidLedManager : ClamshellListener {
         // Listen for preference changes
         preferencesJob?.cancel()
         preferencesJob = scope.launch {
-            PreferencesManager.isLidLedEnabled.collectLatest {
-                updateLedState()
-            }
+            combine(
+                PreferencesManager.isLidLedEnabled,
+                PreferencesManager.isLidLedChargingEnabled,
+                PreferencesManager.lidLedColor
+            ) { enabled, charging, color -> Triple(enabled, charging, color) }
+                .collectLatest { updateLedState() }
         }
 
         isInitialized = true
@@ -507,14 +548,14 @@ object LidLedManager : ClamshellListener {
                 shimmerActiveUntilMs = 0L
                 shimmerPostTime = 0L
                 releaseShimmerWakeLock()
-                runCommand(buildOffCommand())
+                runCommand(buildTeardownCommand())
             }
             LidLedMode.CHARGING -> {
                 shimmerStartTime = 0L
                 shimmerActiveUntilMs = 0L
                 shimmerPostTime = 0L
                 releaseShimmerWakeLock()
-                runCommand(buildSolidCommand(hex))
+                runCommand(buildChargingCommand(hex))
             }
             LidLedMode.NOTIFICATION -> startShimmer(
                 hexColor = hex,
@@ -546,12 +587,14 @@ object LidLedManager : ClamshellListener {
         shimmerStartTime = now
         shimmerActiveUntilMs = now + durationMs
         shimmerPostTime = postTime
-        val cmd = buildShimmerCommand(
+        val shimmer = buildShimmerCommand(
             hexColor = hexColor,
             frameSeconds = frameSeconds,
             cycles = cycles,
             settleMode = settleMode
         )
+        // Plugged in, HLS_LsLedLights would otherwise stomp on the alert with stock green
+        val cmd = if (isChargingState) "${buildSuppressStockChargeCommand()}; $shimmer" else shimmer
         // Keep the SoC up just long enough for the loop to reach its static frame; with the flip
         // closed the display is off and the loop's nanosleep would otherwise stall mid-pattern
         holdShimmerWakeLock(durationMs + 1_000L)

@@ -18,7 +18,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 ## ✨ Features
 
 ### Everyday
-- **Made for real buttons**: Everything works with the d-pad and center key, and a soft pastel glow shows what's selected so you never lose your place.
+- **Made for real buttons**: Everything works with the d-pad, and a soft pastel glow shows what's selected so you never lose your place.
 - **Keitai keyboard**: A system-wide multi-tap keypad keyboard in a little floating pill. Tap a number to cycle its letters, hold for the digit, `*` for shift, `#` for space. It hops out of the way of what you're typing in.
 - **Kaomoji wheel**: Long-press `#` in any app to pop up a wheel of text faces and paste one into your chat `( ˶ˆᗜˆ˵ ) ♡`
 - **Widgets & music deck**: A widget page with a Now Playing card that appears when music plays and hides when it stops. Third-party widgets work too.

@@ -224,4 +224,52 @@ class LidLedManagerTest {
             )
         )
     }
+
+    @Test
+    fun testChargingUsesUserColorOnAllWindows() {
+        val hex = LidLedManager.getHexColor("teal")
+        val cmd = LidLedManager.buildChargingCommand(hex, "/mock/lidled")
+        assertTrue(cmd.endsWith("'/mock/lidled' pattern 11111 0x00ced1"))
+        assertFalse("Charging must never fall back to stock green", cmd.contains("0x00ff00"))
+        // Custom hex colors pass straight through
+        assertTrue(LidLedManager.buildChargingCommand(LidLedManager.getHexColor("#12ab34"), "/mock/lidled")
+            .endsWith("pattern 11111 0x12ab34"))
+    }
+
+    @Test
+    fun testChargingSuppressesHlsStockChargeEffect() {
+        val cmd = LidLedManager.buildChargingCommand("0xff1493", "/mock/lidled")
+        val suppress = cmd.substringBefore("'/mock/lidled'")
+        assertTrue(suppress.contains("chmod 0444 ${LidLedManager.LED_PATH_CHARGE}"))
+        assertTrue(suppress.contains("echo 0 > ${LidLedManager.LED_PATH_EFFECT}"))
+        // Never writes case_charge itself (that would start the vendor sequencer)
+        assertFalse(cmd.contains("> ${LidLedManager.LED_PATH_CHARGE}"))
+    }
+
+    @Test
+    fun testTeardownZeroesChipAndReleasesCaseCharge() {
+        val cmd = LidLedManager.buildTeardownCommand("/mock/lidled")
+        assertTrue(cmd.startsWith("'/mock/lidled' off"))
+        assertTrue(cmd.contains("echo 0 > ${LidLedManager.LED_PATH_EFFECT}"))
+        assertTrue(cmd.contains("chmod \$(cat "))
+        // brightness writes raced the driver's async work and left the chip dark (seen on device)
+        assertFalse(cmd.contains(LidLedManager.LED_PATH_BRIGHTNESS))
+    }
+
+    @Test
+    fun testChargingYieldsToAlertsAndResumesAfter() {
+        // Notification and call take over while plugged in
+        assertEquals(LidLedMode.NOTIFICATION, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = true, chargingLight = true))
+        assertEquals(LidLedMode.CALL, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = true, hasNotifications = false, chargingLight = true))
+        // Cleared alerts fall back to charging
+        assertEquals(LidLedMode.CHARGING, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = false, chargingLight = true))
+        // Unplugged, toggle off, or lid opened -> off
+        assertEquals(LidLedMode.OFF, LidLedManager.resolveMode(
+            lidClosed = true, enabled = true, hasIncomingCall = false, hasNotifications = false, chargingLight = false))
+        assertEquals(LidLedMode.OFF, LidLedManager.resolveMode(
+            lidClosed = false, enabled = true, hasIncomingCall = false, hasNotifications = false, chargingLight = true))
+    }
 }
