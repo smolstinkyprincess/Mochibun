@@ -62,6 +62,8 @@ import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.data.repository.MediaSessionTracker
+import one.crinklecod.mochibun.pet.PetManager
+import one.crinklecod.mochibun.pet.PetMood
 import one.crinklecod.mochibun.ui.theme.LauncherTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.M3x6FontFamily
@@ -319,6 +321,76 @@ val MUSIC_LINES = listOf(
     "bobbing along ₍ᐢ. ̫.ᐢ₎"
 )
 
+// Mochibunny pet lines: one pool per PetMood, plus reactions to feeding.
+
+val PET_HAPPY_LINES = listOf(
+    "so happy! ♡",
+    "best day ever ٩(ˊᗜˋ*)و",
+    "full & loved ♡",
+    "hehe~ (˶ᵔ ᵕ ᵔ˶)",
+    "mochi bliss ✨"
+)
+
+val PET_CONTENT_LINES = listOf(
+    "just loafing ♡",
+    "cozy~ ( ˘ ³˘)",
+    "hi friend! 🌸",
+    "all good here ₍ᐢ. ̫.ᐢ₎",
+    "comfy loaf ♡"
+)
+
+val PET_HUNGRY_LINES = listOf(
+    "tummy rumble... (｡•́︿•̀｡)",
+    "snack time? 🍡",
+    "so hungry... ♡",
+    "treat please? ( ´･ω･)"
+)
+
+val PET_SULKY_LINES = listOf(
+    "hmph... (｀へ´)",
+    "pet me? ( ´･ω･)",
+    "feeling lonely...",
+    "no pats today? ( ˘･з･)"
+)
+
+val PET_SLEEPY_LINES = listOf(
+    "eepy... zzZ",
+    "yawn~ ♡",
+    "bedtime soon? ( ᴗ͈ˬᴗ͈ )",
+    "sweet dreams ✨",
+    "five more mins... zzZ"
+)
+
+val PET_FED_LINES = listOf(
+    "nom nom! ♡",
+    "yummy~ ( ˶ˆᗜˆ˵ )",
+    "thank you! 🍡",
+    "tummy happy ♡",
+    "munch munch ₍ᐢ. ̫.ᐢ₎"
+)
+
+val PET_NO_TREATS_LINES = listOf(
+    "no treats yet... ( ´･ω･)",
+    "go for a walk? ♡",
+    "plug me in for a treat? 🔋",
+    "clear notifs = treats! ✨",
+    "treat bag's empty (｡•́︿•̀｡)"
+)
+
+fun petMoodLines(mood: PetMood): List<String> = when (mood) {
+    PetMood.HAPPY -> PET_HAPPY_LINES
+    PetMood.CONTENT -> PET_CONTENT_LINES
+    PetMood.HUNGRY -> PET_HUNGRY_LINES
+    PetMood.SULKY -> PET_SULKY_LINES
+    PetMood.SLEEPY -> PET_SLEEPY_LINES
+}
+
+/** A random line from [pool] that isn't [previousLine] (unless the pool has nothing else). */
+fun pickLineAvoiding(pool: List<String>, previousLine: String?): String {
+    val filtered = pool.filter { it != previousLine }
+    return if (filtered.isNotEmpty()) filtered.random() else pool.random()
+}
+
 /**
  * Checks if device battery is below 20% using sticky broadcast or BatteryManager.
  */
@@ -350,14 +422,37 @@ fun isDeviceBatteryLow(context: Context): Boolean {
  * - Late night (10:00 PM – 5:00 AM)
  * - Default boops
  * Guarantees that the chosen line avoids the immediate predecessor [previousLine].
+ *
+ * With a [petMood] (the Home pet), her mood leads:
+ * - HUNGRY / SULKY / SLEEPY always speak from their mood pool (needs and bedtime come first;
+ *   SLEEPY also replaces the late-night lines).
+ * - HAPPY / CONTENT still use the low-battery / music lines 70% of the time when those apply,
+ *   otherwise their mood pool.
+ * Without a [petMood] the original context-only behavior is unchanged.
  */
 fun selectSpeechBubbleDialogue(
     context: Context? = null,
     previousLine: String? = null,
     hour: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
     isLowBattery: Boolean? = null,
-    isMusicPlaying: Boolean? = null
+    isMusicPlaying: Boolean? = null,
+    petMood: PetMood? = null
 ): String {
+    if (petMood != null) {
+        val moodPool = petMoodLines(petMood)
+        if (petMood == PetMood.HUNGRY || petMood == PetMood.SULKY || petMood == PetMood.SLEEPY) {
+            return pickLineAvoiding(moodPool, previousLine)
+        }
+        val isLowBatt = isLowBattery ?: (context?.let { isDeviceBatteryLow(it) } ?: false)
+        val isMusic = isMusicPlaying ?: MediaSessionTracker.mediaState.value.isPlaying
+        val contextualPool = buildList {
+            if (isLowBatt) addAll(LOW_BATTERY_LINES)
+            if (isMusic) addAll(MUSIC_LINES)
+        }
+        val pool = if (contextualPool.isNotEmpty() && Random.nextFloat() < 0.70f) contextualPool else moodPool
+        return pickLineAvoiding(pool, previousLine)
+    }
+
     val isLateNight = hour >= 22 || hour < 5
     val isLowBatt = isLowBattery ?: (context?.let { isDeviceBatteryLow(it) } ?: false)
     val isMusic = isMusicPlaying ?: MediaSessionTracker.mediaState.value.isPlaying
@@ -373,12 +468,7 @@ fun selectSpeechBubbleDialogue(
         DEFAULT_BOOP_LINES
     }
 
-    val filtered = candidatePool.filter { it != previousLine }
-    return if (filtered.isNotEmpty()) {
-        filtered.random()
-    } else {
-        candidatePool.random()
-    }
+    return pickLineAvoiding(candidatePool, previousLine)
 }
 
 /**
@@ -506,7 +596,11 @@ fun MochibunnyWithSpeechBubble(
 
     val onBoop = {
         dismissJob?.cancel()
-        val newLine = selectSpeechBubbleDialogue(context, lastSpokenLine ?: currentDialogue)
+        val newLine = selectSpeechBubbleDialogue(
+            context,
+            lastSpokenLine ?: currentDialogue,
+            petMood = PetManager.currentMood()
+        )
         currentDialogue = newLine
         lastSpokenLine = newLine
         popAnimKey++
