@@ -7,7 +7,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -25,27 +24,14 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 
 /**
- * 4-frame stepped keitai mascot bob (0px -> 1px -> 2px -> 1px).
- * Ticks strictly at 4 Hz (250ms), keeping idle CPU usage under 0.5%.
+ * 4-frame stepped keitai mascot bob (0px -> 1px -> 2px -> 1px), driven by a shared stepped clock
+ * such as [rememberKeitaiStep] (4 Hz) instead of its own timer, so the bob and the sprite frames
+ * tick together. [step] is read in the layout phase only: no recomposition per tick.
  */
-@Composable
-fun Modifier.keitaiMascotBob(enabled: Boolean = true): Modifier {
-    if (!enabled) return this
+fun Modifier.keitaiMascotBob(step: () -> Int): Modifier =
+    this.offset { IntOffset(x = 0, y = MASCOT_BOB_OFFSETS[Math.floorMod(step(), MASCOT_BOB_OFFSETS.size)]) }
 
-    // 4 discrete stepped offsets in screen pixels
-    val bobOffsets = listOf(0, 1, 2, 1)
-
-    val stepIndex by produceState(initialValue = 0, key1 = enabled) {
-        while (enabled) {
-            delay(250L) // 4 FPS clock
-            value = (value + 1) % bobOffsets.size
-        }
-    }
-
-    return this.offset {
-        IntOffset(x = 0, y = bobOffsets[stepIndex])
-    }
-}
+private val MASCOT_BOB_OFFSETS = intArrayOf(0, 1, 2, 1)
 
 /**
  * Shared 250ms 8-step keitai rhythm (2000ms full period).

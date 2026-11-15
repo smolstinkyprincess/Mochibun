@@ -19,7 +19,31 @@ data class MochibunBundleManifest(
     val palette: BundlePaletteConfig,
     val cursor: BundleCursorConfig,
     val hasWallpaper: Boolean = false,
-    val hasCustomCursor: Boolean = false
+    val hasCustomCursor: Boolean = false,
+    // Custom mascot atlas (zip entry "mascot_atlas.png"). Older app versions ignore both fields
+    // (ignoreUnknownKeys) and skip the unknown entry, so these bundles still import there.
+    val hasCustomMascot: Boolean = false,
+    val mascot: BundleMascotConfig? = null
+)
+
+/**
+ * Layout of a bundled mascot atlas. There is deliberately no file name: the atlas is always the
+ * zip entry named exactly `mascot_atlas.png`. Slot keys are lowercase [MascotAnimSlot] names
+ * ("idle", "talk", ...); unknown keys are ignored and missing slots fall back to "idle". With no
+ * slots at all, every slot uses its default row and as many frames as fit the width.
+ */
+@Serializable
+data class BundleMascotConfig(
+    val name: String = "Mochibunny",
+    val frameWidth: Int,
+    val frameHeight: Int,
+    val slots: Map<String, BundleMascotSlot> = emptyMap()
+)
+
+@Serializable
+data class BundleMascotSlot(
+    val row: Int,
+    val frames: Int
 )
 
 @Serializable

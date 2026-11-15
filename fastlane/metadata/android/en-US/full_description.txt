@@ -7,7 +7,8 @@ Features:
 - Mochibun Keitai Keyboard: A built-in multi-tap T9 keyboard that works in every app, no extra keyboard app needed, with an adjustable T9 auto-commit delay. Hold # anywhere to pop open the Kaomoji Wheel.
 - Virtual Mouse Cursor: Turn on a mouse pointer with the side key (or a Menu, Search, Camera or * key of your choice) so you can click and scroll in apps made only for touchscreens. Works without root through an optional Accessibility helper.
 - Keypad Sounds & Soft Keys: 7 keypad sound profiles (including Muted), LSK / RSK soft-key navigation you can toggle, and hold 0 on Home for the flashlight.
-- Theme Studio: 5 built-in palettes (Sakura Dream, Lavender Mist, Minty Matcha, Milky Peach, and the Midnight Mochi dark theme), shareable .mochibun theme bundles, and custom YAML themes.
+- Mochibunny Pocket Pet: Press Center on the bunny on Home (or tap her) for a Feed / Pet / Chat pill, with 1 / 2 / 3 keypad shortcuts. Treats come from steps, clearing notifications, and plugging in your charger, and her mood and speech bubbles change through the day.
+- Theme Studio: 5 built-in palettes (Sakura Dream, Lavender Mist, Minty Matcha, Milky Peach, and the Midnight Mochi dark theme), shareable .mochibun theme bundles, and custom YAML themes. Swap Mochibunny for your own 8 x 4 sprite sheet in Settings > Appearance and share it in a .mochibun bundle.
 - Pastel SystemUI: With the optional LSPosed module, your palette also themes Quick Settings, the volume dialog, notification cards, and the status and navigation bars.
 - Media Volume Lock: The volume rocker always steps media volume, even in Silent Mode.
 - Widgets, Recents & Music: A widget page for your third-party widgets with a Now Playing card, plus a keypad-friendly recents switcher.

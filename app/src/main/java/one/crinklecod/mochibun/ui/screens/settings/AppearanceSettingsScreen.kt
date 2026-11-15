@@ -1,7 +1,11 @@
 package one.crinklecod.mochibun.ui.screens.settings
 
 import one.crinklecod.mochibun.ui.dialogs.ResizeWithKeyboard
+import android.net.Uri
 import android.view.KeyEvent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -33,10 +37,16 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.TypographyManager
+import one.crinklecod.mochibun.ui.components.MascotSpriteSource
+import one.crinklecod.mochibun.ui.components.MascotSpriteStore
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
@@ -74,9 +84,31 @@ internal fun AppearanceSettingsSubScreen(
     val isSubDisplayTickerDark by PreferencesManager.isSubDisplayTickerDark.collectAsState()
     val fontId by PreferencesManager.themeFontFamily.collectAsState()
     val fontOptions by TypographyManager.options.collectAsState()
+    val mascotSource by MascotSpriteStore.source.collectAsState()
+    val hasCustomMascot = mascotSource is MascotSpriteSource.Custom
+    val scope = rememberCoroutineScope()
+
+    // Custom mascot atlas: copied (max 1.5 MB) and validated off the main thread, then hot-swapped.
+    // A rejected file keeps the current mascot and explains why.
+    val mascotPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
+                        ?.use { CustomMascotManager.importPng(context, it) }
+                        ?: Result.failure(IllegalArgumentException("Couldn't open that file"))
+                }
+                val message = result.fold(
+                    onSuccess = { "♡ Custom mascot applied" },
+                    onFailure = { "Mascot not changed: ${it.message}" }
+                )
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     // Dynamic item list based on custom wallpaper state
-    val items = remember(hasCustomWallpaper, isSystemMonitorEnabled, isSubDisplayTickerEnabled) {
+    val items = remember(hasCustomWallpaper, hasCustomMascot, isSystemMonitorEnabled, isSubDisplayTickerEnabled) {
         buildList {
             add("theme")
             add("typography")
@@ -87,6 +119,8 @@ internal fun AppearanceSettingsSubScreen(
             if (hasCustomWallpaper) {
                 add("reset_wallpaper")
             }
+            add("pick_mascot")
+            if (hasCustomMascot) add("reset_mascot")
             add("icon_pack")
             add("wallpaper_stickers")
             add("system_monitor")
@@ -101,7 +135,8 @@ internal fun AppearanceSettingsSubScreen(
         when (items.getOrNull(focusedIndex)) {
             "theme", "typography" -> 0
             "name", "sub_display_ticker", "sub_display_style" -> 1
-            "icon_pack", "pick_wallpaper", "reset_wallpaper", "wallpaper_stickers" -> 2
+            "icon_pack", "pick_wallpaper", "reset_wallpaper", "pick_mascot", "reset_mascot",
+            "wallpaper_stickers" -> 2
             "system_monitor", "monitor_interval", "photo_frame" -> 3
             else -> 0
         }
@@ -145,6 +180,16 @@ internal fun AppearanceSettingsSubScreen(
             "reset_wallpaper" -> {
                 SoundEffectManager.play(context, SoundEffect.SELECT)
                 onResetWallpaperClick?.invoke()
+            }
+            "pick_mascot" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                mascotPicker.launch(arrayOf("image/png"))
+            }
+            "reset_mascot" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                CustomMascotManager.reset(context)
+                focusedIndex = items.indexOf("pick_mascot").coerceAtLeast(0)
+                Toast.makeText(context, "♡ Mochibunny is back to default", Toast.LENGTH_SHORT).show()
             }
             "wallpaper_stickers" -> {
                 PreferencesManager.setWallpaperOverlayEnabled(context, !isWallpaperOverlayEnabled)
@@ -349,6 +394,25 @@ internal fun AppearanceSettingsSubScreen(
                             isDestructive = true,
                             jumpNumber = (items.indexOf("reset_wallpaper") + 1).takeIf { it <= 9 },
                             onClick = { onResetWallpaperClick?.invoke() }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "Custom Mascot",
+                        subtitle = "8-row PNG atlas, max 1.5 MB",
+                        icon = "🐰",
+                        isFocused = items.getOrNull(focusedIndex) == "pick_mascot",
+                        jumpNumber = (items.indexOf("pick_mascot") + 1).takeIf { it <= 9 },
+                        onClick = { activateAppearanceItem(items.indexOf("pick_mascot")) }
+                    )
+                    if (hasCustomMascot) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsActionRow(
+                            title = "Reset to Default Mochibunny",
+                            isFocused = items.getOrNull(focusedIndex) == "reset_mascot",
+                            isDestructive = true,
+                            jumpNumber = (items.indexOf("reset_mascot") + 1).takeIf { it <= 9 },
+                            onClick = { activateAppearanceItem(items.indexOf("reset_mascot")) }
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))

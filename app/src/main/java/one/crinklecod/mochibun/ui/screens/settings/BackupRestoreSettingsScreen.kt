@@ -31,6 +31,7 @@ import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.repository.BackupPreviewSummary
 import one.crinklecod.mochibun.data.repository.BackupRestoreManager
+import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.BundlePreviewData
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
@@ -74,6 +75,7 @@ internal fun BackupRestoreSettingsSubScreen(
     var pendingIncludeWallpaper by remember { mutableStateOf(true) }
     var pendingIncludeCursor by remember { mutableStateOf(true) }
     var pendingIncludeDisplayName by remember { mutableStateOf(true) }
+    var pendingIncludeMascot by remember { mutableStateOf(true) }
 
     // Setup Bundle (.mochibun) Create launcher
     val bundleCreateLauncher = rememberLauncherForActivityResult(
@@ -88,7 +90,8 @@ internal fun BackupRestoreSettingsSubScreen(
                         bundleName = pendingBundleName,
                         includeWallpaper = pendingIncludeWallpaper,
                         includeCustomCursor = pendingIncludeCursor,
-                        includeDisplayName = pendingIncludeDisplayName
+                        includeDisplayName = pendingIncludeDisplayName,
+                        includeCustomMascot = pendingIncludeMascot
                     )
                     if (result.isSuccess) {
                         statusMessage = "Theme bundle exported! ♡"
@@ -345,11 +348,13 @@ internal fun BackupRestoreSettingsSubScreen(
 
     if (showExportBundleDialog) {
         ExportBundleDialog(
+            hasCustomMascot = CustomMascotManager.isActive(),
             onDismiss = { showExportBundleDialog = false },
-            onExport = { name, wall, cur, disp ->
+            onExport = { name, wall, cur, mascot, disp ->
                 pendingBundleName = name
                 pendingIncludeWallpaper = wall
                 pendingIncludeCursor = cur
+                pendingIncludeMascot = mascot
                 pendingIncludeDisplayName = disp
                 showExportBundleDialog = false
                 bundleCreateLauncher.launch(ThemeBundleManager.generateBundleFileName(name))
@@ -396,10 +401,12 @@ internal fun BackupRestoreSettingsSubScreen(
                 if (uri != null) {
                     try {
                         context.contentResolver.openInputStream(uri)?.use { stream ->
-                            val applyRes = ThemeBundleManager.applyBundle(context, stream)
+                            var mascotNote: String? = null
+                            val applyRes = ThemeBundleManager.applyBundle(context, stream) { mascotNote = it }
                             if (applyRes.isSuccess) {
                                 onSettingsRestored?.invoke()
-                                statusMessage = "Preset '${preview.manifest.bundleName}' applied! ♡"
+                                statusMessage = "Preset '${preview.manifest.bundleName}' applied! ♡" +
+                                    (mascotNote?.let { " ($it)" } ?: "")
                             } else {
                                 statusMessage = "Apply failed: ${applyRes.exceptionOrNull()?.message}"
                             }

@@ -51,6 +51,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import one.crinklecod.mochibun.core.sound.SoundEffect
@@ -62,6 +63,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
@@ -71,7 +73,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,6 +95,7 @@ import one.crinklecod.mochibun.ui.components.kawaiiCardMotifs
 import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.*
 import one.crinklecod.mochibun.ui.components.*
+import one.crinklecod.mochibun.pet.PetManager
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -166,7 +172,15 @@ fun HomeScreen(
     folderIconRefreshKey: Int = 0,
     homeFocusArea: Int = 0, // 0 = favorites, 1 = header banner, 2 = drawer handle, 3 = clock, 4 = mascot
     isHomeScreenActive: Boolean = true,
-    mascotBoopRequest: Int = 0,
+    // Home is on screen, even with the pet pill open over it: keeps the mascot glow / bob and the
+    // ticker running. isHomeScreenActive is false while the pill (a modal) has the keys.
+    isHomeVisible: Boolean = isHomeScreenActive,
+    isPetPillOpen: Boolean = false,
+    petPillSelection: Int = 0,
+    mascotReaction: MascotReaction = MascotReaction(),
+    onMascotClick: () -> Unit = {},
+    onPetPillOptionClick: (Int) -> Unit = {},
+    onDismissPetPill: () -> Unit = {},
     onHeaderClick: () -> Unit = {},
     onHeaderLongClick: () -> Unit = {},
     onAppClick: (LauncherApp) -> Unit = {},
@@ -183,10 +197,13 @@ fun HomeScreen(
     val unreadNotifCount = notifications.size
     val isTickerEnabled by PreferencesManager.isSubDisplayTickerEnabled.collectAsState()
     val isTickerDark by PreferencesManager.isSubDisplayTickerDark.collectAsState()
+    val petPillBounds = remember { PetPillBounds() }
 
     Box(
         modifier = modifier
             .fillMaxSize()
+            .onGloballyPositioned { petPillBounds.root = it }
+            .dismissPetPillOnOutsideTap(isPetPillOpen, petPillBounds, onDismissPetPill)
             .background(Color.Transparent)
     ) {
 
@@ -206,7 +223,7 @@ fun HomeScreen(
                 isTickerEnabled = isTickerEnabled,
                 isTickerDark = isTickerDark,
                 unreadCount = unreadNotifCount,
-                isTickerRunning = isHomeScreenActive,
+                isTickerRunning = isHomeVisible,
                 onClick = onHeaderClick,
                 onLongClick = onHeaderLongClick
             )
@@ -227,9 +244,14 @@ fun HomeScreen(
                 favoriteItems = favoriteItems,
                 selectedIndex = selectedFavoriteIndex,
                 isCardFocused = isHomeScreenActive && homeFocusArea == 0,
-                isHomeScreenActive = isHomeScreenActive,
-                isMascotFocused = isHomeScreenActive && homeFocusArea == 4,
-                mascotBoopRequest = mascotBoopRequest,
+                isHomeScreenActive = isHomeVisible,
+                isMascotFocused = isHomeVisible && homeFocusArea == 4,
+                isPetPillOpen = isPetPillOpen,
+                petPillSelection = petPillSelection,
+                petPillBounds = petPillBounds,
+                mascotReaction = mascotReaction,
+                onMascotClick = onMascotClick,
+                onPetPillOptionClick = onPetPillOptionClick,
                 folderIconRefreshKey = folderIconRefreshKey,
                 onAppClick = onAppClick,
                 onAppLongClick = onAppLongClick,
@@ -765,7 +787,12 @@ fun FavoritesCard(
     isCardFocused: Boolean = true,
     isHomeScreenActive: Boolean = true,
     isMascotFocused: Boolean = false,
-    mascotBoopRequest: Int = 0,
+    isPetPillOpen: Boolean = false,
+    petPillSelection: Int = 0,
+    petPillBounds: PetPillBounds? = null,
+    mascotReaction: MascotReaction = MascotReaction(),
+    onMascotClick: () -> Unit = {},
+    onPetPillOptionClick: (Int) -> Unit = {},
     folderIconRefreshKey: Int = 0,
     onAppClick: (LauncherApp) -> Unit = {},
     onAppLongClick: (LauncherApp) -> Unit = {},
@@ -920,17 +947,43 @@ fun FavoritesCard(
 
     // Companion mascot loaf sitting on the top-right corner of the favorites card with dynamic speech bubble.
     // Declared last in this Box so she always draws above the lace rim and the bow.
+    // One shared 4 Hz stepped clock for her bob and sprite frames. It runs only while Home is
+    // visible and the activity is RESUMED (rememberKeitaiStep), and is read only in layout/draw.
+    val mascotStep = rememberKeitaiStep(active = isHomeScreenActive, totalSteps = MascotAtlasMath.TICK_WRAP)
+    val mascotTick = remember(mascotStep) { { mascotStep.intValue } }
+    // Her resting row follows her pet mood: re-checked when her state changes and about once a
+    // minute (the clock's minute changes), so hunger and bedtime show up without extra timers.
+    val petState by PetManager.state.collectAsState()
+    val mascotMinute by remember(mascotStep) { derivedStateOf { mascotStep.intValue / MASCOT_TICKS_PER_MINUTE } }
+    val moodSlot = remember(petState, mascotMinute) { currentMoodSlot() }
+
     MochibunnyWithSpeechBubble(
-        mood = getDefaultTimeOfDayMood(),
+        baseSlot = moodSlot,
+        frameTick = mascotTick,
         size = 56.dp,
         themeTintColor = theme.mascotTintColor,
         isFocused = isMascotFocused,
-        boopRequest = mascotBoopRequest,
+        reaction = mascotReaction,
+        onTap = onMascotClick,
         modifier = Modifier
             .align(Alignment.TopEnd)
             .offset(x = (-14).dp, y = (-26).dp)
-            .keitaiMascotBob(enabled = isHomeScreenActive)
+            .keitaiMascotBob(mascotTick)
     )
+
+    // Feed / Pet / Chat pill floating on her left (the side with room: she sits at the right
+    // edge), vertically centred on her. Offsets don't take part in layout, so opening it never
+    // moves the card or the clock.
+    if (isPetPillOpen) {
+        PetActionPill(
+            selectedIndex = petPillSelection,
+            onOptionClick = onPetPillOptionClick,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-76).dp, y = (-15).dp)
+                .onGloballyPositioned { petPillBounds?.pill = it }
+        )
+    }
 }
 }
 
@@ -1279,5 +1332,32 @@ fun FolderWithHeartIcon(
             close()
         }
         drawPath(heartPath, palette.primary)
+    }
+}
+
+/**
+ * While the pet pill is open, a tap anywhere on Home outside the pill closes it. The tap is seen
+ * first (Initial pass) and consumed, so it doesn't also launch the favorite / widget underneath.
+ */
+/** 4 Hz clock: 240 ticks a minute. */
+private const val MASCOT_TICKS_PER_MINUTE = 240
+
+private fun Modifier.dismissPetPillOnOutsideTap(
+    enabled: Boolean,
+    bounds: PetPillBounds,
+    onDismiss: () -> Unit
+): Modifier = if (!enabled) this else composed {
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    pointerInput(bounds) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val down = event.changes.firstOrNull { it.changedToDownIgnoreConsumed() } ?: continue
+                if (!bounds.contains(down.position)) {
+                    event.changes.forEach { it.consume() }
+                    currentOnDismiss()
+                }
+            }
+        }
     }
 }

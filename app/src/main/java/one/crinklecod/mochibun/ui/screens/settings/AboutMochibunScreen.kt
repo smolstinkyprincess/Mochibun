@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.BuildConfig
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
-import one.crinklecod.mochibun.ui.components.MascotMood
+import one.crinklecod.mochibun.ui.components.currentMoodSlot
 import one.crinklecod.mochibun.ui.components.MochibunMascot
 import one.crinklecod.mochibun.ui.components.mascotTintColor
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
@@ -112,7 +112,7 @@ internal fun AboutMochibunSubScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     MochibunMascot(
-                        mood = MascotMood.DEFAULT,
+                        slot = currentMoodSlot(),
                         size = 78.dp,
                         themeTintColor = theme.mascotTintColor
                     )

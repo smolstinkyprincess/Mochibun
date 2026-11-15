@@ -3,6 +3,17 @@ package one.crinklecod.mochibun
 import android.content.ContextWrapper
 import android.content.SharedPreferences
 import one.crinklecod.mochibun.data.model.BundleCursorConfig
+import one.crinklecod.mochibun.data.model.BundleMascotConfig
+import one.crinklecod.mochibun.data.model.BundleMascotSlot
+import one.crinklecod.mochibun.data.model.MascotAtlasValidator
+import one.crinklecod.mochibun.data.repository.CustomMascotManager
+import one.crinklecod.mochibun.ui.components.MascotAnimSlot
+import one.crinklecod.mochibun.ui.components.MascotSlotLayout
+import one.crinklecod.mochibun.ui.components.MascotSpriteSource
+import one.crinklecod.mochibun.ui.components.MascotSpriteStore
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertNull
+import org.junit.Before
 import one.crinklecod.mochibun.data.model.BundleGreetingConfig
 import one.crinklecod.mochibun.data.model.BundlePaletteConfig
 import one.crinklecod.mochibun.data.model.MochibunBundleManifest
@@ -22,6 +33,164 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 class ThemeBundleTest {
+
+    @Before
+    fun resetMascot() {
+        MascotSpriteStore.setSource(MascotSpriteSource.BuiltIn)
+        // Plain JVM has no real BitmapFactory: read the PNG header instead
+        CustomMascotManager.platformBounds = { MascotAtlasValidator.readPngSize(it) }
+    }
+
+    // ── Custom mascot atlas (mascot_atlas.png) ──────────────────────────────
+
+    private fun manifestBytes(manifest: MochibunBundleManifest = validManifest()) =
+        bundleJsonFormat.encodeToString(manifest).toByteArray(Charsets.UTF_8)
+
+    private val customSource get() = MascotSpriteStore.source.value as? MascotSpriteSource.Custom
+
+    @Test
+    fun bundleWithMascot_previewsAndInstallsIt() {
+        val png = fakePng(192, 384)
+        val bundle = createZip("manifest.json" to manifestBytes(), "mascot_atlas.png" to png)
+
+        assertTrue(ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow().hasMascotAsset)
+
+        withTestContext { context ->
+            var skipped: String? = null
+            val applied = ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)) { skipped = it }
+            assertTrue(applied.isSuccess)
+            assertNull(skipped)
+            val file = CustomMascotManager.atlasFile(context)
+            assertArrayEquals(png, file.readBytes())
+            val source = customSource!!
+            assertEquals(file, source.file)
+            assertEquals(48, source.layout.frameWidth) // inferred: 384 / 8
+            assertEquals(MascotSlotLayout(6, 4), source.layout.slots[MascotAnimSlot.EAT])
+            assertTrue("Staging files cleaned", context.cacheDir.listFiles().isNullOrEmpty())
+        }
+    }
+
+    @Test
+    fun bundleWithMascot_usesTheManifestLayout() {
+        val manifest = validManifest().copy(
+            hasCustomMascot = true,
+            mascot = BundleMascotConfig(
+                frameWidth = 32, frameHeight = 48,
+                slots = mapOf("idle" to BundleMascotSlot(0, 6), "sparkle" to BundleMascotSlot(9, 9))
+            )
+        )
+        val bundle = createZip("manifest.json" to manifestBytes(manifest), "mascot_atlas.png" to fakePng(192, 384))
+        withTestContext { context ->
+            assertTrue(ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)).isSuccess)
+            val layout = customSource!!.layout
+            assertEquals(32, layout.frameWidth)
+            assertEquals(mapOf(MascotAnimSlot.IDLE to MascotSlotLayout(0, 6)), layout.slots) // unknown key ignored
+        }
+    }
+
+    @Test
+    fun bundleWithoutMascot_leavesTheCurrentMascotAlone() {
+        val bundle = createZip("manifest.json" to manifestBytes())
+        assertFalse(ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow().hasMascotAsset)
+
+        withTestContext { context ->
+            assertTrue(ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)).isSuccess)
+            assertEquals(MascotSpriteSource.BuiltIn, MascotSpriteStore.source.value)
+            assertFalse(CustomMascotManager.atlasFile(context).exists())
+
+            // An already-installed custom mascot also survives a bundle without one
+            val withMascot = createZip("manifest.json" to manifestBytes(), "mascot_atlas.png" to fakePng(192, 384))
+            ThemeBundleManager.applyBundle(context, ByteArrayInputStream(withMascot)).getOrThrow()
+            val installed = customSource
+            ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)).getOrThrow()
+            assertEquals(installed, MascotSpriteStore.source.value)
+        }
+    }
+
+    @Test
+    fun oversizeMascot_isSkipped_butTheRestOfTheBundleApplies() {
+        val tooBig = fakePng(192, 384, totalBytes = MascotAtlasValidator.MAX_ATLAS_BYTES.toInt() + 1)
+        val bundle = createZip("manifest.json" to manifestBytes(), "mascot_atlas.png" to tooBig)
+
+        assertFalse(ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow().hasMascotAsset)
+        withTestContext { context ->
+            var skipped: String? = null
+            val applied = ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)) { skipped = it }
+            assertTrue("Bundle still applies", applied.isSuccess)
+            assertTrue(skipped!!.contains("1.5 MB"))
+            assertEquals(MascotSpriteSource.BuiltIn, MascotSpriteStore.source.value)
+            assertFalse(CustomMascotManager.atlasFile(context).exists())
+            assertTrue("Staging files cleaned", context.cacheDir.listFiles().isNullOrEmpty())
+        }
+    }
+
+    @Test
+    fun invalidMascotDimensions_areSkipped() {
+        for (png in listOf(fakePng(200, 380), fakePng(16 * 17, 16 * 8), "not a png".toByteArray())) {
+            val bundle = createZip("manifest.json" to manifestBytes(), "mascot_atlas.png" to png)
+            withTestContext { context ->
+                var skipped: String? = null
+                assertTrue(ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)) { skipped = it }.isSuccess)
+                assertTrue(skipped != null)
+                assertEquals(MascotSpriteSource.BuiltIn, MascotSpriteStore.source.value)
+                assertFalse(CustomMascotManager.atlasFile(context).exists())
+            }
+        }
+    }
+
+    @Test
+    fun mascotIsOnlyEverReadFromTheExactEntryName() {
+        // A manifest can't point at a file: extra keys are ignored, and look-alike entries are never used
+        val manifestJson = String(manifestBytes(), Charsets.UTF_8).trimEnd().removeSuffix("}") +
+            ",\"mascotFile\": \"../evil.png\", \"atlasPath\": \"/data/evil.png\"}"
+        val bundle = createZip(
+            "manifest.json" to manifestJson.toByteArray(Charsets.UTF_8),
+            "../evil.png" to fakePng(192, 384),
+            "mascot/mascot_atlas.png" to fakePng(192, 384),
+            "MASCOT_ATLAS.PNG" to fakePng(192, 384)
+        )
+        assertFalse(ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow().hasMascotAsset)
+        withTestContext { context ->
+            assertTrue(ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)).isSuccess)
+            assertEquals(MascotSpriteSource.BuiltIn, MascotSpriteStore.source.value)
+            assertFalse(CustomMascotManager.atlasFile(context).exists())
+            assertFalse(java.io.File(context.filesDir.parentFile, "evil.png").exists())
+            assertTrue(context.filesDir.listFiles().isNullOrEmpty())
+        }
+    }
+
+    @Test
+    fun customMascot_roundTripsThroughExportAndImport() {
+        val png = fakePng(192, 384)
+        var exported = ByteArray(0)
+        withTestContext { source ->
+            val staged = java.io.File(source.cacheDir, "pick.png").apply { writeBytes(png) }
+            CustomMascotManager.installStaged(source, staged, config = null).getOrThrow()
+            val out = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(source, out, bundleName = "Mascot Trip").getOrThrow()
+            exported = out.toByteArray()
+
+            val noMascot = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(source, noMascot, bundleName = "No Mascot", includeCustomMascot = false).getOrThrow()
+            val plain = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(noMascot.toByteArray())).getOrThrow()
+            assertFalse(plain.hasMascotAsset)
+            assertFalse(plain.manifest.hasCustomMascot)
+            assertNull(plain.manifest.mascot)
+        }
+        val installedLayout = customSource!!.layout
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(exported)).getOrThrow()
+        assertTrue(preview.hasMascotAsset)
+        assertTrue(preview.manifest.hasCustomMascot)
+        assertEquals(48, preview.manifest.mascot!!.frameWidth)
+
+        MascotSpriteStore.setSource(MascotSpriteSource.BuiltIn)
+        withTestContext { target ->
+            ThemeBundleManager.applyBundle(target, ByteArrayInputStream(exported)).getOrThrow()
+            assertArrayEquals(png, CustomMascotManager.atlasFile(target).readBytes())
+            assertEquals(installedLayout, customSource!!.layout)
+        }
+    }
 
     @Test
     fun testManifestSerializationRoundtrip() {

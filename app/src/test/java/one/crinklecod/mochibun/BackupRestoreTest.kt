@@ -2,6 +2,11 @@ package one.crinklecod.mochibun
 
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.BackupRestoreManager
+import kotlinx.coroutines.Dispatchers
+import one.crinklecod.mochibun.pet.PetManager
+import one.crinklecod.mochibun.pet.PetPrefsStore
+import one.crinklecod.mochibun.pet.PetState
+import one.crinklecod.mochibun.pet.PetTuning
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -111,6 +116,64 @@ class BackupRestoreTest {
 
         assertEquals(PreferencesManager.DEFAULT_CUSTOM_USER_NAME, PreferencesManager.customUserName.value)
         assertEquals(PreferencesManager.DEFAULT_DPAD_WRAP_AROUND, PreferencesManager.isDpadWrapAround.value)
+    }
+
+    private fun resetPet(context: android.content.Context, clock: FakePetClock) {
+        context.getSharedPreferences(PetPrefsStore.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        PetManager.resetForTests(clock, Dispatchers.Unconfined)
+        PetManager.init(context)
+    }
+
+    @Test
+    fun backupIncludesPet_andRestoreBringsHerBack() {
+        val context = RuntimeEnvironment.getApplication()
+        val clock = FakePetClock(now = 1_800_000_000_000L, day = 20_000L)
+        resetPet(context, clock)
+        PetManager.onNotifClearAll(1)
+        PetManager.pet()
+        val backedUp = PetManager.state.value
+
+        val backup = JSONObject(BackupRestoreManager.createBackupJson(context))
+        assertTrue(backup.has("pet"))
+        assertEquals(backedUp.treats, backup.getJSONObject("pet").getInt("treats"))
+
+        assertTrue(PetManager.feed())
+        assertTrue(PetManager.feed())
+        BackupRestoreManager.restoreBackupJson(context, backup.toString()).getOrThrow()
+        assertEquals(backedUp, PetManager.state.value)
+    }
+
+    @Test
+    fun oldBackupWithoutPet_keepsCurrentPet() {
+        val context = RuntimeEnvironment.getApplication()
+        resetPet(context, FakePetClock(now = 1_800_000_000_000L, day = 20_000L))
+        PetManager.onChargerConnected()
+        val before = PetManager.state.value
+
+        BackupRestoreManager.restoreBackupJson(context, validBackupJson().toString()).getOrThrow()
+        assertEquals(before, PetManager.state.value)
+    }
+
+    @Test
+    fun restoredPetIsSanitized_andMissingFieldsUseDefaults() {
+        val context = RuntimeEnvironment.getApplication()
+        val now = 1_800_000_000_000L
+        resetPet(context, FakePetClock(now = now, day = 20_000L))
+        val tampered = validBackupJson().put(
+            "pet",
+            JSONObject()
+                .put("treats", 999)
+                .put("fullness", "full")
+                .put("last_updated_ms", now + 86_400_000L)
+        )
+
+        BackupRestoreManager.restoreBackupJson(context, tampered.toString()).getOrThrow()
+        val s = PetManager.state.value
+        assertEquals(PetTuning.MAX_TREATS, s.treats)
+        assertEquals(PetState().fullness, s.fullness, 0f)
+        assertEquals(PetState().joy, s.joy, 0f)
+        assertEquals(now, s.lastUpdatedMs)
     }
 
     private fun validBackupJson(): JSONObject = JSONObject()

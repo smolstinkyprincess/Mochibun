@@ -185,10 +185,11 @@ fun NowPlayingCard(
     val theme = LocalLauncherTheme.current
     val cardShape = RoundedCornerShape(22.dp)
 
-    val mascotMood = when {
-        mediaState.isPlaying -> MascotMood.MUSIC
-        else -> getDefaultTimeOfDayMood()
-    }
+    // Bopping along (HAPPY frames + bob) while music plays; otherwise her mood, still frame.
+    // The clock only runs while playing and RESUMED.
+    val mascotStep = rememberKeitaiStep(active = mediaState.isPlaying, totalSteps = MascotAtlasMath.TICK_WRAP)
+    val mascotTick = remember(mascotStep) { { mascotStep.intValue } }
+    val mascotSlot = if (mediaState.isPlaying) MascotAnimSlot.HAPPY else currentMoodSlot()
 
     Box(
         modifier = modifier
@@ -241,7 +242,8 @@ fun NowPlayingCard(
                             )
                         } else {
                             MochibunMascot(
-                                mood = mascotMood,
+                                slot = mascotSlot,
+                                frameTick = mascotTick,
                                 size = 52.dp,
                                 themeTintColor = theme.mascotTintColor
                             )
@@ -317,7 +319,7 @@ fun NowPlayingCard(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .offset(x = 12.dp, y = (-16).dp)
-                .keitaiMascotBob(enabled = mediaState.isPlaying)
+                .keitaiMascotBob(mascotTick)
                 .clip(RoundedCornerShape(12.dp))
                 .background(theme.cardBgColor)
                 .border(1.5.dp, theme.cardBorderColor, RoundedCornerShape(12.dp))
@@ -325,7 +327,8 @@ fun NowPlayingCard(
             contentAlignment = Alignment.Center
         ) {
             MochibunMascot(
-                mood = mascotMood,
+                slot = mascotSlot,
+                frameTick = mascotTick,
                 size = 48.dp,
                 themeTintColor = theme.mascotTintColor
             )

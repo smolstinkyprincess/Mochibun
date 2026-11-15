@@ -272,14 +272,11 @@ fun SystemMonitorCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             val isHighLoad = (!stats.isSystemCpuRestricted && stats.systemCpuPercent > 80f) || stats.ramPercent > 85f
-            val mascotMood = when {
-                isHighLoad -> MascotMood.WORRIED
-                else -> getDefaultTimeOfDayMood()
-            }
+            val mascotSlot = if (isHighLoad) MascotAnimSlot.SULKY else currentMoodSlot()
 
             // Header Accent: Mascot loaf perching proudly above the title (52.dp)
             MochibunMascot(
-                mood = mascotMood,
+                slot = mascotSlot,
                 size = 52.dp,
                 themeTintColor = theme.mascotTintColor,
                 onClick = { onCardClick() },

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
-import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -16,7 +15,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,30 +36,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.rememberAsyncImagePainter
-import coil.imageLoader
-import coil.request.ImageRequest
-import one.crinklecod.mochibun.R
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.data.repository.MediaSessionTracker
+import one.crinklecod.mochibun.pet.PetManager
+import one.crinklecod.mochibun.pet.PetMood
 import one.crinklecod.mochibun.ui.theme.LauncherTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.M3x6FontFamily
@@ -71,51 +66,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
- * Mascot moods mapped to static PNG fallbacks and animated GIF loops.
+ * Her resting animation slot right now, from her pet mood (hungry, sulky, sleepy, happy or
+ * content). Used wherever she appears, so her mood shows across the launcher.
  */
-enum class MascotMood(
-    @DrawableRes val pngResId: Int,
-    @DrawableRes val gifResId: Int?,
-    val description: String
-) {
-    DEFAULT(
-        pngResId = R.drawable.mochibunny,
-        gifResId = R.drawable.mochibunny_idle_anim,
-        description = "Idle squish loaf"
-    ),
-    MUSIC(
-        pngResId = R.drawable.mochibunny_music,
-        gifResId = R.drawable.mochibunny_music_anim,
-        description = "Music bob loop"
-    ),
-    SLEEP(
-        pngResId = R.drawable.mochibunny_sleep,
-        gifResId = R.drawable.mochibunny_sleep_anim,
-        description = "Sleeping loaf loop"
-    ),
-    WORRIED(
-        pngResId = R.drawable.mochibunny_worried,
-        gifResId = null,
-        description = "Worried / concerned loaf"
-    ),
-    CHEER(
-        pngResId = R.drawable.mochibunny_cheer,
-        gifResId = null,
-        description = "Cheering / celebratory loaf"
-    )
-}
-
-/**
- * Returns [MascotMood.SLEEP] during late night hours (22:00 - 06:00),
- * otherwise relaxed [MascotMood.DEFAULT].
- */
-fun getDefaultTimeOfDayMood(): MascotMood {
-    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    return if (hour >= 22 || hour < 6) MascotMood.SLEEP else MascotMood.DEFAULT
-}
+fun currentMoodSlot(): MascotAnimSlot = MascotAtlasMath.moodSlot(PetManager.currentMood())
 
 /**
  * Maps Launcher Theme Presets to their subtle mascot pastel tint washes:
@@ -164,40 +122,43 @@ fun createPastelTintMatrix(tintColor: Color, intensity: Float = 0.22f): ColorMat
 }
 
 /**
- * Adaptive Animated Mochibun Mascot Component.
+ * Mochibunny drawn from the single shared atlas ([rememberMascotAtlas]).
  *
- * Constrains pixel art assets to exact Dp envelopes (default 48.dp) with
- * [FilterQuality.None] nearest-neighbor scaling to preserve 32x32 pixel art fidelity
- * on physical hardware (e.g. ALT Mive Style Folder AT-M120).
+ * - [slot] is her resting animation (usually [currentMoodSlot]); it loops with [frameTick].
+ * - [reactionSlot] (EAT / PET / TALK / HAPPY) plays its frames twice from [reactionStartTick]
+ *   ([MascotAtlasMath.REACTION_LOOPS]), then she returns to [slot].
+ * - [frameTick] is a shared stepped clock (e.g. [rememberKeitaiStep]); it is read only while
+ *   drawing, so each tick redraws the sprite without recomposing anything. The default `{ 0 }`
+ *   shows a still first frame. ~1 GB phones always show the first frame.
+ * - Frames are drawn with [FilterQuality.None] (nearest-neighbor) to keep the pixel art crisp,
+ *   fitted into the [size] envelope without stretching.
  *
- * Decodes animated GIF loops via Coil (`ImageDecoderDecoder`/`GifDecoder`) when
- * [useAnimation] is enabled, with seamless fallback to static PNGs.
- *
- * When booped (tapped / clicked), the mascot bounces with a cheerful vertical hop,
- * plays a tactile audio cue, and displays `mochibunny_cheer.png` before returning
- * smoothly to its base idle loop.
- *
- * Supports dynamic pastel theme tinting via [createPastelTintMatrix] with zero
- * per-recomposition allocations.
+ * When booped (tapped), she hops, plays a tactile audio cue and plays her HAPPY frames.
+ * The pastel theme tint ([createPastelTintMatrix]) is cached per tint color.
  */
 @Composable
 fun MochibunMascot(
-    mood: MascotMood = MascotMood.DEFAULT,
-    useAnimation: Boolean = true,
+    slot: MascotAnimSlot = MascotAnimSlot.IDLE,
     themeTintColor: Color? = null,
     modifier: Modifier = Modifier,
     size: Dp = 48.dp,
+    frameTick: () -> Int = { 0 },
+    reactionSlot: MascotAnimSlot? = null,
+    reactionStartTick: Int = 0,
     isBooped: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val atlas = rememberMascotAtlas()
+    val staticFrames = remember(context) { MascotSpriteStore.isStaticFramesOnly(context) }
     var boopTrigger by remember { mutableIntStateOf(0) }
     var internalBounce by remember { mutableStateOf(false) }
+    var boopStartTick by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(boopTrigger) {
         if (boopTrigger > 0) {
             internalBounce = true
-            delay(1000)
+            delay(MascotAtlasMath.REACTION_MS)
             internalBounce = false
         }
     }
@@ -227,17 +188,9 @@ fun MochibunMascot(
         themeTintColor?.let { ColorFilter.colorMatrix(createPastelTintMatrix(it)) }
     }
 
-    // When bouncing (booped), pause GIF loop to showcase cheer sprite
-    val activeGifRes = if (useAnimation && !isBounce) mood.gifResId else null
-
-    // Pre-cache cheer bitmap and mood bitmap with nearest-neighbor rendering
-    val cheerBitmap = remember(context) {
-        runCatching { ImageBitmap.imageResource(context.resources, R.drawable.mochibunny_cheer) }.getOrNull()
-    }
-    val defaultBitmap = remember(mood.pngResId, context) {
-        ImageBitmap.imageResource(context.resources, mood.pngResId)
-    }
-    val activeStaticBitmap = if (isBounce && cheerBitmap != null) cheerBitmap else defaultBitmap
+    // A caller's reaction wins; otherwise her own boop plays HAPPY
+    val activeReaction = reactionSlot ?: if (internalBounce) MascotAnimSlot.HAPPY else null
+    val activeReactionStart = if (reactionSlot != null) reactionStartTick else boopStartTick
 
     Box(
         modifier = modifier
@@ -252,36 +205,39 @@ fun MochibunMascot(
                 indication = null
             ) {
                 SoundEffectManager.play(context, SoundEffect.SELECT)
+                boopStartTick = frameTick()
                 boopTrigger++
                 onClick?.invoke()
             },
         contentAlignment = Alignment.Center
     ) {
-        if (activeGifRes != null) {
-            // Render animated GIF via Coil with FilterQuality.None nearest-neighbor scaling
-            val painter = rememberAsyncImagePainter(
-                model = ImageRequest.Builder(context)
-                    .data(activeGifRes)
-                    .build(),
-                imageLoader = context.imageLoader,
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val a = atlas ?: return@Canvas
+            val frame = MascotAtlasMath.frameFor(
+                layout = a.layout,
+                base = slot,
+                reaction = activeReaction,
+                reactionStartTick = activeReactionStart,
+                tick = frameTick(),
+                staticFrames = staticFrames
+            )
+            // Fit the frame into the envelope, keeping its aspect ratio (frames may be non-square)
+            val fw = frame.srcSize.width.toFloat()
+            val fh = frame.srcSize.height.toFloat()
+            val fit = minOf(this.size.width / fw, this.size.height / fh)
+            val dstW = (fw * fit).roundToInt()
+            val dstH = (fh * fit).roundToInt()
+            drawImage(
+                image = a.image,
+                srcOffset = frame.srcOffset,
+                srcSize = frame.srcSize,
+                dstOffset = IntOffset(
+                    ((this.size.width - dstW) / 2f).roundToInt(),
+                    ((this.size.height - dstH) / 2f).roundToInt()
+                ),
+                dstSize = IntSize(dstW, dstH),
+                colorFilter = colorFilter,
                 filterQuality = FilterQuality.None
-            )
-            Image(
-                painter = painter,
-                contentDescription = mood.description,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
-                colorFilter = colorFilter
-            )
-        } else {
-            // Render static PNG using direct ImageBitmap with nearest-neighbor FilterQuality.None
-            Image(
-                bitmap = activeStaticBitmap,
-                contentDescription = if (isBounce) "Cheering loaf" else mood.description,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
-                filterQuality = FilterQuality.None,
-                colorFilter = colorFilter
             )
         }
     }
@@ -319,6 +275,99 @@ val MUSIC_LINES = listOf(
     "bobbing along ₍ᐢ. ̫.ᐢ₎"
 )
 
+// Mochibunny pet lines: one pool per PetMood, plus reactions to feeding.
+
+val PET_HAPPY_LINES = listOf(
+    "so happy! ♡",
+    "best day ever ٩(ˊᗜˋ*)و",
+    "full & loved ♡",
+    "hehe~ (˶ᵔ ᵕ ᵔ˶)",
+    "mochi bliss ✨"
+)
+
+val PET_CONTENT_LINES = listOf(
+    "just loafing ♡",
+    "cozy~ ( ˘ ³˘)",
+    "hi friend! 🌸",
+    "all good here ₍ᐢ. ̫.ᐢ₎",
+    "comfy loaf ♡"
+)
+
+val PET_HUNGRY_LINES = listOf(
+    "tummy rumble... (｡•́︿•̀｡)",
+    "snack time? 🍡",
+    "so hungry... ♡",
+    "treat please? ( ´･ω･)"
+)
+
+val PET_SULKY_LINES = listOf(
+    "hmph... (｀へ´)",
+    "pet me? ( ´･ω･)",
+    "feeling lonely...",
+    "no pats today? ( ˘･з･)"
+)
+
+val PET_SLEEPY_LINES = listOf(
+    "eepy... zzZ",
+    "yawn~ ♡",
+    "bedtime soon? ( ᴗ͈ˬᴗ͈ )",
+    "sweet dreams ✨",
+    "five more mins... zzZ"
+)
+
+val PET_FED_LINES = listOf(
+    "nom nom! ♡",
+    "yummy~ ( ˶ˆᗜˆ˵ )",
+    "thank you! 🍡",
+    "tummy happy ♡",
+    "munch munch ₍ᐢ. ̫.ᐢ₎"
+)
+
+val PET_NO_TREATS_LINES = listOf(
+    "no treats yet... ( ´･ω･)",
+    "go for a walk? ♡",
+    "plug me in for a treat? 🔋",
+    "clear notifs = treats! ✨",
+    "treat bag's empty (｡•́︿•̀｡)"
+)
+
+val PET_PETTED_LINES = listOf(
+    "hehe, that tickles ♡",
+    "more pats please~",
+    "soft paws ₍ᐢ. ̫.ᐢ₎",
+    "(˶ᵔ ᵕ ᵔ˶) ♡",
+    "best friend ever ♡"
+)
+
+/**
+ * The bubble line for a pill reaction, never repeating [previousLine]. [chatLine] supplies the
+ * mood-driven Chat line (it needs a Context and her current mood, so the caller provides it).
+ */
+fun selectReactionLine(
+    kind: MascotReactionKind,
+    previousLine: String?,
+    chatLine: () -> String
+): String = when (kind) {
+    MascotReactionKind.CHAT -> chatLine()
+    MascotReactionKind.FED -> pickLineAvoiding(PET_FED_LINES, previousLine)
+    MascotReactionKind.NO_TREATS -> pickLineAvoiding(PET_NO_TREATS_LINES, previousLine)
+    MascotReactionKind.PETTED -> pickLineAvoiding(PET_PETTED_LINES, previousLine)
+}
+
+fun petMoodLines(mood: PetMood): List<String> = when (mood) {
+    PetMood.HAPPY -> PET_HAPPY_LINES
+    PetMood.CONTENT -> PET_CONTENT_LINES
+    PetMood.HUNGRY -> PET_HUNGRY_LINES
+    PetMood.SULKY -> PET_SULKY_LINES
+    PetMood.SLEEPY -> PET_SLEEPY_LINES
+}
+
+/** A random line from [pool] that isn't [previousLine] (unless the pool has nothing else). */
+fun pickLineAvoiding(pool: List<String>, previousLine: String?): String {
+    val filtered = pool.filter { it != previousLine }
+    return if (filtered.isNotEmpty()) filtered.random() else pool.random()
+}
+
 /**
  * Checks if device battery is below 20% using sticky broadcast or BatteryManager.
  */
@@ -350,14 +399,37 @@ fun isDeviceBatteryLow(context: Context): Boolean {
  * - Late night (10:00 PM – 5:00 AM)
  * - Default boops
  * Guarantees that the chosen line avoids the immediate predecessor [previousLine].
+ *
+ * With a [petMood] (the Home pet), her mood leads:
+ * - HUNGRY / SULKY / SLEEPY always speak from their mood pool (needs and bedtime come first;
+ *   SLEEPY also replaces the late-night lines).
+ * - HAPPY / CONTENT still use the low-battery / music lines 70% of the time when those apply,
+ *   otherwise their mood pool.
+ * Without a [petMood] the original context-only behavior is unchanged.
  */
 fun selectSpeechBubbleDialogue(
     context: Context? = null,
     previousLine: String? = null,
     hour: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
     isLowBattery: Boolean? = null,
-    isMusicPlaying: Boolean? = null
+    isMusicPlaying: Boolean? = null,
+    petMood: PetMood? = null
 ): String {
+    if (petMood != null) {
+        val moodPool = petMoodLines(petMood)
+        if (petMood == PetMood.HUNGRY || petMood == PetMood.SULKY || petMood == PetMood.SLEEPY) {
+            return pickLineAvoiding(moodPool, previousLine)
+        }
+        val isLowBatt = isLowBattery ?: (context?.let { isDeviceBatteryLow(it) } ?: false)
+        val isMusic = isMusicPlaying ?: MediaSessionTracker.mediaState.value.isPlaying
+        val contextualPool = buildList {
+            if (isLowBatt) addAll(LOW_BATTERY_LINES)
+            if (isMusic) addAll(MUSIC_LINES)
+        }
+        val pool = if (contextualPool.isNotEmpty() && Random.nextFloat() < 0.70f) contextualPool else moodPool
+        return pickLineAvoiding(pool, previousLine)
+    }
+
     val isLateNight = hour >= 22 || hour < 5
     val isLowBatt = isLowBattery ?: (context?.let { isDeviceBatteryLow(it) } ?: false)
     val isMusic = isMusicPlaying ?: MediaSessionTracker.mediaState.value.isPlaying
@@ -373,13 +445,11 @@ fun selectSpeechBubbleDialogue(
         DEFAULT_BOOP_LINES
     }
 
-    val filtered = candidatePool.filter { it != previousLine }
-    return if (filtered.isNotEmpty()) {
-        filtered.random()
-    } else {
-        candidatePool.random()
-    }
+    return pickLineAvoiding(candidatePool, previousLine)
 }
+
+/** How long a speech bubble line stays up. */
+private const val SPEECH_BUBBLE_MS = 3_500L
 
 /**
  * Kawaii keitai-inspired speech bubble with ultra-rounded pill and subtle downward pointer tail.
@@ -456,24 +526,28 @@ fun SpeechBubble(
 /**
  * Mochibunny Mascot coupled with a dynamic, keitai-inspired speech bubble reaction system.
  *
- * When booped (tapped / DPAD_CENTER clicked):
+ * On Home a tap calls [onTap] (opens the Feed / Pet / Chat pill) and each new [reaction] from the
+ * pill plays once: its bubble line plus its animation slot (EAT / PET / TALK). Without [onTap], a
+ * tap boops her directly.
+ *
+ * When she speaks (boop or pill reaction):
  * - Cancels any ongoing dismiss timer.
  * - Picks a new context-aware dialogue line avoiding the immediate predecessor.
  * - Triggers cheer bounce on the mascot and a subtle pop bounce on the bubble.
- * - Holds the speech bubble for 2.2 seconds before fading/scaling out.
+ * - Holds the speech bubble for 3.5 seconds before fading/scaling out.
  * - Fixed layout size guarantees zero layout shifting of adjacent widgets (clock, favorites card).
  * - Renders speech bubble on top of mascot sprite with explicit zIndex and draw order.
  */
 @Composable
 fun MochibunnyWithSpeechBubble(
-    mood: MascotMood = getDefaultTimeOfDayMood(),
-    useAnimation: Boolean = true,
+    baseSlot: MascotAnimSlot = MascotAnimSlot.IDLE, // her resting (mood) animation
+    frameTick: () -> Int = { 0 }, // shared stepped clock; see MochibunMascot
     themeTintColor: Color? = null,
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
     isFocused: Boolean = false,
-    boopRequest: Int = 0, // bumped by the D-pad (Center on the focused mascot); boops like a tap
-    onClick: (() -> Unit)? = null
+    reaction: MascotReaction = MascotReaction(), // pet pill actions; each new id plays once
+    onTap: () -> Unit // Home opens the pet pill
 ) {
     val context = LocalContext.current
     val theme = LocalLauncherTheme.current
@@ -482,6 +556,10 @@ fun MochibunnyWithSpeechBubble(
     var currentDialogue by remember { mutableStateOf<String?>(null) }
     var lastSpokenLine by remember { mutableStateOf<String?>(null) }
     var dismissJob by remember { mutableStateOf<Job?>(null) }
+    // The slot her current reaction plays (EAT / PET / TALK); IDLE when she isn't reacting.
+    // The sprite plays its frames once from reactionStartTick, then returns to baseSlot.
+    var activeSlot by remember { mutableStateOf(MascotAnimSlot.IDLE) }
+    var reactionStartTick by remember { mutableIntStateOf(0) }
     var popAnimKey by remember { mutableIntStateOf(0) }
     val popScale = remember { Animatable(1f) }
 
@@ -504,22 +582,40 @@ fun MochibunnyWithSpeechBubble(
         }
     }
 
-    val onBoop = {
+    fun speak(line: String, slot: MascotAnimSlot) {
         dismissJob?.cancel()
-        val newLine = selectSpeechBubbleDialogue(context, lastSpokenLine ?: currentDialogue)
-        currentDialogue = newLine
-        lastSpokenLine = newLine
+        currentDialogue = line
+        lastSpokenLine = line
+        activeSlot = slot
+        reactionStartTick = frameTick()
         popAnimKey++
         SoundEffectManager.play(context, SoundEffect.SELECT)
-        onClick?.invoke()
         dismissJob = coroutineScope.launch {
-            delay(1250L)
+            // The reaction (and her hop) ends after 2 loops; the line stays up longer to read
+            delay(MascotAtlasMath.REACTION_MS)
+            activeSlot = MascotAnimSlot.IDLE
+            delay(SPEECH_BUBBLE_MS - MascotAtlasMath.REACTION_MS)
             currentDialogue = null
         }
     }
 
-    LaunchedEffect(boopRequest) {
-        if (boopRequest > 0) onBoop()
+    val chatLine = {
+        selectSpeechBubbleDialogue(
+            context,
+            lastSpokenLine ?: currentDialogue,
+            petMood = PetManager.currentMood()
+        )
+    }
+
+
+    // Starts at the current id, so coming back to Home never replays an old reaction.
+    var handledReactionId by remember { mutableIntStateOf(reaction.id) }
+    LaunchedEffect(reaction.id) {
+        if (reaction.id > handledReactionId) {
+            handledReactionId = reaction.id
+            val line = selectReactionLine(reaction.kind, lastSpokenLine ?: currentDialogue, chatLine)
+            speak(line, reaction.kind.slot)
+        }
     }
 
     Box(
@@ -531,17 +627,19 @@ fun MochibunnyWithSpeechBubble(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                onBoop()
+                onTap()
             }
     ) {
         // 1. Mascot sprite rendered underneath
         MochibunMascot(
-            mood = mood,
-            useAnimation = useAnimation,
+            slot = baseSlot,
             themeTintColor = themeTintColor,
             size = size,
-            isBooped = currentDialogue != null,
-            onClick = onBoop
+            frameTick = frameTick,
+            reactionSlot = activeSlot.takeIf { it != MascotAnimSlot.IDLE },
+            reactionStartTick = reactionStartTick,
+            isBooped = activeSlot != MascotAnimSlot.IDLE,
+            onClick = onTap
         )
 
         // 2. Floating speech bubble rendered on top with higher z-index
@@ -554,7 +652,7 @@ fun MochibunnyWithSpeechBubble(
             exit = fadeOut(tween(180)) + scaleOut(targetScale = 0.75f),
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = 10.dp, y = (-32).dp)
+                .offset(x = 10.dp, y = (-40).dp) // clears her ears
                 .wrapContentWidth(align = Alignment.End, unbounded = true)
                 .widthIn(max = 260.dp)
                 .zIndex(1f)

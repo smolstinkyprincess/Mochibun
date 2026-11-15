@@ -1,0 +1,3 @@
+Mochibun v2.2.2 ♡
+- Outer Sub-Display Ticker: a retro keitai status marquee on Home (Settings > Appearance), with Pastel Theme or Dark Sub-OLED styles.
+- Quick Memo ✎: jot a short note from Home; it's saved automatically.

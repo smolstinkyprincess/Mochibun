@@ -14,7 +14,9 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 import com.android.quickstep.RecentsActivity
 import one.crinklecod.mochibun.core.haptic.HapticManager
+import one.crinklecod.mochibun.core.keypad.HOME_FOCUS_MASCOT
 import one.crinklecod.mochibun.core.keypad.HomeTransitionTracker
+import one.crinklecod.mochibun.core.keypad.petPillTargetIndex
 import one.crinklecod.mochibun.core.keypad.PoundHoldAction
 import one.crinklecod.mochibun.core.keypad.nextHomeFocusArea
 import one.crinklecod.mochibun.core.keypad.poundHoldAction
@@ -253,6 +255,12 @@ internal class LauncherKeyHandler(
             }
         }
 
+        // Mochibunny's pet pill is a modal drawn inside Home (not a dialog window), so its keys
+        // come through here; everything else on Home stays blocked while it is open.
+        if (state.isPetPillOpen) {
+            return handlePetPillKey(nativeEvent, state)
+        }
+
         // A focused text field gets typing keys for the IME; D-pad navigation is handled as usual
         if (state.isModalActive || (state.isInputActive && InputArbiter.isTypingKey(nativeEvent.keyCode))) {
             poundHoldJob?.cancel()
@@ -455,8 +463,8 @@ internal class LauncherKeyHandler(
                         } else if (state.homeFocusArea == 3) {
                             SoundEffectManager.play(context, SoundEffect.SELECT)
                             launchClockApp(context)
-                        } else if (state.homeFocusArea == 4) {
-                            actions.boopMascot()
+                        } else if (state.homeFocusArea == HOME_FOCUS_MASCOT) {
+                            actions.openPetPill()
                         } else {
                             actions.openLauncherMenu()
                         }
@@ -467,6 +475,79 @@ internal class LauncherKeyHandler(
 
             else -> return false
         }
+    }
+
+    // Center pressed while the pet pill was open; its release runs the selected option.
+    private var petPillCenterDown = false
+
+    /**
+     * Pet pill keys. Center runs on release, 1–3 and Left/Right on press; navigation keys are
+     * swallowed so Home can't react behind the pill; anything else passes through.
+     */
+    private fun handlePetPillKey(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
+        val keyCode = nativeEvent.keyCode
+        val isDown = nativeEvent.action == KeyEvent.ACTION_DOWN
+        val isUp = nativeEvent.action == KeyEvent.ACTION_UP
+
+        if (isBackDismissKey(keyCode)) {
+            if (isUp) {
+                petPillCenterDown = false
+                actions.closePetPill()
+            }
+            return true
+        }
+
+        if (isCenterActivateKey(keyCode)) {
+            if (isDown && nativeEvent.repeatCount == 0) {
+                petPillCenterDown = true
+                actions.onPetPillInteraction()
+            } else if (isUp && petPillCenterDown) {
+                petPillCenterDown = false
+                actions.activatePetPillOption(state.petPillSelectedIndex)
+            }
+            return true
+        }
+
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (isDown) {
+                    actions.onPetPillInteraction()
+                    val step = if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                    val target = petPillTargetIndex(
+                        current = state.petPillSelectedIndex,
+                        step = step,
+                        wrapAround = PreferencesManager.isDpadWrapAround(context)
+                    )
+                    if (target != null) {
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        actions.setPetPillSelection(target)
+                    } else {
+                        performBoundaryHaptic(context)
+                    }
+                }
+                return true
+            }
+
+            KeyEvent.KEYCODE_1, KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_3 -> {
+                if (isDown && nativeEvent.repeatCount == 0) {
+                    val index = keyCode - KeyEvent.KEYCODE_1
+                    actions.onPetPillInteraction()
+                    actions.setPetPillSelection(index)
+                    actions.activatePetPillOption(index)
+                }
+                return true
+            }
+
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_4, KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_6,
+            KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_8, KeyEvent.KEYCODE_9,
+            KeyEvent.KEYCODE_STAR, KeyEvent.KEYCODE_POUND,
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_APP_SWITCH -> {
+                if (isDown) actions.onPetPillInteraction()
+                return true
+            }
+        }
+        return false
     }
 
     private fun handleSoftKey(

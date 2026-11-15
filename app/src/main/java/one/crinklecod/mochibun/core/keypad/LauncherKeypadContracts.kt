@@ -46,7 +46,11 @@ data class LauncherKeypadState(
     val isDrawerRailFocused: Boolean = false,
     val drawerRailHoveredLetter: Char? = null,
     val currentPage: Int = 1,
-    val isInputActive: Boolean = false
+    val isInputActive: Boolean = false,
+    /** Mochibunny's Feed / Pet / Chat pill is open: D-pad and keypad drive the pill only. */
+    val isPetPillOpen: Boolean = false,
+    /** Selected pill option: [PET_PILL_FEED], [PET_PILL_PET] or [PET_PILL_CHAT]. */
+    val petPillSelectedIndex: Int = PET_PILL_FEED
 ) {
     val isSidePageActive: Boolean
         get() = (currentPage == 0 || currentPage == 2) && !drawerOpen && !anyModalOpen
@@ -80,9 +84,40 @@ interface LauncherKeypadActions {
     fun openQuickMemo() {}
     fun cycleDrawerSortMode() {}
     fun recordAppLaunch(packageName: String) {}
-    fun boopMascot() {}
     fun dismissModal() {}
+
+    /** Opens Mochibunny's Feed / Pet / Chat pill (Center on the focused mascot). */
+    fun openPetPill() {}
+    fun setPetPillSelection(index: Int) {}
+    /** Runs a pill option ([PET_PILL_FEED] / [PET_PILL_PET] / [PET_PILL_CHAT]); the pill stays open. */
+    fun activatePetPillOption(index: Int) {}
+    /** Closes the pill and puts Home focus back on Mochibunny. */
+    fun closePetPill() {}
+    /** Any key while the pill is open: restarts its auto-close timer. */
+    fun onPetPillInteraction() {}
 }
+
+/** Mochibunny pet pill options, left to right (also keypad 1 / 2 / 3). */
+const val PET_PILL_FEED = 0
+const val PET_PILL_PET = 1
+const val PET_PILL_CHAT = 2
+const val PET_PILL_OPTION_COUNT = 3
+
+/**
+ * D-pad Left ([step] = -1) / Right (+1) in the pet pill: the next option, wrapping around the ends
+ * when [wrapAround] is on, or null at an edge (the caller plays the boundary haptic).
+ */
+fun petPillTargetIndex(current: Int, step: Int, wrapAround: Boolean): Int? {
+    val target = current.coerceIn(0, PET_PILL_OPTION_COUNT - 1) + step
+    return when {
+        target in 0 until PET_PILL_OPTION_COUNT -> target
+        wrapAround -> Math.floorMod(target, PET_PILL_OPTION_COUNT)
+        else -> null
+    }
+}
+
+/** The pill closes itself after this long without a key press or tap. */
+const val PET_PILL_AUTO_CLOSE_MS = 4_000L
 
 /** Home focus areas (see HomeScreen's `homeFocusArea`). */
 const val HOME_FOCUS_FAVORITES = 0

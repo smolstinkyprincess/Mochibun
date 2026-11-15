@@ -20,6 +20,8 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.LidAnimationSlot
 import one.crinklecod.mochibun.data.repository.LidLedAnimationRepository
 import one.crinklecod.mochibun.data.repository.NotificationTracker
+import one.crinklecod.mochibun.pet.ChargerPlugTracker
+import one.crinklecod.mochibun.pet.PetManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -187,20 +189,27 @@ object LidLedManager : ClamshellListener {
     var batteryPct: Int = 100
         private set
 
+    /** Real plug-in detection for Mochibunny's charger treat (the first reading is a baseline only). */
+    private val petChargerTracker = ChargerPlugTracker()
+
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_POWER_CONNECTED -> {
+                    if (petChargerTracker.onPowerConnected()) PetManager.onChargerConnected()
                     isChargingState = true
                     // HLS_LsLedLights reacts to the same event; force a fresh charging program
                     if (appliedMode == LidLedMode.CHARGING) invalidateApplied()
                     updateLedState()
                 }
                 Intent.ACTION_POWER_DISCONNECTED -> {
+                    petChargerTracker.onPowerDisconnected()
                     isChargingState = false
                     updateLedState()
                 }
                 Intent.ACTION_BATTERY_CHANGED -> {
+                    // Sticky on registration: only sets the pet's plug baseline, never grants
+                    petChargerTracker.onBaseline(intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0)
                     val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
                     val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                             status == BatteryManager.BATTERY_STATUS_FULL
@@ -473,6 +482,9 @@ object LidLedManager : ClamshellListener {
             isChargingState = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                     status == BatteryManager.BATTERY_STATUS_FULL
             batteryStatus?.let(::batteryPercent)?.let { batteryPct = it }
+            batteryStatus?.let {
+                petChargerTracker.onBaseline(it.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed reading initial battery status", e)
         }
