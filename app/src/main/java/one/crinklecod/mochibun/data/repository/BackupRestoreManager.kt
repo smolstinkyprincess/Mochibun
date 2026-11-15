@@ -11,6 +11,8 @@ import one.crinklecod.mochibun.data.prefs.ClickMethod
 import one.crinklecod.mochibun.data.prefs.CursorPreferences
 import one.crinklecod.mochibun.data.prefs.HotspotAlignment
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.pet.PetBackupCodec
+import one.crinklecod.mochibun.pet.PetManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -209,6 +211,9 @@ object BackupRestoreManager {
         cursorObj.put("cursor_size_dp", CursorPreferences.getCursorSizeDp(context))
         cursorObj.put("gif_playback_speed", CursorPreferences.getGifPlaybackSpeed(context).toDouble())
         root.put("cursor", cursorObj)
+
+        // ── 6. Mochibunny pet (optional on restore: older backups have no "pet") ──
+        root.put(PetBackupCodec.KEY, PetBackupCodec.toJson(PetManager.stateForBackup(context)))
 
         return root.toString(2)
     }
@@ -837,6 +842,13 @@ object BackupRestoreManager {
                 if (cursorObj.has("gif_playback_speed")) {
                     CursorPreferences.setGifPlaybackSpeed(context, cursorObj.optDouble("gif_playback_speed", 0.5).toFloat())
                 }
+            }
+
+            // ── 6. Restore Mochibunny pet ────────────────────────────────
+            // Optional: backups made before the pet existed simply keep her current state.
+            // Missing fields fall back to defaults; PetManager.restore sanitizes everything.
+            root.optJSONObject(PetBackupCodec.KEY)?.let { petObj ->
+                PetManager.restore(context, PetBackupCodec.fromJson(petObj))
             }
 
             // Refresh in-memory reactive state

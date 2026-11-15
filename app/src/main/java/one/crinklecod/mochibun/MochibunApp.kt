@@ -23,6 +23,7 @@ import one.crinklecod.mochibun.data.repository.IconPackManager
 import one.crinklecod.mochibun.data.repository.NotificationTracker
 import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.data.repository.WidgetRepository
+import one.crinklecod.mochibun.pet.PetManager
 import com.topjohnwu.superuser.Shell
 
 class MochibunApp : Application(), ImageLoaderFactory {
@@ -61,6 +62,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
 
     private fun initUnlockedServices() {
         PreferencesManager.init(this)
+        PetManager.init(this)
         ExternalThemeManager.init(this)
         HardwareRemapManager.init(this)
         TypographyManager.scanFonts(this)
