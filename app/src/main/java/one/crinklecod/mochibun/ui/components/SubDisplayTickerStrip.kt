@@ -68,6 +68,7 @@ import kotlinx.coroutines.delay
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.DailyStepState
+import one.crinklecod.mochibun.pet.PetManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.MediaSessionTracker
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
@@ -236,6 +237,8 @@ private fun rememberStepsToday(): Long? {
                 )
                 PreferencesManager.setDailyStepState(context, state)
                 steps = state.stepsToday
+                // Mochibunny earns a treat per 1,000 steps (capped daily)
+                PetManager.onStepCounterSensor(event.values[0])
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

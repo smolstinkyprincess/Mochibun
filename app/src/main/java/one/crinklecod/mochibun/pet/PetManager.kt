@@ -2,6 +2,7 @@ package one.crinklecod.mochibun.pet
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,12 +25,16 @@ interface PetClock {
     /** The local hour of day (0..23) for [nowMs]. */
     fun localHour(nowMs: Long): Int
 
+    /** When the current boot started, on the wall clock (shifts slightly if the clock is corrected). */
+    fun bootEpochMs(nowMs: Long): Long
+
     object System : PetClock {
         override fun nowMs(): Long = java.lang.System.currentTimeMillis()
         override fun epochDay(nowMs: Long): Long =
             Instant.ofEpochMilli(nowMs).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
         override fun localHour(nowMs: Long): Int =
             Instant.ofEpochMilli(nowMs).atZone(ZoneId.systemDefault()).hour
+        override fun bootEpochMs(nowMs: Long): Long = nowMs - SystemClock.elapsedRealtime()
     }
 }
 
@@ -121,6 +126,16 @@ object PetManager {
         val day = clock.epochDay(now)
         _state.update { PetLogic.onStepsRead(it, rawStepCounter, bootEpochMs, now, day) }
         persist()
+    }
+
+    /**
+     * A raw TYPE_STEP_COUNTER value (cumulative steps since boot). Works out the boot time itself,
+     * so a reboot is noticed even when the new counter is already above the old baseline.
+     */
+    fun onStepCounterSensor(rawSteps: Float) {
+        if (!(rawSteps >= 0f)) return // negative or NaN: ignore
+        val raw = rawSteps.toLong().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        onStepsRead(raw, clock.bootEpochMs(clock.nowMs()))
     }
 
     /** Clearing at least one notification earns a treat (capped daily). Clearing nothing earns nothing. */

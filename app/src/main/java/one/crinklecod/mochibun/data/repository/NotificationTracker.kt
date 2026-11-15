@@ -13,6 +13,7 @@ import android.util.LruCache
 import androidx.annotation.VisibleForTesting
 import one.crinklecod.mochibun.data.model.MochibunNotificationItem
 import one.crinklecod.mochibun.service.MochibunNotificationListenerService
+import one.crinklecod.mochibun.pet.PetManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -227,6 +228,8 @@ object NotificationTracker {
     }
 
     fun cancelAllNotifications() {
+        // Read before clearing: Mochibunny earns a treat only when something was actually cleared
+        val clearedCount = _notifications.value.size
         val service = activeServiceRef?.get()
         if (service != null) {
             try {
@@ -236,6 +239,7 @@ object NotificationTracker {
             }
         }
         updates.trySend(Update.Clear)
+        PetManager.onNotifClearAll(clearedCount)
     }
 
     fun hasNotificationAccess(context: Context): Boolean {

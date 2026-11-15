@@ -26,10 +26,11 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Controllable time for the pet. */
-class FakePetClock(var now: Long, var day: Long, var hour: Int = 12) : PetClock {
+class FakePetClock(var now: Long, var day: Long, var hour: Int = 12, var boot: Long = now - 3_600_000L) : PetClock {
     override fun nowMs(): Long = now
     override fun epochDay(nowMs: Long): Long = day
     override fun localHour(nowMs: Long): Int = hour
+    override fun bootEpochMs(nowMs: Long): Long = boot
 }
 
 @RunWith(RobolectricTestRunner::class)
