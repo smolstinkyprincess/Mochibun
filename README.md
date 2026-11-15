@@ -128,6 +128,9 @@ Never wrestle with tiny touch keyboards just to send a cute face:
 
 ## 🎨 Themes & Custom Styling
 
+> 🎀 **Looking for ready-made themes, custom pocket-pet mascots, or Lid LED animations?**  
+> Browse and download `.mochibun` and `.mochibunled` packs from the **[Mochibun Community Gallery](https://crinklecod.one/Mochibun/community/)** — tap any downloaded file on your phone to preview and apply in one click ♡
+
 ### 🎀 Shareable Theme Packs (`.mochibun`)
 Want to show off your setup on r/flipphones or Discord? Export a `.mochibun` bundle to pack up your colors, greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), and your custom Mochibunny sprite sheet (`mascot_atlas.png`). Opening a `.mochibun` file on your phone shows a live color swatch card, and it applies in one click!
 
@@ -206,6 +209,8 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 
 | Source | Details | Link |
 | :--- | :--- | :--- |
+| **Website** | Showcase & Guides | [crinklecod.one/Mochibun](https://crinklecod.one/Mochibun) |
+| **Community Packs** | Themes, Custom Mascots & Lid LEDs | [Browse & Download ♡](https://crinklecod.one/Mochibun/community/) |
 | **GitHub Releases** | Direct APK download | [Download Latest APK](https://github.com/smolstinkyprincess/Mochibun/releases/latest) |
 | **Obtainium** | One-click update tracking | [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun) |
 
