@@ -481,13 +481,8 @@ internal class LauncherKeyHandler(
     private var petPillCenterDown = false
 
     /**
-     * Keys while Mochibunny's Feed / Pet / Chat pill is open:
-     * - Left / Right move between options (honoring D-pad wrap-around).
-     * - Center / Enter (on release) or 1 / 2 / 3 (on press) run an option; the pill stays open.
-     * - Back / Escape (on release) closes the pill and returns focus to Mochibunny.
-     * - Other navigation and keypad keys are swallowed so nothing on Home reacts behind the pill.
-     * - Anything else (volume, call keys, ...) passes through to the system.
-     * Every handled key restarts the pill's auto-close timer.
+     * Pet pill keys. Center runs on release, 1–3 and Left/Right on press; navigation keys are
+     * swallowed so Home can't react behind the pill; anything else passes through.
      */
     private fun handlePetPillKey(nativeEvent: KeyEvent, state: LauncherKeypadState): Boolean {
         val keyCode = nativeEvent.keyCode

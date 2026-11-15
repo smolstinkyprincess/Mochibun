@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import one.crinklecod.mochibun.pet.DailyGrants
 import one.crinklecod.mochibun.pet.PetBackupCodec
-import one.crinklecod.mochibun.pet.PetClock
 import one.crinklecod.mochibun.pet.PetManager
 import one.crinklecod.mochibun.pet.PetPrefsStore
 import one.crinklecod.mochibun.pet.PetState
@@ -24,14 +23,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-
-/** Controllable time for the pet. */
-class FakePetClock(var now: Long, var day: Long, var hour: Int = 12, var boot: Long = now - 3_600_000L) : PetClock {
-    override fun nowMs(): Long = now
-    override fun epochDay(nowMs: Long): Long = day
-    override fun localHour(nowMs: Long): Int = hour
-    override fun bootEpochMs(nowMs: Long): Long = boot
-}
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])

@@ -1,7 +1,6 @@
 package one.crinklecod.mochibun.data.repository
 
 import android.content.Context
-import android.graphics.BitmapFactory
 import android.util.Log
 import kotlinx.serialization.encodeToString
 import one.crinklecod.mochibun.data.model.BundleMascotConfig
@@ -10,6 +9,7 @@ import one.crinklecod.mochibun.data.model.bundleJsonFormat
 import one.crinklecod.mochibun.ui.components.MascotAtlasLayout
 import one.crinklecod.mochibun.ui.components.MascotSpriteSource
 import one.crinklecod.mochibun.ui.components.MascotSpriteStore
+import one.crinklecod.mochibun.ui.components.decodeImageBounds
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -34,11 +34,7 @@ object CustomMascotManager {
      * Image size as Android's decoder sees it (`inJustDecodeBounds`: no pixels are decoded).
      * Swappable because plain JVM tests have no real BitmapFactory.
      */
-    internal var platformBounds: (File) -> Pair<Int, Int>? = { file ->
-        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.path, opts)
-        if (opts.outWidth > 0 && opts.outHeight > 0) opts.outWidth to opts.outHeight else null
-    }
+    internal var platformBounds: (File) -> Pair<Int, Int>? = ::decodeImageBounds
 
     fun atlasFile(context: Context): File = File(context.filesDir, ATLAS_FILE_NAME)
 

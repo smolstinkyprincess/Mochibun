@@ -500,14 +500,14 @@ fun MainLauncher(
     LaunchedEffect(isHomeScreenActive) {
         val returnToMascot = restoreMascotFocus
         restoreMascotFocus = false
-        if (isHomeScreenActive && returnToMascot) {
-            // Pet pill just closed: Home is active again with Mochibunny still focused
+        if (isHomeScreenActive) {
             homeTracker.wasActive = true
             homeTracker.settledTimestamp = SystemClock.uptimeMillis()
+        }
+        if (isHomeScreenActive && returnToMascot) {
+            // Pet pill just closed: keep Mochibunny focused
             homeFocusArea = HOME_FOCUS_MASCOT
         } else if (isHomeScreenActive) {
-            homeTracker.wasActive = true
-            homeTracker.settledTimestamp = SystemClock.uptimeMillis()
             val liveFavCount = launcherVm.favoriteItems.size
             selectedFavoriteIndex = savedFavoriteIndexOnHome.coerceIn(
                 0,

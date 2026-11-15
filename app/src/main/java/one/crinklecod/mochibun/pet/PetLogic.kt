@@ -44,9 +44,8 @@ object PetTuning {
     /** Decay never pushes a stat below this. She gets peckish and pouty, never "empty". */
     const val STAT_FLOOR = 0.15f
     /** Longest gap that counts toward decay (a week away decays the same as two days). */
-    const val MAX_ELAPSED_MS = 48L * 3_600_000L
-    private const val MS_PER_HOUR = 3_600_000f
-    const val HOURS_PER_MS = 1f / MS_PER_HOUR
+    const val MS_PER_HOUR = 3_600_000L
+    const val MAX_ELAPSED_MS = 48 * MS_PER_HOUR
 
     const val MAX_TREATS = 9
     const val FEED_FULLNESS = 0.30f
@@ -85,7 +84,7 @@ object PetLogic {
      * A never-updated state (`lastUpdatedMs == 0`) decays nothing either.
      */
     fun advance(s: PetState, nowMs: Long, currentEpochDay: Long): PetState {
-        val hours = decayElapsedMs(s.lastUpdatedMs, nowMs) * PetTuning.HOURS_PER_MS
+        val hours = decayElapsedMs(s.lastUpdatedMs, nowMs) / PetTuning.MS_PER_HOUR.toFloat()
         return s.copy(
             fullness = decay(s.fullness, PetTuning.FULLNESS_DECAY_PER_HOUR * hours),
             joy = decay(s.joy, PetTuning.JOY_DECAY_PER_HOUR * hours),

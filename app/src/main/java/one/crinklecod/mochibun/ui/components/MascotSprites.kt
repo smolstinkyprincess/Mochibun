@@ -23,6 +23,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import one.crinklecod.mochibun.R
+import one.crinklecod.mochibun.data.model.MascotAtlasValidator
 import one.crinklecod.mochibun.isOneGbClassDevice
 import one.crinklecod.mochibun.pet.PetMood
 import java.io.File
@@ -161,9 +162,6 @@ object MascotSpriteStore {
     /** Built-in atlas decode: 1024 x 2048 -> 512 x 1024 (128 px frames, ~2 MB instead of 8 MB). */
     const val BUILT_IN_SAMPLE_SIZE = 2
 
-    /** Largest custom atlas side (matches MascotAtlasValidator). */
-    private const val MAX_CUSTOM_ATLAS_PX = 2048
-
     private val _source = MutableStateFlow<MascotSpriteSource>(MascotSpriteSource.BuiltIn)
     val source: StateFlow<MascotSpriteSource> = _source.asStateFlow()
 
@@ -227,13 +225,9 @@ object MascotSpriteStore {
                     null
                 } else {
                     // Bounds first: never decode pixels of something oversized or off-layout
-                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeFile(source.file.path, bounds)
-                    val w = bounds.outWidth
-                    val h = bounds.outHeight
-                    if (w <= 0 || h <= 0 || w > MAX_CUSTOM_ATLAS_PX || h > MAX_CUSTOM_ATLAS_PX ||
-                        !source.layout.fitsIn(w, h)
-                    ) {
+                    val (w, h) = decodeImageBounds(source.file) ?: (0 to 0)
+                    val max = MascotAtlasValidator.MAX_ATLAS_PX
+                    if (w <= 0 || h <= 0 || w > max || h > max || !source.layout.fitsIn(w, h)) {
                         Log.w(TAG, "Custom atlas ${w}x$h rejected before decoding")
                         null
                     } else {
@@ -260,6 +254,13 @@ object MascotSpriteStore {
         }
         return MascotAtlas(bitmap.asImageBitmap(), layout)
     }
+}
+
+/** Image size via `inJustDecodeBounds` (no pixels decoded), or null if Android can't read it. */
+internal fun decodeImageBounds(file: File): Pair<Int, Int>? {
+    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, opts)
+    return if (opts.outWidth > 0 && opts.outHeight > 0) opts.outWidth to opts.outHeight else null
 }
 
 /** The active mascot atlas, shared app-wide. Null only until the first decode finishes. */

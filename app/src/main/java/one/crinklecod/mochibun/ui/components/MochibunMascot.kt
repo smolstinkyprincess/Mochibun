@@ -547,8 +547,7 @@ fun MochibunnyWithSpeechBubble(
     size: Dp = 56.dp,
     isFocused: Boolean = false,
     reaction: MascotReaction = MascotReaction(), // pet pill actions; each new id plays once
-    onTap: (() -> Unit)? = null, // when set, a tap calls this (Home opens the pet pill) instead of booping
-    onClick: (() -> Unit)? = null
+    onTap: () -> Unit // Home opens the pet pill
 ) {
     val context = LocalContext.current
     val theme = LocalLauncherTheme.current
@@ -608,11 +607,6 @@ fun MochibunnyWithSpeechBubble(
         )
     }
 
-    val onBoop = {
-        speak(chatLine(), MascotAnimSlot.TALK)
-        onClick?.invoke()
-    }
-    val handleTap: () -> Unit = { if (onTap != null) onTap() else onBoop() }
 
     // Starts at the current id, so coming back to Home never replays an old reaction.
     var handledReactionId by remember { mutableIntStateOf(reaction.id) }
@@ -633,7 +627,7 @@ fun MochibunnyWithSpeechBubble(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                handleTap()
+                onTap()
             }
     ) {
         // 1. Mascot sprite rendered underneath
@@ -645,7 +639,7 @@ fun MochibunnyWithSpeechBubble(
             reactionSlot = activeSlot.takeIf { it != MascotAnimSlot.IDLE },
             reactionStartTick = reactionStartTick,
             isBooped = activeSlot != MascotAnimSlot.IDLE,
-            onClick = handleTap
+            onClick = onTap
         )
 
         // 2. Floating speech bubble rendered on top with higher z-index

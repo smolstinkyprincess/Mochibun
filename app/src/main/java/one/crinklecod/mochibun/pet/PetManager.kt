@@ -133,7 +133,7 @@ object PetManager {
      * so a reboot is noticed even when the new counter is already above the old baseline.
      */
     fun onStepCounterSensor(rawSteps: Float) {
-        if (!(rawSteps >= 0f)) return // negative or NaN: ignore
+        if (rawSteps.isNaN() || rawSteps < 0f) return
         val raw = rawSteps.toLong().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         onStepsRead(raw, clock.bootEpochMs(clock.nowMs()))
     }

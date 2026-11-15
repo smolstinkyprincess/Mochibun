@@ -1,7 +1,11 @@
 package one.crinklecod.mochibun.ui.screens.settings
 
 import one.crinklecod.mochibun.ui.dialogs.ResizeWithKeyboard
+import android.net.Uri
 import android.view.KeyEvent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -33,6 +37,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
@@ -40,13 +47,6 @@ import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.ui.components.MascotSpriteSource
 import one.crinklecod.mochibun.ui.components.MascotSpriteStore
-import android.net.Uri
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
@@ -94,12 +94,9 @@ internal fun AppearanceSettingsSubScreen(
         if (uri != null) {
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
-                    try {
-                        context.contentResolver.openInputStream(uri)?.use { CustomMascotManager.importPng(context, it) }
-                            ?: Result.failure(IllegalArgumentException("Couldn't open that file"))
-                    } catch (e: Exception) {
-                        Result.failure(IllegalArgumentException("Couldn't open that file"))
-                    }
+                    runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
+                        ?.use { CustomMascotManager.importPng(context, it) }
+                        ?: Result.failure(IllegalArgumentException("Couldn't open that file"))
                 }
                 val message = result.fold(
                     onSuccess = { "♡ Custom mascot applied" },

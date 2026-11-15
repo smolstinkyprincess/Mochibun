@@ -25,6 +25,7 @@ import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -506,15 +507,7 @@ object ThemeBundleManager {
      * drained under the whole-bundle limit, so only the mascot is rejected, not the bundle.
      */
     private fun readMascotEntry(input: InputStream, output: OutputStream, totalCounter: AtomicLong): Boolean {
-        val counting = object : java.io.FilterInputStream(input) {
-            override fun read(b: ByteArray, off: Int, len: Int): Int {
-                val n = super.read(b, off, len)
-                if (n > 0 && totalCounter.addAndGet(n.toLong()) > MAX_TOTAL_BUNDLE_BYTES) {
-                    throw IllegalArgumentException("Theme bundle entry exceeds maximum allowed size")
-                }
-                return n
-            }
-        }
+        val counting = BundleByteCounter(input, totalCounter)
         val withinLimit = MascotAtlasValidator.copyAtMost(counting, output, MascotAtlasValidator.MAX_ATLAS_BYTES)
         if (!withinLimit) copyBounded(input, DISCARD_OUTPUT_STREAM, MAX_TOTAL_BUNDLE_BYTES, totalCounter)
         return withinLimit
@@ -556,6 +549,17 @@ object ThemeBundleManager {
 
     fun hexToColorInt(hex: String, defaultColor: Int): Int =
         safeParseColorInt(hex, defaultColor)
+}
+
+/** Adds every byte read to the whole-bundle total and fails once the bundle is too big. */
+private class BundleByteCounter(input: InputStream, private val total: AtomicLong) : FilterInputStream(input) {
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        val n = super.read(b, off, len)
+        if (n > 0 && total.addAndGet(n.toLong()) > ThemeBundleManager.MAX_TOTAL_BUNDLE_BYTES) {
+            throw IllegalArgumentException("Theme bundle entry exceeds maximum allowed size")
+        }
+        return n
+    }
 }
 
 /** Keeps the first 24 bytes written (a PNG signature + IHDR) and discards the rest. */

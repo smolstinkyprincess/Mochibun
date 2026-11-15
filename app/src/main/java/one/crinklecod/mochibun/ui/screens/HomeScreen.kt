@@ -791,7 +791,7 @@ fun FavoritesCard(
     petPillSelection: Int = 0,
     petPillBounds: PetPillBounds? = null,
     mascotReaction: MascotReaction = MascotReaction(),
-    onMascotClick: (() -> Unit)? = null,
+    onMascotClick: () -> Unit = {},
     onPetPillOptionClick: (Int) -> Unit = {},
     folderIconRefreshKey: Int = 0,
     onAppClick: (LauncherApp) -> Unit = {},
