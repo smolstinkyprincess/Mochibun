@@ -4,7 +4,11 @@ import one.crinklecod.mochibun.pet.PetMood
 import one.crinklecod.mochibun.ui.components.LOW_BATTERY_LINES
 import one.crinklecod.mochibun.ui.components.MUSIC_LINES
 import one.crinklecod.mochibun.ui.components.PET_FED_LINES
+import one.crinklecod.mochibun.ui.components.MascotAnimSlot
+import one.crinklecod.mochibun.ui.components.MascotReactionKind
 import one.crinklecod.mochibun.ui.components.PET_NO_TREATS_LINES
+import one.crinklecod.mochibun.ui.components.PET_PETTED_LINES
+import one.crinklecod.mochibun.ui.components.selectReactionLine
 import one.crinklecod.mochibun.ui.components.pickLineAvoiding
 import one.crinklecod.mochibun.ui.components.petMoodLines
 import one.crinklecod.mochibun.ui.components.selectSpeechBubbleDialogue
@@ -17,7 +21,7 @@ class PetSpeechLinesTest {
 
     private val allPools: Map<String, List<String>> =
         PetMood.entries.associate { it.name to petMoodLines(it) } +
-            mapOf("FED" to PET_FED_LINES, "NO_TREATS" to PET_NO_TREATS_LINES)
+            mapOf("FED" to PET_FED_LINES, "NO_TREATS" to PET_NO_TREATS_LINES, "PETTED" to PET_PETTED_LINES)
 
     @Test
     fun everyPoolHasFourOrMoreShortSingleLines() {
@@ -100,5 +104,26 @@ class PetSpeechLinesTest {
             assertNotEquals(prev, line)
             prev = line
         }
+    }
+
+    @Test
+    fun pillReactions_speakFromTheRightPool_andPlayTheRightSlot() {
+        val chat = "chat line"
+        repeat(20) {
+            assertTrue(selectReactionLine(MascotReactionKind.FED, null) { chat } in PET_FED_LINES)
+            assertTrue(selectReactionLine(MascotReactionKind.NO_TREATS, null) { chat } in PET_NO_TREATS_LINES)
+            assertTrue(selectReactionLine(MascotReactionKind.PETTED, null) { chat } in PET_PETTED_LINES)
+        }
+        assertEquals(chat, selectReactionLine(MascotReactionKind.CHAT, null) { chat })
+
+        val previous = PET_FED_LINES[0]
+        repeat(20) { assertNotEquals(previous, selectReactionLine(MascotReactionKind.FED, previous) { chat }) }
+
+        assertEquals(MascotAnimSlot.EAT, MascotReactionKind.FED.slot)
+        assertEquals(MascotAnimSlot.PET, MascotReactionKind.PETTED.slot)
+        assertEquals(MascotAnimSlot.TALK, MascotReactionKind.CHAT.slot)
+        assertEquals(MascotAnimSlot.TALK, MascotReactionKind.NO_TREATS.slot)
+        // Built-in atlas row order
+        assertEquals((0..7).toList(), MascotAnimSlot.entries.map { it.defaultRow })
     }
 }

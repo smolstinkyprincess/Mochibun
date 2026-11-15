@@ -47,9 +47,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import one.crinklecod.mochibun.ui.components.WallpaperOverlay
+import one.crinklecod.mochibun.core.keypad.HOME_FOCUS_MASCOT
 import one.crinklecod.mochibun.core.keypad.HomeTransitionTracker
 import one.crinklecod.mochibun.core.keypad.LauncherKeypadActions
 import one.crinklecod.mochibun.core.keypad.LauncherKeypadState
+import one.crinklecod.mochibun.core.keypad.PET_PILL_AUTO_CLOSE_MS
+import one.crinklecod.mochibun.core.keypad.PET_PILL_FEED
+import one.crinklecod.mochibun.core.keypad.PET_PILL_PET
 import one.crinklecod.mochibun.core.keypad.T9InputState
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
@@ -64,6 +68,9 @@ import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
 import one.crinklecod.mochibun.service.InputArbiter
 import one.crinklecod.mochibun.ui.components.WidgetPage
+import one.crinklecod.mochibun.ui.components.MascotReaction
+import one.crinklecod.mochibun.ui.components.MascotReactionKind
+import one.crinklecod.mochibun.pet.PetManager
 import one.crinklecod.mochibun.ui.dialogs.AppActionDialog
 import one.crinklecod.mochibun.ui.dialogs.CreateFavoriteFolderDialog
 import one.crinklecod.mochibun.ui.dialogs.FavoriteFolderDialog
@@ -124,6 +131,8 @@ sealed interface ActiveModal {
     data object HiddenApps : ActiveModal
     data object KaomojiWheel : ActiveModal
     data object QuickMemo : ActiveModal
+    /** Mochibunny's Feed / Pet / Chat pill, drawn inside Home; LauncherKeyHandler routes its keys. */
+    data object PetPill : ActiveModal
 }
 
 // main launcher composable managing focus, gestures, state, and page navigation
@@ -295,7 +304,12 @@ fun MainLauncher(
     var drawerRailHoveredLetter by remember { mutableStateOf<Char?>('A') }
     // Home focus area: 0 = FavoritesCard row, 1 = StatusCard (launcher options / page switcher)
     var homeFocusArea by remember { mutableIntStateOf(0) }
-    var mascotBoopRequest by remember { mutableIntStateOf(0) }
+    // Mochibunny pet pill: selected option, auto-close timer key, and the latest reaction for her
+    var petPillSelection by remember { mutableIntStateOf(PET_PILL_FEED) }
+    var petPillInteractionTick by remember { mutableIntStateOf(0) }
+    var mascotReaction by remember { mutableStateOf(MascotReaction()) }
+    // Set when the pill closes back to Home, so the focus reset below keeps Mochibunny focused
+    var restoreMascotFocus by remember { mutableStateOf(false) }
 
 
     val moveFavoriteSlotItem: (itemKey: String, direction: Int) -> Unit = remember(launcherVm) {
@@ -338,6 +352,58 @@ fun MainLauncher(
     val isDrawerActive = drawerOpen && !anyModalOpen
 
     val isModalActive = anyModalOpen
+
+    // Home is on screen with at most the pet pill over it. Unlike isHomeScreenActive (false while
+    // the pill, a modal, owns the keys), this keeps Home visuals alive: mascot glow & bob, ticker.
+    val isPetPillOpen = activeModal is ActiveModal.PetPill
+    val isHomeVisible = !drawerOpen &&
+        (activeModal == null || isPetPillOpen) &&
+        (pendingTargetPage == null || pendingTargetPage == 1) &&
+        pagerState.currentPage == 1 &&
+        pagerState.targetPage == 1 &&
+        pagerState.settledPage == 1 &&
+        !pagerState.isScrollInProgress
+
+    fun openPetPillModal() {
+        if (activeModal != null || drawerOpen) return
+        PetManager.refresh()
+        homeFocusArea = HOME_FOCUS_MASCOT
+        petPillSelection = PET_PILL_FEED
+        petPillInteractionTick++
+        activeModal = ActiveModal.PetPill
+    }
+
+    // Back, tap outside, or the auto-close timer: Home focus goes back to Mochibunny.
+    // (Lid close, Home press and screen-off reset clear activeModal directly and keep their own reset.)
+    fun closePetPillModal() {
+        if (activeModal !is ActiveModal.PetPill) return
+        activeModal = null
+        homeFocusArea = HOME_FOCUS_MASCOT
+        restoreMascotFocus = true
+    }
+
+    fun runPetPillOption(index: Int) {
+        if (activeModal !is ActiveModal.PetPill) return
+        petPillSelection = index
+        petPillInteractionTick++
+        val kind = when (index) {
+            PET_PILL_FEED -> if (PetManager.feed()) MascotReactionKind.FED else MascotReactionKind.NO_TREATS
+            PET_PILL_PET -> {
+                PetManager.pet()
+                MascotReactionKind.PETTED
+            }
+            else -> MascotReactionKind.CHAT
+        }
+        mascotReaction = MascotReaction(id = mascotReaction.id + 1, kind = kind)
+    }
+
+    // Auto-close after PET_PILL_AUTO_CLOSE_MS without a key or tap (every interaction bumps the tick)
+    LaunchedEffect(isPetPillOpen, petPillInteractionTick) {
+        if (isPetPillOpen) {
+            delay(PET_PILL_AUTO_CLOSE_MS)
+            closePetPillModal()
+        }
+    }
 
     // Flip physically closed (never a display timeout): dismiss transient modals, collapse folder/drawer, reset T9 state, and position on Home
     // Set on a real close so the open action runs on a flip open, not on a display wake with the flip already open
@@ -426,7 +492,14 @@ fun MainLauncher(
     }
 
     LaunchedEffect(isHomeScreenActive) {
-        if (isHomeScreenActive) {
+        val returnToMascot = restoreMascotFocus
+        restoreMascotFocus = false
+        if (isHomeScreenActive && returnToMascot) {
+            // Pet pill just closed: Home is active again with Mochibunny still focused
+            homeTracker.wasActive = true
+            homeTracker.settledTimestamp = SystemClock.uptimeMillis()
+            homeFocusArea = HOME_FOCUS_MASCOT
+        } else if (isHomeScreenActive) {
             homeTracker.wasActive = true
             homeTracker.settledTimestamp = SystemClock.uptimeMillis()
             val liveFavCount = launcherVm.favoriteItems.size
@@ -615,8 +688,12 @@ fun MainLauncher(
             override fun recordAppLaunch(packageName: String) {
                 launcherVm.recordAppLaunch(packageName)
             }
-            override fun boopMascot() { mascotBoopRequest++ }
             override fun dismissModal() { activeModal = null }
+            override fun openPetPill() = openPetPillModal()
+            override fun setPetPillSelection(index: Int) { petPillSelection = index }
+            override fun activatePetPillOption(index: Int) = runPetPillOption(index)
+            override fun closePetPill() = closePetPillModal()
+            override fun onPetPillInteraction() { petPillInteractionTick++ }
         }
     }
 
@@ -658,7 +735,9 @@ fun MainLauncher(
             currentPage = pagerState.currentPage,
             // Text fields only exist inside modals. Requiring one keeps a stale flag (a dialog
             // closed without a focus event) from silencing digits on Home and in the drawer.
-            isInputActive = InputArbiter.isInputActive && activeModal != null
+            isInputActive = InputArbiter.isInputActive && activeModal != null,
+            isPetPillOpen = activeModal is ActiveModal.PetPill,
+            petPillSelectedIndex = petPillSelection
         )
     }
 
@@ -860,6 +939,7 @@ fun MainLauncher(
                         poundKeyState = 0
                         activeModal = null
                     }
+                    is ActiveModal.PetPill -> closePetPillModal()
                     else -> {
                         activeModal = null
                     }
@@ -1027,7 +1107,15 @@ fun MainLauncher(
                                 folderIconRefreshKey = launcherVm.folderIconRefreshKey,
                                 homeFocusArea = homeFocusArea,
                                 isHomeScreenActive = isHomeScreenActive,
-                                mascotBoopRequest = mascotBoopRequest,
+                                isHomeVisible = isHomeVisible,
+                                isPetPillOpen = isPetPillOpen,
+                                petPillSelection = petPillSelection,
+                                mascotReaction = mascotReaction,
+                                onMascotClick = {
+                                    if (activeModal is ActiveModal.PetPill) closePetPillModal() else openPetPillModal()
+                                },
+                                onPetPillOptionClick = { index -> runPetPillOption(index) },
+                                onDismissPetPill = { closePetPillModal() },
                                 onHeaderClick = onHomeHeaderClick,
                                 onHeaderLongClick = onHomeHeaderLongClick,
                                 onAppClick = onHomeAppClick,
@@ -1491,6 +1579,10 @@ fun MainLauncher(
                         onApply = onApplyBundle,
                         onDismiss = onDismissBundle
                     )
+                }
+
+                is ActiveModal.PetPill -> {
+                    // Drawn inside HomeScreen, next to Mochibunny (not a dialog window)
                 }
 
                 null -> {

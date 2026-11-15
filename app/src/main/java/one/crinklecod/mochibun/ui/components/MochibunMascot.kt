@@ -377,6 +377,29 @@ val PET_NO_TREATS_LINES = listOf(
     "treat bag's empty (｡•́︿•̀｡)"
 )
 
+val PET_PETTED_LINES = listOf(
+    "hehe, that tickles ♡",
+    "more pats please~",
+    "soft paws ₍ᐢ. ̫.ᐢ₎",
+    "(˶ᵔ ᵕ ᵔ˶) ♡",
+    "best friend ever ♡"
+)
+
+/**
+ * The bubble line for a pill reaction, never repeating [previousLine]. [chatLine] supplies the
+ * mood-driven Chat line (it needs a Context and her current mood, so the caller provides it).
+ */
+fun selectReactionLine(
+    kind: MascotReactionKind,
+    previousLine: String?,
+    chatLine: () -> String
+): String = when (kind) {
+    MascotReactionKind.CHAT -> chatLine()
+    MascotReactionKind.FED -> pickLineAvoiding(PET_FED_LINES, previousLine)
+    MascotReactionKind.NO_TREATS -> pickLineAvoiding(PET_NO_TREATS_LINES, previousLine)
+    MascotReactionKind.PETTED -> pickLineAvoiding(PET_PETTED_LINES, previousLine)
+}
+
 fun petMoodLines(mood: PetMood): List<String> = when (mood) {
     PetMood.HAPPY -> PET_HAPPY_LINES
     PetMood.CONTENT -> PET_CONTENT_LINES
@@ -546,7 +569,11 @@ fun SpeechBubble(
 /**
  * Mochibunny Mascot coupled with a dynamic, keitai-inspired speech bubble reaction system.
  *
- * When booped (tapped / DPAD_CENTER clicked):
+ * On Home a tap calls [onTap] (opens the Feed / Pet / Chat pill) and each new [reaction] from the
+ * pill plays once: its bubble line plus its animation slot (EAT / PET / TALK). Without [onTap], a
+ * tap boops her directly.
+ *
+ * When she speaks (boop or pill reaction):
  * - Cancels any ongoing dismiss timer.
  * - Picks a new context-aware dialogue line avoiding the immediate predecessor.
  * - Triggers cheer bounce on the mascot and a subtle pop bounce on the bubble.
@@ -562,7 +589,8 @@ fun MochibunnyWithSpeechBubble(
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
     isFocused: Boolean = false,
-    boopRequest: Int = 0, // bumped by the D-pad (Center on the focused mascot); boops like a tap
+    reaction: MascotReaction = MascotReaction(), // pet pill actions; each new id plays once
+    onTap: (() -> Unit)? = null, // when set, a tap calls this (Home opens the pet pill) instead of booping
     onClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -572,6 +600,9 @@ fun MochibunnyWithSpeechBubble(
     var currentDialogue by remember { mutableStateOf<String?>(null) }
     var lastSpokenLine by remember { mutableStateOf<String?>(null) }
     var dismissJob by remember { mutableStateOf<Job?>(null) }
+    // The slot her current reaction plays (EAT / PET / TALK); IDLE when she isn't reacting.
+    // Until the atlas renderer lands, any non-idle slot shows the existing cheer hop.
+    var activeSlot by remember { mutableStateOf(MascotAnimSlot.IDLE) }
     var popAnimKey by remember { mutableIntStateOf(0) }
     val popScale = remember { Animatable(1f) }
 
@@ -594,26 +625,42 @@ fun MochibunnyWithSpeechBubble(
         }
     }
 
-    val onBoop = {
+    fun speak(line: String, slot: MascotAnimSlot) {
         dismissJob?.cancel()
-        val newLine = selectSpeechBubbleDialogue(
+        currentDialogue = line
+        lastSpokenLine = line
+        activeSlot = slot
+        popAnimKey++
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+        dismissJob = coroutineScope.launch {
+            delay(1250L)
+            currentDialogue = null
+            activeSlot = MascotAnimSlot.IDLE
+        }
+    }
+
+    val chatLine = {
+        selectSpeechBubbleDialogue(
             context,
             lastSpokenLine ?: currentDialogue,
             petMood = PetManager.currentMood()
         )
-        currentDialogue = newLine
-        lastSpokenLine = newLine
-        popAnimKey++
-        SoundEffectManager.play(context, SoundEffect.SELECT)
-        onClick?.invoke()
-        dismissJob = coroutineScope.launch {
-            delay(1250L)
-            currentDialogue = null
-        }
     }
 
-    LaunchedEffect(boopRequest) {
-        if (boopRequest > 0) onBoop()
+    val onBoop = {
+        speak(chatLine(), MascotAnimSlot.TALK)
+        onClick?.invoke()
+    }
+    val handleTap: () -> Unit = { if (onTap != null) onTap() else onBoop() }
+
+    // Starts at the current id, so coming back to Home never replays an old reaction.
+    var handledReactionId by remember { mutableIntStateOf(reaction.id) }
+    LaunchedEffect(reaction.id) {
+        if (reaction.id > handledReactionId) {
+            handledReactionId = reaction.id
+            val line = selectReactionLine(reaction.kind, lastSpokenLine ?: currentDialogue, chatLine)
+            speak(line, reaction.kind.slot)
+        }
     }
 
     Box(
@@ -625,7 +672,7 @@ fun MochibunnyWithSpeechBubble(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                onBoop()
+                handleTap()
             }
     ) {
         // 1. Mascot sprite rendered underneath
@@ -634,8 +681,8 @@ fun MochibunnyWithSpeechBubble(
             useAnimation = useAnimation,
             themeTintColor = themeTintColor,
             size = size,
-            isBooped = currentDialogue != null,
-            onClick = onBoop
+            isBooped = activeSlot != MascotAnimSlot.IDLE,
+            onClick = handleTap
         )
 
         // 2. Floating speech bubble rendered on top with higher z-index
