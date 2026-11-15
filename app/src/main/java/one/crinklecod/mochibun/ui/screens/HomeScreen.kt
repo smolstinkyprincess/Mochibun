@@ -48,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.NotificationTracker
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.Dispatchers
@@ -156,7 +157,7 @@ fun HomeScreen(
     userName: String = "",
     selectedFavoriteIndex: Int = 0,
     folderIconRefreshKey: Int = 0,
-    homeFocusArea: Int = 0, // 0 = favorites, 1 = header banner, 2 = drawer handle, 3 = clock, 4 = mascot
+    homeFocusArea: Int = 0, // 0 = favorites, 1 = header banner, 2 = drawer handle, 3 = clock, 4 = mascot, 5 = sub-display ticker
     isHomeScreenActive: Boolean = true,
     mascotBoopRequest: Int = 0,
     onHeaderClick: () -> Unit = {},
@@ -173,6 +174,8 @@ fun HomeScreen(
     val theme = LocalLauncherTheme.current
     val notifications by NotificationTracker.notifications.collectAsState()
     val unreadNotifCount = notifications.size
+    val isTickerEnabled by PreferencesManager.isSubDisplayTickerEnabled.collectAsState()
+    val isTickerDark by PreferencesManager.isSubDisplayTickerDark.collectAsState()
 
     Box(
         modifier = modifier
@@ -197,7 +200,28 @@ fun HomeScreen(
                 onLongClick = onHeaderLongClick
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            if (isTickerEnabled) {
+                // 1b. Outer sub-display ticker: 5 + 26 + 5dp, adds ~26dp net (the Favorites
+                // card had ~100dp of slack above the clouds on the 320x533dp AT-M120 screen).
+                Spacer(modifier = Modifier.height(5.dp))
+                SubDisplayTickerStrip(
+                    unreadCount = unreadNotifCount,
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    isActivePage = isHomeScreenActive,
+                    isDarkStyle = isTickerDark,
+                    isFocused = isHomeScreenActive && homeFocusArea == 5,
+                    onClick = {
+                        if (subDisplayTickerTargetPage(unreadNotifCount) == SUB_DISPLAY_PAGE_NOTIFICATIONS) {
+                            onNavigateToNotifications()
+                        } else {
+                            onNavigateToStats()
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(5.dp))
+            } else {
+                Spacer(modifier = Modifier.height(10.dp))
+            }
 
             // 2. Digital Clock & Date Section
             ClockWidget(

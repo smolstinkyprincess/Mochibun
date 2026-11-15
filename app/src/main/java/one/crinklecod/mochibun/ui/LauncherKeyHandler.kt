@@ -31,6 +31,8 @@ import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.isDpadOrActionKey
 import one.crinklecod.mochibun.ui.screens.firstLetterOf
 import one.crinklecod.mochibun.ui.screens.launchClockApp
+import one.crinklecod.mochibun.ui.components.subDisplayTickerTargetPage
+import one.crinklecod.mochibun.data.repository.NotificationTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -115,6 +117,10 @@ private val T9_LETTERS_NONE = CharArray(0)
 private const val APP_SWITCH_HOLD_MS = 400L
 private const val POUND_HOLD_MS = 400L
 private const val HOME_HOLD_MS = 400L
+/** Home focus area of the outer sub-display ticker strip (see HomeScreen's homeFocusArea). */
+private const val HOME_FOCUS_TICKER = 5
+
+private fun isSubDisplayTickerOn(): Boolean = PreferencesManager.isSubDisplayTickerEnabled.value
 
 internal class LauncherKeyHandler(
     private val context: Context,
@@ -453,6 +459,11 @@ internal class LauncherKeyHandler(
                             launchClockApp(context)
                         } else if (state.homeFocusArea == 4) {
                             actions.boopMascot()
+                        } else if (state.homeFocusArea == HOME_FOCUS_TICKER && isSubDisplayTickerOn()) {
+                            val target = subDisplayTickerTargetPage(NotificationTracker.notifications.value.size)
+                            actions.setSavedFavoriteIndexOnHome(state.selectedFavoriteIndex)
+                            actions.setPendingTargetPage(target)
+                            scope.launch { pagerState.animateScrollToPage(target) }
                         } else {
                             actions.openLauncherMenu()
                         }
@@ -829,7 +840,8 @@ internal class LauncherKeyHandler(
             val isCooldown = (SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
             if (isCooldown) return true
 
-            // Top to bottom: 1 header, 3 clock, 4 mascot, 0 favorites (skipped when empty), 2 drawer handle
+            // Top to bottom: 1 header, 5 sub-display ticker (when enabled), 3 clock, 4 mascot,
+            // 0 favorites (skipped when empty), 2 drawer handle
             val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
             if (state.homeFocusArea == 2) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
@@ -841,6 +853,9 @@ internal class LauncherKeyHandler(
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(3)
             } else if (state.homeFocusArea == 3) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                actions.setHomeFocusArea(if (isSubDisplayTickerOn()) HOME_FOCUS_TICKER else 1)
+            } else if (state.homeFocusArea == HOME_FOCUS_TICKER) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(1)
             } else if (nativeEvent.repeatCount == 0) {
@@ -897,6 +912,9 @@ internal class LauncherKeyHandler(
 
             val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
             if (state.homeFocusArea == 1) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+                actions.setHomeFocusArea(if (isSubDisplayTickerOn()) HOME_FOCUS_TICKER else 3)
+            } else if (state.homeFocusArea == HOME_FOCUS_TICKER) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setHomeFocusArea(3)
             } else if (state.homeFocusArea == 3) {

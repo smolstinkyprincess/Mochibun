@@ -70,15 +70,19 @@ internal fun AppearanceSettingsSubScreen(
     val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
     val systemMonitorInterval by PreferencesManager.systemMonitorInterval.collectAsState()
     val isPhotoFrameEnabled by PreferencesManager.isPhotoFrameEnabled.collectAsState()
+    val isSubDisplayTickerEnabled by PreferencesManager.isSubDisplayTickerEnabled.collectAsState()
+    val isSubDisplayTickerDark by PreferencesManager.isSubDisplayTickerDark.collectAsState()
     val fontId by PreferencesManager.themeFontFamily.collectAsState()
     val fontOptions by TypographyManager.options.collectAsState()
 
     // Dynamic item list based on custom wallpaper state
-    val items = remember(hasCustomWallpaper, isSystemMonitorEnabled) {
+    val items = remember(hasCustomWallpaper, isSystemMonitorEnabled, isSubDisplayTickerEnabled) {
         buildList {
             add("theme")
             add("typography")
             add("name")
+            add("sub_display_ticker")
+            if (isSubDisplayTickerEnabled) add("sub_display_style")
             add("pick_wallpaper")
             if (hasCustomWallpaper) {
                 add("reset_wallpaper")
@@ -96,7 +100,7 @@ internal fun AppearanceSettingsSubScreen(
     val targetCardIndex = remember(focusedIndex, items) {
         when (items.getOrNull(focusedIndex)) {
             "theme", "typography" -> 0
-            "name" -> 1
+            "name", "sub_display_ticker", "sub_display_style" -> 1
             "icon_pack", "pick_wallpaper", "reset_wallpaper", "wallpaper_stickers" -> 2
             "system_monitor", "monitor_interval", "photo_frame" -> 3
             else -> 0
@@ -157,6 +161,14 @@ internal fun AppearanceSettingsSubScreen(
                 PreferencesManager.setSystemMonitorInterval(context, next)
             }
             "photo_frame" -> PreferencesManager.setPhotoFrameEnabled(context, !isPhotoFrameEnabled)
+            "sub_display_ticker" -> {
+                PreferencesManager.setSubDisplayTickerEnabled(context, !isSubDisplayTickerEnabled)
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "sub_display_style" -> {
+                PreferencesManager.setSubDisplayTickerDark(context, !isSubDisplayTickerDark)
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
         }
     }
 
@@ -225,6 +237,10 @@ internal fun AppearanceSettingsSubScreen(
                             }
                             PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
                             SoundEffectManager.play(context, SoundEffect.NAV)
+                        } else if (items.getOrNull(focusedIndex) == "sub_display_style") {
+                            // Two-value stepper: Left / Right both flip the style.
+                            PreferencesManager.setSubDisplayTickerDark(context, !isSubDisplayTickerDark)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
                         } else {
                             val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
                             focusedIndex = (focusedIndex + direction + totalItems) % totalItems
@@ -291,6 +307,27 @@ internal fun AppearanceSettingsSubScreen(
                             isEditingName = true
                         }
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Outer Sub-Display Ticker",
+                        subtitle = "Retro keitai status marquee on Home",
+                        checked = isSubDisplayTickerEnabled,
+                        isFocused = items.getOrNull(focusedIndex) == "sub_display_ticker",
+                        jumpNumber = (items.indexOf("sub_display_ticker") + 1).takeIf { it <= 9 },
+                        onCheckedChange = { PreferencesManager.setSubDisplayTickerEnabled(context, it) }
+                    )
+                    if (isSubDisplayTickerEnabled) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsStepperRow(
+                            title = "Sub-Display Style",
+                            subtitle = "Lid-screen look of the ticker",
+                            valueDisplay = if (isSubDisplayTickerDark) "Dark Sub-OLED" else "Pastel Theme",
+                            isFocused = items.getOrNull(focusedIndex) == "sub_display_style",
+                            jumpNumber = (items.indexOf("sub_display_style") + 1).takeIf { it <= 9 },
+                            onDecrement = { PreferencesManager.setSubDisplayTickerDark(context, !isSubDisplayTickerDark) },
+                            onIncrement = { PreferencesManager.setSubDisplayTickerDark(context, !isSubDisplayTickerDark) }
+                        )
+                    }
                 }
             }
 

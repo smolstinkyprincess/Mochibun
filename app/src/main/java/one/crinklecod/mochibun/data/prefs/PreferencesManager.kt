@@ -173,6 +173,10 @@ object PreferencesManager {
     const val DEFAULT_PHOTO_FRAME_LABEL = "Mochi ♡"
     const val KEY_PHOTO_FRAME_ENABLED = "pref_photo_frame_enabled"
     const val DEFAULT_PHOTO_FRAME_ENABLED = true
+    const val KEY_SUB_DISPLAY_TICKER_ENABLED = "pref_sub_display_ticker_enabled"
+    const val DEFAULT_SUB_DISPLAY_TICKER_ENABLED = true
+    const val KEY_SUB_DISPLAY_TICKER_DARK = "pref_sub_display_ticker_dark"
+    const val DEFAULT_SUB_DISPLAY_TICKER_DARK = false
     const val KEY_HIDDEN_APPS = "hidden_apps"
     const val KEY_FAVORITE_ITEMS_ORDERED = "favorite_items_ordered_v1"
     const val KEY_CUSTOM_ICON_PREFIX = "custom_icon_"
@@ -254,6 +258,14 @@ object PreferencesManager {
 
     private val _isPhotoFrameEnabled = MutableStateFlow(DEFAULT_PHOTO_FRAME_ENABLED)
     val isPhotoFrameEnabled: StateFlow<Boolean> = _isPhotoFrameEnabled.asStateFlow()
+
+    private val _isSubDisplayTickerEnabled = MutableStateFlow(DEFAULT_SUB_DISPLAY_TICKER_ENABLED)
+    /** Retro keitai "outer sub-display" status marquee on Home. */
+    val isSubDisplayTickerEnabled: StateFlow<Boolean> = _isSubDisplayTickerEnabled.asStateFlow()
+
+    private val _isSubDisplayTickerDark = MutableStateFlow(DEFAULT_SUB_DISPLAY_TICKER_DARK)
+    /** true = dark sub-OLED look, false = pastel theme-matched look. */
+    val isSubDisplayTickerDark: StateFlow<Boolean> = _isSubDisplayTickerDark.asStateFlow()
 
     private val _showRootOptions = MutableStateFlow(false)
     /** Whether root / LSPosed rows are shown in settings. Loaded in [init]. */
@@ -372,6 +384,14 @@ object PreferencesManager {
                 KEY_PHOTO_FRAME_ENABLED,
                 DEFAULT_PHOTO_FRAME_ENABLED
             )
+            _isSubDisplayTickerEnabled.value = prefs.getBoolean(
+                KEY_SUB_DISPLAY_TICKER_ENABLED,
+                DEFAULT_SUB_DISPLAY_TICKER_ENABLED
+            )
+            _isSubDisplayTickerDark.value = prefs.getBoolean(
+                KEY_SUB_DISPLAY_TICKER_DARK,
+                DEFAULT_SUB_DISPLAY_TICKER_DARK
+            )
         }
         _showRootOptions.value = isShowRootOptions(context)
     }
@@ -487,6 +507,30 @@ object PreferencesManager {
     fun setPhotoFrameEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_PHOTO_FRAME_ENABLED, enabled).apply()
         _isPhotoFrameEnabled.value = enabled
+    }
+
+    fun isSubDisplayTickerEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(
+            KEY_SUB_DISPLAY_TICKER_ENABLED,
+            DEFAULT_SUB_DISPLAY_TICKER_ENABLED
+        )
+    }
+
+    fun setSubDisplayTickerEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SUB_DISPLAY_TICKER_ENABLED, enabled).apply()
+        _isSubDisplayTickerEnabled.value = enabled
+    }
+
+    fun isSubDisplayTickerDark(context: Context): Boolean {
+        return getPrefs(context).getBoolean(
+            KEY_SUB_DISPLAY_TICKER_DARK,
+            DEFAULT_SUB_DISPLAY_TICKER_DARK
+        )
+    }
+
+    fun setSubDisplayTickerDark(context: Context, dark: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SUB_DISPLAY_TICKER_DARK, dark).apply()
+        _isSubDisplayTickerDark.value = dark
     }
 
     fun isFolderGridMode(context: Context): Boolean {

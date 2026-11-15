@@ -294,6 +294,12 @@ fun MainLauncher(
     var homeFocusArea by remember { mutableIntStateOf(0) }
     var mascotBoopRequest by remember { mutableIntStateOf(0) }
 
+    // Area 5 is the sub-display ticker; if it's switched off while focused, fall back to the banner.
+    val isSubDisplayTickerEnabled by PreferencesManager.isSubDisplayTickerEnabled.collectAsState()
+    LaunchedEffect(isSubDisplayTickerEnabled) {
+        if (!isSubDisplayTickerEnabled && homeFocusArea == 5) homeFocusArea = 1
+    }
+
     val moveFavoriteSlotItem: (itemKey: String, direction: Int) -> Unit = remember(launcherVm) {
         { itemKey, direction ->
             val targetIndex = launcherVm.moveFavoriteSlotItem(itemKey, direction)
