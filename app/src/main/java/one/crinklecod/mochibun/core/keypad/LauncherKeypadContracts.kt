@@ -77,8 +77,68 @@ interface LauncherKeypadActions {
     fun openLauncherMenu()
     fun openSpeedDial(digit: Int)
     fun openKaomojiWheel() {}
+    fun openQuickMemo() {}
     fun cycleDrawerSortMode() {}
     fun recordAppLaunch(packageName: String) {}
     fun boopMascot() {}
     fun dismissModal() {}
+}
+
+/** Home focus areas (see HomeScreen's `homeFocusArea`). */
+const val HOME_FOCUS_FAVORITES = 0
+const val HOME_FOCUS_HEADER = 1
+const val HOME_FOCUS_DRAWER_HANDLE = 2
+const val HOME_FOCUS_CLOCK = 3
+const val HOME_FOCUS_MASCOT = 4
+
+/** Every Home focus area in on-screen order, top to bottom. */
+private val HOME_FOCUS_FULL_ORDER = intArrayOf(
+    HOME_FOCUS_HEADER,
+    HOME_FOCUS_CLOCK,
+    HOME_FOCUS_MASCOT,
+    HOME_FOCUS_FAVORITES,
+    HOME_FOCUS_DRAWER_HANDLE
+)
+
+/** Whether a Home focus area is currently on screen. */
+fun isHomeFocusAreaShown(area: Int, hasFavorites: Boolean): Boolean =
+    when (area) {
+        HOME_FOCUS_FAVORITES -> hasFavorites
+        else -> true
+    }
+
+/**
+ * D-pad Up ([direction] = -1) / Down (+1) on Home: the next visible area in on-screen order,
+ * or null at the top / bottom edge. An area that is hidden (e.g. an empty Favorites card)
+ * still moves to its nearest visible neighbour.
+ */
+fun nextHomeFocusArea(
+    current: Int,
+    direction: Int,
+    hasFavorites: Boolean
+): Int? {
+    var i = HOME_FOCUS_FULL_ORDER.indexOf(current)
+    if (i < 0) return null
+    while (true) {
+        i += direction
+        if (i !in HOME_FOCUS_FULL_ORDER.indices) return null
+        val area = HOME_FOCUS_FULL_ORDER[i]
+        if (isHomeFocusAreaShown(area, hasFavorites)) return area
+    }
+}
+
+/** What holding `#` (~400 ms) does in the launcher. */
+enum class PoundHoldAction {
+    /** Not ours: the Mochibun IME owns `#` while a text field is focused (Kaomoji Wheel). */
+    LEAVE_TO_IME,
+    /** Home screen: open Quick Memo. */
+    QUICK_MEMO,
+    /** App drawer or anywhere else: the hold is swallowed. */
+    NONE
+}
+
+fun poundHoldAction(state: LauncherKeypadState): PoundHoldAction = when {
+    state.isInputActive -> PoundHoldAction.LEAVE_TO_IME
+    state.isHomeScreenActive && !state.anyModalOpen -> PoundHoldAction.QUICK_MEMO
+    else -> PoundHoldAction.NONE
 }

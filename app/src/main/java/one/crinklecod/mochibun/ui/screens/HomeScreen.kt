@@ -36,6 +36,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalDensity
+import androidx.lifecycle.compose.currentStateAsState
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -157,7 +164,7 @@ fun HomeScreen(
     userName: String = "",
     selectedFavoriteIndex: Int = 0,
     folderIconRefreshKey: Int = 0,
-    homeFocusArea: Int = 0, // 0 = favorites, 1 = header banner, 2 = drawer handle, 3 = clock, 4 = mascot, 5 = sub-display ticker
+    homeFocusArea: Int = 0, // 0 = favorites, 1 = header banner, 2 = drawer handle, 3 = clock, 4 = mascot
     isHomeScreenActive: Boolean = true,
     mascotBoopRequest: Int = 0,
     onHeaderClick: () -> Unit = {},
@@ -196,32 +203,15 @@ fun HomeScreen(
             WelcomeHomeBanner(
                 userName = userName,
                 isFocused = isHomeScreenActive && homeFocusArea == 1,
+                isTickerEnabled = isTickerEnabled,
+                isTickerDark = isTickerDark,
+                unreadCount = unreadNotifCount,
+                isTickerRunning = isHomeScreenActive,
                 onClick = onHeaderClick,
                 onLongClick = onHeaderLongClick
             )
 
-            if (isTickerEnabled) {
-                // 1b. Outer sub-display ticker: 5 + 26 + 5dp, adds ~26dp net (the Favorites
-                // card had ~100dp of slack above the clouds on the 320x533dp AT-M120 screen).
-                Spacer(modifier = Modifier.height(5.dp))
-                SubDisplayTickerStrip(
-                    unreadCount = unreadNotifCount,
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    isActivePage = isHomeScreenActive,
-                    isDarkStyle = isTickerDark,
-                    isFocused = isHomeScreenActive && homeFocusArea == 5,
-                    onClick = {
-                        if (subDisplayTickerTargetPage(unreadNotifCount) == SUB_DISPLAY_PAGE_NOTIFICATIONS) {
-                            onNavigateToNotifications()
-                        } else {
-                            onNavigateToStats()
-                        }
-                    }
-                )
-                Spacer(modifier = Modifier.height(5.dp))
-            } else {
-                Spacer(modifier = Modifier.height(10.dp))
-            }
+            Spacer(modifier = Modifier.height(10.dp))
 
             // 2. Digital Clock & Date Section
             ClockWidget(
@@ -286,6 +276,68 @@ fun HomeScreen(
 }
 
 /**
+ * Greeting + sub-display feed as one 3 Hz stepped marquee. The visible character count is
+ * measured from the font so the text fills the pill without clipping early; the minimum
+ * height matches the measured 20sp greeting line so the banner (and everything below it) keeps its size.
+ */
+@Composable
+private fun GreetingMarquee(
+    greeting: String,
+    unreadCount: Int,
+    color: Color,
+    running: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val feed = rememberSubDisplayFeed(unreadCount = unreadCount, greeting = greeting)
+    val fontFamily = LocalLauncherFontFamily.current
+    val style = TextStyle(
+        fontFamily = fontFamily,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Medium
+    )
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    // Same height as the static 20sp greeting line, so the banner keeps its full, padded size
+    // Measured with the inherited LocalTextStyle (the static Text's style, incl. its line height)
+    val inheritedStyle = LocalTextStyle.current
+    val greetingLineHeight = remember(inheritedStyle, density) {
+        with(density) {
+            measurer.measure(
+                "♡ Welcome home ♡",
+                inheritedStyle.merge(TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Medium))
+            ).size.height.toDp()
+        }
+    }
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = greetingLineHeight),
+        contentAlignment = Alignment.Center
+    ) {
+        val charWidthPx = remember(style) {
+            measurer.measure("MMMMMMMMMM", style).size.width / 10f
+        }
+        val visibleChars = remember(constraints.maxWidth, charWidthPx) {
+            if (charWidthPx <= 0f) 20 else (constraints.maxWidth / charWidthPx).toInt().coerceAtLeast(8)
+        }
+        val shown = rememberSteppedTickerText(
+            text = feed,
+            visibleCharCount = visibleChars,
+            enabled = running && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+        )
+        Text(
+            text = shown,
+            style = style,
+            color = color,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip
+        )
+    }
+}
+
+/**
  * Top "Welcome Home" Banner.
  * Outlined pill container with rounded corners, bow badge anchored at top-center,
  * flanking sparkle/heart accents, and dynamically scaled/truncated user name.
@@ -295,6 +347,10 @@ fun WelcomeHomeBanner(
     modifier: Modifier = Modifier,
     userName: String = "",
     isFocused: Boolean = false,
+    isTickerEnabled: Boolean = false,
+    isTickerDark: Boolean = false,
+    unreadCount: Int = 0,
+    isTickerRunning: Boolean = true,
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {}
 ) {
@@ -356,13 +412,13 @@ fun WelcomeHomeBanner(
         KeitaiLaceContainer(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp)
+                .padding(horizontal = if (isTickerEnabled) 8.dp else 14.dp)
                 .softGlowFocus(isSelected = isFocused, cornerRadius = 32.dp),
             cardCornerRadius = 32.dp,
             scallopDepth = 3.dp,
             beadDiameter = 4.dp,
             contentPadding = 6.dp,
-            containerColor = theme.greetingBgColor,
+            containerColor = if (isTickerEnabled && isTickerDark) SubOledBackdrop else theme.greetingBgColor,
             borderColor = theme.greetingOutlineColor,
             beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
             showCornerBows = false // the top-centre bow badge is drawn below
@@ -377,7 +433,8 @@ fun WelcomeHomeBanner(
                     onClick = onClick,
                     onLongClick = onLongClick
                 )
-                .padding(horizontal = 12.dp, vertical = 9.dp),
+                // Ticker marquee: a little roomier (wider pill above, taller padding here)
+                .padding(horizontal = 12.dp, vertical = if (isTickerEnabled) 12.dp else 9.dp),
             contentAlignment = Alignment.Center
         ) {
             // Inner corner sparkles
@@ -410,8 +467,15 @@ fun WelcomeHomeBanner(
                     .offset(x = (-2).dp, y = 8.dp)
             )
 
-            // Centered title text with dynamic scaling and clean truncation
-            Text(
+            if (isTickerEnabled) {
+                GreetingMarquee(
+                    greeting = greetingText,
+                    unreadCount = unreadCount,
+                    color = if (isTickerDark) SubOledInk else theme.greetingColor,
+                    running = isTickerRunning,
+                    modifier = Modifier.padding(horizontal = 14.dp)
+                )
+            } else Text(
                 text = greetingText,
                 fontSize = dynamicFontSize,
                 fontWeight = FontWeight.Medium,

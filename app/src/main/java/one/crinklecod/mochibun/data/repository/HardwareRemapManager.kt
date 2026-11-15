@@ -290,6 +290,17 @@ object HardwareRemapManager {
             is ActionType.ToggleFlashlight -> {
                 TorchManager.toggleTorch(context)
             }
+            is ActionType.OpenQuickMemo -> {
+                try {
+                    val intent = Intent(context, one.crinklecod.mochibun.ui.MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra(one.crinklecod.mochibun.ui.MainActivity.EXTRA_OPEN_QUICK_MEMO, true)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to open Quick Memo", e)
+                }
+            }
         }
     }
 

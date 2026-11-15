@@ -62,6 +62,7 @@ fun SettingsHubScreen(
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false,
     onSettingsRestored: (() -> Unit)? = null,
+    onOpenQuickMemo: (() -> Unit)? = null,
     initialDestination: SettingsDestination = SettingsDestination.Hub
 ) {
     var currentDestination by remember { mutableStateOf(initialDestination) }
@@ -126,6 +127,7 @@ fun SettingsHubScreen(
                 focusedIndex = rootFocusedIndex,
                 onFocusedIndexChange = { rootFocusedIndex = it },
                 listState = rootListState,
+                onOpenQuickMemo = onOpenQuickMemo,
                 modifier = settingsModifier
             )
         }
@@ -208,13 +210,15 @@ private fun SettingsHubRootScreen(
     focusedIndex: Int,
     onFocusedIndexChange: (Int) -> Unit,
     listState: LazyListState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenQuickMemo: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val totalItems = 8 // Eight primary navigation cards
+    // Eight settings categories, plus the Quick Memo shortcut (9) when the launcher provides it
+    val totalItems = if (onOpenQuickMemo != null) 9 else 8
 
     fun openDestination(index: Int) {
         when (index) {
@@ -226,6 +230,7 @@ private fun SettingsHubRootScreen(
             5 -> onNavigate(SettingsDestination.PermissionsRoot)
             6 -> onNavigate(SettingsDestination.BackupRestore)
             7 -> onNavigate(SettingsDestination.About)
+            8 -> onOpenQuickMemo?.invoke()
         }
     }
 
@@ -401,6 +406,21 @@ private fun SettingsHubRootScreen(
                     )
                 }
             }
+
+            if (onOpenQuickMemo != null) {
+                item {
+                    SettingsCard(categoryTitle = "Shortcuts") {
+                        SettingsNavigationRow(
+                            title = "Quick Memo ♡",
+                            subtitle = "Jot a sticky note & pin it to Home (or hold # on Home)",
+                            icon = "✎",
+                            isFocused = focusedIndex == 8,
+                            jumpNumber = 9,
+                            onClick = onOpenQuickMemo
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -421,6 +441,7 @@ fun SettingsHubDialog(
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false,
     onSettingsRestored: (() -> Unit)? = null,
+    onOpenQuickMemo: (() -> Unit)? = null,
     initialDestination: SettingsDestination = SettingsDestination.Hub
 ) {
     BasicAlertDialog(
@@ -446,6 +467,7 @@ fun SettingsHubDialog(
             onResetWallpaperClick = onResetWallpaperClick,
             hasCustomWallpaper = hasCustomWallpaper,
             onSettingsRestored = onSettingsRestored,
+            onOpenQuickMemo = onOpenQuickMemo,
             initialDestination = initialDestination
         )
     }

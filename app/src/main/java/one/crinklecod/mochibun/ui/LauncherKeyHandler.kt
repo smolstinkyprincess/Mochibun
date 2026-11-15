@@ -15,6 +15,9 @@ import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 import com.android.quickstep.RecentsActivity
 import one.crinklecod.mochibun.core.haptic.HapticManager
 import one.crinklecod.mochibun.core.keypad.HomeTransitionTracker
+import one.crinklecod.mochibun.core.keypad.PoundHoldAction
+import one.crinklecod.mochibun.core.keypad.nextHomeFocusArea
+import one.crinklecod.mochibun.core.keypad.poundHoldAction
 import one.crinklecod.mochibun.core.keypad.LauncherKeypadActions
 import one.crinklecod.mochibun.core.keypad.LauncherKeypadState
 import one.crinklecod.mochibun.core.keypad.T9InputState
@@ -31,7 +34,6 @@ import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.isDpadOrActionKey
 import one.crinklecod.mochibun.ui.screens.firstLetterOf
 import one.crinklecod.mochibun.ui.screens.launchClockApp
-import one.crinklecod.mochibun.ui.components.subDisplayTickerTargetPage
 import one.crinklecod.mochibun.data.repository.NotificationTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -117,10 +119,6 @@ private val T9_LETTERS_NONE = CharArray(0)
 private const val APP_SWITCH_HOLD_MS = 400L
 private const val POUND_HOLD_MS = 400L
 private const val HOME_HOLD_MS = 400L
-/** Home focus area of the outer sub-display ticker strip (see HomeScreen's homeFocusArea). */
-private const val HOME_FOCUS_TICKER = 5
-
-private fun isSubDisplayTickerOn(): Boolean = PreferencesManager.isSubDisplayTickerEnabled.value
 
 internal class LauncherKeyHandler(
     private val context: Context,
@@ -459,11 +457,6 @@ internal class LauncherKeyHandler(
                             launchClockApp(context)
                         } else if (state.homeFocusArea == 4) {
                             actions.boopMascot()
-                        } else if (state.homeFocusArea == HOME_FOCUS_TICKER && isSubDisplayTickerOn()) {
-                            val target = subDisplayTickerTargetPage(NotificationTracker.notifications.value.size)
-                            actions.setSavedFavoriteIndexOnHome(state.selectedFavoriteIndex)
-                            actions.setPendingTargetPage(target)
-                            scope.launch { pagerState.animateScrollToPage(target) }
                         } else {
                             actions.openLauncherMenu()
                         }
@@ -600,14 +593,20 @@ internal class LauncherKeyHandler(
                 SoundEffectManager.play(context, SoundEffect.CLICK)
                 actions.setPoundKeyState(1)
                 poundHoldJob?.cancel()
+                val holdAction = poundHoldAction(state)
                 poundHoldJob = scope.launch {
                     delay(POUND_HOLD_MS)
                     poundHoldJob = null
-                    actions.setPoundKeyState(2)
-                    performBoundaryHaptic(context)
-                    SoundEffectManager.play(context, SoundEffect.CLICK)
-                    actions.openKaomojiWheel()
+                    firePoundHold(holdAction)
                 }
+            } else if (poundHoldJob != null &&
+                (nativeEvent.isLongPress || nativeEvent.eventTime - nativeEvent.downTime >= POUND_HOLD_MS)
+            ) {
+                // A repeat already past the hold delay is a hold even if the timer hasn't run yet:
+                // injected long-presses arrive faster than real time (as in MochibunImeService).
+                poundHoldJob?.cancel()
+                poundHoldJob = null
+                firePoundHold(poundHoldAction(state))
             }
             return true
         }
@@ -650,6 +649,19 @@ internal class LauncherKeyHandler(
             KeyEvent.KEYCODE_DPAD_RIGHT -> return handleDpadRight(nativeEvent, state)
 
             else -> return false
+        }
+    }
+
+    /**
+     * '#' held: Home opens Quick Memo; the drawer swallows the hold. The Kaomoji Wheel only opens
+     * while typing, from MochibunImeService (typing keys never reach this handler).
+     */
+    private fun firePoundHold(holdAction: PoundHoldAction) {
+        actions.setPoundKeyState(2)
+        if (holdAction == PoundHoldAction.QUICK_MEMO) {
+            performBoundaryHaptic(context)
+            SoundEffectManager.play(context, SoundEffect.CLICK)
+            actions.openQuickMemo()
         }
     }
 
@@ -734,6 +746,11 @@ internal class LauncherKeyHandler(
                     performBoundaryHaptic(context)
                     actions.setPendingTargetPage(2)
                     scope.launch { pagerState.animateScrollToPage(2) }
+                    return true
+                }
+                is ActionType.OpenQuickMemo -> {
+                    performBoundaryHaptic(context)
+                    actions.openQuickMemo()
                     return true
                 }
                 is ActionType.None -> {
@@ -840,24 +857,17 @@ internal class LauncherKeyHandler(
             val isCooldown = (SystemClock.uptimeMillis() - homeTracker.settledTimestamp) < 350L
             if (isCooldown) return true
 
-            // Top to bottom: 1 header, 5 sub-display ticker (when enabled), 3 clock, 4 mascot,
+            // Top to bottom: 1 header, 3 clock, 4 mascot,
             // 0 favorites (skipped when empty), 2 drawer handle
             val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
-            if (state.homeFocusArea == 2) {
+            val target = nextHomeFocusArea(
+                current = state.homeFocusArea,
+                direction = -1,
+                                hasFavorites = favCount > 0
+            )
+            if (target != null) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(if (favCount > 0) 0 else 4)
-            } else if (state.homeFocusArea == 0) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(4)
-            } else if (state.homeFocusArea == 4) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(3)
-            } else if (state.homeFocusArea == 3) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(if (isSubDisplayTickerOn()) HOME_FOCUS_TICKER else 1)
-            } else if (state.homeFocusArea == HOME_FOCUS_TICKER) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(1)
+                actions.setHomeFocusArea(target)
             } else if (nativeEvent.repeatCount == 0) {
                 performBoundaryHaptic(context)
             }
@@ -911,22 +921,16 @@ internal class LauncherKeyHandler(
             if (isCooldown) return true
 
             val favCount = state.favoriteItemCount.coerceAtLeast(state.favoriteItems.size)
-            if (state.homeFocusArea == 1) {
+            val target = nextHomeFocusArea(
+                current = state.homeFocusArea,
+                direction = 1,
+                                hasFavorites = favCount > 0
+            )
+            if (target != null) {
                 SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(if (isSubDisplayTickerOn()) HOME_FOCUS_TICKER else 3)
-            } else if (state.homeFocusArea == HOME_FOCUS_TICKER) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(3)
-            } else if (state.homeFocusArea == 3) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(4)
-            } else if (state.homeFocusArea == 4) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(if (favCount > 0) 0 else 2)
-            } else if (state.homeFocusArea == 0) {
-                SoundEffectManager.play(context, SoundEffect.NAV)
-                actions.setHomeFocusArea(2)
-            } else if (state.homeFocusArea == 2 && nativeEvent.repeatCount == 0) {
+                actions.setHomeFocusArea(target)
+            } else if (nativeEvent.repeatCount == 0) {
+                // Past the drawer handle: open the app drawer
                 SoundEffectManager.play(context, SoundEffect.NAV)
                 actions.setSelectedDrawerIndex(0)
                 actions.setDrawerOpen(true)

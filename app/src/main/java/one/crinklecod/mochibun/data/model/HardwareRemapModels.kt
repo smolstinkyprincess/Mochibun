@@ -83,6 +83,7 @@ sealed class ActionType {
     object OpenRecentsSystem : ActionType()
     object GlobalNotifications : ActionType()
     object ToggleFlashlight : ActionType()
+    object OpenQuickMemo : ActionType()
 
     fun displayName(): String = when (this) {
         is None -> "None (Default)"
@@ -94,6 +95,7 @@ sealed class ActionType {
         is OpenRecentsSystem -> "Open Recents (System)"
         is GlobalNotifications -> "Open Notifications"
         is ToggleFlashlight -> "Toggle Flashlight"
+        is OpenQuickMemo -> "Open Quick Memo"
     }
 
     fun serialize(): String = when (this) {
@@ -106,6 +108,7 @@ sealed class ActionType {
         is OpenRecentsSystem -> "OPEN_RECENTS_SYSTEM"
         is GlobalNotifications -> "GLOBAL_NOTIFICATIONS"
         is ToggleFlashlight -> "TOGGLE_FLASHLIGHT"
+        is OpenQuickMemo -> "QUICK_MEMO"
     }
 
     companion object {
@@ -127,6 +130,7 @@ sealed class ActionType {
                 "OPEN_RECENTS_SYSTEM" -> OpenRecentsSystem
                 "GLOBAL_NOTIFICATIONS" -> GlobalNotifications
                 "TOGGLE_FLASHLIGHT" -> ToggleFlashlight
+                "QUICK_MEMO" -> OpenQuickMemo
                 else -> None
             }
         }

@@ -1,17 +1,27 @@
 /**
- * Outer sub-display ticker strip for the Home screen.
+ * Outer sub-display ticker feed, shown as a marquee inside the Home greeting banner.
  *
  * Mimics the narrow external OLED/LCD strip on the lid of classic FOMA / au flip phones:
- * a short pill that scrolls a one-line status feed (now playing, unread count, battery
- * and a daily fortune) in discrete 3 Hz steps.
+ * the greeting followed by a one-line status feed (pinned Quick Memo, now playing, unread
+ * count, next alarm, today's steps, battery and a cozy daily fortune) in discrete 3 Hz steps.
+ * No date segment: the clock right below already shows it.
  */
 package one.crinklecod.mochibun.ui.components
 
+import android.Manifest
+import android.app.AlarmManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.BatteryManager
+import android.os.Build
+import android.text.format.DateFormat
 import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -57,56 +67,50 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.data.prefs.DailyStepState
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.MediaSessionTracker
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherFontFamily
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 /** Deep plum/navy LCD backdrop for the dark "sub-OLED" style. */
-private val SubOledBackdrop = Color(0xFF23182E)
+internal val SubOledBackdrop = Color(0xFF23182E)
 /** Luminous pastel lavender "phosphor" ink for the dark sub-OLED style. */
-private val SubOledInk = Color(0xFFF3D9FF)
-private val SubDisplayShape = RoundedCornerShape(12.dp)
-private const val SUB_DISPLAY_VISIBLE_CHARS = 36
+internal val SubOledInk = Color(0xFFF3D9FF)
 private const val FEED_SEPARATOR = "  ✦  "
 /** MediaSessionTracker's placeholder artist; treated like a blank artist. */
 private const val PLACEHOLDER_ARTIST = "Unknown Artist"
 
-/** Pager page indices (see MainLauncher): 0 = Widgets / Now Playing, 2 = Notifications. */
-internal const val SUB_DISPLAY_PAGE_WIDGETS = 0
-internal const val SUB_DISPLAY_PAGE_NOTIFICATIONS = 2
 
-private val DAILY_FORTUNES = arrayOf(
-    "Lucky: Sakura Tea",
-    "Lucky: Strawberry Mochi",
-    "Lucky: Pink Ribbon",
-    "Lucky: Melon Soda",
-    "Lucky: Star Sticker",
-    "Lucky: Purikura",
-    "Lucky: Taiyaki",
-    "Lucky: Lavender Pen",
-    "Lucky: Gacha Capsule",
-    "Lucky: Matcha Latte",
-    "Lucky: Phone Charm",
-    "Lucky: Pudding",
-    "Lucky: Love Letter",
-    "Lucky: Bunny Plush"
+/** Cozy, plain-text fortunes (no numbers, no kaomoji). One per day; see [dailyFortuneLabel]. */
+internal val COZY_FORTUNES = arrayOf(
+    "good vibes ahead ♡",
+    "a peaceful little day awaits",
+    "treat yourself to something sweet",
+    "something cute will happen soon",
+    "take a cozy breath & stretch",
+    "small steps still count ♡",
+    "a warm drink would be lovely",
+    "someone is thinking of you",
+    "be gentle with yourself today",
+    "a happy surprise is on its way",
+    "today is a good day to rest",
+    "you are doing better than you think"
 )
 
 /** Deterministic fortune for a given day: same answer all day, changes at midnight. */
 internal fun dailyFortuneLabel(year: Int, dayOfYear: Int): String {
     val seed = year * 400 + dayOfYear
     // Multiply by a prime so consecutive days don't walk the list in order.
-    val index = Math.floorMod(seed * 7919, DAILY_FORTUNES.size)
-    return DAILY_FORTUNES[index]
+    val index = Math.floorMod(seed * 7919, COZY_FORTUNES.size)
+    return COZY_FORTUNES[index]
 }
 
-/**
- * Which pager page tapping / Center on the strip opens: Notifications when alerts are
- * waiting, otherwise the Widgets page (Now Playing, battery and stats live there).
- */
-internal fun subDisplayTickerTargetPage(unreadCount: Int): Int =
-    if (unreadCount > 0) SUB_DISPLAY_PAGE_NOTIFICATIONS else SUB_DISPLAY_PAGE_WIDGETS
 
 /**
  * Builds the one-line feed. Pure so it can be unit tested; the composable only calls it
@@ -119,17 +123,143 @@ internal fun buildSubDisplayFeed(
     unreadCount: Int,
     batteryLevel: Int,
     isCharging: Boolean,
-    fortune: String
+    fortune: String,
+    pinnedMemo: String? = null,
+    nextAlarm: String? = null,
+    stepsToday: Long? = null,
+    greeting: String = ""
 ): String {
-    val parts = ArrayList<String>(4)
+    val parts = ArrayList<String>(8)
+    // The Home greeting ("♡ Welcome home, name ♡") always leads the marquee.
+    if (greeting.isNotBlank()) parts += greeting.trim()
+    // The Quick Memo leads: it's the one thing the user asked to see.
+    val memo = pinnedMemo?.replace('\n', ' ')?.trim()
+    if (!memo.isNullOrEmpty()) parts += "✎ $memo"
     if (isMediaPlaying && title.isNotBlank()) {
         val cleanArtist = artist.trim().takeUnless { it.isEmpty() || it == PLACEHOLDER_ARTIST }
         parts += if (cleanArtist == null) "♫ ${title.trim()}" else "♫ $cleanArtist - ${title.trim()}"
     }
     if (unreadCount > 0) parts += "✉ $unreadCount new"
+    if (!nextAlarm.isNullOrBlank()) parts += "⏰ $nextAlarm"
+    if (stepsToday != null && stepsToday >= 0) parts += "🐾 $stepsToday steps"
     if (batteryLevel in 0..100) parts += "${if (isCharging) "⚡" else "♥"} $batteryLevel%"
     if (fortune.isNotBlank()) parts += fortune
     return parts.joinToString(FEED_SEPARATOR)
+}
+
+/** Next alarm time as "7:30 AM" (12h) or "07:30" (24h), following the system time format. */
+internal fun formatNextAlarmTime(
+    triggerAtMillis: Long,
+    is24Hour: Boolean,
+    locale: Locale = Locale.getDefault(),
+    timeZone: TimeZone = TimeZone.getDefault()
+): String {
+    val format = SimpleDateFormat(if (is24Hour) "HH:mm" else "h:mm a", locale)
+    format.timeZone = timeZone
+    return format.format(Date(triggerAtMillis))
+}
+
+/**
+ * Next alarm (AlarmManager.nextAlarmClock), formatted. Re-read on resume and when the
+ * alarm changes (ACTION_NEXT_ALARM_CLOCK_CHANGED); the receiver lives only while RESUMED.
+ */
+@Composable
+private fun rememberNextAlarmLabel(): String? {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var label by remember { mutableStateOf<String?>(null) }
+
+    DisposableEffect(context, lifecycleOwner) {
+        val alarmManager = context.getSystemService(AlarmManager::class.java)
+        fun read() {
+            val trigger = alarmManager?.nextAlarmClock?.triggerTime
+            label = trigger?.let { formatNextAlarmTime(it, DateFormat.is24HourFormat(context)) }
+        }
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, intent: Intent) = read()
+        }
+        var registered = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> if (!registered) {
+                    context.registerReceiver(receiver, IntentFilter(AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED))
+                    registered = true
+                    read()
+                }
+                Lifecycle.Event.ON_PAUSE -> if (registered) {
+                    context.unregisterReceiver(receiver)
+                    registered = false
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            if (registered) context.unregisterReceiver(receiver)
+        }
+    }
+    return label
+}
+
+/**
+ * Today's steps from TYPE_STEP_COUNTER, or null when the phone has no step sensor (the AT-M120
+ * doesn't) or activity recognition isn't granted (API 29+). The sensor is cumulative since boot;
+ * [DailyStepState] turns it into a since-midnight count persisted in PreferencesManager. The
+ * listener is registered only while RESUMED.
+ */
+@Composable
+private fun rememberStepsToday(): Long? {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var steps by remember { mutableStateOf<Long?>(null) }
+
+    DisposableEffect(context, lifecycleOwner) {
+        val sensorManager = context.getSystemService(SensorManager::class.java)
+        val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+        val permitted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            context.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (sensorManager == null || sensor == null || !permitted) {
+            return@DisposableEffect onDispose {}
+        }
+
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                val cal = Calendar.getInstance()
+                val today = DailyStepState.dayStamp(cal.get(Calendar.YEAR), cal.get(Calendar.DAY_OF_YEAR))
+                val state = DailyStepState.update(
+                    PreferencesManager.getDailyStepState(context),
+                    today,
+                    event.values[0].toLong()
+                )
+                PreferencesManager.setDailyStepState(context, state)
+                steps = state.stepsToday
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+        var registered = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> if (!registered) {
+                    registered = sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+                }
+                Lifecycle.Event.ON_PAUSE -> if (registered) {
+                    sensorManager.unregisterListener(listener)
+                    registered = false
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            if (registered) sensorManager.unregisterListener(listener)
+        }
+    }
+    return steps
 }
 
 @Immutable
@@ -221,35 +351,23 @@ private fun rememberDayStamp(): DayStamp {
 }
 
 /**
- * Compact keitai sub-display marquee.
- *
- * @param unreadCount unread notification count (passed in: Home already collects it).
- * @param isActivePage the ticker only steps while Home is the visible page.
- * @param isDarkStyle true = dark sub-OLED, false = pastel theme-matched surface.
- * @param isFocused D-pad focus from the Home focus model (draws the soft glow halo).
- * @param onClick tap / Center action; null makes the strip non-interactive.
+ * Live sub-display feed text for the Home greeting marquee: [greeting] first, then the live
+ * segments. Recomputed only when an input changes (never on a ticker step).
  */
 @Composable
-fun SubDisplayTickerStrip(
-    unreadCount: Int,
-    modifier: Modifier = Modifier,
-    isActivePage: Boolean = true,
-    isDarkStyle: Boolean = true,
-    isFocused: Boolean = false,
-    onClick: (() -> Unit)? = null
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
-    val isResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
-
+fun rememberSubDisplayFeed(unreadCount: Int, greeting: String): String {
     val media by MediaSessionTracker.mediaState.collectAsState()
+    val memoText by PreferencesManager.quickMemoText.collectAsState()
     val battery = rememberBatterySnapshot()
+    val nextAlarm = rememberNextAlarmLabel()
+    val stepsToday = rememberStepsToday()
     val day = rememberDayStamp()
 
     val fortune = remember(day.year, day.dayOfYear) { dailyFortuneLabel(day.year, day.dayOfYear) }
-    val feedText = remember(
-        media.isPlaying, media.artist, media.title, unreadCount, battery, fortune
+    val memo = memoText.takeIf { it.isNotBlank() }
+    return remember(
+        greeting, media.isPlaying, media.artist, media.title, unreadCount, battery, fortune,
+        memo, nextAlarm, stepsToday
     ) {
         buildSubDisplayFeed(
             isMediaPlaying = media.isPlaying,
@@ -258,113 +376,11 @@ fun SubDisplayTickerStrip(
             unreadCount = unreadCount,
             batteryLevel = battery.level,
             isCharging = battery.isCharging,
-            fortune = fortune
+            fortune = fortune,
+            pinnedMemo = memo,
+            nextAlarm = nextAlarm,
+            stepsToday = stepsToday,
+            greeting = greeting
         )
-    }
-
-    val shownText = rememberSteppedTickerText(
-        text = feedText,
-        visibleCharCount = SUB_DISPLAY_VISIBLE_CHARS,
-        enabled = isActivePage && isResumed
-    )
-
-    // Pastel style: a frosted mini greeting pill. Light themes get a slightly see-through
-    // surface; dark themes (e.g. Midnight Mochi) keep the solid surface for contrast.
-    val surface = ActiveTheme.surface
-    val isLightTheme = ActiveTheme.background.luminance() > 0.5f
-    val backdrop = when {
-        isDarkStyle -> SubOledBackdrop
-        isLightTheme -> surface.copy(alpha = 0.90f)
-        else -> surface
-    }
-    val inkColor = if (isDarkStyle) SubOledInk else ActiveTheme.accentDeep
-    val capColor = inkColor.copy(alpha = 0.75f)
-
-    var hasComposeFocus by remember { mutableStateOf(false) }
-    val activate: () -> Unit = {
-        if (onClick != null) {
-            SoundEffectManager.play(context, SoundEffect.SELECT)
-            onClick()
-        }
-    }
-
-    var interactive: Modifier = Modifier
-    if (onClick != null) {
-        interactive = Modifier
-            .onFocusChanged { hasComposeFocus = it.isFocused }
-            .focusable()
-            .onKeyEvent { keyEvent ->
-                if (keyEvent.type == KeyEventType.KeyDown &&
-                    (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
-                        keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER)
-                ) {
-                    activate()
-                    true
-                } else {
-                    false
-                }
-            }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = activate
-            )
-    }
-
-    // Outer box: unclipped layer so the soft glow halo can spill past the pill.
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer { clip = false }
-            .softGlowFocus(
-                isSelected = isFocused || hasComposeFocus,
-                cornerRadius = 12.dp,
-                containerTint = Color.Transparent
-            )
-            .then(interactive)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(26.dp)
-                .clip(SubDisplayShape)
-                .background(backdrop)
-                .border(1.4.dp, ActiveTheme.cardBorder, SubDisplayShape)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "✦",
-                color = capColor,
-                fontSize = 10.sp,
-                fontFamily = LocalLauncherFontFamily.current,
-                maxLines = 1,
-                softWrap = false
-            )
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 6.dp)
-            ) {
-                Text(
-                    text = shownText,
-                    color = inkColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = LocalLauncherFontFamily.current,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Clip
-                )
-            }
-            Text(
-                text = "♡",
-                color = capColor,
-                fontSize = 10.sp,
-                fontFamily = LocalLauncherFontFamily.current,
-                maxLines = 1,
-                softWrap = false
-            )
-        }
     }
 }

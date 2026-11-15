@@ -72,6 +72,7 @@ import one.crinklecod.mochibun.ui.dialogs.HardwareButtonsDialog
 import one.crinklecod.mochibun.ui.dialogs.HiddenAppsDialog
 import one.crinklecod.mochibun.ui.dialogs.IconPackSelectionDialog
 import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelDialog
+import one.crinklecod.mochibun.ui.dialogs.QuickMemoDialog
 import one.crinklecod.mochibun.ui.dialogs.KawaiiIconPicker
 import one.crinklecod.mochibun.ui.dialogs.PresetPreviewDialog
 import one.crinklecod.mochibun.ui.dialogs.awaitFocusSafely
@@ -122,6 +123,7 @@ sealed interface ActiveModal {
     data object IconPackSelection : ActiveModal
     data object HiddenApps : ActiveModal
     data object KaomojiWheel : ActiveModal
+    data object QuickMemo : ActiveModal
 }
 
 // main launcher composable managing focus, gestures, state, and page navigation
@@ -137,6 +139,7 @@ fun MainLauncher(
     screenOffResetCount: Int = 0,
     unlockCount: Int = 0,
     settingsRequestCount: Int = 0,
+    quickMemoRequestCount: Int = 0,
     requestedPage: Int? = null,
     onPageConsumed: () -> Unit = {},
     incomingBundleUri: Uri? = null,
@@ -294,11 +297,6 @@ fun MainLauncher(
     var homeFocusArea by remember { mutableIntStateOf(0) }
     var mascotBoopRequest by remember { mutableIntStateOf(0) }
 
-    // Area 5 is the sub-display ticker; if it's switched off while focused, fall back to the banner.
-    val isSubDisplayTickerEnabled by PreferencesManager.isSubDisplayTickerEnabled.collectAsState()
-    LaunchedEffect(isSubDisplayTickerEnabled) {
-        if (!isSubDisplayTickerEnabled && homeFocusArea == 5) homeFocusArea = 1
-    }
 
     val moveFavoriteSlotItem: (itemKey: String, direction: Int) -> Unit = remember(launcherVm) {
         { itemKey, direction ->
@@ -415,6 +413,9 @@ fun MainLauncher(
                     pendingTargetPage = targetPage
                     pagerState.scrollToPage(targetPage)
                 }
+                if (action == LidOpenAction.QUICK_MEMO) {
+                    activeModal = ActiveModal.QuickMemo
+                }
                 homeTracker.wasActive = true
                 homeTracker.settledTimestamp = SystemClock.uptimeMillis()
                 focusRequester.requestFocus()
@@ -515,15 +516,17 @@ fun MainLauncher(
         }
     }
 
-    // Timed long-press detection on '#' to open Kaomoji radial wheel
-    LaunchedEffect(poundKeyState, drawerOpen, isHomeScreenActive, anyModalOpen) {
-        if (poundKeyState == 1 && !anyModalOpen && (drawerOpen || isHomeScreenActive)) {
-            delay(400L)
-            if (poundKeyState == 1 && !anyModalOpen) {
-                poundKeyState = 2
-                performBoundaryHaptic(context)
-                SoundEffectManager.play(context, SoundEffect.CLICK)
-                activeModal = ActiveModal.KaomojiWheel
+    // '#' hold (Quick Memo on Home) is timed by LauncherKeyHandler's poundHoldJob.
+
+    // "Open Quick Memo" key remap action (MainActivity.EXTRA_OPEN_QUICK_MEMO): show it over Home
+    LaunchedEffect(quickMemoRequestCount) {
+        if (quickMemoRequestCount > 0) {
+            drawerOpen = false
+            poundKeyState = 0
+            activeModal = ActiveModal.QuickMemo
+            if (pagerState.currentPage != 1) {
+                pendingTargetPage = 1
+                pagerState.scrollToPage(1)
             }
         }
     }
@@ -603,6 +606,7 @@ fun MainLauncher(
             }
             override fun setPoundKeyState(state: Int) { poundKeyState = state }
             override fun openKaomojiWheel() { activeModal = ActiveModal.KaomojiWheel }
+            override fun openQuickMemo() { activeModal = ActiveModal.QuickMemo }
             override fun cycleDrawerSortMode() {
                 val nextMode = launcherVm.cycleAppDrawerSortMode()
                 SoundEffectManager.play(context, SoundEffect.CLICK)
@@ -746,6 +750,15 @@ fun MainLauncher(
             PreferencesManager.setThemePreset(context, newTheme.name)
             SystemUiThemeBridge.broadcastTheme(context, newTheme)
             activeModal = null
+        }
+    }
+    val onOpenQuickMemo: () -> Unit = remember {
+        { activeModal = ActiveModal.QuickMemo }
+    }
+    val onDismissQuickMemo = remember {
+        {
+            activeModal = null
+            poundKeyState = 0
         }
     }
     val onDismissKaomojiWheel = remember {
@@ -1088,7 +1101,8 @@ fun MainLauncher(
                         onPickWallpaperClick = onPickWallpaperClick,
                         onResetWallpaperClick = onResetWallpaperClick,
                         hasCustomWallpaper = launcherVm.wallpaperUri != null,
-                        onSettingsRestored = onSettingsRestored
+                        onSettingsRestored = onSettingsRestored,
+                        onOpenQuickMemo = onOpenQuickMemo
                     )
                 }
 
@@ -1120,6 +1134,15 @@ fun MainLauncher(
                 is ActiveModal.KaomojiWheel -> {
                     KaomojiWheelDialog(
                         onDismiss = onDismissKaomojiWheel
+                    )
+                }
+
+                is ActiveModal.QuickMemo -> {
+                    // poundKeyState == 2: opened by a '#' hold that may still be down
+                    val openedByPoundHold = remember { poundKeyState == 2 }
+                    QuickMemoDialog(
+                        onDismiss = onDismissQuickMemo,
+                        waitForPoundRelease = openedByPoundHold
                     )
                 }
 

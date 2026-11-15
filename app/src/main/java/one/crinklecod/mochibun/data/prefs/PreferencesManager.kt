@@ -18,7 +18,8 @@ import kotlin.collections.emptyList
 enum class LidOpenAction(val id: String, val label: String) {
     HOME("home", "Home Screen"),
     RESUME_LAST_APP("resume_last", "Resume Last App"),
-    NOTIFICATIONS("notifications", "Notifications Screen");
+    NOTIFICATIONS("notifications", "Notifications Screen"),
+    QUICK_MEMO("quick_memo", "Quick Memo");
 
     companion object {
         fun fromId(id: String?): LidOpenAction = entries.firstOrNull { it.id == id } ?: HOME
@@ -26,6 +27,40 @@ enum class LidOpenAction(val id: String, val label: String) {
 
     fun next(): LidOpenAction = entries[(ordinal + 1) % entries.size]
     fun previous(): LidOpenAction = entries[(ordinal - 1 + entries.size) % entries.size]
+}
+
+/**
+ * Today's step count from the cumulative-since-boot `TYPE_STEP_COUNTER` sensor.
+ *
+ * @param day day stamp (`year * 1000 + dayOfYear`) the state belongs to
+ * @param baseline counter value that counts as 0 steps today (since the last reboot)
+ * @param carried steps already walked today before a reboot reset the counter
+ * @param lastCounter most recent counter reading
+ */
+data class DailyStepState(val day: Int, val baseline: Long, val carried: Long, val lastCounter: Long) {
+    val stepsToday: Long get() = carried + (lastCounter - baseline).coerceAtLeast(0L)
+
+    companion object {
+        fun dayStamp(year: Int, dayOfYear: Int): Int = year * 1000 + dayOfYear
+
+        /**
+         * Folds a new counter reading into [previous].
+         * - New day: today starts from the last reading we saw (steps after it count for today).
+         * - Counter went backwards: the phone rebooted, so keep today's steps in [carried].
+         */
+        fun update(previous: DailyStepState?, today: Int, counter: Long): DailyStepState {
+            if (previous == null) return DailyStepState(today, counter, 0L, counter)
+            val rebooted = counter < previous.lastCounter
+            if (previous.day != today) {
+                val baseline = if (rebooted) 0L else previous.lastCounter
+                return DailyStepState(today, baseline, 0L, counter)
+            }
+            if (rebooted) {
+                return DailyStepState(today, 0L, previous.stepsToday, counter)
+            }
+            return previous.copy(lastCounter = counter)
+        }
+    }
 }
 
 /**
@@ -177,6 +212,14 @@ object PreferencesManager {
     const val DEFAULT_SUB_DISPLAY_TICKER_ENABLED = true
     const val KEY_SUB_DISPLAY_TICKER_DARK = "pref_sub_display_ticker_dark"
     const val DEFAULT_SUB_DISPLAY_TICKER_DARK = false
+    const val KEY_QUICK_MEMO_TEXT = "pref_quick_memo_text"
+    /** Quick Memo length cap (a keitai-sized sticky note). */
+    const val QUICK_MEMO_MAX_CHARS = 140
+    // Daily step counter bookkeeping (see [DailyStepState])
+    const val KEY_STEP_DAY = "pref_step_day"
+    const val KEY_STEP_BASELINE = "pref_step_baseline"
+    const val KEY_STEP_CARRIED = "pref_step_carried"
+    const val KEY_STEP_LAST_COUNTER = "pref_step_last_counter"
     const val KEY_HIDDEN_APPS = "hidden_apps"
     const val KEY_FAVORITE_ITEMS_ORDERED = "favorite_items_ordered_v1"
     const val KEY_CUSTOM_ICON_PREFIX = "custom_icon_"
@@ -266,6 +309,10 @@ object PreferencesManager {
     private val _isSubDisplayTickerDark = MutableStateFlow(DEFAULT_SUB_DISPLAY_TICKER_DARK)
     /** true = dark sub-OLED look, false = pastel theme-matched look. */
     val isSubDisplayTickerDark: StateFlow<Boolean> = _isSubDisplayTickerDark.asStateFlow()
+
+    private val _quickMemoText = MutableStateFlow("")
+    /** Quick Memo text (`#` hold on Home); shown in the sub-display ticker when non-blank. */
+    val quickMemoText: StateFlow<String> = _quickMemoText.asStateFlow()
 
     private val _showRootOptions = MutableStateFlow(false)
     /** Whether root / LSPosed rows are shown in settings. Loaded in [init]. */
@@ -392,6 +439,7 @@ object PreferencesManager {
                 KEY_SUB_DISPLAY_TICKER_DARK,
                 DEFAULT_SUB_DISPLAY_TICKER_DARK
             )
+            _quickMemoText.value = prefs.getString(KEY_QUICK_MEMO_TEXT, "") ?: ""
         }
         _showRootOptions.value = isShowRootOptions(context)
     }
@@ -531,6 +579,39 @@ object PreferencesManager {
     fun setSubDisplayTickerDark(context: Context, dark: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SUB_DISPLAY_TICKER_DARK, dark).apply()
         _isSubDisplayTickerDark.value = dark
+    }
+
+    /** Saves the memo text (trimmed of trailing blank lines, capped at [QUICK_MEMO_MAX_CHARS]). */
+    fun setQuickMemoText(context: Context, text: String) {
+        val clean = text.take(QUICK_MEMO_MAX_CHARS).trimEnd()
+        getPrefs(context).edit().putString(KEY_QUICK_MEMO_TEXT, clean).apply()
+        _quickMemoText.value = clean
+    }
+
+    /** Clear button: empties the memo (which also removes it from the ticker). */
+    fun clearQuickMemo(context: Context) {
+        setQuickMemoText(context, "")
+    }
+
+    fun getDailyStepState(context: Context): DailyStepState? {
+        val prefs = getPrefs(context)
+        val day = prefs.getInt(KEY_STEP_DAY, -1)
+        if (day < 0) return null
+        return DailyStepState(
+            day = day,
+            baseline = prefs.getLong(KEY_STEP_BASELINE, 0L),
+            carried = prefs.getLong(KEY_STEP_CARRIED, 0L),
+            lastCounter = prefs.getLong(KEY_STEP_LAST_COUNTER, 0L)
+        )
+    }
+
+    fun setDailyStepState(context: Context, state: DailyStepState) {
+        getPrefs(context).edit()
+            .putInt(KEY_STEP_DAY, state.day)
+            .putLong(KEY_STEP_BASELINE, state.baseline)
+            .putLong(KEY_STEP_CARRIED, state.carried)
+            .putLong(KEY_STEP_LAST_COUNTER, state.lastCounter)
+            .apply()
     }
 
     fun isFolderGridMode(context: Context): Boolean {

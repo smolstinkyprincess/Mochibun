@@ -242,7 +242,8 @@ fun HardwareButtonsDialog(
         ActionType.GlobalRecents,
         ActionType.OpenRecentsSystem,
         ActionType.GlobalNotifications,
-        ActionType.ToggleFlashlight
+        ActionType.ToggleFlashlight,
+        ActionType.OpenQuickMemo
     )
 
     fun cycleAction(current: ActionType, forward: Boolean): ActionType {

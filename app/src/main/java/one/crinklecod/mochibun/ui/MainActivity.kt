@@ -75,6 +75,10 @@ class MainActivity : ComponentActivity() {
 
     var appListRefreshCount by mutableIntStateOf(0)
 
+    /** Bumped by the "Open Quick Memo" key remap action (EXTRA_OPEN_QUICK_MEMO intent). */
+    var quickMemoRequestCount by mutableIntStateOf(0)
+        private set
+
     var lidOpenCount by mutableIntStateOf(0)
         private set
 
@@ -221,6 +225,9 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        /** Intent extra (boolean) that opens the Quick Memo dialog on Home. */
+        const val EXTRA_OPEN_QUICK_MEMO = "OPEN_QUICK_MEMO"
+
         @Volatile
         var isForeground = false
             private set
@@ -309,6 +316,8 @@ class MainActivity : ComponentActivity() {
             requestedPage = page.coerceIn(0, 2)
         }
 
+        if (intent.getBooleanExtra(EXTRA_OPEN_QUICK_MEMO, false)) quickMemoRequestCount++
+
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
             // When SystemUI triggers Recents on Android 12 with a 3rd party launcher,
             // it starts the default Home activity with FLAG_ACTIVITY_RESET_TASK_IF_NEEDED (0x00200000)
@@ -346,6 +355,10 @@ class MainActivity : ComponentActivity() {
         if (intent?.hasExtra("OPEN_PAGE") == true) {
             val page = intent.getIntExtra("OPEN_PAGE", 1)
             requestedPage = page.coerceIn(0, 2)
+        }
+
+        if (savedInstanceState == null && intent?.getBooleanExtra(EXTRA_OPEN_QUICK_MEMO, false) == true) {
+            quickMemoRequestCount++
         }
 
         if (intent?.action == Intent.ACTION_VIEW && intent?.data != null) {
@@ -416,6 +429,7 @@ class MainActivity : ComponentActivity() {
                         screenOffResetCount = screenOffResetCount,
                         unlockCount = unlockCount,
                         settingsRequestCount = settingsRequestCount,
+                        quickMemoRequestCount = quickMemoRequestCount,
                         requestedPage = requestedPage,
                         onPageConsumed = ::consumeRequestedPage,
                         incomingBundleUri = pendingThemeBundleUri,
