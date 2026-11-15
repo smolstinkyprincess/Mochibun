@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mochibun (もちぶん) ♡ pastel T9 launcher</title>
-  <meta name="description" content="Mochibun — a pastel, T9-oriented Android launcher and virtual cursor daemon for the ALT Mive Style Folder (AT-M120). Installs on Android 8.1+; v2.2.1 adds a configurable cursor toggle key.">
+  <meta name="description" content="Mochibun — a pastel, T9-oriented Android launcher and virtual cursor daemon for the ALT Mive Style Folder (AT-M120). Installs on Android 8.1+; v2.3.0 brings custom pocket pets to your home screen!">
   <meta name="theme-color" content="#FFEBF2">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍡</text></svg>">
 
@@ -179,6 +179,64 @@
     .candy--butter { background: linear-gradient(180deg, #FFF4CC, #FFE9A8); }
     .candy--blue { background: linear-gradient(180deg, #DDE3FF, var(--periwinkle)); }
     .candy:hover { transform: translateY(-3px) scale(1.05) rotate(-1.5deg); box-shadow: var(--shadow-plush-hover); }
+
+    /* 🐰 floating pocket pet bubble */
+    .pet-bubble {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      width: fit-content;
+      max-width: 36rem;
+      margin: 0 auto 2rem;
+      padding: 0.9rem 1.3rem 0.9rem 1rem;
+      text-align: left;
+      background: var(--card-solid);
+      border: 2px solid var(--strawberry-milk);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-plush);
+      animation: float 5s ease-in-out infinite;
+    }
+    /* little speech-bubble tail pointing down at the buttons */
+    .pet-bubble::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -9px;
+      width: 16px;
+      height: 16px;
+      background: var(--card-solid);
+      border-right: 2px solid var(--strawberry-milk);
+      border-bottom: 2px solid var(--strawberry-milk);
+      transform: translateX(-50%) rotate(45deg);
+    }
+    .pet-bunny {
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      width: 3.4rem;
+      height: 3.4rem;
+      font-size: 1.9rem;
+      background: var(--whisper-pink);
+      border: 2px solid var(--strawberry-milk);
+      border-radius: 50%;
+    }
+    .pet-new {
+      display: inline-block;
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      color: var(--strawberry-deep);
+      background: var(--whisper-pink);
+      padding: 0.1rem 0.7rem;
+      border-radius: var(--radius-pill);
+      margin-bottom: 0.3rem;
+    }
+    .pet-bubble p { font-size: 0.92rem; line-height: 1.5; margin: 0.15rem 0; }
+    .pet-bubble code { font-size: 0.85em; }
+
+    @media (max-width: 600px) {
+      .pet-bubble { flex-direction: column; text-align: center; padding: 1rem 1.1rem; }
+    }
 
     /* 〰️ cloud dividers */
     .divider {
@@ -372,7 +430,17 @@
     <div class="wrap">
       <span class="welcome-ribbon">౨ৎ for the ALT Mive Style Folder ౨ৎ</span>
       <h1>Mochibun <span class="jp">もちぶん</span></h1>
-      <p class="tagline">A pastel T9 launcher, keitai keyboard, and virtual cursor made for the ALT Mive Style Folder (AT-M120). The everyday basics work on a stock phone, and root + LSPosed wake up the extra magic: pastel SystemUI, speedy native taps, and (new in v2.2.0) the Lid LED Studio ✨ for drawing your own light shows on the outer lid ♡</p>
+      <p class="tagline">A pastel T9 launcher, keitai keyboard, and virtual cursor made for the ALT Mive Style Folder (AT-M120). Everyday basics work on a stock phone, and root + LSPosed unlock the extras: pastel SystemUI, faster taps, and Lid LED Studio for drawing your own light shows on the outer lid ♡</p>
+
+        <div class="pet-bubble">
+          <span class="pet-bunny" aria-hidden="true">🐰</span>
+          <div>
+            <span class="pet-new">new in v2.3.0 ✨</span>
+            <p><b>mochibunny is a pocket pet now!</b> press center on her (or tap her) for a <b>feed / pet / chat</b> pill, or use <code>1</code> / <code>2</code> / <code>3</code>. she earns treats from your steps, cleared notifications, and charging ♡</p>
+            <p>want your own bunny? draw an 8 × 4 <code>mascot_atlas.png</code> and pick it in <b>settings › appearance</b>.</p>
+          </div>
+      </div>
+
       <ul class="candy-pills">
         <li><a class="candy candy--pink" id="download-btn" href="https://github.com/smolstinkyprincess/Mochibun/releases/latest">🍡 download latest APK</a></li>
         <li><a class="candy candy--blue" href="https://github.com/smolstinkyprincess/Mochibun" target="_blank" rel="noopener">🧵 view on GitHub</a></li>
@@ -454,11 +522,6 @@
             </ol>
             <p><b>screen-off flip reset</b> tidies everything back to home whenever the screen goes dark, so closing the flip feels clean even without root ♡</p>
             <p>📟 <b>other flip phones</b>: since v2.2.1 mochibun installs on android 8.1+ (<code>minSdk 27</code>), like kyocera <code>902KC</code> / <code>KYF42</code>. the AT-M120 (android 12) is still home base, so other phones are community-untested. no F4 side key? pick a <b>cursor toggle key</b> in settings › cursor &amp; hardware ♡</p>
-          </article>
-          <article class="setup-card">
-            <h3>🐰 new in v2.3.0: mochibunny pocket pet</h3>
-            <p>the bunny on home is a tiny pet now! press center on her (or tap her) for a little <b>feed / pet / chat</b> pill, or use <code>1</code> / <code>2</code> / <code>3</code> on the keypad. treats come from everyday phone life: steps (if your phone counts them), clearing notifications, and plugging in your charger.</p>
-            <p>she gets peckish, sulky, and sleepy through the day, with kaomoji bubbles to match. want your own bunny? draw an 8 × 4 <code>mascot_atlas.png</code> sprite sheet (idle, talk, happy, hungry, sulky, sleepy, eat, pet), pick it in <b>settings › appearance</b>, and share it inside a <code>.mochibun</code> bundle ♡</p>
           </article>
           <article class="setup-card">
             <h3>🔮 optional root &amp; lsposed perks</h3>
