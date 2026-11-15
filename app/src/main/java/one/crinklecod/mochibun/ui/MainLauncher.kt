@@ -837,9 +837,6 @@ fun MainLauncher(
             activeModal = null
         }
     }
-    val onOpenQuickMemo: () -> Unit = remember {
-        { activeModal = ActiveModal.QuickMemo }
-    }
     val onDismissQuickMemo = remember {
         {
             activeModal = null
@@ -1195,8 +1192,7 @@ fun MainLauncher(
                         onPickWallpaperClick = onPickWallpaperClick,
                         onResetWallpaperClick = onResetWallpaperClick,
                         hasCustomWallpaper = launcherVm.wallpaperUri != null,
-                        onSettingsRestored = onSettingsRestored,
-                        onOpenQuickMemo = onOpenQuickMemo
+                        onSettingsRestored = onSettingsRestored
                     )
                 }
 

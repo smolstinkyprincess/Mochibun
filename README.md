@@ -25,12 +25,13 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Virtual mouse pointer**: Press the side key (F4) for a little cursor in touch-only apps. Click with the center key, scroll with `2`/`8` and `4`/`6`, and use your own `.png` or `.gif` sprite. No root? Turn on the optional Accessibility helper and it taps and scrolls anyway.
 - **Clamshell tricks**: Choose what opens when you flip the phone open (Home, Resume Last App, or Notifications), plus an optional snap sound when you close it. **Screen-Off Flip Reset** tidies up (back to Home, menus closed, cursor hidden) whenever the screen goes dark, so unrooted phones get a clean flip-shut too.
 - **Soft-key navigation**: Recents and Back act as little LSK / RSK soft keys on Home and in the drawer, and you can switch that off in *Settings > Virtual Cursor*.
+- **Mochibunny pocket pet 🐰**: The little bunny on Home is yours to look after now! Press Center on her (or tap her) to pop open a tiny **Feed / Pet / Chat** pill, or use `1` / `2` / `3` on the keypad. Treats show up on their own: walk a little (1 per 1,000 steps, if your phone has a step counter), clear your notifications, or plug in your charger. She gets peckish, sulky, and sleepy as the day goes on, and her little speech bubbles change with her mood. No guilt, no game over, just a cozy loaf ♡
 - **Offline & private**: No internet permission, no camera permission, no telemetry.
 
 ### Make it yours
 - **5 pastel themes**: *Sakura Dream*, *Lavender Mist*, *Minty Matcha*, *Milky Peach*, and *Midnight Mochi* for night owls 🌙. Switch live, or write your own in simple YAML.
 - **7 keypad sound profiles**: Generated on-device, so the app stays tiny. Pick *Kawaii Pop*, *Retro Keitai*, *8-Bit Chiptune*, *Cyber Pager*, *Tactile Thock*, *Water Drop*, or *Muted* for library mode.
-- **Share your setup**: Back up pinned apps, folders, and settings to `.json`, or pack colors, cursor, and wallpaper into a `.mochibun` bundle to swap with friends.
+- **Share your setup**: Back up pinned apps, folders, and settings to `.json`, or pack colors, cursor, wallpaper, and your custom Mochibunny into a `.mochibun` bundle to swap with friends.
 - **Icon pack support**: Works with Nova, Apex, and ADW icon packs.
 
 ### Root / LSPosed extras
@@ -128,7 +129,14 @@ Never wrestle with tiny touch keyboards just to send a cute face:
 ## 🎨 Themes & Custom Styling
 
 ### 🎀 Shareable Theme Packs (`.mochibun`)
-Want to show off your setup on r/flipphones or Discord? Export a `.mochibun` bundle to pack up your colors, greeting text, wallpaper, and custom mouse cursor (`.gif`/`.png`). Opening a `.mochibun` file on your phone shows a live color swatch card, and it applies in one click!
+Want to show off your setup on r/flipphones or Discord? Export a `.mochibun` bundle to pack up your colors, greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), and your custom Mochibunny sprite sheet (`mascot_atlas.png`). Opening a `.mochibun` file on your phone shows a live color swatch card, and it applies in one click!
+
+### 🐰 Custom Mochibunny Sprites (`mascot_atlas.png`)
+Want a different little friend on Home? Draw your own! Mochibunny lives on one PNG sprite sheet: **8 rows × 4 columns** of square frames, one row per mood or action, top to bottom: `idle`, `talk`, `happy`, `hungry`, `sulky`, `sleepy`, `eat`, `pet`. Pick yours in *Settings > Appearance > Custom Mascot* (and **Reset to Default Mochibunny** brings her back).
+
+- Frames can be 16–256 px, up to 16 per row, the whole sheet up to 2048 × 2048 and 1.5 MB.
+- She's drawn with crisp nearest-neighbor pixels, so tiny pixel art stays sharp ♡
+- If a file doesn't fit, nothing breaks: you get a little note and your current mascot stays.
 
 ### 📝 Hand-Crafted YAML Themes (`kaml`)
 Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom themes—drop your `.yaml` files into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/`:

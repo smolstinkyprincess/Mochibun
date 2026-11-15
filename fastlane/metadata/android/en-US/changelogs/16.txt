@@ -1,0 +1,4 @@
+Mochibun v2.3.0 ♡
+- Mochibunny Pocket Pet: Feed Mochibunny treats earned from daily steps, clearing notifications, and plugging in your charger, or pet and chat with her using the D-pad pill!
+- Mood-Driven Dialogue & 8×4 Sprite Atlas: Mochibunny reacts to hunger, joy, and late-night hours with animated states and kaomoji speech bubbles.
+- Custom Mascot Atlases: Pick your own 8×4 sprite atlas in Settings → Appearance or share one inside .mochibun theme bundles.
