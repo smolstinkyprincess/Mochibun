@@ -139,7 +139,7 @@ Want a different little friend on Home? Draw your own! Mochibunny lives on one P
 - If a file doesn't fit, nothing breaks: you get a little note and your current mascot stays.
 
 ### 📝 Hand-Crafted YAML Themes (`kaml`)
-Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom themes—drop your `.yaml` files into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/`:
+Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom color palettes and card styling—drop your `.yaml` files into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/` *(to bundle images like `mascot_atlas.png`, wallpapers, or cursors, export a `.mochibun` pack above)*:
 
 ```yaml
 # /sdcard/Android/data/one.crinklecod.mochibun/files/themes/sweet_sakura.yaml
@@ -180,9 +180,8 @@ steps:              # up to 16
 
 Exports are saved as `.mochibunled` files (it's the same YAML inside, just with a cute extension). Open one on your phone and it pops straight into your Studio library ♡ Plain `.yaml` or `.json` files with the same fields work too, through **Import** in the Studio.
 
-### 📦 Full Backups (`.json`) 
-#### Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, and cursor tweaks to a simple `.json` file. Restoring shows a preview summary first and reloads everything instantly, no reboot needed.
----
+### 📦 Full Backups (`.json`)
+Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, cursor tweaks, and mochibunny's stats to a simple `.json` file. Restoring shows a preview summary first and reloads everything instantly, no reboot needed.
 
 ## 📱 Hardware & Specs
 
