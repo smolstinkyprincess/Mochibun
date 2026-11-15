@@ -212,7 +212,7 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 | **Website** | Showcase & Guides | [crinklecod.one/Mochibun](https://crinklecod.one/Mochibun) |
 | **Community Packs** | Themes, Custom Mascots & Lid LEDs | [Browse & Download ♡](https://crinklecod.one/Mochibun/community/) |
 | **GitHub Releases** | Direct APK download | [Download Latest APK](https://github.com/smolstinkyprincess/Mochibun/releases/latest) |
-| **Obtainium** | One-click update tracking | [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](obtainium://app/https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun) |
+| **Obtainium** | One-click update tracking | [![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add%20App-007ACC?style=for-the-badge&logo=android&logoColor=white)](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22one.crinklecod.mochibun%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fsmolstinkyprincess%2FMochibun%22%2C%22author%22%3A%22smolstinkyprincess%22%2C%22name%22%3A%22Mochibun%22%7D) |
 
 > 💡 **Using an ALT Mive Style Folder (AT-M120)?**
 > Mochibun works great right out of the box, no root required! (˶ᵔ ᵕ ᵔ˶) Start with the [Standard (Non-Root) Setup](#-standard-non-root-setup) below. Want the extra perks later? Hop to [Optional Root & LSPosed Perks](#-optional-root--lsposed-perks) ✨
