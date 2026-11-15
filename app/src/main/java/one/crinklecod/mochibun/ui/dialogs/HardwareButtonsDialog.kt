@@ -49,7 +49,7 @@ import one.crinklecod.mochibun.data.model.ButtonActionConfig
 import one.crinklecod.mochibun.data.model.PhysicalKey
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.HardwareRemapManager
-import one.crinklecod.mochibun.ui.components.MascotMood
+import one.crinklecod.mochibun.ui.components.MascotAnimSlot
 import one.crinklecod.mochibun.ui.components.MochibunMascot
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.destructiveColor
@@ -449,7 +449,7 @@ fun HardwareButtonsDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     MochibunMascot(
-                        mood = if (!isListening) MascotMood.CHEER else MascotMood.WORRIED,
+                        slot = if (!isListening) MascotAnimSlot.HAPPY else MascotAnimSlot.SULKY,
                         size = 48.dp
                     )
                 }

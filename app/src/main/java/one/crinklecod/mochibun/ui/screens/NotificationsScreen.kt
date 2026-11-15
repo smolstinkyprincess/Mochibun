@@ -46,7 +46,7 @@ import one.crinklecod.mochibun.data.repository.NotificationTracker
 import one.crinklecod.mochibun.ui.components.BottomLavenderClouds
 import one.crinklecod.mochibun.ui.components.MochibunMascot
 import one.crinklecod.mochibun.ui.components.TopLavenderClouds
-import one.crinklecod.mochibun.ui.components.getDefaultTimeOfDayMood
+import one.crinklecod.mochibun.ui.components.currentMoodSlot
 import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.dialogs.awaitFocusSafely
 import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
@@ -523,7 +523,7 @@ fun NotificationsScreen(
                             verticalArrangement = Arrangement.Center
                         ) {
                             MochibunMascot(
-                                mood = getDefaultTimeOfDayMood(),
+                                slot = currentMoodSlot(),
                                 size = 72.dp
                             )
                             Spacer(Modifier.height(10.dp))

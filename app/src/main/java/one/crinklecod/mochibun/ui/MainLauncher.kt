@@ -397,6 +397,12 @@ fun MainLauncher(
         mascotReaction = MascotReaction(id = mascotReaction.id + 1, kind = kind)
     }
 
+    // Catch her up on decay whenever Home comes back on screen (in memory only, no disk write),
+    // so her mood and sprite row are current after time away
+    LaunchedEffect(isHomeVisible) {
+        if (isHomeVisible) PetManager.refresh()
+    }
+
     // Auto-close after PET_PILL_AUTO_CLOSE_MS without a key or tap (every interaction bumps the tick)
     LaunchedEffect(isPetPillOpen, petPillInteractionTick) {
         if (isPetPillOpen) {

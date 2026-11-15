@@ -4,8 +4,6 @@ import one.crinklecod.mochibun.ui.components.DEFAULT_BOOP_LINES
 import one.crinklecod.mochibun.ui.components.LATE_NIGHT_LINES
 import one.crinklecod.mochibun.ui.components.LOW_BATTERY_LINES
 import one.crinklecod.mochibun.ui.components.MUSIC_LINES
-import one.crinklecod.mochibun.ui.components.MascotMood
-import one.crinklecod.mochibun.ui.components.getDefaultTimeOfDayMood
 import one.crinklecod.mochibun.ui.components.selectSpeechBubbleDialogue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals

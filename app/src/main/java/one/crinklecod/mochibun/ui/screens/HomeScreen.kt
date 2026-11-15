@@ -95,6 +95,7 @@ import one.crinklecod.mochibun.ui.components.kawaiiCardMotifs
 import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.*
 import one.crinklecod.mochibun.ui.components.*
+import one.crinklecod.mochibun.pet.PetManager
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -946,8 +947,19 @@ fun FavoritesCard(
 
     // Companion mascot loaf sitting on the top-right corner of the favorites card with dynamic speech bubble.
     // Declared last in this Box so she always draws above the lace rim and the bow.
+    // One shared 4 Hz stepped clock for her bob and sprite frames. It runs only while Home is
+    // visible and the activity is RESUMED (rememberKeitaiStep), and is read only in layout/draw.
+    val mascotStep = rememberKeitaiStep(active = isHomeScreenActive, totalSteps = MascotAtlasMath.TICK_WRAP)
+    val mascotTick = remember(mascotStep) { { mascotStep.intValue } }
+    // Her resting row follows her pet mood: re-checked when her state changes and about once a
+    // minute (the clock's minute changes), so hunger and bedtime show up without extra timers.
+    val petState by PetManager.state.collectAsState()
+    val mascotMinute by remember(mascotStep) { derivedStateOf { mascotStep.intValue / MASCOT_TICKS_PER_MINUTE } }
+    val moodSlot = remember(petState, mascotMinute) { currentMoodSlot() }
+
     MochibunnyWithSpeechBubble(
-        mood = getDefaultTimeOfDayMood(),
+        baseSlot = moodSlot,
+        frameTick = mascotTick,
         size = 56.dp,
         themeTintColor = theme.mascotTintColor,
         isFocused = isMascotFocused,
@@ -956,7 +968,7 @@ fun FavoritesCard(
         modifier = Modifier
             .align(Alignment.TopEnd)
             .offset(x = (-14).dp, y = (-26).dp)
-            .keitaiMascotBob(enabled = isHomeScreenActive)
+            .keitaiMascotBob(mascotTick)
     )
 
     // Feed / Pet / Chat pill floating on her left (the side with room: she sits at the right
@@ -1327,6 +1339,9 @@ fun FolderWithHeartIcon(
  * While the pet pill is open, a tap anywhere on Home outside the pill closes it. The tap is seen
  * first (Initial pass) and consumed, so it doesn't also launch the favorite / widget underneath.
  */
+/** 4 Hz clock: 240 ticks a minute. */
+private const val MASCOT_TICKS_PER_MINUTE = 240
+
 private fun Modifier.dismissPetPillOnOutsideTap(
     enabled: Boolean,
     bounds: PetPillBounds,
