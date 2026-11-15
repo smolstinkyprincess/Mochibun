@@ -1,0 +1,10 @@
+{
+    "id":              "strawberry_lavender_bunbun",
+    "name":            "Strawberry Lavender Bunbun ♡",
+    "author":          "emii",
+    "type":            "theme",
+    "file":            "themes/strawberry_lavender_bunbun.mochibun",
+    "preview":         "previews/strawberry_lavender_bunbun.png",
+    "colors":          ["#FFB7D5", "#DCC4F8", "#FFF5F8"],
+    "hasCustomMascot": true
+}

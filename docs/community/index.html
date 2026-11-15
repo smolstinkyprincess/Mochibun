@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mochibun Community (もちぶん) ♡ themes, mascots &amp; lid LEDs</title>
+  <meta name="description" content="Community themes, custom pocket-pet mascots (.mochibun), and Lid LED Studio animations (.mochibunled) for Mochibun on the ALT Mive Style Folder (AT-M120).">
+  <meta name="theme-color" content="#FFEBF2">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍡</text></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DynaPuff:wght@400;600&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* same palette & motion as docs/index.html */
+    :root {
+      --cream: #FFFDF7;
+      --whisper-pink: #FFEBF2;
+      --powder-blue: #EAF4FC;
+      --lavender-haze: #F4EBFD;
+      --card: rgba(255, 255, 255, 0.78);
+      --card-solid: #FFFFFF;
+
+      --strawberry-milk: #F6B3C8;
+      --strawberry-deep: #E58AA8;
+      --buttercup-deep: #F5CF6B;
+      --periwinkle: #B9C3F5;
+      --periwinkle-deep: #8E9BE6;
+
+      --cocoa: #4A3E3D;
+      --cocoa-soft: #7C6866;
+
+      --radius-md: 22px;
+      --radius-lg: 30px;
+      --radius-xl: 36px;
+      --radius-pill: 999px;
+
+      --shadow-plush: 0 12px 30px rgba(230, 180, 200, 0.25);
+      --shadow-plush-hover: 0 18px 40px rgba(230, 180, 200, 0.35);
+      --shadow-soft: 0 4px 14px rgba(230, 180, 200, 0.22);
+
+      --font-display: 'DynaPuff', 'Comic Sans MS', system-ui, sans-serif;
+      --font-body: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+      --bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--cocoa);
+      background: var(--cream);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      width: min(1000px, 100% - 2.5rem);
+      margin-inline: auto;
+    }
+
+    section { position: relative; }
+
+    /* motion */
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50%      { transform: translateY(-12px) rotate(2deg); }
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.35; transform: scale(0.8); }
+    }
+    @keyframes tint-shift {
+      0%, 100% { background-position: 0% 50%; }
+      50%      { background-position: 100% 50%; }
+    }
+    @keyframes sprinkle-fall {
+      0%   { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+      10%  { opacity: 0.45; }
+      90%  { opacity: 0.45; }
+      100% { transform: translateY(110vh) rotate(160deg); opacity: 0; }
+    }
+
+    .float   { animation: float 4s ease-in-out infinite; }
+    .twinkle { animation: twinkle 3s ease-in-out infinite; }
+
+    /* ☁️ hero */
+    .hero {
+      position: relative;
+      text-align: center;
+      background:
+        radial-gradient(circle at 12% 20%, rgba(255, 255, 255, 0.9) 0 6%, transparent 30%),
+        radial-gradient(circle at 88% 30%, var(--lavender-haze) 0%, transparent 45%),
+        linear-gradient(180deg, var(--whisper-pink) 0%, var(--lavender-haze) 55%, var(--powder-blue) 100%);
+      padding: 4rem 0 6rem;
+      overflow: hidden;
+    }
+
+    .hero-decor { position: absolute; inset: 0; pointer-events: none; }
+    .hero-decor > * { position: absolute; }
+
+    .cloud { width: 140px; height: 80px; filter: drop-shadow(0 8px 14px rgba(185, 195, 245, 0.35)); }
+    .cloud-1 { top: 10%; left: 4%; }
+    .cloud-2 { top: 20%; right: 5%; width: 110px; animation-delay: -1.5s; }
+    .cloud-3 { bottom: 18%; left: 10%; width: 90px; animation-delay: -2.6s; opacity: 0.85; }
+
+    .star { font-size: 1.3rem; color: var(--buttercup-deep); }
+    .star-1 { top: 14%; left: 28%; animation-delay: -0.4s; }
+    .star-2 { top: 9%;  right: 26%; color: var(--strawberry-deep); animation-delay: -1.2s; }
+    .star-3 { bottom: 28%; right: 14%; color: var(--periwinkle-deep); animation-delay: -2s; }
+
+    .welcome-ribbon {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-display);
+      font-size: 0.9rem;
+      background: var(--card-solid);
+      color: var(--strawberry-deep);
+      padding: 0.4rem 1.1rem;
+      border-radius: var(--radius-pill);
+      border: 2px solid var(--strawberry-milk);
+      box-shadow: var(--shadow-soft);
+      margin-bottom: 1.1rem;
+    }
+
+    .hero h1 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(2.1rem, 6vw, 3.4rem);
+      line-height: 1.12;
+      margin-bottom: 0.9rem;
+    }
+
+    .hero h1 .jp {
+      display: block;
+      font-size: 0.44em;
+      color: var(--strawberry-deep);
+      margin-top: 0.3rem;
+    }
+
+    .tagline {
+      font-size: 1.08rem;
+      color: var(--cocoa-soft);
+      max-width: 46ch;
+      margin: 0 auto 1.6rem;
+    }
+
+    .candy-pills {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.7rem;
+      list-style: none;
+    }
+
+    .candy {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.6rem 1.2rem;
+      border-radius: var(--radius-pill);
+      font-weight: 800;
+      font-size: 0.92rem;
+      text-decoration: none;
+      color: var(--cocoa);
+      border: 2px solid rgba(255, 255, 255, 0.9);
+      box-shadow: var(--shadow-soft), inset 0 -3px 0 rgba(0, 0, 0, 0.05), inset 0 3px 0 rgba(255, 255, 255, 0.6);
+      transition: transform 0.35s var(--bounce), box-shadow 0.3s ease;
+      cursor: pointer;
+    }
+    .candy--pink { background: linear-gradient(180deg, #FFD3E1, var(--strawberry-milk)); }
+    .candy--butter { background: linear-gradient(180deg, #FFF4CC, #FFE9A8); }
+    .candy--blue { background: linear-gradient(180deg, #DDE3FF, var(--periwinkle)); }
+    .candy:hover { transform: translateY(-3px) scale(1.04) rotate(-1deg); box-shadow: var(--shadow-plush-hover); }
+
+    /* 〰️ cloud dividers */
+    .divider {
+      position: absolute;
+      left: 0;
+      bottom: -1px;
+      width: 100%;
+      height: 70px;
+      line-height: 0;
+    }
+    .divider svg { width: 100%; height: 100%; }
+
+    /* 🎀 gallery section */
+    .gallery-section {
+      background: var(--powder-blue);
+      padding: 2.5rem 0 6.5rem;
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(1.6rem, 4vw, 2.2rem);
+      text-align: center;
+      margin-bottom: 0.4rem;
+    }
+    .section-sub {
+      text-align: center;
+      color: var(--cocoa-soft);
+      margin-bottom: 1.6rem;
+    }
+
+    /* filter tabs */
+    .filter-bar {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin-bottom: 2rem;
+    }
+    .filter-btn {
+      font-family: var(--font-display);
+      font-size: 0.88rem;
+      color: var(--cocoa);
+      background: var(--card-solid);
+      border: 2px solid var(--strawberry-milk);
+      border-radius: var(--radius-pill);
+      padding: 0.42rem 1.05rem;
+      cursor: pointer;
+      box-shadow: var(--shadow-soft);
+      transition: transform 0.25s var(--bounce), background 0.2s ease;
+    }
+    .filter-btn:hover { transform: translateY(-2px); }
+    .filter-btn.active {
+      background: linear-gradient(180deg, #FFD3E1, var(--strawberry-milk));
+      border-color: #FFFFFF;
+    }
+
+    /* catalog grid */
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+      gap: 1.4rem;
+    }
+
+    .pack-card {
+      display: flex;
+      flex-direction: column;
+      background: var(--card-solid);
+      border: 2px solid var(--whisper-pink);
+      border-radius: var(--radius-lg);
+      padding: 0.9rem;
+      box-shadow: var(--shadow-plush);
+      transition: transform 0.35s var(--bounce), box-shadow 0.3s ease;
+    }
+    .pack-card:nth-child(even) { border-color: var(--lavender-haze); }
+    .pack-card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-plush-hover);
+    }
+
+    .preview-frame {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 480 / 800;
+      max-height: 310px;
+      border-radius: 18px;
+      overflow: hidden;
+      background: linear-gradient(135deg, var(--whisper-pink), var(--lavender-haze));
+      border: 3px solid var(--whisper-pink);
+      margin-bottom: 0.85rem;
+    }
+    .pack-card:nth-child(even) .preview-frame { border-color: var(--powder-blue); }
+
+    .preview-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .preview-placeholder {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      font-size: 3rem;
+    }
+
+    .mascot-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-family: var(--font-display);
+      font-size: 0.74rem;
+      color: var(--cocoa);
+      background: rgba(255, 255, 255, 0.94);
+      border: 2px solid var(--strawberry-milk);
+      border-radius: var(--radius-pill);
+      padding: 0.2rem 0.65rem;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .pack-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .pack-title {
+      font-family: var(--font-display);
+      font-size: 1.08rem;
+      line-height: 1.25;
+      color: var(--cocoa);
+    }
+
+    .type-pill {
+      flex: 0 0 auto;
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.15rem 0.55rem;
+      border-radius: var(--radius-pill);
+      background: var(--lavender-haze);
+      color: var(--cocoa);
+    }
+    .type-pill--led { background: #FFF4CC; }
+
+    .pack-author {
+      font-size: 0.85rem;
+      color: var(--cocoa-soft);
+      margin-bottom: 0.65rem;
+    }
+
+    .swatches {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 0.9rem;
+    }
+    .swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid #FFFFFF;
+      box-shadow: 0 2px 6px rgba(74, 62, 61, 0.16);
+    }
+
+    .pack-download {
+      margin-top: auto;
+      width: 100%;
+      justify-content: center;
+      font-size: 0.88rem;
+      padding: 0.55rem 1rem;
+    }
+
+    .status-box {
+      text-align: center;
+      background: var(--card);
+      border: 2px solid var(--whisper-pink);
+      border-radius: var(--radius-lg);
+      padding: 2rem 1.5rem;
+      color: var(--cocoa-soft);
+      font-size: 0.98rem;
+    }
+
+    /* 🌷 how-to cards */
+    .setup-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.2rem;
+      margin-top: 2.5rem;
+    }
+    .setup-card {
+      background: var(--card);
+      border: 2px solid var(--whisper-pink);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-soft);
+      padding: 1.3rem 1.5rem;
+      color: var(--cocoa);
+    }
+    .setup-card:nth-child(even) { border-color: var(--lavender-haze); }
+    .setup-card h3 { font-family: var(--font-display); margin: 0 0 0.6rem; }
+    .setup-card ol, .setup-card p { margin: 0.4rem 0; font-size: 0.94rem; line-height: 1.5; }
+    .setup-card li { margin-bottom: 0.35rem; margin-left: 1.1rem; }
+    .setup-card a { color: var(--strawberry-deep); font-weight: 700; }
+
+    /* 🌙 footer */
+    .site-footer {
+      position: relative;
+      background: linear-gradient(180deg, #DCD3F5 0%, #C9C4EE 100%);
+      text-align: center;
+      padding: 3rem 0 3.5rem;
+      overflow: hidden;
+    }
+    .moon {
+      font-size: 3rem;
+      display: inline-block;
+      margin-bottom: 0.4rem;
+      filter: drop-shadow(0 0 18px rgba(255, 233, 168, 0.8));
+    }
+    .site-footer h2 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 1.4rem;
+      margin-bottom: 1rem;
+    }
+    .site-footer p { color: #5F5170; font-size: 0.92rem; margin-top: 1.2rem; }
+
+    /* 🌈 drifting sky */
+    .sky {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .sky-tint {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, var(--whisper-pink), var(--lavender-haze), var(--powder-blue), #FFF6D6, var(--whisper-pink));
+      background-size: 400% 400%;
+      mix-blend-mode: multiply;
+      opacity: 0.35;
+      animation: tint-shift 30s ease-in-out infinite;
+    }
+    .sprinkle {
+      position: absolute;
+      top: 0;
+      left: var(--x);
+      font-size: 0.9rem;
+      color: var(--strawberry-milk);
+      opacity: 0;
+      animation: sprinkle-fall var(--d) linear var(--delay) infinite;
+    }
+    .sprinkle:nth-child(even) { color: var(--periwinkle); }
+
+    @media (max-width: 600px) {
+      .divider { height: 44px; }
+      .cloud-2, .star-1 { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .sprinkle { display: none; }
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- shared cloud shape -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="cloud" viewBox="0 0 140 80">
+        <path fill="#FFFFFF" d="M34 72c-16 0-28-10-28-24 0-13 10-23 23-24 4-13 16-21 30-21 13 0 24 7 29 18 3-1 6-2 9-2 14 0 25 10 26 23 9 2 15 9 15 17 0 8-7 13-17 13H34z"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- 🍡 hero -->
+  <header class="hero">
+    <div class="hero-decor" aria-hidden="true">
+      <svg class="cloud cloud-1 float"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-2 float"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-3 float"><use href="#cloud"/></svg>
+      <span class="star star-1 twinkle">✦</span>
+      <span class="star star-2 twinkle">✧</span>
+      <span class="star star-3 twinkle">★</span>
+    </div>
+
+    <div class="wrap">
+      <span class="welcome-ribbon">౨ৎ mochibun community gallery ౨ৎ</span>
+      <h1>Theme &amp; Mascot Packs <span class="jp">もちぶん コミュニティ ♡</span></h1>
+      <p class="tagline">Download pastel setups, custom pocket pets, and outer lid LED light shows made for Mochibun — tap any downloaded file on your phone to preview and apply in one click ♡</p>
+
+      <ul class="candy-pills">
+        <li><a class="candy candy--blue" href="../">← back to Mochibun</a></li>
+        <li><a class="candy candy--pink" href="https://github.com/smolstinkyprincess/Mochibun" target="_blank" rel="noopener">🧵 submit yours on GitHub</a></li>
+      </ul>
+    </div>
+
+    <div class="divider" aria-hidden="true">
+      <svg viewBox="0 0 1440 70" preserveAspectRatio="none"><path fill="#EAF4FC" d="M0 40c60-30 120-30 180 0s120 30 180 0 120-30 180 0 120 30 180 0 120-30 180 0 120 30 180 0 120-30 180 0 120 30 180 0v30H0z"/></svg>
+    </div>
+  </header>
+
+  <main>
+    <section class="gallery-section" aria-labelledby="gallery-title">
+      <div class="wrap">
+        <h2 class="section-title" id="gallery-title">✦ featured &amp; community packs ✦</h2>
+        <p class="section-sub">grab a <code>.mochibun</code> setup bundle or <code>.mochibunled</code> light pattern</p>
+
+        <div class="filter-bar" role="tablist" aria-label="Filter community items">
+          <button class="filter-btn active" data-filter="all" type="button">✨ all packs</button>
+          <button class="filter-btn" data-filter="theme" type="button">🎀 themes &amp; mascots</button>
+          <button class="filter-btn" data-filter="led" type="button">💡 lid LEDs</button>
+        </div>
+
+        <div id="catalog-container" class="catalog-grid">
+          <div class="status-box" style="grid-column: 1 / -1;">loading cute packs... 🍡</div>
+        </div>
+
+        <div class="setup-cards">
+          <article class="setup-card">
+            <h3>📲 how to install on your phone</h3>
+            <ol>
+              <li>Tap <b>download pack</b> on any card above in your flip phone browser.</li>
+              <li>Open the downloaded <code>.mochibun</code> or <code>.mochibunled</code> file from your notifications or file manager.</li>
+              <li>Mochibun pops open a live swatch preview — hit <b>apply</b> and you're all set ♡</li>
+            </ol>
+          </article>
+          <article class="setup-card">
+            <h3>🎀 share your own creation</h3>
+            <p>Export your setup from <b>settings › backup &amp; restore › share setup (.mochibun)</b> (check <i>include custom mascot</i> if you drew a sprite sheet!), or export a light show from <b>lid LED studio</b>.</p>
+            <p>Drop your file + a screenshot into a PR or issue on <a href="https://github.com/smolstinkyprincess/Mochibun" target="_blank" rel="noopener">GitHub</a> to add it here ✨</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="divider" aria-hidden="true">
+        <svg viewBox="0 0 1440 70" preserveAspectRatio="none"><path fill="#DCD3F5" d="M0 40c60-30 120-30 180 0s120 30 180 0 120-30 180 0 120 30 180 0 120-30 180 0 120 30 180 0 120-30 180 0 120 30 180 0v30H0z"/></svg>
+      </div>
+    </section>
+  </main>
+
+  <!-- 🌙 footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <span class="moon float" aria-hidden="true">🌙</span>
+      <h2>sweet dreams, little flip phone</h2>
+      <ul class="candy-pills">
+        <li><a class="candy candy--pink" href="../">🍡 Mochibun home</a></li>
+        <li><a class="candy candy--butter" href="https://crinklecod.one">✨ crinklecod.one</a></li>
+        <li><a class="candy candy--blue" href="https://github.com/smolstinkyprincess" target="_blank" rel="noopener">🌷 GitHub</a></li>
+      </ul>
+      <p>made with stardust, ♡ &amp; eepy magic · licensed under Apache 2.0</p>
+    </div>
+  </footer>
+
+  <!-- 🌈 drifting sky behind everything -->
+  <div class="sky" aria-hidden="true">
+    <div class="sky-tint"></div>
+    <span class="sprinkle" style="--x:8%;--d:28s;--delay:-4s">✦</span>
+    <span class="sprinkle" style="--x:24%;--d:33s;--delay:-18s">♡</span>
+    <span class="sprinkle" style="--x:41%;--d:30s;--delay:-9s">✧</span>
+    <span class="sprinkle" style="--x:58%;--d:36s;--delay:-25s">🍡</span>
+    <span class="sprinkle" style="--x:74%;--d:27s;--delay:-13s">✦</span>
+    <span class="sprinkle" style="--x:91%;--d:32s;--delay:-2s">♡</span>
+  </div>
+
+  <script>
+    let allItems = [];
+    let activeFilter = 'all';
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderCatalog() {
+      const container = document.getElementById('catalog-container');
+      const filtered = activeFilter === 'all'
+        ? allItems
+        : allItems.filter((item) => item.type === activeFilter);
+
+      if (!filtered.length) {
+        container.innerHTML = `<div class="status-box" style="grid-column: 1 / -1;">no packs in this category yet — be the first to share one! ♡</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map((item) => {
+        const isLed = item.type === 'led';
+        const pillLabel = isLed ? '💡 lid LED' : '🎀 theme';
+        const btnClass = isLed ? 'candy--butter' : 'candy--pink';
+        const swatches = (item.colors || [])
+          .map((hex) => `<span class="swatch" style="background:${escapeHtml(hex)}" title="${escapeHtml(hex)}"></span>`)
+          .join('');
+
+        const mascotBadge = item.hasCustomMascot
+          ? `<span class="mascot-badge">🐰 custom mascot</span>`
+          : '';
+
+        const previewHtml = item.preview
+          ? `<img src="${escapeHtml(item.preview)}" alt="${escapeHtml(item.name)} preview" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'preview-placeholder',textContent:'${isLed ? '💡' : '🐰'}'}))">`
+          : `<div class="preview-placeholder">${isLed ? '💡' : '🐰'}</div>`;
+
+        return `
+          <article class="pack-card">
+            <div class="preview-frame">
+              ${previewHtml}
+              ${mascotBadge}
+            </div>
+            <div class="pack-header">
+              <h3 class="pack-title">${escapeHtml(item.name)}</h3>
+              <span class="type-pill ${isLed ? 'type-pill--led' : ''}">${pillLabel}</span>
+            </div>
+            <p class="pack-author">by ${escapeHtml(item.author || 'anonymous')}</p>
+            ${swatches ? `<div class="swatches" aria-label="Color palette">${swatches}</div>` : ''}
+            <a class="candy ${btnClass} pack-download" href="${escapeHtml(item.file)}" download>
+              🍡 download ${isLed ? '.mochibunled' : '.mochibun'}
+            </a>
+          </article>
+        `;
+      }).join('');
+    }
+
+    document.querySelectorAll('.filter-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeFilter = btn.dataset.filter;
+        renderCatalog();
+      });
+    });
+
+    (async () => {
+      const container = document.getElementById('catalog-container');
+      try {
+        const res = await fetch('catalog.json', { cache: 'no-cache' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        allItems = Array.isArray(data) ? data : (data.items || []);
+        renderCatalog();
+      } catch (err) {
+        console.warn('Could not load catalog.json', err);
+        container.innerHTML = `<div class="status-box" style="grid-column: 1 / -1;">couldn't load <code>catalog.json</code> yet — make sure <code>docs/community/catalog.json</code> is valid JSON ♡</div>`;
+      }
+    })();
+  </script>
+
+</body>
+</html>
