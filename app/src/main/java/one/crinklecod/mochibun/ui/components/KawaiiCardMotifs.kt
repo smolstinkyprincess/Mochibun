@@ -519,7 +519,10 @@ fun Modifier.softGlowFocus(
     cornerRadius: Dp = 22.dp,
     glowColor: Color? = null,
     borderColor: Color? = null,
-    containerTint: Color? = null
+    containerTint: Color? = null,
+    // Scroll the focused item into view. Off for fixed overlays (the pet pill): its request
+    // would otherwise reach the Home HorizontalPager and flip it to another page.
+    bringIntoView: Boolean = true
 ): Modifier = composed {
     val context = LocalContext.current
     val scaleAnim = remember { Animatable(1.0f) }
@@ -563,6 +566,7 @@ fun Modifier.softGlowFocus(
                     if (scaleAnim.value != 1.0f) scaleAnim.snapTo(1.0f)
                 }
             }
+            if (!bringIntoView) return@LaunchedEffect
             val topMargin = with(localDensity) { 58.dp.toPx() }
             val bottomMargin = with(localDensity) { 72.dp.toPx() }
             try {

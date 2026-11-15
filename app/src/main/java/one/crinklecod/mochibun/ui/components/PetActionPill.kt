@@ -54,8 +54,8 @@ fun PetActionPill(
             .graphicsLayer { clip = false }
             .background(ActiveTheme.surface.copy(alpha = 0.94f), PillShape)
             .border(1.5.dp, ActiveTheme.cardBorder, PillShape)
-            .padding(horizontal = 5.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         PetPillButton(
@@ -89,7 +89,7 @@ private fun PetPillButton(
     Box(
         modifier = Modifier
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isSelected, cornerRadius = 14.dp)
+            .softGlowFocus(isSelected = isSelected, cornerRadius = 14.dp, bringIntoView = false)
             .background(
                 if (isSelected) ActiveTheme.primary.copy(alpha = 0.55f) else ActiveTheme.container,
                 ButtonShape
@@ -100,13 +100,14 @@ private fun PetPillButton(
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 9.dp, vertical = 4.dp),
+            .padding(horizontal = 7.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
-            lineHeight = 15.sp,
+            // Sized so the whole pill fits left of her on a 480 dp wide screen
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
             color = accent.copy(alpha = if (isDimmed) 0.45f else 1f),
             maxLines = 1,
