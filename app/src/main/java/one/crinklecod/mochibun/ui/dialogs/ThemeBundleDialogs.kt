@@ -53,12 +53,21 @@ import java.util.Locale
 fun ExportBundleDialog(
     initialBundleName: String = "Mochibun Setup",
     onDismiss: () -> Unit,
-    onExport: (bundleName: String, includeWallpaper: Boolean, includeCustomCursor: Boolean, includeDisplayName: Boolean) -> Unit
+    hasCustomMascot: Boolean = false,
+    onExport: (
+        bundleName: String,
+        includeWallpaper: Boolean,
+        includeCustomCursor: Boolean,
+        includeCustomMascot: Boolean,
+        includeDisplayName: Boolean
+    ) -> Unit
 ) {
     val theme = LocalLauncherTheme.current
     var bundleName by remember { mutableStateOf(initialBundleName) }
     var includeWallpaper by remember { mutableStateOf(true) }
     var includeCustomCursor by remember { mutableStateOf(true) }
+    // Checked by default only when a custom mascot atlas is active
+    var includeCustomMascot by remember { mutableStateOf(hasCustomMascot) }
     var includeDisplayName by remember { mutableStateOf(true) }
 
     val focusRequester = remember { FocusRequester() }
@@ -66,7 +75,8 @@ fun ExportBundleDialog(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    val totalItems = 6 // 0: Name, 1: Wallpaper, 2: Cursor, 3: DisplayName, 4: Cancel, 5: Create
+    // 0: Name, 1: Wallpaper, 2: Cursor, 3: Mascot, 4: DisplayName, 5: Cancel, 6: Create
+    val totalItems = 7
 
     requestFocusSafely(focusRequester)
 
@@ -107,9 +117,10 @@ fun ExportBundleDialog(
                                 }
                                 1 -> includeWallpaper = !includeWallpaper
                                 2 -> includeCustomCursor = !includeCustomCursor
-                                3 -> includeDisplayName = !includeDisplayName
-                                4 -> onDismiss()
-                                5 -> onExport(bundleName, includeWallpaper, includeCustomCursor, includeDisplayName)
+                                3 -> includeCustomMascot = !includeCustomMascot
+                                4 -> includeDisplayName = !includeDisplayName
+                                5 -> onDismiss()
+                                6 -> onExport(bundleName, includeWallpaper, includeCustomCursor, includeCustomMascot, includeDisplayName)
                             }
                         }
                         return@onPreviewKeyEvent true
@@ -126,14 +137,14 @@ fun ExportBundleDialog(
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
-                            if (focusedIndex == 5) {
-                                focusedIndex = 4
+                            if (focusedIndex == 6) {
+                                focusedIndex = 5
                                 true
                             } else false
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (focusedIndex == 4) {
-                                focusedIndex = 5
+                            if (focusedIndex == 5) {
+                                focusedIndex = 6
                                 true
                             } else false
                         }
@@ -208,9 +219,16 @@ fun ExportBundleDialog(
                 )
 
                 CheckboxRow(
+                    label = "Include Custom Mascot",
+                    checked = includeCustomMascot,
+                    isFocused = focusedIndex == 3,
+                    onToggle = { includeCustomMascot = !includeCustomMascot }
+                )
+
+                CheckboxRow(
                     label = "Include Display Name",
                     checked = includeDisplayName,
-                    isFocused = focusedIndex == 3,
+                    isFocused = focusedIndex == 4,
                     onToggle = { includeDisplayName = !includeDisplayName }
                 )
 
@@ -223,16 +241,16 @@ fun ExportBundleDialog(
                 ) {
                     KawaiiClosePill(
                         label = "Cancel",
-                        isFocused = focusedIndex == 4,
+                        isFocused = focusedIndex == 5,
                         onClick = { onDismiss() },
                         modifier = Modifier.weight(1f)
                     )
 
                     KawaiiDialogPillButton(
                         text = "Create ♡",
-                        isFocused = focusedIndex == 5,
+                        isFocused = focusedIndex == 6,
                         isPrimary = true,
-                        onClick = { onExport(bundleName, includeWallpaper, includeCustomCursor, includeDisplayName) },
+                        onClick = { onExport(bundleName, includeWallpaper, includeCustomCursor, includeCustomMascot, includeDisplayName) },
                         modifier = Modifier.weight(1.3f)
                     )
                 }
@@ -402,6 +420,16 @@ fun PresetPreviewDialog(
                 if (previewData.hasCursorAsset) {
                     Text(
                         text = "🖱️ Custom cursor included",
+                        fontSize = 11.sp,
+                        color = theme.greetingColor,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                }
+
+                if (previewData.hasMascotAsset) {
+                    Text(
+                        text = "🐰 Custom mascot included",
                         fontSize = 11.sp,
                         color = theme.greetingColor,
                         fontWeight = FontWeight.SemiBold,

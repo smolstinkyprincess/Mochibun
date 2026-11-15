@@ -125,8 +125,8 @@ fun createPastelTintMatrix(tintColor: Color, intensity: Float = 0.22f): ColorMat
  * Mochibunny drawn from the single shared atlas ([rememberMascotAtlas]).
  *
  * - [slot] is her resting animation (usually [currentMoodSlot]); it loops with [frameTick].
- * - [reactionSlot] (EAT / PET / TALK / HAPPY) plays its frames once from [reactionStartTick],
- *   then she returns to [slot].
+ * - [reactionSlot] (EAT / PET / TALK / HAPPY) plays its frames twice from [reactionStartTick]
+ *   ([MascotAtlasMath.REACTION_LOOPS]), then she returns to [slot].
  * - [frameTick] is a shared stepped clock (e.g. [rememberKeitaiStep]); it is read only while
  *   drawing, so each tick redraws the sprite without recomposing anything. The default `{ 0 }`
  *   shows a still first frame. ~1 GB phones always show the first frame.
@@ -158,7 +158,7 @@ fun MochibunMascot(
     LaunchedEffect(boopTrigger) {
         if (boopTrigger > 0) {
             internalBounce = true
-            delay(1000)
+            delay(MascotAtlasMath.REACTION_MS)
             internalBounce = false
         }
     }
@@ -448,6 +448,9 @@ fun selectSpeechBubbleDialogue(
     return pickLineAvoiding(candidatePool, previousLine)
 }
 
+/** How long a speech bubble line stays up. */
+private const val SPEECH_BUBBLE_MS = 3_500L
+
 /**
  * Kawaii keitai-inspired speech bubble with ultra-rounded pill and subtle downward pointer tail.
  */
@@ -531,7 +534,7 @@ fun SpeechBubble(
  * - Cancels any ongoing dismiss timer.
  * - Picks a new context-aware dialogue line avoiding the immediate predecessor.
  * - Triggers cheer bounce on the mascot and a subtle pop bounce on the bubble.
- * - Holds the speech bubble for 2.2 seconds before fading/scaling out.
+ * - Holds the speech bubble for 3.5 seconds before fading/scaling out.
  * - Fixed layout size guarantees zero layout shifting of adjacent widgets (clock, favorites card).
  * - Renders speech bubble on top of mascot sprite with explicit zIndex and draw order.
  */
@@ -589,9 +592,11 @@ fun MochibunnyWithSpeechBubble(
         popAnimKey++
         SoundEffectManager.play(context, SoundEffect.SELECT)
         dismissJob = coroutineScope.launch {
-            delay(1250L)
-            currentDialogue = null
+            // The reaction (and her hop) ends after 2 loops; the line stays up longer to read
+            delay(MascotAtlasMath.REACTION_MS)
             activeSlot = MascotAnimSlot.IDLE
+            delay(SPEECH_BUBBLE_MS - MascotAtlasMath.REACTION_MS)
+            currentDialogue = null
         }
     }
 
@@ -653,7 +658,7 @@ fun MochibunnyWithSpeechBubble(
             exit = fadeOut(tween(180)) + scaleOut(targetScale = 0.75f),
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = 10.dp, y = (-32).dp)
+                .offset(x = 10.dp, y = (-40).dp) // clears her ears
                 .wrapContentWidth(align = Alignment.End, unbounded = true)
                 .widthIn(max = 260.dp)
                 .zIndex(1f)

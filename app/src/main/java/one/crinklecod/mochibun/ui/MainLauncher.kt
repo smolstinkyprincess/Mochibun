@@ -1546,8 +1546,14 @@ fun MainLauncher(
                         {
                             scope.launch(Dispatchers.IO) {
                                 try {
+                                    var mascotNote: String? = null
                                     context.contentResolver.openInputStream(modal.uri)?.use { stream ->
-                                        ThemeBundleManager.applyBundle(context, stream)
+                                        ThemeBundleManager.applyBundle(context, stream) { mascotNote = it }
+                                    }
+                                    mascotNote?.let { note ->
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(context, note, Toast.LENGTH_LONG).show()
+                                        }
                                     }
                                     withContext(Dispatchers.Main) {
                                         currentTheme = loadSavedTheme(preferences)

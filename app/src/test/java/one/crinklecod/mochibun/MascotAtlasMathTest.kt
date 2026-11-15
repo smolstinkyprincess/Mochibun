@@ -85,19 +85,20 @@ class MascotAtlasMathTest {
     }
 
     @Test
-    fun reaction_playsItsFramesOnce_thenReturnsToTheMoodRow() {
+    fun reaction_playsItsFramesTwice_thenReturnsToTheMoodRow() {
         val start = 37
-        val shown = (start until start + 6).map { tick ->
+        val shown = (start until start + 10).map { tick ->
             MascotAtlasMath.frameFor(builtIn, MascotAnimSlot.HUNGRY, MascotAnimSlot.EAT, start, tick).srcOffset
         }
+        val eatLoop = listOf(IntOffset(0, 6 * 128), IntOffset(128, 6 * 128), IntOffset(256, 6 * 128), IntOffset(384, 6 * 128))
         assertEquals(
-            listOf(
-                IntOffset(0, 6 * 128), IntOffset(128, 6 * 128), IntOffset(256, 6 * 128), IntOffset(384, 6 * 128),
+            eatLoop + eatLoop + listOf(
                 // back to HUNGRY (row 3), on the clock's own column
-                IntOffset(((start + 4) % 4) * 128, 3 * 128), IntOffset(((start + 5) % 4) * 128, 3 * 128)
+                IntOffset(((start + 8) % 4) * 128, 3 * 128), IntOffset(((start + 9) % 4) * 128, 3 * 128)
             ),
             shown
         )
+        assertEquals(2_000L, MascotAtlasMath.REACTION_MS)
     }
 
     @Test

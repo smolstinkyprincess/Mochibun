@@ -71,8 +71,11 @@ sealed interface MascotSpriteSource {
     /** The bundled Mochibunny atlas. */
     data object BuiltIn : MascotSpriteSource
 
-    /** A validated user atlas PNG in the app's files dir. Falls back to [BuiltIn] if unreadable. */
-    data class Custom(val file: File, val layout: MascotAtlasLayout) : MascotSpriteSource
+    /**
+     * A validated user atlas PNG in the app's files dir. Falls back to [BuiltIn] if unreadable.
+     * [version] changes on every install, so re-picking into the same file still reloads.
+     */
+    data class Custom(val file: File, val layout: MascotAtlasLayout, val version: Long = 0L) : MascotSpriteSource
 }
 
 /** A decoded atlas ready to draw. [layout] is in the decoded image's pixels. */
@@ -90,6 +93,12 @@ object MascotAtlasMath {
      */
     const val TICK_WRAP = 720_720
 
+    /** A reaction plays its row this many times before she returns to her mood row (4 frames: 2 s). */
+    const val REACTION_LOOPS = 2
+
+    /** How long a reaction lasts on the 4 Hz clock for a 4-frame row: 2 loops = 8 ticks = 2 s. */
+    const val REACTION_MS = 4L * REACTION_LOOPS * 250L
+
     /** The resting slot for her mood. */
     fun moodSlot(mood: PetMood): MascotAnimSlot = when (mood) {
         PetMood.HAPPY -> MascotAnimSlot.HAPPY
@@ -104,7 +113,8 @@ object MascotAtlasMath {
 
     /**
      * Which slot and frame to show at [tick]:
-     * - A [reaction] plays its frames once from [reactionStartTick], then she returns to [base].
+     * - A [reaction] plays its frames [REACTION_LOOPS] times from [reactionStartTick], then she
+     *   returns to [base].
      * - [base] loops with the clock.
      * - [staticFrames] (low-RAM phones) always shows the first frame of whichever slot is current.
      * A slot the layout lacks falls back to IDLE (and then to row 0, one frame).
@@ -120,8 +130,8 @@ object MascotAtlasMath {
         if (reaction != null) {
             val reactionLayout = slotLayout(layout, reaction)
             val elapsed = ticksSince(tick, reactionStartTick)
-            if (elapsed < reactionLayout.frames) {
-                return frameRect(layout, reactionLayout, if (staticFrames) 0 else elapsed)
+            if (elapsed < reactionLayout.frames * REACTION_LOOPS) {
+                return frameRect(layout, reactionLayout, if (staticFrames) 0 else elapsed % reactionLayout.frames)
             }
         }
         val baseLayout = slotLayout(layout, base)
@@ -150,6 +160,9 @@ object MascotSpriteStore {
 
     /** Built-in atlas decode: 1024 x 2048 -> 512 x 1024 (128 px frames, ~2 MB instead of 8 MB). */
     const val BUILT_IN_SAMPLE_SIZE = 2
+
+    /** Largest custom atlas side (matches MascotAtlasValidator). */
+    private const val MAX_CUSTOM_ATLAS_PX = 2048
 
     private val _source = MutableStateFlow<MascotSpriteSource>(MascotSpriteSource.BuiltIn)
     val source: StateFlow<MascotSpriteSource> = _source.asStateFlow()
@@ -213,8 +226,20 @@ object MascotSpriteStore {
                 if (!source.file.isFile) {
                     null
                 } else {
-                    val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-                    BitmapFactory.decodeFile(source.file.path, opts)?.let { toAtlas(it, source.layout) }
+                    // Bounds first: never decode pixels of something oversized or off-layout
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(source.file.path, bounds)
+                    val w = bounds.outWidth
+                    val h = bounds.outHeight
+                    if (w <= 0 || h <= 0 || w > MAX_CUSTOM_ATLAS_PX || h > MAX_CUSTOM_ATLAS_PX ||
+                        !source.layout.fitsIn(w, h)
+                    ) {
+                        Log.w(TAG, "Custom atlas ${w}x$h rejected before decoding")
+                        null
+                    } else {
+                        val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+                        BitmapFactory.decodeFile(source.file.path, opts)?.let { toAtlas(it, source.layout) }
+                    }
                 }
             }
         }

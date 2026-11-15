@@ -10,6 +10,7 @@ import one.crinklecod.mochibun.core.util.downsampleAndSaveImage
 import one.crinklecod.mochibun.data.model.BundleCursorConfig
 import one.crinklecod.mochibun.data.model.BundleGreetingConfig
 import one.crinklecod.mochibun.data.model.BundlePaletteConfig
+import one.crinklecod.mochibun.data.model.MascotAtlasValidator
 import one.crinklecod.mochibun.data.model.MochibunBundleManifest
 import one.crinklecod.mochibun.data.model.bundleJsonFormat
 import one.crinklecod.mochibun.data.model.colorIntToHex
@@ -40,7 +41,9 @@ import java.util.zip.ZipOutputStream
 data class BundlePreviewData(
     val manifest: MochibunBundleManifest,
     val wallpaperPreview: Bitmap? = null,
-    val hasCursorAsset: Boolean = false
+    val hasCursorAsset: Boolean = false,
+    /** A `mascot_atlas.png` within the 1.5 MB limit that is a PNG (fully validated on apply). */
+    val hasMascotAsset: Boolean = false
 )
 
 /**
@@ -54,6 +57,8 @@ object ThemeBundleManager {
     private const val WALLPAPER_ENTRY = "wallpaper.png"
     private const val CURSOR_GIF_ENTRY = "cursor.gif"
     private const val CURSOR_PNG_ENTRY = "cursor.png"
+    /** Always this exact entry name; a manifest never names or locates the atlas. */
+    const val MASCOT_ENTRY = "mascot_atlas.png"
 
     private const val MAX_WALLPAPER_WIDTH = 480
     private const val MAX_WALLPAPER_HEIGHT = 800
@@ -93,7 +98,8 @@ object ThemeBundleManager {
         author: String = "Mochi User",
         includeWallpaper: Boolean = true,
         includeCustomCursor: Boolean = true,
-        includeDisplayName: Boolean = true
+        includeDisplayName: Boolean = true,
+        includeCustomMascot: Boolean = true
     ): Result<Unit> {
         return try {
             val launcherPrefs = PreferencesManager.getPrefs(context)
@@ -116,6 +122,8 @@ object ThemeBundleManager {
             val activeCursorUri = if (includeCustomCursor) {
                 CursorPreferences.getCustomCursorUri(context)
             } else null
+
+            val mascotConfig = if (includeCustomMascot) CustomMascotManager.activeConfig(context) else null
 
             val manifest = MochibunBundleManifest(
                 bundleVersion = 1,
@@ -146,7 +154,9 @@ object ThemeBundleManager {
                     accelRampMs = CursorPreferences.getAccelRampMs(context)
                 ),
                 hasWallpaper = activeWallpaperUri != null,
-                hasCustomCursor = activeCursorUri != null
+                hasCustomCursor = activeCursorUri != null,
+                hasCustomMascot = mascotConfig != null,
+                mascot = mascotConfig
             )
 
             // 3. Stream directly to ZipOutputStream
@@ -188,6 +198,19 @@ object ThemeBundleManager {
                     }
                 }
 
+                // Custom mascot atlas: always the fixed entry name, copied from the fixed file
+                if (mascotConfig != null) {
+                    try {
+                        CustomMascotManager.atlasFile(context).inputStream().use { atlasIn ->
+                            zipOut.putNextEntry(ZipEntry(MASCOT_ENTRY))
+                            atlasIn.copyTo(zipOut, bufferSize = 8192)
+                            zipOut.closeEntry()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w(TAG, "Failed to bundle mascot atlas", e)
+                    }
+                }
+
                 zipOut.finish()
                 zipOut.flush()
             }
@@ -208,6 +231,7 @@ object ThemeBundleManager {
             var manifest: MochibunBundleManifest? = null
             var wallpaperBitmap: Bitmap? = null
             var hasCursor = false
+            var hasMascot = false
 
             ZipInputStream(bufferedIn).use { zipIn ->
                 var entry = zipIn.nextEntry
@@ -235,6 +259,12 @@ object ThemeBundleManager {
                             copyBounded(zipIn, DISCARD_OUTPUT_STREAM, MAX_CURSOR_BYTES, totalBytes)
                             hasCursor = true
                         }
+                        MASCOT_ENTRY -> {
+                            // Keeps only the 24-byte PNG header; the rest is counted and discarded
+                            val header = PngHeaderCapture()
+                            val withinLimit = readMascotEntry(zipIn, header, totalBytes)
+                            hasMascot = withinLimit && MascotAtlasValidator.readPngSize(header.bytes()) != null
+                        }
                         else -> copyBounded(
                             zipIn,
                             DISCARD_OUTPUT_STREAM,
@@ -254,7 +284,8 @@ object ThemeBundleManager {
                     BundlePreviewData(
                         manifest = manifest!!,
                         wallpaperPreview = wallpaperBitmap,
-                        hasCursorAsset = hasCursor
+                        hasCursorAsset = hasCursor,
+                        hasMascotAsset = hasMascot
                     )
                 )
             }
@@ -266,7 +297,15 @@ object ThemeBundleManager {
     /**
      * Extracts and applies all settings, palette tokens, and assets from a .mochibun bundle.
      */
-    fun applyBundle(context: Context, inputStream: InputStream): Result<MochibunBundleManifest> {
+    /**
+     * [onMascotSkipped] gets a short, friendly reason when the bundle has a mascot atlas that was
+     * not applied (too big or failed validation); the rest of the bundle still applies.
+     */
+    fun applyBundle(
+        context: Context,
+        inputStream: InputStream,
+        onMascotSkipped: (String) -> Unit = {}
+    ): Result<MochibunBundleManifest> {
         val stagedFiles = mutableListOf<File>()
         return try {
             var manifest: MochibunBundleManifest? = null
@@ -274,6 +313,8 @@ object ThemeBundleManager {
             var extractedCursorFile: File? = null
             var stagedWallpaperFile: File? = null
             var stagedCursorFile: File? = null
+            var stagedMascotFile: File? = null
+            var mascotWithinLimit = false
             val totalBytes = AtomicLong()
 
             ZipInputStream(BufferedInputStream(inputStream)).use { zipIn ->
@@ -323,6 +364,14 @@ object ThemeBundleManager {
                                 copyBounded(zipIn, out, MAX_CURSOR_BYTES, totalBytes)
                             }
                             extractedCursorFile = File(context.filesDir, "bundle_cursor.png")
+                        }
+                        MASCOT_ENTRY -> {
+                            val mascotFile = File.createTempFile("theme_bundle_mascot_", ".png", context.cacheDir)
+                            stagedFiles.add(mascotFile)
+                            stagedMascotFile = mascotFile
+                            mascotWithinLimit = FileOutputStream(mascotFile).use { out ->
+                                readMascotEntry(zipIn, out, totalBytes)
+                            }
                         }
                         else -> copyBounded(
                             zipIn,
@@ -424,6 +473,17 @@ object ThemeBundleManager {
                 CursorPreferences.setCustomCursorUri(context, curUri)
             }
 
+            // Custom mascot: validated against the manifest's layout (or inferred). A bad or
+            // oversized atlas is skipped and the current mascot is kept.
+            stagedMascotFile?.let { staged ->
+                if (!mascotWithinLimit) {
+                    onMascotSkipped("Custom mascot skipped: bigger than 1.5 MB")
+                } else {
+                    CustomMascotManager.installStaged(context, staged, targetManifest.mascot)
+                        .onFailure { onMascotSkipped("Custom mascot skipped: ${it.message}") }
+                }
+            }
+
             editor.apply()
             PreferencesManager.init(context)
             one.crinklecod.mochibun.ui.theme.SystemUiThemeBridge.broadcastSavedTheme(context)
@@ -438,6 +498,26 @@ object ThemeBundleManager {
                 }
             }
         }
+    }
+
+    /**
+     * Reads the mascot entry into [output] up to [MascotAtlasValidator.MAX_ATLAS_BYTES], counting
+     * real bytes (never `ZipEntry.size`). Returns false when the entry is larger: the rest is then
+     * drained under the whole-bundle limit, so only the mascot is rejected, not the bundle.
+     */
+    private fun readMascotEntry(input: InputStream, output: OutputStream, totalCounter: AtomicLong): Boolean {
+        val counting = object : java.io.FilterInputStream(input) {
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                val n = super.read(b, off, len)
+                if (n > 0 && totalCounter.addAndGet(n.toLong()) > MAX_TOTAL_BUNDLE_BYTES) {
+                    throw IllegalArgumentException("Theme bundle entry exceeds maximum allowed size")
+                }
+                return n
+            }
+        }
+        val withinLimit = MascotAtlasValidator.copyAtMost(counting, output, MascotAtlasValidator.MAX_ATLAS_BYTES)
+        if (!withinLimit) copyBounded(input, DISCARD_OUTPUT_STREAM, MAX_TOTAL_BUNDLE_BYTES, totalCounter)
+        return withinLimit
     }
 
     private fun readBytesBounded(
@@ -476,4 +556,24 @@ object ThemeBundleManager {
 
     fun hexToColorInt(hex: String, defaultColor: Int): Int =
         safeParseColorInt(hex, defaultColor)
+}
+
+/** Keeps the first 24 bytes written (a PNG signature + IHDR) and discards the rest. */
+private class PngHeaderCapture : OutputStream() {
+    private val header = ByteArray(24)
+    private var size = 0
+
+    override fun write(value: Int) {
+        if (size < header.size) header[size++] = value.toByte()
+    }
+
+    override fun write(buffer: ByteArray, offset: Int, length: Int) {
+        val n = minOf(length, header.size - size)
+        if (n > 0) {
+            System.arraycopy(buffer, offset, header, size, n)
+            size += n
+        }
+    }
+
+    fun bytes(): ByteArray = header.copyOf(size)
 }
