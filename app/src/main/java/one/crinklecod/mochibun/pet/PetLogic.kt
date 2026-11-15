@@ -65,8 +65,8 @@ object PetTuning {
     const val HUNGRY_BELOW = 0.30f
     const val SULKY_BELOW = 0.30f
     const val HAPPY_AT_LEAST = 0.70f
-    /** Sleepy from 23:00 until 06:59 local time. */
-    const val SLEEPY_FROM_HOUR = 23
+    /** Sleepy from 22:00 until 06:59 local time. */
+    const val SLEEPY_FROM_HOUR = 22
     const val SLEEPY_UNTIL_HOUR = 6
 
     fun dailyCap(source: TreatSource): Int = when (source) {

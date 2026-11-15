@@ -371,7 +371,7 @@ class PetLogicTest {
         assertEquals(PetMood.CONTENT, PetLogic.mood(PetState(fullness = 0.30f, joy = 0.30f), 12))
         assertEquals(PetMood.HAPPY, PetLogic.mood(PetState(fullness = 0.70f, joy = 0.70f), 12))
         val happy = PetState(fullness = 0.9f, joy = 0.9f)
-        for (h in listOf(23, 0, 3, 6)) assertEquals("hour $h", PetMood.SLEEPY, PetLogic.mood(happy, h))
-        for (h in listOf(7, 12, 22)) assertEquals("hour $h", PetMood.HAPPY, PetLogic.mood(happy, h))
+        for (h in listOf(22, 23, 0, 3, 6)) assertEquals("hour $h", PetMood.SLEEPY, PetLogic.mood(happy, h))
+        for (h in listOf(7, 12, 21)) assertEquals("hour $h", PetMood.HAPPY, PetLogic.mood(happy, h))
     }
 }
