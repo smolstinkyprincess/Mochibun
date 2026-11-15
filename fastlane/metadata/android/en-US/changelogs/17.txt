@@ -1,0 +1,2 @@
+Mochibun v2.3.1 ♡
+- F-Droid Build Compatibility: Replaced the external Xposed Maven dependency with a local compileOnly stub module and removed the Foojay toolchain resolver so reproducible builds succeed cleanly without third-party repositories.
