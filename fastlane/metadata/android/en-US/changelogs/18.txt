@@ -1,0 +1,5 @@
+Mochibun v2.3.2 ♡
+- Custom Mascot Dialogue: .mochibundle packs can now include custom speech-bubble dialogue pools matching your mascot atlas.
+- Weekday Daily Fortunes: Expanded the sub-display ticker with 132 cozy day-of-the-week fortunes.
+- Settings & Export Polish: Marquee scrolling for clipped Settings Hub values, .mochibundle UI copy, and fixed .mochibundle export filenames.
+- Under-the-Hood Cleanup: Tightened media artwork memory bounds, lifecycle listeners, and per-frame canvas allocations.

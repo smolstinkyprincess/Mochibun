@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mochibun Community (もちぶん) ♡ themes, mascots &amp; lid LEDs</title>
-  <meta name="description" content="Community themes, custom pocket-pet mascots (.mochibun), and Lid LED Studio animations (.mochibunled) for Mochibun on the ALT Mive Style Folder (AT-M120).">
+  <meta name="description" content="Community themes, custom pocket-pet mascots (.mochibundle), and Lid LED Studio animations (.mochibunled) for Mochibun on the ALT Mive Style Folder (AT-M120).">
   <meta name="theme-color" content="#FFEBF2">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍡</text></svg>">
 
@@ -497,7 +497,7 @@
     <section class="gallery-section" aria-labelledby="gallery-title">
       <div class="wrap">
         <h2 class="section-title" id="gallery-title">✦ featured &amp; community packs ✦</h2>
-        <p class="section-sub">grab a <code>.mochibun</code> setup bundle or <code>.mochibunled</code> light pattern</p>
+        <p class="section-sub">grab a <code>.mochibundle</code> setup bundle or <code>.mochibunled</code> light pattern</p>
 
         <div class="filter-bar" role="tablist" aria-label="Filter community items">
           <button class="filter-btn active" data-filter="all" type="button">✨ all packs</button>
@@ -514,13 +514,13 @@
             <h3>📲 how to install on your phone</h3>
             <ol>
               <li>Tap <b>download pack</b> on any card above in your flip phone browser.</li>
-              <li>Open the downloaded <code>.mochibun</code> or <code>.mochibunled</code> file from your notifications or file manager.</li>
+              <li>Open the downloaded <code>.mochibundle</code> (or legacy <code>.mochibun</code>) or <code>.mochibunled</code> file from your notifications or file manager.</li>
               <li>Mochibun pops open a live swatch preview — hit <b>apply</b> and you're all set ♡</li>
             </ol>
           </article>
           <article class="setup-card">
             <h3>🎀 share your own creation</h3>
-            <p>Export your setup from <b>settings › backup &amp; restore › share setup (.mochibun)</b> (check <i>include custom mascot</i> if you drew a sprite sheet!), or export a light show from <b>lid LED studio</b>.</p>
+            <p>Export your setup from <b>settings › backup &amp; restore › share setup (.mochibundle)</b> (check <i>include custom mascot</i> if you drew a sprite sheet — you can even add custom <code>mascot.dialogue</code> speech-bubble pools in <code>manifest.json</code>!), or export a light show from <b>lid LED studio</b>.</p>
             <p>Drop your file + a screenshot into a PR or issue on <a href="https://github.com/smolstinkyprincess/Mochibun" target="_blank" rel="noopener">GitHub</a> to add it here ✨</p>
           </article>
         </div>
@@ -609,7 +609,7 @@
             <p class="pack-author">by ${escapeHtml(item.author || 'anonymous')}</p>
             ${swatches ? `<div class="swatches" aria-label="Color palette">${swatches}</div>` : ''}
             <a class="candy ${btnClass} pack-download" href="${escapeHtml(item.file)}" download>
-              🍡 download ${isLed ? '.mochibunled' : '.mochibun'}
+              🍡 download ${isLed ? '.mochibunled' : '.mochibundle'}
             </a>
           </article>
         `;

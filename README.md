@@ -31,7 +31,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 ### Make it yours
 - **5 pastel themes**: *Sakura Dream*, *Lavender Mist*, *Minty Matcha*, *Milky Peach*, and *Midnight Mochi* for night owls 🌙. Switch live, or write your own in simple YAML.
 - **7 keypad sound profiles**: Generated on-device, so the app stays tiny. Pick *Kawaii Pop*, *Retro Keitai*, *8-Bit Chiptune*, *Cyber Pager*, *Tactile Thock*, *Water Drop*, or *Muted* for library mode.
-- **Share your setup**: Back up pinned apps, folders, and settings to `.json`, or pack colors, cursor, wallpaper, and your custom Mochibunny into a `.mochibun` bundle to swap with friends.
+- **Share your setup**: Back up pinned apps, folders, and settings to `.json`, or pack colors, cursor, wallpaper, and your custom Mochibunny into a `.mochibundle` bundle to swap with friends.
 - **Icon pack support**: Works with Nova, Apex, and ADW icon packs.
 
 ### Root / LSPosed extras
@@ -129,20 +129,21 @@ Never wrestle with tiny touch keyboards just to send a cute face:
 ## 🎨 Themes & Custom Styling
 
 > 🎀 **Looking for ready-made themes, custom pocket-pet mascots, or Lid LED animations?**  
-> Browse and download `.mochibun` and `.mochibunled` packs from the **[Mochibun Community Gallery](https://crinklecod.one/Mochibun/community/)** — tap any downloaded file on your phone to preview and apply in one click ♡
+> Browse and download `.mochibundle` and `.mochibunled` packs from the **[Mochibun Community Gallery](https://crinklecod.one/Mochibun/community/)** — tap any downloaded file on your phone to preview and apply in one click ♡
 
-### 🎀 Shareable Theme Packs (`.mochibun`)
-Want to show off your setup on r/flipphones or Discord? Export a `.mochibun` bundle to pack up your colors, greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), and your custom Mochibunny sprite sheet (`mascot_atlas.png`). Opening a `.mochibun` file on your phone shows a live color swatch card, and it applies in one click!
+### 🎀 Shareable Theme Packs (`.mochibundle`)
+Want to show off your setup on r/flipphones or Discord? Export a `.mochibundle` bundle to pack up your colors, greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), and your custom Mochibunny sprite sheet (`mascot_atlas.png`) + optional speech-bubble dialogue. Opening a `.mochibundle` file (or a legacy `.mochibun` bundle) on your phone shows a live color swatch card, and it applies in one click!
 
 ### 🐰 Custom Mochibunny Sprites (`mascot_atlas.png`)
 Want a different little friend on Home? Draw your own! Mochibunny lives on one PNG sprite sheet: **8 rows × 4 columns** of square frames, one row per mood or action, top to bottom: `idle`, `talk`, `happy`, `hungry`, `sulky`, `sleepy`, `eat`, `pet`. Pick yours in *Settings > Appearance > Custom Mascot* (and **Reset to Default Mochibunny** brings her back).
 
 - Frames can be 16–256 px, up to 16 per row, the whole sheet up to 2048 × 2048 and 1.5 MB.
 - She's drawn with crisp nearest-neighbor pixels, so tiny pixel art stays sharp ♡
+- Inside a `.mochibundle` pack, `manifest.json` can also include optional `mascot.dialogue` pools (`happy`, `content`, `hungry`, `sulky`, `sleepy`, `fed`, `noTreats`; up to 20 lines of 48 chars each) so your custom mascot talks in character!
 - If a file doesn't fit, nothing breaks: you get a little note and your current mascot stays.
 
 ### 📝 Hand-Crafted YAML Themes (`kaml`)
-Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom color palettes and card styling—drop your `.yaml` files into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/` *(to bundle images like `mascot_atlas.png`, wallpapers, or cursors, export a `.mochibun` pack above)*:
+Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom color palettes and card styling—drop your `.yaml` files into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/` *(to bundle images like `mascot_atlas.png`, wallpapers, or cursors, export a `.mochibundle` pack above)*:
 
 ```yaml
 # /sdcard/Android/data/one.crinklecod.mochibun/files/themes/sweet_sakura.yaml
