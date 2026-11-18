@@ -1,0 +1,4 @@
+Mochibun v2.4.1 ♡
+- Now Playing Card: Redesigned into a compact two-band player with live track time, marquee title, and pastel transport pills.
+- System Stats Monitor: Upgraded to a pocket health monitor with non-clipped CPU/RAM pills, ✦/♥ gauges, and mood status.
+- Border & Scroll Fixes: Aligned focus halos on custom 9-slice headers and stopped embedded photo widgets from auto-scrolling the Widgets page.
