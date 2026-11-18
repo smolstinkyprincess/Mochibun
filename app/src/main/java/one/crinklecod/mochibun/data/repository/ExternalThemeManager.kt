@@ -115,6 +115,7 @@ decorations:
   greetingText: "— ♡ Sweet Strawberries ♡ —"
   glowExpansionDp: 4.0
   cardRoundnessDp: 24.0
+  borderStyle: "solid"
 """
 
     /**

@@ -5,9 +5,10 @@ import android.content.SharedPreferences
 import android.view.KeyEvent
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.core.system.MediaVolumeLockSync
+import one.crinklecod.mochibun.data.model.AppDrawerSortMode
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.model.FavoriteFolder
 import one.crinklecod.mochibun.data.model.PhysicalKey
-import one.crinklecod.mochibun.data.model.AppDrawerSortMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -115,6 +116,10 @@ object PreferencesManager {
     const val KEY_THEME_GREETING_BG_COLOR = "theme_greeting_bg_color"
     const val KEY_THEME_APP_ACTION_COLOR = "theme_app_action_color"
     const val KEY_THEME_CARD_ROUNDNESS = "theme_card_roundness"
+    const val KEY_THEME_BORDER_STYLE = "theme_border_style"
+    const val DEFAULT_THEME_BORDER_STYLE = CardBorderStyle.DEFAULT_ID
+    const val KEY_CUSTOM_CARD_BORDER_SLICE_PX = "custom_card_border_slice_px"
+    const val DEFAULT_CUSTOM_CARD_BORDER_SLICE_PX = CardBorderStyle.DEFAULT_SLICE_PX
 
     val THEME_COLOR_KEYS = listOf(
         KEY_THEME_BG_COLOR,
@@ -307,6 +312,9 @@ object PreferencesManager {
     private val _themeFontFamily = MutableStateFlow(DEFAULT_THEME_FONT_FAMILY)
     val themeFontFamily: StateFlow<String> = _themeFontFamily.asStateFlow()
 
+    private val _themeBorderStyle = MutableStateFlow(DEFAULT_THEME_BORDER_STYLE)
+    val themeBorderStyle: StateFlow<String> = _themeBorderStyle.asStateFlow()
+
     private val _isRootQuickSettingsEnabled = MutableStateFlow(DEFAULT_ROOT_QUICK_SETTINGS_ENABLED)
     val isRootQuickSettingsEnabled: StateFlow<Boolean> = _isRootQuickSettingsEnabled.asStateFlow()
 
@@ -441,6 +449,9 @@ object PreferencesManager {
             KEY_THEME_FONT_FAMILY,
             DEFAULT_THEME_FONT_FAMILY
         ) ?: DEFAULT_THEME_FONT_FAMILY
+        _themeBorderStyle.value = CardBorderStyle.normalizeId(
+            prefs.getString(KEY_THEME_BORDER_STYLE, DEFAULT_THEME_BORDER_STYLE)
+        )
         _photoFrameUri.value = prefs.getString(KEY_PHOTO_FRAME_URI, null)
         _photoFrameStyle.value = prefs.getString(
             KEY_PHOTO_FRAME_STYLE,
@@ -903,6 +914,24 @@ object PreferencesManager {
     fun setThemeFontFamily(context: Context, family: String) {
         getPrefs(context).edit().putString(KEY_THEME_FONT_FAMILY, family).apply()
         _themeFontFamily.value = family
+    }
+
+    fun getThemeBorderStyle(context: Context? = null): String {
+        return if (initialized) {
+            _themeBorderStyle.value
+        } else if (context != null) {
+            CardBorderStyle.normalizeId(
+                getPrefs(context).getString(KEY_THEME_BORDER_STYLE, DEFAULT_THEME_BORDER_STYLE)
+            )
+        } else {
+            _themeBorderStyle.value
+        }
+    }
+
+    fun setThemeBorderStyle(context: Context, borderStyle: String) {
+        val normalized = CardBorderStyle.normalizeId(borderStyle)
+        getPrefs(context).edit().putString(KEY_THEME_BORDER_STYLE, normalized).apply()
+        _themeBorderStyle.value = normalized
     }
 
     fun getWallpaperUri(context: Context): String? {

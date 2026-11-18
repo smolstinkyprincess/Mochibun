@@ -1,7 +1,9 @@
 package one.crinklecod.mochibun.ui.dialogs
 
 import android.graphics.BitmapFactory
+import android.util.SparseArray
 import android.view.KeyEvent
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,7 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -39,9 +44,11 @@ import one.crinklecod.mochibun.R
 import one.crinklecod.mochibun.ui.components.JumpNumberBadge
 import one.crinklecod.mochibun.ui.components.KawaiiClosePill
 import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
+import one.crinklecod.mochibun.ui.components.mochibunCardBorder
 import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
+import one.crinklecod.mochibun.ui.theme.accentDeep
 import one.crinklecod.mochibun.ui.theme.destructiveBgColor
 import one.crinklecod.mochibun.ui.theme.destructiveColor
 import one.crinklecod.mochibun.ui.theme.selectedContainerColor
@@ -92,6 +99,36 @@ fun requestFocusSafely(focusRequester: FocusRequester, key: Any? = Unit) {
     LaunchedEffect(key) {
         focusRequester.awaitFocusSafely()
     }
+}
+
+/**
+ * Shared modal dialog container surface that applies the active [mochibunCardBorder]
+ * (custom 9-slice `card_border.png` or procedural `CardBorderStyle`) while keeping
+ * `clip = false` so button focus halos are never clipped.
+ */
+@Composable
+fun KawaiiDialogSurface(
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 22.dp,
+    containerColor: Color = ActiveTheme.surface,
+    borderColor: Color = ActiveTheme.cardBorder,
+    borderWidth: Dp = 2.dp,
+    contentPadding: Dp = 16.dp,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val shape = RoundedCornerShape(cornerRadius)
+    Box(
+        modifier = modifier
+            .graphicsLayer { clip = false }
+            .background(containerColor, shape)
+            .mochibunCardBorder(
+                cornerRadius = cornerRadius,
+                borderColor = borderColor,
+                borderWidth = borderWidth
+            )
+            .padding(contentPadding),
+        content = content
+    )
 }
 
 /**
@@ -162,11 +199,27 @@ fun KeitaiLaceDialogWithClose(
  */
 private val FLOATING_PILL_CLEARANCE = 30.dp
 
+private val cachedDialogIconBitmaps = SparseArray<ImageBitmap>()
+
+@Composable
+private fun rememberDialogIconBitmap(@DrawableRes iconResId: Int): ImageBitmap {
+    val context = LocalContext.current
+    return remember(iconResId) {
+        cachedDialogIconBitmaps.get(iconResId) ?: BitmapFactory.decodeResource(
+            context.resources,
+            iconResId
+        ).asImageBitmap().also {
+            cachedDialogIconBitmaps.put(iconResId, it)
+        }
+    }
+}
+
 @Composable
 fun KawaiiDialogItem(
     text: String,
     isFocused: Boolean,
     modifier: Modifier = Modifier,
+    @DrawableRes iconResId: Int? = null,
     enabled: Boolean = true,
     isDestructive: Boolean = false,
     textAlign: TextAlign = TextAlign.Start,
@@ -215,6 +268,20 @@ fun KawaiiDialogItem(
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (iconResId != null) {
+            val iconBitmap = rememberDialogIconBitmap(iconResId)
+            val iconTint = remember(theme.accentDeep) {
+                ColorFilter.tint(theme.accentDeep, BlendMode.SrcAtop)
+            }
+            Image(
+                bitmap = iconBitmap,
+                contentDescription = null,
+                filterQuality = FilterQuality.None,
+                colorFilter = iconTint,
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
         Text(
             text = text,
             color = textColor,
@@ -343,4 +410,3 @@ fun PixelRibbonBow(
         modifier = modifier.size(width = width, height = height)
     )
 }
-

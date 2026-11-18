@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import one.crinklecod.mochibun.R
 import one.crinklecod.mochibun.data.model.FavoriteFolder
 import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
@@ -70,6 +71,7 @@ fun FolderActionDialog(
 
     data class FolderMenuAction(
         val label: String,
+        val iconResId: Int? = null,
         val enabled: Boolean = true,
         val isDestructive: Boolean = false,
         val onClick: () -> Unit
@@ -79,14 +81,45 @@ fun FolderActionDialog(
         buildList {
             add(FolderMenuAction("◀ Move Left", enabled = canMoveLeft, onClick = onMoveLeft))
             add(FolderMenuAction("Move Right ▶", enabled = canMoveRight, onClick = onMoveRight))
-            add(FolderMenuAction("📂 Open folder", onClick = onOpenFolder))
-            add(FolderMenuAction("✎ Rename folder", onClick = onRenameFolder))
-            add(FolderMenuAction("＋ Add / remove apps", onClick = onEditFolderApps))
-            add(FolderMenuAction("🎨 Change folder icon", onClick = onChangeIcon))
-            add(FolderMenuAction("↺ Reset folder icon", onClick = onResetIcon))
             add(
                 FolderMenuAction(
-                    "🗑 Delete folder",
+                    label = "Open folder",
+                    iconResId = R.drawable.add_folder,
+                    onClick = onOpenFolder
+                )
+            )
+            add(
+                FolderMenuAction(
+                    label = "Rename folder",
+                    iconResId = R.drawable.customize,
+                    onClick = onRenameFolder
+                )
+            )
+            add(
+                FolderMenuAction(
+                    label = "Add / remove apps",
+                    iconResId = R.drawable.add_folder,
+                    onClick = onEditFolderApps
+                )
+            )
+            add(
+                FolderMenuAction(
+                    label = "Change folder icon",
+                    iconResId = R.drawable.customize,
+                    onClick = onChangeIcon
+                )
+            )
+            add(
+                FolderMenuAction(
+                    label = "Reset folder icon",
+                    iconResId = R.drawable.reset,
+                    onClick = onResetIcon
+                )
+            )
+            add(
+                FolderMenuAction(
+                    label = "Delete folder",
+                    iconResId = R.drawable.rem_folder,
                     isDestructive = true,
                     onClick = {
                         confirmDeleteIndex = 0
@@ -95,7 +128,13 @@ fun FolderActionDialog(
                 )
             )
             if (onOpenLauncherOptions != null) {
-                add(FolderMenuAction("⚙ Launcher options", onClick = onOpenLauncherOptions))
+                add(
+                    FolderMenuAction(
+                        label = "Launcher options",
+                        iconResId = R.drawable.options,
+                        onClick = onOpenLauncherOptions
+                    )
+                )
             }
             add(FolderMenuAction("♥ Close ♥", onClick = onDismiss))
         }
@@ -357,6 +396,7 @@ fun FolderActionDialog(
                         KawaiiDialogItem(
                             text = item.label,
                             isFocused = selectedIndex == idx,
+                            iconResId = item.iconResId,
                             enabled = item.enabled,
                             isDestructive = item.isDestructive,
                             modifier = Modifier.fillMaxWidth(),

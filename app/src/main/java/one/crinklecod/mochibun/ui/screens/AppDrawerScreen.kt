@@ -129,15 +129,14 @@ fun AppDrawerCard(
             .fillMaxWidth()
             .height(60.dp)
             .softGlowFocus(isSelected = isSelected, cornerRadius = 22.dp)
+            .mochibunCardBorder(
+                cornerRadius = 22.dp,
+                borderColor = if (isSelected) theme.selectionGlowColor.copy(alpha = 0.7f) else theme.unfocusedCardBorderColor,
+                borderWidth = 1.5.dp,
+                allowCustomNineSlice = false
+            )
             .clip(DrawerCardShape)
             .background(cardBrush, DrawerCardShape)
-            .then(
-                if (!isSelected) {
-                    Modifier.border(1.5.dp, theme.unfocusedCardBorderColor, DrawerCardShape)
-                } else {
-                    Modifier
-                }
-            )
             .combinedClickable(
                 onClick = { onAppClick(app) },
                 onLongClick = { onAppLongClick(app) }

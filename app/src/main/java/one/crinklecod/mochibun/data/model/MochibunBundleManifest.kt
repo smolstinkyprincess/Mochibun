@@ -81,7 +81,10 @@ data class BundlePaletteConfig(
     val cardColorHex: String,
     val greetingColorHex: String,
     val actionColorHex: String,
-    val cardRoundnessDp: Float
+    val cardRoundnessDp: Float,
+    val borderStyle: String = CardBorderStyle.DEFAULT_ID,
+    val hasCustomCardBorder: Boolean = false,
+    val cardBorderSlicePx: Int = CardBorderStyle.DEFAULT_SLICE_PX
 )
 
 @Serializable

@@ -91,7 +91,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import one.crinklecod.mochibun.data.model.FavoriteFolder
 import one.crinklecod.mochibun.data.model.FavoriteSlotItem
 import one.crinklecod.mochibun.data.model.LauncherApp
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import one.crinklecod.mochibun.data.repository.IconPackManager
+import one.crinklecod.mochibun.data.repository.rememberCustomCardBorderFrame
 import one.crinklecod.mochibun.ui.components.kawaiiCardMotifs
 import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.*
@@ -971,14 +974,20 @@ fun FavoritesCard(
     }
 
     // Mini pixel bow pinned on the top-left corner, balancing Mochibunny on the top-right.
-    PixelRibbonBow(
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .offset(x = (-3).dp, y = (-7).dp)
-            .graphicsLayer { rotationZ = -30f },
-        width = 24.dp,
-        height = 20.dp
-    )
+    // Suppressed when a custom 9-slice card_border.png is active so it doesn't collide with custom corner ornaments.
+    val customBorderSource by CustomCardBorderManager.source.collectAsState()
+    val customBorderFrame = rememberCustomCardBorderFrame()
+    val hasCustomBorder = customBorderFrame != null || customBorderSource is CustomCardBorderSource.Custom
+    if (!hasCustomBorder) {
+        PixelRibbonBow(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(x = (-3).dp, y = (-7).dp)
+                .graphicsLayer { rotationZ = -30f },
+            width = 24.dp,
+            height = 20.dp
+        )
+    }
 
     // Companion mascot loaf sitting on the top-right corner of the favorites card with dynamic speech bubble.
     // Declared last in this Box so she always draws above the lace rim and the bow.

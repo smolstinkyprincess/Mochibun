@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import one.crinklecod.mochibun.R
 import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
@@ -70,24 +71,70 @@ fun AppActionDialog(
     val scrollState = rememberScrollState()
     var sawCenterDown by remember { mutableStateOf(false) }
 
+    data class AppMenuAction(
+        val label: String,
+        val iconResId: Int? = null,
+        val onClick: () -> Unit
+    )
+
     val actions = remember(isFav, onOpenLauncherOptions) {
-        buildList<Pair<String, () -> Unit>> {
+        buildList {
             if (isFav) {
-                add("◀ Move Left" to onMoveFavoriteLeft)
-                add("Move Right ▶" to onMoveFavoriteRight)
+                add(AppMenuAction("◀ Move Left", onClick = onMoveFavoriteLeft))
+                add(AppMenuAction("Move Right ▶", onClick = onMoveFavoriteRight))
             }
             add(
-                (if (isFav) "💔 Remove from favorites" else "💖 Add to favorites") to onToggleFavorite
+                AppMenuAction(
+                    label = if (isFav) "Remove from favorites" else "Add to favorites",
+                    iconResId = if (isFav) R.drawable.rem_favorite else R.drawable.add_favorite,
+                    onClick = onToggleFavorite
+                )
             )
-            add("📁 Make folder" to onCreateFolder)
-            add("🎨 Change app icon" to onChangeIcon)
-            add("↺ Reset icon to default" to onResetIcon)
-            add("ℹ️ App info" to onAppInfo)
-            add("🙈 Hide app" to onHideApp)
+            add(
+                AppMenuAction(
+                    label = "Make folder",
+                    iconResId = R.drawable.add_folder,
+                    onClick = onCreateFolder
+                )
+            )
+            add(
+                AppMenuAction(
+                    label = "Change app icon",
+                    iconResId = R.drawable.customize,
+                    onClick = onChangeIcon
+                )
+            )
+            add(
+                AppMenuAction(
+                    label = "Reset icon to default",
+                    iconResId = R.drawable.reset,
+                    onClick = onResetIcon
+                )
+            )
+            add(
+                AppMenuAction(
+                    label = "App info",
+                    iconResId = R.drawable.app_info,
+                    onClick = onAppInfo
+                )
+            )
+            add(
+                AppMenuAction(
+                    label = "Hide app",
+                    iconResId = R.drawable.hide_app,
+                    onClick = onHideApp
+                )
+            )
             if (onOpenLauncherOptions != null) {
-                add("⚙ Launcher options" to onOpenLauncherOptions)
+                add(
+                    AppMenuAction(
+                        label = "Launcher options",
+                        iconResId = R.drawable.options,
+                        onClick = onOpenLauncherOptions
+                    )
+                )
             }
-            add("♥ Close ♥" to onDismiss)
+            add(AppMenuAction("♥ Close ♥", onClick = onDismiss))
         }
     }
 
@@ -127,7 +174,7 @@ fun AppActionDialog(
                         sawCenterDown = true
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
-                        actions.getOrNull(selectedIndex)?.second?.invoke()
+                        actions.getOrNull(selectedIndex)?.onClick?.invoke()
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -136,7 +183,7 @@ fun AppActionDialog(
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         val targetIndex = digit - 1
                         selectedIndex = targetIndex
-                        actions.getOrNull(targetIndex)?.second?.invoke()
+                        actions.getOrNull(targetIndex)?.onClick?.invoke()
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -194,7 +241,7 @@ fun AppActionDialog(
             isCloseFocused = selectedIndex == actions.lastIndex,
             onClose = {
                 selectedIndex = actions.lastIndex
-                actions.last().second()
+                actions.last().onClick()
             },
             modifier = Modifier
                 .width(dialogWidth)
@@ -270,16 +317,17 @@ fun AppActionDialog(
 
                 val startIdx = if (isFav) 2 else 0
                 for (idx in startIdx until actions.size) {
-                    val (label, action) = actions[idx]
+                    val item = actions[idx]
                     if (idx == actions.lastIndex) continue // "close" is the floating pill
                     KawaiiDialogItem(
-                        text = label,
+                        text = item.label,
                         isFocused = selectedIndex == idx,
+                        iconResId = item.iconResId,
                         modifier = Modifier.fillMaxWidth(),
                         jumpNumber = if (idx + 1 <= 9) idx + 1 else null,
                         onClick = {
                             selectedIndex = idx
-                            action()
+                            item.onClick()
                         }
                     )
                 }

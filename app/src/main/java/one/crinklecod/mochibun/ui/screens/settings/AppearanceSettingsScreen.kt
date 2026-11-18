@@ -43,14 +43,19 @@ import kotlinx.coroutines.withContext
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.ui.components.MascotSpriteSource
 import one.crinklecod.mochibun.ui.components.MascotSpriteStore
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
+import one.crinklecod.mochibun.ui.components.mochibunCardBorder
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
+import one.crinklecod.mochibun.ui.theme.loadSavedTheme
+import one.crinklecod.mochibun.ui.theme.saveTheme
 
 /**
  * Tier 1: Look & Aesthetic Sub-Screen
@@ -87,6 +92,9 @@ internal fun AppearanceSettingsScreen(
     val fontOptions by TypographyManager.options.collectAsState()
     val mascotSource by MascotSpriteStore.source.collectAsState()
     val hasCustomMascot = mascotSource is MascotSpriteSource.Custom
+    val activeBorderStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
+    val customBorderSource by CustomCardBorderManager.source.collectAsState()
+    val hasCustomBorder = customBorderSource is CustomCardBorderSource.Custom
     val scope = rememberCoroutineScope()
 
     // Custom mascot atlas: copied (max 1.5 MB) and validated off the main thread, then hot-swapped.
@@ -108,11 +116,36 @@ internal fun AppearanceSettingsScreen(
         }
     }
 
-    // Dynamic item list based on custom wallpaper state
-    val items = remember(hasCustomWallpaper, hasCustomMascot, isSystemMonitorEnabled, isSubDisplayTickerEnabled) {
+    // Custom 9-slice card border PNG (16x16..256x256 px, max 512 KB) validated off the main thread.
+    val borderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    CustomCardBorderManager.importPng(context, uri)
+                }
+                val message = result.fold(
+                    onSuccess = { spec -> "♡ Custom card border applied (${spec.width}×${spec.height}px)" },
+                    onFailure = { "Card border not changed: ${it.message}" }
+                )
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // Dynamic item list based on custom wallpaper, mascot, and border state
+    val items = remember(
+        hasCustomWallpaper,
+        hasCustomMascot,
+        hasCustomBorder,
+        isSystemMonitorEnabled,
+        isSubDisplayTickerEnabled
+    ) {
         buildList {
             add("theme")
             add("typography")
+            add("border_style")
+            add("pick_border")
+            if (hasCustomBorder) add("reset_border")
             add("name")
             add("sub_display_ticker")
             if (isSubDisplayTickerEnabled) add("sub_display_style")
@@ -135,7 +168,7 @@ internal fun AppearanceSettingsScreen(
 
     val targetCardIndex = remember(focusedIndex, items) {
         when (items.getOrNull(focusedIndex)) {
-            "theme", "typography" -> 0
+            "theme", "typography", "border_style", "pick_border", "reset_border" -> 0
             "name", "sub_display_ticker", "sub_display_style" -> 1
             "icon_pack", "pick_wallpaper", "reset_wallpaper", "pick_mascot", "reset_mascot",
             "mascot_size", "wallpaper_stickers" -> 2
@@ -165,6 +198,23 @@ internal fun AppearanceSettingsScreen(
                 val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
                 PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
                 SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "border_style" -> {
+                val nextStyle = activeBorderStyle.next()
+                CustomCardBorderManager.setBorderStyle(context, nextStyle)
+                val prefs = PreferencesManager.getPrefs(context)
+                saveTheme(prefs, loadSavedTheme(prefs).copy(borderStyle = nextStyle.id))
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "pick_border" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                borderPicker.launch(arrayOf("image/png"))
+            }
+            "reset_border" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                CustomCardBorderManager.resetCustomBorder(context)
+                focusedIndex = items.indexOf("pick_border").coerceAtLeast(0)
+                Toast.makeText(context, "♡ Custom card border reset", Toast.LENGTH_SHORT).show()
             }
             "name" -> {
                 SoundEffectManager.play(context, SoundEffect.SELECT)
@@ -288,6 +338,16 @@ internal fun AppearanceSettingsScreen(
                             }
                             PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
                             SoundEffectManager.play(context, SoundEffect.NAV)
+                        } else if (items.getOrNull(focusedIndex) == "border_style") {
+                            val nextStyle = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                                activeBorderStyle.previous()
+                            } else {
+                                activeBorderStyle.next()
+                            }
+                            CustomCardBorderManager.setBorderStyle(context, nextStyle)
+                            val prefs = PreferencesManager.getPrefs(context)
+                            saveTheme(prefs, loadSavedTheme(prefs).copy(borderStyle = nextStyle.id))
+                            SoundEffectManager.play(context, SoundEffect.NAV)
                         } else if (items.getOrNull(focusedIndex) == "sub_display_style") {
                             // Two-value stepper: Left / Right both flip the style.
                             PreferencesManager.setSubDisplayTickerDark(context, !isSubDisplayTickerDark)
@@ -350,6 +410,54 @@ internal fun AppearanceSettingsScreen(
                             SoundEffectManager.play(context, SoundEffect.NAV)
                         }
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Card Border Style",
+                        subtitle = if (hasCustomBorder) {
+                            "Overridden by custom 9-slice PNG"
+                        } else {
+                            activeBorderStyle.subtitle
+                        },
+                        valueDisplay = activeBorderStyle.label,
+                        isFocused = items.getOrNull(focusedIndex) == "border_style",
+                        jumpNumber = (items.indexOf("border_style") + 1).takeIf { it <= 9 },
+                        onDecrement = {
+                            val prevStyle = activeBorderStyle.previous()
+                            CustomCardBorderManager.setBorderStyle(context, prevStyle)
+                            val prefs = PreferencesManager.getPrefs(context)
+                            saveTheme(prefs, loadSavedTheme(prefs).copy(borderStyle = prevStyle.id))
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        },
+                        onIncrement = {
+                            val nextStyle = activeBorderStyle.next()
+                            CustomCardBorderManager.setBorderStyle(context, nextStyle)
+                            val prefs = PreferencesManager.getPrefs(context)
+                            saveTheme(prefs, loadSavedTheme(prefs).copy(borderStyle = nextStyle.id))
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val customBorderSubtitle = (customBorderSource as? CustomCardBorderSource.Custom)?.let {
+                        "Active: ${it.spec.width}×${it.spec.height}px (${it.spec.slicePx}px slice)"
+                    } ?: "9-slice PNG frame (16–256px, max 512 KB)"
+                    SettingsNavigationRow(
+                        title = "Custom Border Frame (.png)",
+                        subtitle = customBorderSubtitle,
+                        icon = "🎀",
+                        isFocused = items.getOrNull(focusedIndex) == "pick_border",
+                        jumpNumber = (items.indexOf("pick_border") + 1).takeIf { it <= 9 },
+                        onClick = { activateAppearanceItem(items.indexOf("pick_border")) }
+                    )
+                    if (hasCustomBorder) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsActionRow(
+                            title = "Reset Custom Border",
+                            isFocused = items.getOrNull(focusedIndex) == "reset_border",
+                            isDestructive = true,
+                            jumpNumber = (items.indexOf("reset_border") + 1).takeIf { it <= 9 },
+                            onClick = { activateAppearanceItem(items.indexOf("reset_border")) }
+                        )
+                    }
                 }
             }
 
@@ -531,9 +639,13 @@ internal fun AppearanceSettingsScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
+                        .mochibunCardBorder(
+                            cornerRadius = 22.dp,
+                            borderColor = ActiveTheme.cardBorder,
+                            borderWidth = 1.5.dp
+                        )
                         .clip(RoundedCornerShape(22.dp))
                         .background(ActiveTheme.container)
-                        .border(1.5.dp, ActiveTheme.cardBorder, RoundedCornerShape(22.dp))
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {

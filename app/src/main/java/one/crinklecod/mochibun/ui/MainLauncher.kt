@@ -196,6 +196,12 @@ fun MainLauncher(
     var currentTheme by remember {
         mutableStateOf(loadSavedTheme(preferences))
     }
+    val activeBorderStyle by one.crinklecod.mochibun.data.repository.CustomCardBorderManager.activeBorderStyle.collectAsState()
+    LaunchedEffect(activeBorderStyle) {
+        if (currentTheme.borderStyle != activeBorderStyle.id) {
+            currentTheme = currentTheme.copy(borderStyle = activeBorderStyle.id)
+        }
+    }
     val themeOptions by ExternalThemeManager.themes.collectAsState()
     LaunchedEffect(themeOptions) {
         val savedPreset = preferences.getString(PreferencesManager.KEY_THEME_PRESET, null)
@@ -203,6 +209,10 @@ fun MainLauncher(
             val matching = ExternalThemeManager.findTheme(savedPreset)
             if (matching != null) {
                 currentTheme = matching.theme
+                one.crinklecod.mochibun.data.repository.CustomCardBorderManager.setBorderStyle(
+                    context,
+                    matching.theme.borderStyle
+                )
             }
         }
     }
@@ -922,6 +932,10 @@ fun MainLauncher(
         { newTheme ->
             currentTheme = newTheme
             saveTheme(preferences, newTheme)
+            one.crinklecod.mochibun.data.repository.CustomCardBorderManager.setBorderStyle(
+                context,
+                newTheme.borderStyle
+            )
             PreferencesManager.setThemePreset(context, newTheme.name)
             SystemUiThemeBridge.broadcastTheme(context, newTheme)
             activeModal = null

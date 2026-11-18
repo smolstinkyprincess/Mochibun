@@ -1,9 +1,11 @@
 package one.crinklecod.mochibun.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
@@ -18,11 +20,20 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import one.crinklecod.mochibun.data.model.CardBorderStyle
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
+import one.crinklecod.mochibun.data.repository.rememberCustomCardBorderFrame
 import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import kotlin.math.PI
@@ -44,9 +55,14 @@ private const val PEARL_OUTLINE_ALPHA = 0.65f
  * 1. a sheer scalloped organza ruffle (translucent [containerColor] wash with a hairline
  *    [borderColor] rim) that lets the wallpaper and stickers peek through,
  * 2. a ring of ivory pearls piped along the seam between ruffle and card,
- * 3. an opaque rounded card ([cardCornerRadius]) with a crisp 1.35dp outline, filled with
- *    [containerBrush] when given (e.g. a gradient header pill) or [containerColor] otherwise,
+ * 3. an opaque rounded card ([cardCornerRadius]) with a crisp 1.35dp outline (or the active
+ *    custom 9-slice / procedural [CardBorderStyle]), filled with [containerBrush] when given
+ *    (e.g. a gradient header pill) or [containerColor] otherwise,
  * plus optional pixel-art bows pinned at 45° on the four corners.
+ *
+ * When [allowCustomNineSlice] is `true` and a custom 9-slice `card_border.png` is active,
+ * the procedural organza/pearl lace ruffle and corner-pinned bow overlays are skipped and
+ * only the custom 9-slice frame is rendered via [mochibunCardBorder].
  *
  * The ruffle and pearls follow the card's rounded outline, so corners stay even. The ruffle
  * reaches the measured bounds and the card sits [scallopDepth] + pearl radius + 1dp inside them.
@@ -72,10 +88,33 @@ fun KeitaiLaceContainer(
     showCornerBows: Boolean = true,
     bowWidth: Dp = 28.dp,
     bowHeight: Dp = 24.dp,
+    allowCustomNineSlice: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
-    Box(
-        modifier = modifier
+    val activeBorderStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
+    val customBorderSource by CustomCardBorderManager.source.collectAsState()
+    val customFrame = if (allowCustomNineSlice) rememberCustomCardBorderFrame() else null
+    val hasCustomBorder = allowCustomNineSlice &&
+        (customFrame != null || customBorderSource is CustomCardBorderSource.Custom)
+
+    val frameModifier = if (customFrame != null) {
+        val cardShape = RoundedCornerShape(cardCornerRadius)
+        val bgModifier = if (containerBrush != null) {
+            Modifier.background(containerBrush, cardShape)
+        } else {
+            Modifier.background(containerColor, cardShape)
+        }
+        modifier
+            .graphicsLayer { clip = false }
+            .then(bgModifier)
+            .mochibunCardBorder(
+                cornerRadius = cardCornerRadius,
+                borderColor = borderColor,
+                borderWidth = 1.35.dp,
+                allowCustomNineSlice = true
+            )
+    } else {
+        modifier
             .graphicsLayer { clip = false }
             .drawWithCache {
                 val rimStroke = 0.8.dp.toPx()
@@ -91,9 +130,6 @@ fun KeitaiLaceContainer(
                 val corner = min(cardCornerRadius.toPx(), min(cardW, cardH) / 2f)
 
                 // ── Layer 1: organza ruffle ──────────────────────────────────────────────
-                // Lobes are quadratic arcs along a baseline concentric with the card (inset by
-                // the scallop depth). A control point 2x the bulge away from the baseline puts
-                // each lobe's peak exactly `bulge` out, i.e. half a rim stroke inside the bounds.
                 val base = RoundRectWalker(
                     inset = depth, width = size.width, height = size.height,
                     radius = corner + (inset - depth)
@@ -114,8 +150,6 @@ fun KeitaiLaceContainer(
                 }
                 rufflePath.close()
 
-                // Sheer wash fills only the ring outside the card (even-odd hole), so a
-                // translucent containerColor is never composited twice under the card.
                 val cardRect = RoundRect(
                     left = inset, top = inset, right = inset + cardW, bottom = inset + cardH,
                     cornerRadius = CornerRadius(corner)
@@ -138,13 +172,13 @@ fun KeitaiLaceContainer(
                 }
                 val pearlDrawRadius = pearlRadius - pearlStroke / 2f
 
-                // ── Layer 3: opaque card ─────────────────────────────────────────────────
+                // ── Layer 3: opaque card & procedural card border ────────────────────────
                 val cardTopLeft = Offset(inset, inset)
                 val cardSize = Size(cardW, cardH)
                 val cardRadius = CornerRadius(corner)
                 val half = cardStroke / 2f
                 val strokeTopLeft = Offset(inset + half, inset + half)
-                val strokeSize = Size(cardW - cardStroke, cardH - cardStroke)
+                val strokeSize = Size((cardW - cardStroke).coerceAtLeast(0f), (cardH - cardStroke).coerceAtLeast(0f))
                 val cardStrokeRadius = CornerRadius((corner - half).coerceAtLeast(0f))
 
                 val washColor = containerColor.copy(alpha = containerColor.alpha * ORGANZA_WASH_ALPHA)
@@ -154,6 +188,57 @@ fun KeitaiLaceContainer(
                 val pearlStyle = Stroke(width = pearlStroke)
                 val cardStrokeStyle = Stroke(width = cardStroke)
 
+                val innerInset = inset + 3.2.dp.toPx()
+                val innerSize = Size(
+                    (size.width - innerInset * 2f).coerceAtLeast(0f),
+                    (size.height - innerInset * 2f).coerceAtLeast(0f)
+                )
+                val innerTopLeft = Offset(innerInset, innerInset)
+                val innerRadius = CornerRadius((corner - 3.2.dp.toPx()).coerceAtLeast(0f))
+                val innerDoubleStroke = Stroke(width = 1.0.dp.toPx())
+                val innerDoubleColor = borderColor.copy(alpha = (borderColor.alpha * 0.72f).coerceIn(0f, 1f))
+
+                val stitchStroke = Stroke(
+                    width = 1.25.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    pathEffect = PathEffect.dashPathEffect(
+                        intervals = floatArrayOf(5.dp.toPx(), 3.dp.toPx()),
+                        phase = 0f
+                    )
+                )
+
+                val innerLacePath = if (activeBorderStyle == CardBorderStyle.LACE) {
+                    buildLaceBorderPath(
+                        inset = innerInset,
+                        width = size.width,
+                        height = size.height,
+                        cornerRadiusPx = (corner - 3.2.dp.toPx()).coerceAtLeast(0f),
+                        scallopRadiusPx = 2.2.dp.toPx(),
+                        scallopStepPx = 5.5.dp.toPx()
+                    )
+                } else null
+                val innerLaceStroke = Stroke(
+                    width = 1.0.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
+
+                val pixelStepPx = 2.dp.toPx().coerceAtLeast(1f)
+                val pixelPath = if (activeBorderStyle == CardBorderStyle.PIXEL) {
+                    buildPixelBorderPath(
+                        left = inset + pixelStepPx / 2f,
+                        top = inset + pixelStepPx / 2f,
+                        right = inset + cardW - pixelStepPx / 2f,
+                        bottom = inset + cardH - pixelStepPx / 2f,
+                        stepPx = pixelStepPx
+                    )
+                } else null
+                val pixelStroke = Stroke(
+                    width = pixelStepPx,
+                    cap = StrokeCap.Butt,
+                    join = StrokeJoin.Miter
+                )
+
                 onDrawBehind {
                     drawPath(washPath, washColor)
                     drawPath(rufflePath, rimColor, style = rimStyle)
@@ -162,10 +247,63 @@ fun KeitaiLaceContainer(
                     } else {
                         drawRoundRect(containerColor, cardTopLeft, cardSize, cardRadius)
                     }
-                    drawRoundRect(
-                        borderColor, strokeTopLeft, strokeSize, cardStrokeRadius,
-                        style = cardStrokeStyle
-                    )
+
+                    when (activeBorderStyle) {
+                        CardBorderStyle.SOLID -> {
+                            drawRoundRect(
+                                borderColor, strokeTopLeft, strokeSize, cardStrokeRadius,
+                                style = cardStrokeStyle
+                            )
+                        }
+                        CardBorderStyle.DOUBLE -> {
+                            drawRoundRect(
+                                borderColor, strokeTopLeft, strokeSize, cardStrokeRadius,
+                                style = cardStrokeStyle
+                            )
+                            if (innerSize.width > 0f && innerSize.height > 0f) {
+                                drawRoundRect(
+                                    innerDoubleColor, innerTopLeft, innerSize, innerRadius,
+                                    style = innerDoubleStroke
+                                )
+                            }
+                        }
+                        CardBorderStyle.LACE -> {
+                            drawRoundRect(
+                                borderColor, strokeTopLeft, strokeSize, cardStrokeRadius,
+                                style = cardStrokeStyle
+                            )
+                            if (innerLacePath != null) {
+                                drawPath(
+                                    path = innerLacePath,
+                                    color = innerDoubleColor,
+                                    style = innerLaceStroke
+                                )
+                            }
+                        }
+                        CardBorderStyle.STITCH -> {
+                            drawRoundRect(
+                                borderColor.copy(alpha = (borderColor.alpha * 0.55f).coerceIn(0f, 1f)),
+                                strokeTopLeft, strokeSize, cardStrokeRadius,
+                                style = cardStrokeStyle
+                            )
+                            if (innerSize.width > 0f && innerSize.height > 0f) {
+                                drawRoundRect(
+                                    borderColor, innerTopLeft, innerSize, innerRadius,
+                                    style = stitchStroke
+                                )
+                            }
+                        }
+                        CardBorderStyle.PIXEL -> {
+                            if (pixelPath != null) {
+                                drawPath(
+                                    path = pixelPath,
+                                    color = borderColor,
+                                    style = pixelStroke
+                                )
+                            }
+                        }
+                    }
+
                     // Pearls last so they sit on top of the card edge like piping.
                     var i = 0
                     while (i < pearls.size) {
@@ -176,6 +314,10 @@ fun KeitaiLaceContainer(
                     }
                 }
             }
+    }
+
+    Box(
+        modifier = frameModifier
     ) {
         // Same default text color a Material Surface would give, so dialogs moved here from
         // a plain Material Surface keep the look of any Text that doesn't set its own color.
@@ -188,7 +330,7 @@ fun KeitaiLaceContainer(
             )
         }
 
-        if (showCornerBows) {
+        if (showCornerBows && !hasCustomBorder) {
             for (spec in CornerBows) {
                 PixelRibbonBow(
                     modifier = Modifier

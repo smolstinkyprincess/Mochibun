@@ -214,10 +214,10 @@ fun NowPlayingCard(
                 )
                 .clip(cardShape)
                 .background(theme.cardBgColor)
-                .nowPlayingCardConcentricBorder(
+                .mochibunCardBorder(
                     cornerRadius = 22.dp,
-                    outerColor = theme.cardBorderColor,
-                    innerColor = theme.cardBorderColor.copy(alpha = 0.5f)
+                    borderColor = theme.cardBorderColor,
+                    borderWidth = 1.5.dp
                 )
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {

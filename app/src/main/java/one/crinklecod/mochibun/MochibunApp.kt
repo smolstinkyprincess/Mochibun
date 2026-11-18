@@ -17,6 +17,7 @@ import one.crinklecod.mochibun.core.system.MemoryTrimTier
 import one.crinklecod.mochibun.core.system.memoryTrimTier
 import one.crinklecod.mochibun.data.prefs.CursorPreferences
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
 import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.data.repository.HardwareRemapManager
@@ -64,6 +65,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
         PreferencesManager.init(this)
         PetManager.init(this)
         CustomMascotManager.restore(this)
+        CustomCardBorderManager.restore(this)
         ExternalThemeManager.init(this)
         HardwareRemapManager.init(this)
         TypographyManager.scanFonts(this)

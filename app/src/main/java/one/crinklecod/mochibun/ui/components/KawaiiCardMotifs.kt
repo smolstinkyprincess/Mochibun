@@ -19,21 +19,23 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import one.crinklecod.mochibun.core.haptic.HapticManager
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderFrame
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
+import one.crinklecod.mochibun.data.repository.rememberCustomCardBorderFrame
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,35 +44,38 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.cardBorderColor
-import one.crinklecod.mochibun.ui.theme.focusedContainerColor
 import one.crinklecod.mochibun.ui.theme.palette
 import one.crinklecod.mochibun.ui.theme.selectionGlowColor
 import one.crinklecod.mochibun.ui.theme.surfaceTint
-import one.crinklecod.mochibun.ui.theme.unfocusedCardBgColor
-import one.crinklecod.mochibun.ui.theme.unfocusedCardBorderColor
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.roundToInt
 
@@ -480,9 +485,436 @@ fun Modifier.kawaiiCardMotifs(
         }
 }
 
+// ============================================================================
+// Custom 9-Slice & Procedural Card Border Renderer
+// ============================================================================
+
+/**
+ * Builds the 2-step chamfered pixel-art path for [CardBorderStyle.PIXEL].
+ * Reused inside `drawWithCache` so zero objects are allocated during per-frame drawing.
+ */
+internal fun buildPixelBorderPath(
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+    stepPx: Float,
+    outPath: Path = Path()
+): Path {
+    val w = (right - left).coerceAtLeast(0f)
+    val h = (bottom - top).coerceAtLeast(0f)
+    val s = stepPx.coerceIn(1f, (min(w, h) / 6f).coerceAtLeast(1f))
+    val s2 = s * 2f
+
+    outPath.reset()
+    // Start on top edge after top-left 2-step chamfer
+    outPath.moveTo(left + s2, top)
+    // Top edge -> top-right 2-step chamfer
+    outPath.lineTo(right - s2, top)
+    outPath.lineTo(right - s2, top + s)
+    outPath.lineTo(right - s, top + s)
+    outPath.lineTo(right - s, top + s2)
+    outPath.lineTo(right, top + s2)
+    // Right edge -> bottom-right 2-step chamfer
+    outPath.lineTo(right, bottom - s2)
+    outPath.lineTo(right - s, bottom - s2)
+    outPath.lineTo(right - s, bottom - s)
+    outPath.lineTo(right - s2, bottom - s)
+    outPath.lineTo(right - s2, bottom)
+    // Bottom edge -> bottom-left 2-step chamfer
+    outPath.lineTo(left + s2, bottom)
+    outPath.lineTo(left + s2, bottom - s)
+    outPath.lineTo(left + s, bottom - s)
+    outPath.lineTo(left + s, bottom - s2)
+    outPath.lineTo(left, bottom - s2)
+    // Left edge -> top-left 2-step chamfer
+    outPath.lineTo(left, top + s2)
+    outPath.lineTo(left + s, top + s2)
+    outPath.lineTo(left + s, top + s)
+    outPath.lineTo(left + s2, top + s)
+    outPath.close()
+    return outPath
+}
+
+/**
+ * Builds the scalloped lace path for [CardBorderStyle.LACE] along the rounded rectangle perimeter.
+ * Reused inside `drawWithCache` so zero objects are allocated during per-frame drawing.
+ */
+internal fun buildLaceBorderPath(
+    inset: Float,
+    width: Float,
+    height: Float,
+    cornerRadiusPx: Float,
+    scallopRadiusPx: Float,
+    scallopStepPx: Float,
+    outPath: Path = Path()
+): Path {
+    outPath.reset()
+    if (width <= inset * 2f || height <= inset * 2f) return outPath
+    val walker = RoundRectWalker(
+        inset = inset,
+        width = width,
+        height = height,
+        radius = cornerRadiusPx
+    )
+    if (walker.length <= 0f) return outPath
+    val lobes = (walker.length / scallopStepPx.coerceAtLeast(2f)).roundToInt().coerceAtLeast(8)
+    val lobeLen = walker.length / lobes
+    val bulge = scallopRadiusPx.coerceAtLeast(1f)
+    val pt = FloatArray(4)
+    walker.at(0f, pt)
+    outPath.moveTo(pt[0], pt[1])
+    for (k in 0 until lobes) {
+        walker.at((k + 0.5f) * lobeLen, pt)
+        val cx = pt[0] + pt[2] * bulge * 1.85f
+        val cy = pt[1] + pt[3] * bulge * 1.85f
+        walker.at(((k + 1) * lobeLen).coerceAtMost(walker.length), pt)
+        outPath.quadraticTo(cx, cy, pt[0], pt[1])
+    }
+    outPath.close()
+    return outPath
+}
+
+/**
+ * Draws the 8 border patches (4 corners at 1:1 + 4 stretched edges; center patch skipped) of a
+ * custom 9-slice [CustomCardBorderFrame] using `FilterQuality.None` and precomputed [NineSliceDestGeometry].
+ */
+internal class NineSliceDestGeometry(
+    frame: CustomCardBorderFrame,
+    leftPx: Int,
+    topPx: Int,
+    widthPx: Int,
+    heightPx: Int
+) {
+    private val dstSlice = min(frame.slicePx, min(widthPx, heightPx) / 2).coerceAtLeast(1)
+    private val midW = (widthPx - dstSlice * 2).coerceAtLeast(0)
+    private val midH = (heightPx - dstSlice * 2).coerceAtLeast(0)
+    private val rightX = leftPx + widthPx - dstSlice
+    private val bottomY = topPx + heightPx - dstSlice
+
+    val hasEdgesW: Boolean = midW > 0
+    val hasEdgesH: Boolean = midH > 0
+
+    val cornerDstSize = IntSize(dstSlice, dstSlice)
+    val topBottomDstSize = IntSize(midW, dstSlice)
+    val leftRightDstSize = IntSize(dstSlice, midH)
+
+    val topLeftDstOffset = IntOffset(leftPx, topPx)
+    val topRightDstOffset = IntOffset(rightX, topPx)
+    val bottomLeftDstOffset = IntOffset(leftPx, bottomY)
+    val bottomRightDstOffset = IntOffset(rightX, bottomY)
+
+    val topEdgeDstOffset = IntOffset(leftPx + dstSlice, topPx)
+    val bottomEdgeDstOffset = IntOffset(leftPx + dstSlice, bottomY)
+    val leftEdgeDstOffset = IntOffset(leftPx, topPx + dstSlice)
+    val rightEdgeDstOffset = IntOffset(rightX, topPx + dstSlice)
+
+    fun draw(scope: DrawScope, frame: CustomCardBorderFrame) = with(scope) {
+        val img = frame.image
+        // 4 corners (drawn 1:1 at dstSlice x dstSlice)
+        drawImage(
+            image = img,
+            srcOffset = frame.topLeftSrcOffset,
+            srcSize = frame.cornerSrcSize,
+            dstOffset = topLeftDstOffset,
+            dstSize = cornerDstSize,
+            filterQuality = FilterQuality.None
+        )
+        drawImage(
+            image = img,
+            srcOffset = frame.topRightSrcOffset,
+            srcSize = frame.cornerSrcSize,
+            dstOffset = topRightDstOffset,
+            dstSize = cornerDstSize,
+            filterQuality = FilterQuality.None
+        )
+        drawImage(
+            image = img,
+            srcOffset = frame.bottomLeftSrcOffset,
+            srcSize = frame.cornerSrcSize,
+            dstOffset = bottomLeftDstOffset,
+            dstSize = cornerDstSize,
+            filterQuality = FilterQuality.None
+        )
+        drawImage(
+            image = img,
+            srcOffset = frame.bottomRightSrcOffset,
+            srcSize = frame.cornerSrcSize,
+            dstOffset = bottomRightDstOffset,
+            dstSize = cornerDstSize,
+            filterQuality = FilterQuality.None
+        )
+        // Top & bottom stretched edges
+        if (hasEdgesW) {
+            drawImage(
+                image = img,
+                srcOffset = frame.topEdgeSrcOffset,
+                srcSize = frame.topBottomSrcSize,
+                dstOffset = topEdgeDstOffset,
+                dstSize = topBottomDstSize,
+                filterQuality = FilterQuality.None
+            )
+            drawImage(
+                image = img,
+                srcOffset = frame.bottomEdgeSrcOffset,
+                srcSize = frame.topBottomSrcSize,
+                dstOffset = bottomEdgeDstOffset,
+                dstSize = topBottomDstSize,
+                filterQuality = FilterQuality.None
+            )
+        }
+        // Left & right stretched edges (center patch is deliberately skipped to save fill-rate)
+        if (hasEdgesH) {
+            drawImage(
+                image = img,
+                srcOffset = frame.leftEdgeSrcOffset,
+                srcSize = frame.leftRightSrcSize,
+                dstOffset = leftEdgeDstOffset,
+                dstSize = leftRightDstSize,
+                filterQuality = FilterQuality.None
+            )
+            drawImage(
+                image = img,
+                srcOffset = frame.rightEdgeSrcOffset,
+                srcSize = frame.leftRightSrcSize,
+                dstOffset = rightEdgeDstOffset,
+                dstSize = leftRightDstSize,
+                filterQuality = FilterQuality.None
+            )
+        }
+    }
+}
+
+/**
+ * Reusable Mochibun Card Border modifier supporting both:
+ * 1. **Custom 9-Slice PNG Frame** (`card_border.png` via [CustomCardBorderManager]) with `FilterQuality.None`
+ *    when [allowCustomNineSlice] is `true` and a custom border PNG is installed.
+ * 2. **5 Procedural Border Styles** ([CardBorderStyle]: `SOLID`, `DOUBLE`, `LACE`, `STITCH`, `PIXEL`)
+ *    when no custom 9-slice PNG is active.
+ *
+ * All `Stroke`, `Path`, `PathEffect`, and `IntOffset`/`IntSize` objects are precomputed in
+ * `drawWithCache` so zero allocations occur inside the per-frame draw lambda.
+ */
+fun Modifier.mochibunCardBorder(
+    cornerRadius: Dp = 22.dp,
+    borderColor: Color = Color.Unspecified,
+    borderWidth: Dp = 1.5.dp,
+    allowCustomNineSlice: Boolean = true,
+    styleOverride: CardBorderStyle? = null
+): Modifier = composed {
+    val resolvedColor = if (borderColor != Color.Unspecified) borderColor else ActiveTheme.cardBorder
+    val activeStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
+    val resolvedStyle = styleOverride ?: activeStyle
+    val customFrame = if (allowCustomNineSlice) rememberCustomCardBorderFrame() else null
+
+    this
+        .graphicsLayer { clip = false }
+        .drawWithCache {
+            val w = size.width
+            val h = size.height
+            val maxRadius = min(w, h) / 2f
+            val r = cornerRadius.toPx().coerceIn(0f, maxRadius)
+
+            if (customFrame != null && w >= 4f && h >= 4f) {
+                val nineSlice = NineSliceDestGeometry(
+                    frame = customFrame,
+                    leftPx = 0,
+                    topPx = 0,
+                    widthPx = w.roundToInt(),
+                    heightPx = h.roundToInt()
+                )
+                onDrawWithContent {
+                    drawContent()
+                    nineSlice.draw(this, customFrame)
+                }
+            } else {
+                when (resolvedStyle) {
+                    CardBorderStyle.SOLID -> {
+                        val strokePx = borderWidth.toPx()
+                        val half = strokePx / 2f
+                        val topLeft = Offset(half, half)
+                        val rectSize = Size((w - strokePx).coerceAtLeast(0f), (h - strokePx).coerceAtLeast(0f))
+                        val corner = CornerRadius((r - half).coerceAtLeast(0f))
+                        val stroke = Stroke(width = strokePx)
+                        onDrawWithContent {
+                            drawContent()
+                            drawRoundRect(
+                                color = resolvedColor,
+                                topLeft = topLeft,
+                                size = rectSize,
+                                cornerRadius = corner,
+                                style = stroke
+                            )
+                        }
+                    }
+
+                    CardBorderStyle.DOUBLE -> {
+                        val outerStrokePx = 1.5.dp.toPx()
+                        val innerStrokePx = 1.0.dp.toPx()
+                        val outerHalf = outerStrokePx / 2f
+                        val innerInset = 3.5.dp.toPx()
+
+                        val outerTopLeft = Offset(outerHalf, outerHalf)
+                        val outerSize = Size(
+                            (w - outerStrokePx).coerceAtLeast(0f),
+                            (h - outerStrokePx).coerceAtLeast(0f)
+                        )
+                        val outerCorner = CornerRadius((r - outerHalf).coerceAtLeast(0f))
+                        val outerStroke = Stroke(width = outerStrokePx)
+
+                        val innerTopLeft = Offset(innerInset, innerInset)
+                        val innerSize = Size(
+                            (w - innerInset * 2f).coerceAtLeast(0f),
+                            (h - innerInset * 2f).coerceAtLeast(0f)
+                        )
+                        val innerCorner = CornerRadius((r - innerInset).coerceAtLeast(0f))
+                        val innerStroke = Stroke(width = innerStrokePx)
+                        val innerColor = resolvedColor.copy(alpha = (resolvedColor.alpha * 0.72f).coerceIn(0f, 1f))
+
+                        onDrawWithContent {
+                            drawContent()
+                            drawRoundRect(
+                                color = resolvedColor,
+                                topLeft = outerTopLeft,
+                                size = outerSize,
+                                cornerRadius = outerCorner,
+                                style = outerStroke
+                            )
+                            if (innerSize.width > 0f && innerSize.height > 0f) {
+                                drawRoundRect(
+                                    color = innerColor,
+                                    topLeft = innerTopLeft,
+                                    size = innerSize,
+                                    cornerRadius = innerCorner,
+                                    style = innerStroke
+                                )
+                            }
+                        }
+                    }
+
+                    CardBorderStyle.LACE -> {
+                        val baseStrokePx = 1.2.dp.toPx()
+                        val scallopStrokePx = 1.1.dp.toPx()
+                        val half = baseStrokePx / 2f
+                        val baseTopLeft = Offset(half, half)
+                        val baseSize = Size((w - baseStrokePx).coerceAtLeast(0f), (h - baseStrokePx).coerceAtLeast(0f))
+                        val baseCorner = CornerRadius((r - half).coerceAtLeast(0f))
+                        val baseStroke = Stroke(width = baseStrokePx)
+                        val scallopStroke = Stroke(
+                            width = scallopStrokePx,
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
+                        )
+                        val lacePath = buildLaceBorderPath(
+                            inset = half,
+                            width = w,
+                            height = h,
+                            cornerRadiusPx = (r - half).coerceAtLeast(0f),
+                            scallopRadiusPx = 3.dp.toPx(),
+                            scallopStepPx = 6.dp.toPx()
+                        )
+                        val laceColor = resolvedColor.copy(alpha = (resolvedColor.alpha * 0.85f).coerceIn(0f, 1f))
+                        onDrawWithContent {
+                            drawContent()
+                            drawPath(
+                                path = lacePath,
+                                color = laceColor,
+                                style = scallopStroke
+                            )
+                            drawRoundRect(
+                                color = resolvedColor,
+                                topLeft = baseTopLeft,
+                                size = baseSize,
+                                cornerRadius = baseCorner,
+                                style = baseStroke
+                            )
+                        }
+                    }
+
+                    CardBorderStyle.STITCH -> {
+                        val outerStrokePx = 1.0.dp.toPx()
+                        val outerHalf = outerStrokePx / 2f
+                        val outerTopLeft = Offset(outerHalf, outerHalf)
+                        val outerSize = Size(
+                            (w - outerStrokePx).coerceAtLeast(0f),
+                            (h - outerStrokePx).coerceAtLeast(0f)
+                        )
+                        val outerCorner = CornerRadius((r - outerHalf).coerceAtLeast(0f))
+                        val outerStroke = Stroke(width = outerStrokePx)
+                        val outerColor = resolvedColor.copy(alpha = (resolvedColor.alpha * 0.55f).coerceIn(0f, 1f))
+
+                        val stitchInset = 3.dp.toPx()
+                        val stitchStrokePx = 1.35.dp.toPx()
+                        val stitchTopLeft = Offset(stitchInset, stitchInset)
+                        val stitchSize = Size(
+                            (w - stitchInset * 2f).coerceAtLeast(0f),
+                            (h - stitchInset * 2f).coerceAtLeast(0f)
+                        )
+                        val stitchCorner = CornerRadius((r - stitchInset).coerceAtLeast(0f))
+                        val dashEffect = PathEffect.dashPathEffect(
+                            intervals = floatArrayOf(5.dp.toPx(), 3.dp.toPx()),
+                            phase = 0f
+                        )
+                        val stitchStroke = Stroke(
+                            width = stitchStrokePx,
+                            cap = StrokeCap.Round,
+                            pathEffect = dashEffect
+                        )
+
+                        onDrawWithContent {
+                            drawContent()
+                            drawRoundRect(
+                                color = outerColor,
+                                topLeft = outerTopLeft,
+                                size = outerSize,
+                                cornerRadius = outerCorner,
+                                style = outerStroke
+                            )
+                            if (stitchSize.width > 0f && stitchSize.height > 0f) {
+                                drawRoundRect(
+                                    color = resolvedColor,
+                                    topLeft = stitchTopLeft,
+                                    size = stitchSize,
+                                    cornerRadius = stitchCorner,
+                                    style = stitchStroke
+                                )
+                            }
+                        }
+                    }
+
+                    CardBorderStyle.PIXEL -> {
+                        val stepPx = 2.dp.toPx().coerceAtLeast(1f)
+                        val half = stepPx / 2f
+                        val pixelPath = buildPixelBorderPath(
+                            left = half,
+                            top = half,
+                            right = w - half,
+                            bottom = h - half,
+                            stepPx = stepPx
+                        )
+                        val pixelStroke = Stroke(
+                            width = stepPx,
+                            cap = StrokeCap.Butt,
+                            join = StrokeJoin.Miter
+                        )
+                        onDrawWithContent {
+                            drawContent()
+                            drawPath(
+                                path = pixelPath,
+                                color = resolvedColor,
+                                style = pixelStroke
+                            )
+                        }
+                    }
+                }
+            }
+        }
+}
+
 /**
  * Reusable Mochibun Kawaii Card wrapper component.
- * Applies delicate boundary accents and gentle focus halo sparkles.
+ * Applies delicate boundary accents, gentle focus halo sparkles, and the active
+ * [mochibunCardBorder] (custom 9-slice PNG or procedural [CardBorderStyle]).
  */
 @Composable
 fun KawaiiCard(
@@ -504,8 +936,12 @@ fun KawaiiCard(
                 cornerRadius = cornerRadius,
                 motifs = motifs
             )
-            .border(width = borderWidth, color = borderColor, shape = shape)
-            .background(color = containerColor, shape = shape),
+            .background(color = containerColor, shape = shape)
+            .mochibunCardBorder(
+                cornerRadius = cornerRadius,
+                borderColor = borderColor,
+                borderWidth = borderWidth
+            ),
         content = content
     )
 }
@@ -862,5 +1298,3 @@ private fun rememberCloudDriftPx(): State<Int> {
     }
     return drift
 }
-
-

@@ -6,7 +6,10 @@ import one.crinklecod.mochibun.data.model.BundleCursorConfig
 import one.crinklecod.mochibun.data.model.BundleMascotConfig
 import one.crinklecod.mochibun.data.model.BundleMascotDialogue
 import one.crinklecod.mochibun.data.model.BundleMascotSlot
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.model.MascotAtlasValidator
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.pet.PetMood
 import one.crinklecod.mochibun.ui.components.MascotAnimSlot
@@ -52,6 +55,7 @@ class ThemeBundleManagerTest {
         MascotSpriteStore.setSource(MascotSpriteSource.BuiltIn)
         // Plain JVM has no real BitmapFactory: read the PNG header instead
         CustomMascotManager.platformBounds = { MascotAtlasValidator.readPngSize(it) }
+        CustomCardBorderManager.platformBounds = { MascotAtlasValidator.readPngSize(it) }
     }
 
     // ── Custom mascot atlas (mascot_atlas.png) ──────────────────────────────
@@ -321,6 +325,123 @@ class ThemeBundleManagerTest {
             // Importing a standalone PNG without dialogue clears previous custom dialogue
             CustomMascotManager.importPng(target, ByteArrayInputStream(png)).getOrThrow()
             assertNull(CustomMascotManager.activeDialogue())
+        }
+    }
+
+    // ── Custom card border (card_border.png + procedural borderStyle) ─────────
+
+    @Test
+    fun bundleWithCustomCardBorder_previewsInstallsAndRoundTrips() {
+        val borderPng = fakePng(48, 48)
+        val manifest = validManifest().copy(
+            palette = validManifest().palette.copy(
+                borderStyle = "lace",
+                hasCustomCardBorder = true,
+                cardBorderSlicePx = 14
+            )
+        )
+        val bundle = createZip(
+            "manifest.json" to manifestBytes(manifest),
+            "card_border.png" to borderPng
+        )
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow()
+        assertTrue(preview.hasCardBorderAsset)
+        assertEquals("lace", preview.manifest.palette.borderStyle)
+        assertTrue(preview.manifest.palette.hasCustomCardBorder)
+        assertEquals(14, preview.manifest.palette.cardBorderSlicePx)
+
+        var exportedWithBorder = ByteArray(0)
+        var exportedWithoutBorder = ByteArray(0)
+        withTestContext { source ->
+            var skipped: String? = null
+            val applied = ThemeBundleManager.applyBundle(source, ByteArrayInputStream(bundle)) { skipped = it }
+            assertTrue(applied.isSuccess)
+            assertNull(skipped)
+            assertTrue(CustomCardBorderManager.isCustomBorderActive())
+            assertEquals(CardBorderStyle.LACE, CustomCardBorderManager.currentBorderStyle(source))
+            assertArrayEquals(borderPng, CustomCardBorderManager.borderFile(source).readBytes())
+            val customSource = CustomCardBorderManager.source.value as CustomCardBorderSource.Custom
+            assertEquals(48, customSource.spec.width)
+            assertEquals(48, customSource.spec.height)
+            assertEquals(14, customSource.spec.slicePx)
+
+            val outWith = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(
+                source,
+                outWith,
+                bundleName = "Lace & Frame",
+                includeCustomCardBorder = true
+            ).getOrThrow()
+            exportedWithBorder = outWith.toByteArray()
+
+            val outWithout = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(
+                source,
+                outWithout,
+                bundleName = "Lace Only",
+                includeCustomCardBorder = false
+            ).getOrThrow()
+            exportedWithoutBorder = outWithout.toByteArray()
+        }
+
+        // Verify export with custom card border included
+        val previewWith = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(exportedWithBorder)).getOrThrow()
+        assertTrue(previewWith.hasCardBorderAsset)
+        assertTrue(previewWith.manifest.palette.hasCustomCardBorder)
+        assertEquals(14, previewWith.manifest.palette.cardBorderSlicePx)
+        assertEquals("lace", previewWith.manifest.palette.borderStyle)
+
+        // Verify export with custom card border excluded
+        val previewWithout = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(exportedWithoutBorder)).getOrThrow()
+        assertFalse(previewWithout.hasCardBorderAsset)
+        assertFalse(previewWithout.manifest.palette.hasCustomCardBorder)
+        assertEquals("lace", previewWithout.manifest.palette.borderStyle)
+
+        // Applying exportedWithoutBorder to a context that had a custom border resets the custom border PNG
+        withTestContext { target ->
+            ThemeBundleManager.applyBundle(target, ByteArrayInputStream(exportedWithBorder)).getOrThrow()
+            assertTrue(CustomCardBorderManager.isCustomBorderActive())
+            assertTrue(CustomCardBorderManager.borderFile(target).exists())
+
+            ThemeBundleManager.applyBundle(target, ByteArrayInputStream(exportedWithoutBorder)).getOrThrow()
+            assertFalse("Bundle without custom border must clear previous custom border", CustomCardBorderManager.isCustomBorderActive())
+            assertFalse(CustomCardBorderManager.borderFile(target).exists())
+            assertEquals(CardBorderStyle.LACE, CustomCardBorderManager.currentBorderStyle(target))
+        }
+    }
+
+    @Test
+    fun oversizedOrInvalidCardBorder_isSkipped_andResetsExistingCustomBorder() {
+        val validBorderPng = fakePng(48, 48)
+        val tooBigBorderPng = fakePng(48, 48, totalBytes = ThemeBundleManager.MAX_CARD_BORDER_BYTES.toInt() + 1)
+        val manifest = validManifest().copy(
+            palette = validManifest().palette.copy(
+                borderStyle = "stitch",
+                hasCustomCardBorder = true,
+                cardBorderSlicePx = 16
+            )
+        )
+        val bundle = createZip(
+            "manifest.json" to manifestBytes(manifest),
+            "card_border.png" to tooBigBorderPng
+        )
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow()
+        assertFalse("Oversized card_border.png must not be marked valid in preview", preview.hasCardBorderAsset)
+
+        withTestContext { context ->
+            // Pre-install a valid custom border to verify it is cleaned up when a bundle's border is skipped
+            CustomCardBorderManager.installFromBytes(context, validBorderPng, 16).getOrThrow()
+            assertTrue(CustomCardBorderManager.isCustomBorderActive())
+
+            var skipped: String? = null
+            val applied = ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)) { skipped = it }
+            assertTrue("Bundle still applies when card_border.png is oversized", applied.isSuccess)
+            assertTrue(skipped!!.contains("512 KB"))
+            assertFalse(CustomCardBorderManager.isCustomBorderActive())
+            assertFalse(CustomCardBorderManager.borderFile(context).exists())
+            assertEquals(CardBorderStyle.STITCH, CustomCardBorderManager.currentBorderStyle(context))
         }
     }
 

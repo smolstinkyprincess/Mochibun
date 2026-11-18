@@ -10,6 +10,7 @@ import one.crinklecod.mochibun.core.util.downsampleAndSaveImage
 import one.crinklecod.mochibun.data.model.BundleCursorConfig
 import one.crinklecod.mochibun.data.model.BundleGreetingConfig
 import one.crinklecod.mochibun.data.model.BundlePaletteConfig
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.model.MascotAtlasValidator
 import one.crinklecod.mochibun.data.model.MochibunBundleManifest
 import one.crinklecod.mochibun.data.model.bundleJsonFormat
@@ -44,7 +45,9 @@ data class BundlePreviewData(
     val wallpaperPreview: Bitmap? = null,
     val hasCursorAsset: Boolean = false,
     /** A `mascot_atlas.png` within the 1.5 MB limit that is a PNG (fully validated on apply). */
-    val hasMascotAsset: Boolean = false
+    val hasMascotAsset: Boolean = false,
+    /** A `card_border.png` within the 512 KB limit that is a PNG (fully validated on apply). */
+    val hasCardBorderAsset: Boolean = false
 ) {
     val hasCustomMascot: Boolean
         get() = hasMascotAsset
@@ -52,6 +55,12 @@ data class BundlePreviewData(
     val hasCustomMascotDialogue: Boolean
         get() = (hasMascotAsset || manifest.hasCustomMascot) &&
             MascotAtlasValidator.sanitizeMascotDialogue(manifest.mascot?.dialogue) != null
+
+    val hasCustomCardBorder: Boolean
+        get() = hasCardBorderAsset
+
+    val borderStyle: CardBorderStyle
+        get() = CardBorderStyle.fromId(manifest.palette.borderStyle)
 }
 
 /**
@@ -67,6 +76,8 @@ object ThemeBundleManager {
     private const val CURSOR_PNG_ENTRY = "cursor.png"
     /** Always this exact entry name; a manifest never names or locates the atlas. */
     const val MASCOT_ENTRY = "mascot_atlas.png"
+    /** Always this exact entry name for custom 9-slice card border frames. */
+    const val CARD_BORDER_ENTRY = "card_border.png"
 
     private const val MAX_WALLPAPER_WIDTH = 480
     private const val MAX_WALLPAPER_HEIGHT = 800
@@ -74,6 +85,7 @@ object ThemeBundleManager {
     const val MAX_MANIFEST_BYTES = 512L * 1024L
     const val MAX_WALLPAPER_BYTES = 5L * 1024L * 1024L
     const val MAX_CURSOR_BYTES = 2L * 1024L * 1024L
+    const val MAX_CARD_BORDER_BYTES = CustomCardBorderManager.MAX_BORDER_BYTES
     const val MAX_TOTAL_BUNDLE_BYTES = 8L * 1024L * 1024L
 
     private val DISCARD_OUTPUT_STREAM = object : OutputStream() {
@@ -107,21 +119,23 @@ object ThemeBundleManager {
         includeWallpaper: Boolean = true,
         includeCustomCursor: Boolean = true,
         includeDisplayName: Boolean = true,
-        includeCustomMascot: Boolean = true
+        includeCustomMascot: Boolean = true,
+        includeCustomCardBorder: Boolean = true
     ): Result<Unit> {
         return try {
             val launcherPrefs = PreferencesManager.getPrefs(context)
             val currentPreset = PreferencesManager.getThemePreset(context)
 
-            // 1. Resolve active theme colors
+            // 1. Resolve active theme colors & border style
             val currentTheme = one.crinklecod.mochibun.ui.theme.loadSavedTheme(launcherPrefs)
             val bgColorHex = colorIntToHex(currentTheme.bgColor.toArgb())
             val cardColorHex = colorIntToHex(currentTheme.cardBgColor.toArgb())
             val greetingColorHex = colorIntToHex(currentTheme.greetingColor.toArgb())
             val actionColorHex = colorIntToHex(currentTheme.appActionColor.toArgb())
             val cardRoundness = currentTheme.cardRoundnessDp
+            val borderStyleId = CardBorderStyle.normalizeId(currentTheme.borderStyle)
 
-            // 2. Check wallpaper & cursor availability
+            // 2. Check wallpaper, cursor, mascot, and custom card border availability
             val activeWallpaperUriStr = PreferencesManager.getWallpaperUri(context)
             val activeWallpaperUri = if (includeWallpaper && !activeWallpaperUriStr.isNullOrBlank()) {
                 Uri.parse(activeWallpaperUriStr)
@@ -132,6 +146,16 @@ object ThemeBundleManager {
             } else null
 
             val mascotConfig = if (includeCustomMascot) CustomMascotManager.activeConfig(context) else null
+
+            val customBorderFile = CustomCardBorderManager.borderFile(context)
+            val hasCustomBorderToBundle = includeCustomCardBorder &&
+                (CustomCardBorderManager.isCustomBorderActive() || customBorderFile.isFile) &&
+                customBorderFile.isFile
+            val customBorderSlicePx = if (hasCustomBorderToBundle) {
+                CustomCardBorderManager.activeSlicePx(context)
+            } else {
+                CardBorderStyle.DEFAULT_SLICE_PX
+            }
 
             val manifest = MochibunBundleManifest(
                 bundleVersion = 1,
@@ -149,7 +173,10 @@ object ThemeBundleManager {
                     cardColorHex = cardColorHex,
                     greetingColorHex = greetingColorHex,
                     actionColorHex = actionColorHex,
-                    cardRoundnessDp = cardRoundness
+                    cardRoundnessDp = cardRoundness,
+                    borderStyle = borderStyleId,
+                    hasCustomCardBorder = hasCustomBorderToBundle,
+                    cardBorderSlicePx = customBorderSlicePx
                 ),
                 cursor = BundleCursorConfig(
                     baseVelocity = CursorPreferences.getMoveSpeed(context),
@@ -219,6 +246,19 @@ object ThemeBundleManager {
                     }
                 }
 
+                // Custom 9-slice card border PNG: always the fixed entry name "card_border.png"
+                if (hasCustomBorderToBundle) {
+                    try {
+                        customBorderFile.inputStream().use { borderIn ->
+                            zipOut.putNextEntry(ZipEntry(CARD_BORDER_ENTRY))
+                            borderIn.copyTo(zipOut, bufferSize = 8192)
+                            zipOut.closeEntry()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w(TAG, "Failed to bundle custom card border", e)
+                    }
+                }
+
                 zipOut.finish()
                 zipOut.flush()
             }
@@ -240,6 +280,7 @@ object ThemeBundleManager {
             var wallpaperBitmap: Bitmap? = null
             var hasCursor = false
             var hasMascot = false
+            var hasCardBorder = false
 
             ZipInputStream(bufferedIn).use { zipIn ->
                 var entry = zipIn.nextEntry
@@ -273,6 +314,17 @@ object ThemeBundleManager {
                             val withinLimit = readMascotEntry(zipIn, header, totalBytes)
                             hasMascot = withinLimit && MascotAtlasValidator.readPngSize(header.bytes()) != null
                         }
+                        CARD_BORDER_ENTRY -> {
+                            val header = PngHeaderCapture()
+                            val withinLimit = readCardBorderEntry(zipIn, header, totalBytes)
+                            val pngSize = MascotAtlasValidator.readPngSize(header.bytes())
+                            hasCardBorder = withinLimit && pngSize != null &&
+                                CustomCardBorderManager.validateDimensions(
+                                    pngSize.first,
+                                    pngSize.second,
+                                    CardBorderStyle.MIN_SLICE_PX
+                                ).isSuccess
+                        }
                         else -> copyBounded(
                             zipIn,
                             DISCARD_OUTPUT_STREAM,
@@ -293,7 +345,8 @@ object ThemeBundleManager {
                         manifest = manifest!!,
                         wallpaperPreview = wallpaperBitmap,
                         hasCursorAsset = hasCursor,
-                        hasMascotAsset = hasMascot
+                        hasMascotAsset = hasMascot,
+                        hasCardBorderAsset = hasCardBorder
                     )
                 )
             }
@@ -304,10 +357,9 @@ object ThemeBundleManager {
 
     /**
      * Extracts and applies all settings, palette tokens, and assets from a .mochibun bundle.
-     */
-    /**
-     * [onMascotSkipped] gets a short, friendly reason when the bundle has a mascot atlas that was
-     * not applied (too big or failed validation); the rest of the bundle still applies.
+     *
+     * [onMascotSkipped] gets a short, friendly reason when the bundle has a mascot atlas or custom
+     * card border that was not applied (too big or failed validation); the rest of the bundle still applies.
      */
     fun applyBundle(
         context: Context,
@@ -323,6 +375,8 @@ object ThemeBundleManager {
             var stagedCursorFile: File? = null
             var stagedMascotFile: File? = null
             var mascotWithinLimit = false
+            var stagedCardBorderFile: File? = null
+            var cardBorderWithinLimit = false
             val totalBytes = AtomicLong()
 
             ZipInputStream(BufferedInputStream(inputStream)).use { zipIn ->
@@ -381,6 +435,14 @@ object ThemeBundleManager {
                                 readMascotEntry(zipIn, out, totalBytes)
                             }
                         }
+                        CARD_BORDER_ENTRY -> {
+                            val borderFile = File.createTempFile("theme_bundle_border_", ".png", context.cacheDir)
+                            stagedFiles.add(borderFile)
+                            stagedCardBorderFile = borderFile
+                            cardBorderWithinLimit = FileOutputStream(borderFile).use { out ->
+                                readCardBorderEntry(zipIn, out, totalBytes)
+                            }
+                        }
                         else -> copyBounded(
                             zipIn,
                             DISCARD_OUTPUT_STREAM,
@@ -433,6 +495,7 @@ object ThemeBundleManager {
             val cardInt = hexToColorInt(p.cardColorHex, DEFAULT_FALLBACK_CARD_INT)
             val greetingInt = hexToColorInt(p.greetingColorHex, DEFAULT_FALLBACK_GREETING_INT)
             val actionInt = hexToColorInt(p.actionColorHex, DEFAULT_FALLBACK_ACTION_INT)
+            val resolvedBorderStyle = CardBorderStyle.fromId(p.borderStyle)
 
             editor.putInt(PreferencesManager.KEY_THEME_BG_COLOR, bgInt)
             editor.putInt(PreferencesManager.KEY_THEME_FG_TEXT_COLOR, greetingInt)
@@ -443,6 +506,8 @@ object ThemeBundleManager {
             editor.putInt(PreferencesManager.KEY_THEME_GREETING_BG_COLOR, bgInt)
             editor.putInt(PreferencesManager.KEY_THEME_APP_ACTION_COLOR, actionInt)
             editor.putFloat(PreferencesManager.KEY_THEME_CARD_ROUNDNESS, p.cardRoundnessDp)
+            editor.putString(PreferencesManager.KEY_THEME_BORDER_STYLE, resolvedBorderStyle.id)
+            CustomCardBorderManager.setBorderStyle(context, resolvedBorderStyle)
 
             // 2. Apply Greeting
             if (targetManifest.greeting.userName.isNotBlank() &&
@@ -492,6 +557,35 @@ object ThemeBundleManager {
                 }
             }
 
+            // Custom 9-slice card border:
+            // - If the bundle includes a staged `card_border.png` (and hasn't explicitly disabled it
+            //   while missing an entry), validate and install it; if invalid/oversized, clear any
+            //   stale custom border and fall back to procedural `borderStyle`.
+            // - If `hasCustomCardBorder` is false and no `card_border.png` entry is present, clear
+            //   any previously active custom PNG so the bundle's procedural `borderStyle` shows.
+            val stagedBorder = stagedCardBorderFile
+            if (stagedBorder != null) {
+                if (!cardBorderWithinLimit) {
+                    CustomCardBorderManager.resetCustomBorder(context)
+                    onMascotSkipped("Custom card border skipped: bigger than 512 KB")
+                } else {
+                    CustomCardBorderManager.installStaged(
+                        context = context,
+                        staged = stagedBorder,
+                        requestedSlicePx = p.cardBorderSlicePx,
+                        autoAdjustSliceForSmallImage = false
+                    ).onFailure {
+                        CustomCardBorderManager.resetCustomBorder(context)
+                        onMascotSkipped("Custom card border skipped: ${it.message}")
+                    }
+                }
+            } else if (!p.hasCustomCardBorder) {
+                CustomCardBorderManager.resetCustomBorder(context)
+            } else {
+                // Manifest claimed hasCustomCardBorder = true, but card_border.png was missing
+                CustomCardBorderManager.resetCustomBorder(context)
+            }
+
             editor.apply()
             PreferencesManager.init(context)
             one.crinklecod.mochibun.ui.theme.SystemUiThemeBridge.broadcastSavedTheme(context)
@@ -516,6 +610,18 @@ object ThemeBundleManager {
     private fun readMascotEntry(input: InputStream, output: OutputStream, totalCounter: AtomicLong): Boolean {
         val counting = BundleByteCounter(input, totalCounter)
         val withinLimit = MascotAtlasValidator.copyAtMost(counting, output, MascotAtlasValidator.MAX_ATLAS_BYTES)
+        if (!withinLimit) copyBounded(input, DISCARD_OUTPUT_STREAM, MAX_TOTAL_BUNDLE_BYTES, totalCounter)
+        return withinLimit
+    }
+
+    /**
+     * Reads `card_border.png` into [output] up to [MAX_CARD_BORDER_BYTES] (512 KB), counting real
+     * bytes. If oversized, drains the entry under the whole-bundle limit and returns false so the
+     * rest of the bundle still imports cleanly.
+     */
+    private fun readCardBorderEntry(input: InputStream, output: OutputStream, totalCounter: AtomicLong): Boolean {
+        val counting = BundleByteCounter(input, totalCounter)
+        val withinLimit = MascotAtlasValidator.copyAtMost(counting, output, MAX_CARD_BORDER_BYTES)
         if (!withinLimit) copyBounded(input, DISCARD_OUTPUT_STREAM, MAX_TOTAL_BUNDLE_BYTES, totalCounter)
         return withinLimit
     }

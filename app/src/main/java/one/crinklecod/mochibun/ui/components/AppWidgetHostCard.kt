@@ -99,10 +99,16 @@ fun AppWidgetHostCard(
                     .softGlowFocus(isSelected = isFocused, cornerRadius = 22.dp)
                     .clip(cardShape)
                     .background(palette.container)
-                    .border(
-                        width = 1.5.dp,
-                        color = if (isFocused) Color.Transparent else palette.outline,
-                        shape = cardShape
+                    .then(
+                        if (!isFocused) {
+                            Modifier.mochibunCardBorder(
+                                cornerRadius = 22.dp,
+                                borderColor = palette.outline,
+                                borderWidth = 1.5.dp
+                            )
+                        } else {
+                            Modifier
+                        }
                     )
             ) {
                 if (info == null || spec == null) {

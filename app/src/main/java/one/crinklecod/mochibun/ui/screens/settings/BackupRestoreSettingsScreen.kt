@@ -31,6 +31,7 @@ import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.repository.BackupPreviewSummary
 import one.crinklecod.mochibun.data.repository.BackupRestoreManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
 import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.BundlePreviewData
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
@@ -76,6 +77,7 @@ internal fun BackupRestoreSettingsScreen(
     var pendingIncludeCursor by remember { mutableStateOf(true) }
     var pendingIncludeDisplayName by remember { mutableStateOf(true) }
     var pendingIncludeMascot by remember { mutableStateOf(true) }
+    var pendingIncludeCardBorder by remember { mutableStateOf(true) }
 
     // Setup Bundle (.mochibundle) Create launcher
     val bundleCreateLauncher = rememberLauncherForActivityResult(
@@ -91,7 +93,8 @@ internal fun BackupRestoreSettingsScreen(
                         includeWallpaper = pendingIncludeWallpaper,
                         includeCustomCursor = pendingIncludeCursor,
                         includeDisplayName = pendingIncludeDisplayName,
-                        includeCustomMascot = pendingIncludeMascot
+                        includeCustomMascot = pendingIncludeMascot,
+                        includeCustomCardBorder = pendingIncludeCardBorder
                     )
                     if (result.isSuccess) {
                         statusMessage = "Theme bundle exported! ♡"
@@ -349,12 +352,14 @@ internal fun BackupRestoreSettingsScreen(
     if (showExportBundleDialog) {
         ExportBundleDialog(
             hasCustomMascot = CustomMascotManager.isActive(),
+            hasCustomCardBorder = CustomCardBorderManager.isCustomBorderActive(),
             onDismiss = { showExportBundleDialog = false },
-            onExport = { name, wall, cur, mascot, disp ->
+            onExport = { name, wall, cur, mascot, cardBorder, disp ->
                 pendingBundleName = name
                 pendingIncludeWallpaper = wall
                 pendingIncludeCursor = cur
                 pendingIncludeMascot = mascot
+                pendingIncludeCardBorder = cardBorder
                 pendingIncludeDisplayName = disp
                 showExportBundleDialog = false
                 bundleCreateLauncher.launch(ThemeBundleManager.generateBundleFileName(name))

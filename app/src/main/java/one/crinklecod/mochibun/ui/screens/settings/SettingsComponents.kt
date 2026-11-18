@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.ui.components.BottomLavenderClouds
 import one.crinklecod.mochibun.ui.components.JumpNumberBadge
 import one.crinklecod.mochibun.ui.components.TopLavenderClouds
+import one.crinklecod.mochibun.ui.components.mochibunCardBorder
 import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
@@ -156,7 +157,12 @@ fun SettingsCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(22.dp))
                 .background(ActiveTheme.container)
-                .border(1.5.dp, ActiveTheme.cardBorder, RoundedCornerShape(22.dp))
+                .mochibunCardBorder(
+                    cornerRadius = 22.dp,
+                    borderColor = ActiveTheme.cardBorder,
+                    borderWidth = 1.5.dp,
+                    allowCustomNineSlice = false
+                )
                 .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
             content()

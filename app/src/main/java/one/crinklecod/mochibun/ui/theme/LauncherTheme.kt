@@ -8,6 +8,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.toArgb
 
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.ui.theme.*
 
@@ -178,7 +179,10 @@ val MidnightMochiPalette = MochibunThemePalette(
 /** Muted lavender-mist secondary text for Midnight Mochi cards. */
 private val MidnightMochiTextSecondary = Color(0xFFC8B6DF)
 
-fun MochibunThemePalette.toLauncherTheme(roundnessDp: Float = 24f): LauncherTheme = LauncherTheme(
+fun MochibunThemePalette.toLauncherTheme(
+    roundnessDp: Float = 24f,
+    borderStyle: String = CardBorderStyle.DEFAULT_ID
+): LauncherTheme = LauncherTheme(
     name = id,
     bgColor = background,
     fgTextColor = textColor,
@@ -189,7 +193,8 @@ fun MochibunThemePalette.toLauncherTheme(roundnessDp: Float = 24f): LauncherThem
     greetingBgColor = background,
     appActionColor = deepAccent,
     cardRoundnessDp = roundnessDp,
-    mascotTint = mascotTint
+    mascotTint = mascotTint,
+    borderStyle = CardBorderStyle.normalizeId(borderStyle)
 )
 
 @Immutable
@@ -205,8 +210,12 @@ data class LauncherTheme(
     val appActionColor: Color = Color(0xFFA04064),
     val cardRoundnessDp: Float = 24f,
     val mascotTint: Color? = null,
-    val fontFamilyId: String = "default"
+    val fontFamilyId: String = "default",
+    val borderStyle: String = CardBorderStyle.DEFAULT_ID
 )
+
+val LauncherTheme.cardBorderStyle: CardBorderStyle
+    get() = CardBorderStyle.fromId(borderStyle)
 
 val SakuraDreamTheme = SakuraDreamPalette.toLauncherTheme(24f)
 val LavenderMistTheme = LavenderMistPalette.toLauncherTheme(24f)
@@ -217,8 +226,11 @@ val MilkyPeachTheme = MilkyPeachPalette.toLauncherTheme(24f)
 val OriginalTheme = SakuraDreamTheme
 val StrawberryMilkTheme = SakuraDreamTheme
 val LavenderDreamTheme = LavenderMistTheme
-fun midnightMochiTheme(roundnessDp: Float = 24f): LauncherTheme =
-    MidnightMochiPalette.toLauncherTheme(roundnessDp).copy(cardTextColor = MidnightMochiTextSecondary)
+fun midnightMochiTheme(
+    roundnessDp: Float = 24f,
+    borderStyle: String = CardBorderStyle.DEFAULT_ID
+): LauncherTheme =
+    MidnightMochiPalette.toLauncherTheme(roundnessDp, borderStyle).copy(cardTextColor = MidnightMochiTextSecondary)
 
 val MidnightMochiTheme = midnightMochiTheme()
 
@@ -336,6 +348,16 @@ object ActiveTheme {
         @Composable
         @ReadOnlyComposable
         get() = current.mascotTint ?: palette.mascotTint
+
+    val borderStyle: String
+        @Composable
+        @ReadOnlyComposable
+        get() = CardBorderStyle.normalizeId(current.borderStyle)
+
+    val cardBorderStyle: CardBorderStyle
+        @Composable
+        @ReadOnlyComposable
+        get() = CardBorderStyle.fromId(current.borderStyle)
 }
 
 data class CustomPreset(
@@ -387,6 +409,9 @@ fun loadCustomPresets(prefs: SharedPreferences): List<CustomPreset> {
             "preset_custom_${id}_round",
             SakuraDreamTheme.cardRoundnessDp
         )
+        val borderStyle = CardBorderStyle.normalizeId(
+            prefs.getString("preset_custom_${id}_border_style", SakuraDreamTheme.borderStyle)
+        )
 
         CustomPreset(
             id = id,
@@ -401,7 +426,8 @@ fun loadCustomPresets(prefs: SharedPreferences): List<CustomPreset> {
                 greetingOutlineColor = Color(outline),
                 greetingBgColor = Color(gBg),
                 appActionColor = Color(action),
-                cardRoundnessDp = roundness
+                cardRoundnessDp = roundness,
+                borderStyle = borderStyle
             )
         )
     }
@@ -431,6 +457,7 @@ fun saveCustomPreset(
         .putInt("preset_custom_${id}_gbg", theme.greetingBgColor.toArgb())
         .putInt("preset_custom_${id}_action", theme.appActionColor.toArgb())
         .putFloat("preset_custom_${id}_round", theme.cardRoundnessDp)
+        .putString("preset_custom_${id}_border_style", CardBorderStyle.normalizeId(theme.borderStyle))
         .apply()
 }
 
@@ -453,6 +480,7 @@ fun deleteCustomPreset(prefs: SharedPreferences, id: String) {
         .remove("preset_custom_${id}_gbg")
         .remove("preset_custom_${id}_action")
         .remove("preset_custom_${id}_round")
+        .remove("preset_custom_${id}_border_style")
         .apply()
 }
 
@@ -471,12 +499,22 @@ fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
     if (presetName.startsWith("custom_")) {
         val id = presetName.removePrefix("custom_")
         val found = loadCustomPresets(prefs).firstOrNull { it.id == id }
-        if (found != null) return found.theme
+        if (found != null) {
+            return if (prefs.contains("theme_border_style")) {
+                found.theme.copy(
+                    borderStyle = CardBorderStyle.normalizeId(
+                        prefs.getString("theme_border_style", found.theme.borderStyle)
+                    )
+                )
+            } else {
+                found.theme
+            }
+        }
     }
 
     val externalTheme = ExternalThemeManager.findTheme(presetName)
     if (externalTheme != null) {
-        if (!prefs.contains("theme_bg_color")) {
+        if (!prefs.contains("theme_bg_color") && !prefs.contains("theme_border_style")) {
             return externalTheme.theme
         }
     }
@@ -489,7 +527,10 @@ fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
         else -> SakuraDreamTheme
     }
 
-    if (!prefs.contains("theme_bg_color") && (presetName == "sakura_dream" || presetName == "original")) {
+    if (!prefs.contains("theme_bg_color") &&
+        !prefs.contains("theme_border_style") &&
+        (presetName == "sakura_dream" || presetName == "original")
+    ) {
         return base
     }
 
@@ -530,7 +571,10 @@ fun loadSavedTheme(prefs: SharedPreferences): LauncherTheme {
             base.cardRoundnessDp
         ),
         mascotTint = base.mascotTint,
-        fontFamilyId = prefs.getString("pref_theme_font_family", "default") ?: "default"
+        fontFamilyId = prefs.getString("pref_theme_font_family", "default") ?: "default",
+        borderStyle = CardBorderStyle.normalizeId(
+            prefs.getString("theme_border_style", base.borderStyle)
+        )
     )
 }
 
@@ -547,5 +591,6 @@ fun saveTheme(prefs: SharedPreferences, theme: LauncherTheme) {
         .putInt("theme_greeting_bg_color", theme.greetingBgColor.toArgb())
         .putInt("theme_app_action_color", theme.appActionColor.toArgb())
         .putFloat("theme_card_roundness", theme.cardRoundnessDp)
+        .putString("theme_border_style", CardBorderStyle.normalizeId(theme.borderStyle))
         .apply()
 }

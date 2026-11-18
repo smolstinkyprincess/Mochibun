@@ -48,6 +48,7 @@ import one.crinklecod.mochibun.ui.components.BottomLavenderClouds
 import one.crinklecod.mochibun.ui.components.MochibunMascot
 import one.crinklecod.mochibun.ui.components.TopLavenderClouds
 import one.crinklecod.mochibun.ui.components.currentMoodSlot
+import one.crinklecod.mochibun.ui.components.mochibunCardBorder
 import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.dialogs.awaitFocusSafely
 import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
@@ -397,6 +398,12 @@ fun NotificationsScreen(
                             .padding(top = 10.dp)
                             .graphicsLayer { clip = false }
                             .softGlowFocus(isSelected = isFocused, cornerRadius = cardRoundness)
+                            .mochibunCardBorder(
+                                cornerRadius = cardRoundness,
+                                borderColor = if (isFocused) palette.focusedCardBorder else palette.unfocusedCardBorder,
+                                borderWidth = 1.5.dp,
+                                allowCustomNineSlice = false
+                            )
                             .clip(RoundedCornerShape(cardRoundness))
                             .background(
                                 if (isFocused) {
@@ -406,11 +413,6 @@ fun NotificationsScreen(
                                 } else {
                                     SolidColor(palette.unfocusedCardBg)
                                 }
-                            )
-                            .border(
-                                width = 1.5.dp,
-                                color = if (isFocused) palette.focusedCardBorder else palette.unfocusedCardBorder,
-                                shape = RoundedCornerShape(cardRoundness)
                             )
                             .clickable { launchNotificationListenerSettings(context) }
                             .padding(14.dp),
@@ -513,9 +515,14 @@ fun NotificationsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 16.dp)
+                            .mochibunCardBorder(
+                                cornerRadius = cardRoundness,
+                                borderColor = palette.unfocusedCardBorder,
+                                borderWidth = 1.dp,
+                                allowCustomNineSlice = false
+                            )
                             .clip(RoundedCornerShape(cardRoundness))
                             .background(palette.unfocusedCardBg)
-                            .border(1.dp, palette.unfocusedCardBorder, RoundedCornerShape(cardRoundness))
                             .padding(vertical = 24.dp, horizontal = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -587,6 +594,12 @@ private fun NotificationCard(
             .fillMaxWidth()
             .graphicsLayer { clip = false }
             .softGlowFocus(isSelected = isBodyFocused, cornerRadius = cardRoundness)
+            .mochibunCardBorder(
+                cornerRadius = cardRoundness,
+                borderColor = if (isBodyFocused) palette.focusedCardBorder else if (isCardFocused) palette.outline else palette.unfocusedCardBorder,
+                borderWidth = 1.5.dp,
+                allowCustomNineSlice = false
+            )
             .clip(RoundedCornerShape(cardRoundness))
             .background(
                 if (isCardFocused) {
@@ -596,11 +609,6 @@ private fun NotificationCard(
                 } else {
                     SolidColor(palette.unfocusedCardBg)
                 }
-            )
-            .border(
-                width = 1.5.dp,
-                color = if (isBodyFocused) palette.focusedCardBorder else if (isCardFocused) palette.outline else palette.unfocusedCardBorder,
-                shape = RoundedCornerShape(cardRoundness)
             )
             .clickable { onCardClick() }
             .padding(12.dp)

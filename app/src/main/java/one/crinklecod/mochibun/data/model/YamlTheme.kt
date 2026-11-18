@@ -17,9 +17,20 @@ data class YamlTheme(
     val name: String = "Custom Theme",
     val author: String = "Community",
     val version: String = "1.0",
+    val borderStyle: String = CardBorderStyle.DEFAULT_ID,
     val colors: YamlThemeColors = YamlThemeColors(),
     val decorations: YamlThemeDecorations = YamlThemeDecorations()
-)
+) {
+    /**
+     * Resolves the effective procedural border style (`"solid"`, `"double"`, `"lace"`, `"stitch"`, `"pixel"`),
+     * checking `decorations.borderStyle` first and then top-level `borderStyle`.
+     */
+    fun resolvedBorderStyle(): String {
+        val fromDecorations = CardBorderStyle.fromId(decorations.borderStyle)
+        if (fromDecorations != CardBorderStyle.SOLID) return fromDecorations.id
+        return CardBorderStyle.fromId(borderStyle).id
+    }
+}
 
 @Serializable
 data class YamlThemeColors(
@@ -45,7 +56,8 @@ data class YamlThemeColors(
 data class YamlThemeDecorations(
     val greetingText: String = "— ♡ Welcome Home ♡ —",
     val glowExpansionDp: Float = 4f,
-    val cardRoundnessDp: Float = 24f
+    val cardRoundnessDp: Float = 24f,
+    val borderStyle: String = CardBorderStyle.DEFAULT_ID
 )
 
 /**
@@ -167,5 +179,8 @@ fun YamlTheme.toLauncherPalette(fallback: MochibunThemePalette = SakuraDreamPale
  * Converts this [YamlTheme] directly into a [LauncherTheme].
  */
 fun YamlTheme.toLauncherTheme(fallback: MochibunThemePalette = SakuraDreamPalette): LauncherTheme {
-    return toLauncherPalette(fallback).toLauncherTheme(decorations.cardRoundnessDp)
+    return toLauncherPalette(fallback).toLauncherTheme(
+        roundnessDp = decorations.cardRoundnessDp,
+        borderStyle = resolvedBorderStyle()
+    )
 }

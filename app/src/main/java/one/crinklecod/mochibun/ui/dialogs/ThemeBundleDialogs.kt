@@ -31,14 +31,12 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.repository.BundlePreviewData
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
-import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -54,11 +52,13 @@ fun ExportBundleDialog(
     initialBundleName: String = "Mochibun Setup",
     onDismiss: () -> Unit,
     hasCustomMascot: Boolean = false,
+    hasCustomCardBorder: Boolean = false,
     onExport: (
         bundleName: String,
         includeWallpaper: Boolean,
         includeCustomCursor: Boolean,
         includeCustomMascot: Boolean,
+        includeCustomCardBorder: Boolean,
         includeDisplayName: Boolean
     ) -> Unit
 ) {
@@ -66,8 +66,9 @@ fun ExportBundleDialog(
     var bundleName by remember { mutableStateOf(initialBundleName) }
     var includeWallpaper by remember { mutableStateOf(true) }
     var includeCustomCursor by remember { mutableStateOf(true) }
-    // Checked by default only when a custom mascot atlas is active
+    // Checked by default only when a custom mascot atlas / card border is active
     var includeCustomMascot by remember { mutableStateOf(hasCustomMascot) }
+    var includeCustomCardBorder by remember { mutableStateOf(hasCustomCardBorder) }
     var includeDisplayName by remember { mutableStateOf(true) }
 
     val focusRequester = remember { FocusRequester() }
@@ -75,8 +76,8 @@ fun ExportBundleDialog(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    // 0: Name, 1: Wallpaper, 2: Cursor, 3: Mascot, 4: DisplayName, 5: Cancel, 6: Create
-    val totalItems = 7
+    // 0: Name, 1: Wallpaper, 2: Cursor, 3: Mascot, 4: CardBorder, 5: DisplayName, 6: Cancel, 7: Create
+    val totalItems = 8
 
     requestFocusSafely(focusRequester)
 
@@ -89,13 +90,14 @@ fun ExportBundleDialog(
         )
     ) {
         ResizeWithKeyboard()
-        Box(
+        KawaiiDialogSurface(
+            cornerRadius = 22.dp,
+            containerColor = theme.cardBgColor,
+            borderColor = theme.greetingOutlineColor,
+            borderWidth = 2.dp,
+            contentPadding = 16.dp,
             modifier = Modifier
                 .width(280.dp)
-                // Shape-aware background instead of clip(): keeps the buttons' focus halos unclipped
-                .background(theme.cardBgColor, RoundedCornerShape(22.dp))
-                .border(2.dp, theme.greetingOutlineColor, RoundedCornerShape(22.dp))
-                .padding(16.dp)
                 .focusRequester(focusRequester)
                 .focusable()
                 .onPreviewKeyEvent { event ->
@@ -118,9 +120,17 @@ fun ExportBundleDialog(
                                 1 -> includeWallpaper = !includeWallpaper
                                 2 -> includeCustomCursor = !includeCustomCursor
                                 3 -> includeCustomMascot = !includeCustomMascot
-                                4 -> includeDisplayName = !includeDisplayName
-                                5 -> onDismiss()
-                                6 -> onExport(bundleName, includeWallpaper, includeCustomCursor, includeCustomMascot, includeDisplayName)
+                                4 -> includeCustomCardBorder = !includeCustomCardBorder
+                                5 -> includeDisplayName = !includeDisplayName
+                                6 -> onDismiss()
+                                7 -> onExport(
+                                    bundleName,
+                                    includeWallpaper,
+                                    includeCustomCursor,
+                                    includeCustomMascot,
+                                    includeCustomCardBorder,
+                                    includeDisplayName
+                                )
                             }
                         }
                         return@onPreviewKeyEvent true
@@ -137,14 +147,14 @@ fun ExportBundleDialog(
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
-                            if (focusedIndex == 6) {
-                                focusedIndex = 5
+                            if (focusedIndex == 7) {
+                                focusedIndex = 6
                                 true
                             } else false
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (focusedIndex == 5) {
-                                focusedIndex = 6
+                            if (focusedIndex == 6) {
+                                focusedIndex = 7
                                 true
                             } else false
                         }
@@ -226,9 +236,16 @@ fun ExportBundleDialog(
                 )
 
                 CheckboxRow(
+                    label = "Include Custom Card Border",
+                    checked = includeCustomCardBorder,
+                    isFocused = focusedIndex == 4,
+                    onToggle = { includeCustomCardBorder = !includeCustomCardBorder }
+                )
+
+                CheckboxRow(
                     label = "Include Display Name",
                     checked = includeDisplayName,
-                    isFocused = focusedIndex == 4,
+                    isFocused = focusedIndex == 5,
                     onToggle = { includeDisplayName = !includeDisplayName }
                 )
 
@@ -241,16 +258,25 @@ fun ExportBundleDialog(
                 ) {
                     KawaiiClosePill(
                         label = "Cancel",
-                        isFocused = focusedIndex == 5,
+                        isFocused = focusedIndex == 6,
                         onClick = { onDismiss() },
                         modifier = Modifier.weight(1f)
                     )
 
                     KawaiiDialogPillButton(
                         text = "Create ♡",
-                        isFocused = focusedIndex == 6,
+                        isFocused = focusedIndex == 7,
                         isPrimary = true,
-                        onClick = { onExport(bundleName, includeWallpaper, includeCustomCursor, includeCustomMascot, includeDisplayName) },
+                        onClick = {
+                            onExport(
+                                bundleName,
+                                includeWallpaper,
+                                includeCustomCursor,
+                                includeCustomMascot,
+                                includeCustomCardBorder,
+                                includeDisplayName
+                            )
+                        },
                         modifier = Modifier.weight(1.3f)
                     )
                 }
@@ -292,13 +318,14 @@ fun PresetPreviewDialog(
         )
     ) {
         ResizeWithKeyboard()
-        Box(
+        KawaiiDialogSurface(
+            cornerRadius = 22.dp,
+            containerColor = theme.cardBgColor,
+            borderColor = theme.greetingOutlineColor,
+            borderWidth = 2.dp,
+            contentPadding = 16.dp,
             modifier = Modifier
                 .width(280.dp)
-                // Shape-aware background instead of clip(): keeps the buttons' focus halos unclipped
-                .background(theme.cardBgColor, RoundedCornerShape(22.dp))
-                .border(2.dp, theme.greetingOutlineColor, RoundedCornerShape(22.dp))
-                .padding(16.dp)
                 .focusRequester(focusRequester)
                 .focusable()
                 .onPreviewKeyEvent { event ->
@@ -437,6 +464,16 @@ fun PresetPreviewDialog(
                     )
                 }
 
+                previewCardBorderBadgeText(previewData)?.let { borderBadge ->
+                    Text(
+                        text = borderBadge,
+                        fontSize = 11.sp,
+                        color = theme.greetingColor,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                }
+
                 if (manifest.greeting.userName.isNotBlank() && manifest.greeting.userName != "Mochi User") {
                     Text(
                         text = "Greeting: ♡ ${manifest.greeting.userName} ♡",
@@ -479,6 +516,12 @@ internal fun previewMascotBadgeText(preview: BundlePreviewData): String =
     } else {
         "🐰 Custom mascot included"
     }
+
+internal fun previewCardBorderBadgeText(preview: BundlePreviewData): String? = when {
+    preview.hasCustomCardBorder -> "🎀 Custom card border included"
+    preview.borderStyle != CardBorderStyle.SOLID -> "🎀 Border style: ${preview.borderStyle.label}"
+    else -> null
+}
 
 @Composable
 private fun ColorDot(color: Color) {

@@ -104,7 +104,7 @@ private fun InstaxFrame(photo: ImageBitmap?, label: String, isFocused: Boolean, 
                 .softGlowFocus(isSelected = isFocused, cornerRadius = 16.dp)
                 .clip(shape)
                 .background(FrameCream)
-                .border(1.2.dp, ActiveTheme.cardBorder, shape)
+                .mochibunCardBorder(cornerRadius = 12.dp, borderColor = ActiveTheme.cardBorder, borderWidth = 1.2.dp)
                 .clickable(onClick = onClick)
                 .padding(start = 8.dp, top = 8.dp, end = 8.dp)
         ) {
@@ -157,7 +157,7 @@ private fun PurikuraFrame(photo: ImageBitmap?, label: String, isFocused: Boolean
                 .softGlowFocus(isSelected = isFocused, cornerRadius = 16.dp)
                 .clip(shape)
                 .background(PurikuraPink)
-                .border(1.2.dp, ActiveTheme.cardBorder, shape)
+                .mochibunCardBorder(cornerRadius = 12.dp, borderColor = ActiveTheme.cardBorder, borderWidth = 1.2.dp)
                 .clickable(onClick = onClick)
                 .padding(start = 10.dp, top = 12.dp, end = 10.dp)
         ) {
