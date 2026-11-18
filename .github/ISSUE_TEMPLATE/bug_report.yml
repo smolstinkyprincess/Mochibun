@@ -1,0 +1,63 @@
+name: "🐛 Bug Report"
+description: "Report a bug, crash, or unexpected behavior in Mochibun"
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! ♡ Please fill in the details below so we can reproduce and fix it quickly.
+
+  - type: input
+    id: mochibun_version
+    attributes:
+      label: "Mochibun Version"
+      placeholder: "e.g., v2.3.2"
+    validations:
+      required: true
+
+  - type: input
+    id: device_info
+    attributes:
+      label: "Phone Model & Android Version"
+      placeholder: "e.g., ALT Mive Style Folder (AT-M120), Android 12"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: setup_mode
+    attributes:
+      label: "Setup Mode"
+      options:
+        - "🌷 Unrooted (Standard)"
+        - "🌷 Unrooted + Accessibility Service enabled"
+        - "🔮 Rooted (Magisk)"
+        - "🔮 Rooted + LSPosed module enabled"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: "What happened?"
+      description: "A clear description of the bug and what you expected to happen instead."
+      placeholder: "Describe the issue..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: "Steps to Reproduce"
+      placeholder: |
+        1. Go to '...'
+        2. Press key '...'
+        3. See issue
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs_or_screenshots
+    attributes:
+      label: "Screenshots, Key Codes, or Logs (Optional)"
+      description: "If related to a physical key, you can check **Settings › Cursor & Hardware › Last Key Pressed** for its `keyCode` and `scanCode`."

@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mochibun Bundle &amp; Mascot Workshop (もちぶん) ♡</title>
+  <meta name="description" content="Client-side .mochibundle packer &amp; custom mascot dialogue editor for Mochibun. Preview 8×4 mascot_atlas.png sprite sheets at 4 Hz, write mood dialogue pools, or edit existing .mochibundle packs.">
+  <meta name="theme-color" content="#FFEBF2">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐰</text></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DynaPuff:wght@400;600&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" crossorigin="anonymous"></script>
+
+  <style>
+    :root {
+      --cream: #FFFDF7;
+      --whisper-pink: #FFEBF2;
+      --powder-blue: #EAF4FC;
+      --lavender-haze: #F4EBFD;
+      --card: rgba(255, 255, 255, 0.86);
+      --card-solid: #FFFFFF;
+
+      --strawberry-milk: #F6B3C8;
+      --strawberry-deep: #E58AA8;
+      --buttercup-deep: #F5CF6B;
+      --periwinkle: #B9C3F5;
+      --periwinkle-deep: #8E9BE6;
+
+      --cocoa: #4A3E3D;
+      --cocoa-soft: #7C6866;
+
+      --radius-md: 18px;
+      --radius-lg: 28px;
+      --radius-pill: 999px;
+
+      --shadow-plush: 0 12px 30px rgba(230, 180, 200, 0.25);
+      --shadow-plush-hover: 0 18px 40px rgba(230, 180, 200, 0.35);
+      --shadow-soft: 0 4px 14px rgba(230, 180, 200, 0.22);
+
+      --font-display: 'DynaPuff', 'Comic Sans MS', system-ui, sans-serif;
+      --font-body: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+      --bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--cocoa);
+      background: var(--cream);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      width: min(1040px, 100% - 2.5rem);
+      margin-inline: auto;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50%      { transform: translateY(-10px) rotate(2deg); }
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.35; transform: scale(0.8); }
+    }
+    .float   { animation: float 4s ease-in-out infinite; }
+    .twinkle { animation: twinkle 3s ease-in-out infinite; }
+
+    .hero {
+      position: relative;
+      text-align: center;
+      background:
+        radial-gradient(circle at 12% 20%, rgba(255, 255, 255, 0.9) 0 6%, transparent 30%),
+        radial-gradient(circle at 88% 30%, var(--lavender-haze) 0%, transparent 45%),
+        linear-gradient(180deg, var(--whisper-pink) 0%, var(--lavender-haze) 55%, var(--powder-blue) 100%);
+      padding: 3.4rem 0 5.4rem;
+      overflow: hidden;
+    }
+
+    .welcome-ribbon {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-display);
+      font-size: 0.9rem;
+      background: var(--card-solid);
+      color: var(--strawberry-deep);
+      padding: 0.4rem 1.1rem;
+      border-radius: var(--radius-pill);
+      border: 2px solid var(--strawberry-milk);
+      box-shadow: var(--shadow-soft);
+      margin-bottom: 1rem;
+    }
+
+    .hero h1 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(2rem, 5.5vw, 3.1rem);
+      line-height: 1.14;
+      margin-bottom: 0.75rem;
+    }
+    .hero h1 .jp {
+      display: block;
+      font-size: 0.44em;
+      color: var(--strawberry-deep);
+      margin-top: 0.25rem;
+    }
+
+    .tagline {
+      font-size: 1.04rem;
+      color: var(--cocoa-soft);
+      max-width: 56ch;
+      margin: 0 auto 1.4rem;
+    }
+
+    .candy-pills {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      list-style: none;
+    }
+
+    .candy {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.58rem 1.15rem;
+      border-radius: var(--radius-pill);
+      font-family: var(--font-body);
+      font-weight: 800;
+      font-size: 0.92rem;
+      text-decoration: none;
+      color: var(--cocoa);
+      border: 2px solid rgba(255, 255, 255, 0.92);
+      box-shadow: var(--shadow-soft), inset 0 -3px 0 rgba(0, 0, 0, 0.05), inset 0 3px 0 rgba(255, 255, 255, 0.6);
+      transition: transform 0.3s var(--bounce), box-shadow 0.25s ease;
+      cursor: pointer;
+    }
+    .candy--pink { background: linear-gradient(180deg, #FFD3E1, var(--strawberry-milk)); }
+    .candy--butter { background: linear-gradient(180deg, #FFF4CC, #FFE9A8); }
+    .candy--blue { background: linear-gradient(180deg, #DDE3FF, var(--periwinkle)); }
+    .candy--sm { padding: 0.38rem 0.85rem; font-size: 0.82rem; }
+    .candy:hover { transform: translateY(-2px) scale(1.03); box-shadow: var(--shadow-plush-hover); }
+
+    .divider {
+      position: absolute;
+      left: 0;
+      bottom: -1px;
+      width: 100%;
+      height: 64px;
+      line-height: 0;
+    }
+    .divider svg { width: 100%; height: 100%; }
+
+    .workshop-main {
+      background: var(--powder-blue);
+      padding: 2rem 0 6rem;
+      position: relative;
+    }
+
+    .workshop-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.4rem;
+      margin-bottom: 1.4rem;
+    }
+    @media (max-width: 820px) {
+      .workshop-grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--card-solid);
+      border: 2.5px solid var(--whisper-pink);
+      border-radius: var(--radius-lg);
+      padding: 1.4rem 1.5rem;
+      box-shadow: var(--shadow-plush);
+    }
+    .panel--lavender { border-color: var(--lavender-haze); }
+    .panel--full { margin-bottom: 1.4rem; }
+
+    .panel-title {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      margin-bottom: 0.35rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .panel-sub {
+      font-size: 0.9rem;
+      color: var(--cocoa-soft);
+      margin-bottom: 1rem;
+    }
+
+    .drop-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.85rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 540px) {
+      .drop-row { grid-template-columns: 1fr; }
+    }
+
+    .dropzone {
+      position: relative;
+      border: 2.5px dashed var(--strawberry-milk);
+      border-radius: var(--radius-md);
+      background: linear-gradient(180deg, #FFF9FB, var(--whisper-pink));
+      padding: 1rem 0.9rem;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.2s var(--bounce), border-color 0.2s ease, background 0.2s ease;
+    }
+    .dropzone--lavender {
+      border-color: var(--periwinkle);
+      background: linear-gradient(180deg, #FAF7FF, var(--lavender-haze));
+    }
+    .dropzone:hover, .dropzone.dragover {
+      transform: translateY(-2px);
+      border-color: var(--strawberry-deep);
+    }
+    .dropzone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .dropzone-icon { font-size: 1.65rem; display: block; margin-bottom: 0.2rem; }
+    .dropzone-title { font-family: var(--font-display); font-size: 0.95rem; color: var(--cocoa); }
+    .dropzone-hint { font-size: 0.78rem; color: var(--cocoa-soft); margin-top: 0.15rem; }
+
+    .asset-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.65rem;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.78rem;
+      font-weight: 800;
+      padding: 0.22rem 0.7rem;
+      border-radius: var(--radius-pill);
+      background: var(--whisper-pink);
+      color: var(--cocoa);
+      border: 1.5px solid var(--strawberry-milk);
+    }
+    .badge--ok { background: #E6F8EE; border-color: #98DFB6; color: #24593A; }
+    .badge--warn { background: #FFF0F3; border-color: #F497A9; color: #8A2538; }
+
+    /* Live Sprite Preview Stage */
+    .stage-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-md);
+      border: 2.5px solid #F3D1DC;
+      background: #FFF5F8;
+      padding: 1.1rem 1rem 0.9rem;
+      margin-bottom: 0.9rem;
+      position: relative;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .speech-bubble {
+      background: #FFFFFF;
+      border: 2px solid #8B3A62;
+      color: #4A2E56;
+      font-weight: 800;
+      font-size: 0.84rem;
+      padding: 0.32rem 0.85rem;
+      border-radius: var(--radius-pill);
+      box-shadow: 0 3px 10px rgba(74, 46, 86, 0.12);
+      margin-bottom: 0.55rem;
+      max-width: 95%;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #sprite-canvas {
+      width: 128px;
+      height: 128px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border-radius: 14px;
+      background: repeating-conic-gradient(rgba(255,255,255,0.55) 0% 25%, rgba(246,179,200,0.18) 0% 50%) 50% / 16px 16px;
+      border: 1.5px dashed rgba(139, 58, 98, 0.25);
+    }
+
+    .slot-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.35rem;
+      margin-top: 0.75rem;
+    }
+    .slot-btn {
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      padding: 0.24rem 0.65rem;
+      border-radius: var(--radius-pill);
+      border: 1.5px solid var(--strawberry-milk);
+      background: #FFFFFF;
+      color: var(--cocoa);
+      cursor: pointer;
+    }
+    .slot-btn.active {
+      background: linear-gradient(180deg, #FFD3E1, var(--strawberry-milk));
+      border-color: var(--strawberry-deep);
+    }
+
+    /* Form Controls */
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-bottom: 0.85rem;
+    }
+    @media (max-width: 520px) {
+      .field-grid { grid-template-columns: 1fr; }
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .field label {
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: var(--cocoa);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .field input[type="text"],
+    .field textarea {
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      color: var(--cocoa);
+      background: #FFFDF9;
+      border: 2px solid #F0D6E0;
+      border-radius: 12px;
+      padding: 0.48rem 0.7rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+    .field input[type="text"]:focus,
+    .field textarea:focus {
+      border-color: var(--strawberry-deep);
+    }
+
+    .color-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.6rem;
+      margin-top: 0.5rem;
+    }
+    @media (max-width: 540px) {
+      .color-row { grid-template-columns: repeat(2, 1fr); }
+    }
+    .color-cell {
+      background: #FFFDF9;
+      border: 1.5px solid #F0D6E0;
+      border-radius: 12px;
+      padding: 0.4rem 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .color-cell span {
+      font-size: 0.73rem;
+      font-weight: 800;
+      color: var(--cocoa-soft);
+    }
+    .color-picker-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .color-picker-wrap input[type="color"] {
+      width: 26px;
+      height: 26px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      padding: 0;
+    }
+    .color-picker-wrap input[type="text"] {
+      width: 100%;
+      font-size: 0.78rem;
+      font-family: monospace;
+      padding: 0.2rem 0.35rem;
+      border-radius: 7px;
+      border: 1px solid #E5CCD6;
+    }
+
+    .dialogue-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 0.95rem;
+      margin-top: 0.8rem;
+    }
+    .dialogue-card {
+      background: #FFFDF9;
+      border: 2px solid var(--whisper-pink);
+      border-radius: 16px;
+      padding: 0.75rem 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .dialogue-card:nth-child(even) { border-color: var(--lavender-haze); }
+    .dialogue-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-display);
+      font-size: 0.92rem;
+    }
+    .dialogue-count {
+      font-family: var(--font-body);
+      font-size: 0.74rem;
+      font-weight: 800;
+      padding: 0.1rem 0.5rem;
+      border-radius: var(--radius-pill);
+      background: var(--whisper-pink);
+      color: var(--cocoa-soft);
+    }
+    .dialogue-count.warn {
+      background: #FFE3E8;
+      color: #9E243B;
+    }
+    .dialogue-hint {
+      font-size: 0.76rem;
+      color: var(--cocoa-soft);
+    }
+    .dialogue-card textarea {
+      width: 100%;
+      min-height: 108px;
+      resize: vertical;
+      font-family: var(--font-body);
+      font-size: 0.84rem;
+      line-height: 1.45;
+      padding: 0.45rem 0.6rem;
+      border-radius: 10px;
+      border: 1.5px solid #EED5DF;
+      background: #FFFFFF;
+      color: var(--cocoa);
+    }
+
+    .export-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      background: linear-gradient(135deg, #FFF5F8, #F4EBFD);
+      border: 2.5px solid var(--strawberry-milk);
+      border-radius: var(--radius-lg);
+      padding: 1.2rem 1.5rem;
+      box-shadow: var(--shadow-plush);
+    }
+
+    .site-footer {
+      position: relative;
+      background: linear-gradient(180deg, #DCD3F5 0%, #C9C4EE 100%);
+      text-align: center;
+      padding: 2.8rem 0 3.2rem;
+    }
+    .site-footer h2 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: 1.35rem;
+      margin-bottom: 0.9rem;
+    }
+    .site-footer p { color: #5F5170; font-size: 0.9rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+
+  <header class="hero">
+    <div class="wrap">
+      <span class="welcome-ribbon">౨ৎ mochibun bundle &amp; mascot workshop ౨ৎ</span>
+      <h1>Mascot &amp; Bundle Packer <span class="jp">もちぶん ワークショップ ♡</span></h1>
+      <p class="tagline">Build a fresh <code>.mochibundle</code> from an 8 × 4 <code>mascot_atlas.png</code> and 7 custom speech-bubble mood pools, or load an existing <code>.mochibundle</code> to edit its mascot &amp; dialogue without losing its wallpaper, cursor, or palette ♡</p>
+
+      <ul class="candy-pills">
+        <li><a class="candy candy--blue" href="./">← back to community gallery</a></li>
+        <li><button class="candy candy--butter" type="button" id="download-template-btn">🎨 download 8×4 starter grid (.png)</button></li>
+        <li><a class="candy candy--pink" href="https://github.com/smolstinkyprincess/Mochibun/issues/new?template=pack_submission.yml" target="_blank" rel="noopener">🎀 submit pack on GitHub</a></li>
+      </ul>
+    </div>
+
+    <div class="divider" aria-hidden="true">
+      <svg viewBox="0 0 1440 70" preserveAspectRatio="none"><path fill="#EAF4FC" d="M0 40c60-30 120-30 180 0s120 30 180 0 120-30 180 0 120 30 180 0 120-30 180 0 120 30 180 0 120-30 180 0 120 30 180 0v30H0z"/></svg>
+    </div>
+  </header>
+
+  <main class="workshop-main">
+    <div class="wrap">
+
+      <div class="workshop-grid">
+        <!-- Left Panel: Load Bundle / Atlas & Live 4Hz Sprite Preview -->
+        <section class="panel" aria-labelledby="sprite-panel-title">
+          <div class="panel-title">
+            <span id="sprite-panel-title">1. Load Bundle or Sprite Atlas 🐰</span>
+            <button class="candy candy--butter candy--sm" type="button" id="clear-atlas-btn" style="display:none;">✕ remove atlas</button>
+          </div>
+          <p class="panel-sub">Load an existing <code>.mochibundle</code> / <code>.mochibun</code> to keep its wallpaper &amp; cursor intact, or drop a new 8-row PNG sprite sheet.</p>
+
+          <div class="drop-row">
+            <label class="dropzone dropzone--lavender" id="bundle-dropzone">
+              <input type="file" id="bundle-input" accept=".mochibundle,.mochibun,.zip" aria-label="Load existing .mochibundle file">
+              <span class="dropzone-icon">📦</span>
+              <span class="dropzone-title" style="display:block;">Load .mochibundle</span>
+              <span class="dropzone-hint" style="display:block;">Keeps wallpaper, cursor &amp; colors</span>
+            </label>
+
+            <label class="dropzone" id="atlas-dropzone">
+              <input type="file" id="atlas-input" accept="image/png" aria-label="Pick mascot_atlas.png file">
+              <span class="dropzone-icon">🖼️</span>
+              <span class="dropzone-title" style="display:block;">Pick mascot_atlas.png</span>
+              <span class="dropzone-hint" style="display:block;">8 rows × 1–16 square frames (≤1.5 MB)</span>
+            </label>
+          </div>
+
+          <div class="stage-box" id="preview-stage">
+            <div class="speech-bubble" id="preview-bubble">( ˶ˆᗜˆ˵ ) ♡ drop a sprite sheet or test dialogue!</div>
+            <canvas id="sprite-canvas" width="128" height="128"></canvas>
+            <div class="slot-tabs" id="slot-tabs" role="tablist" aria-label="Animation row preview"></div>
+          </div>
+
+          <div class="asset-badges" id="status-badges">
+            <span class="badge">✨ Ready: Fresh bundle mode</span>
+          </div>
+        </section>
+
+        <!-- Right Panel: Bundle Info & Palette -->
+        <section class="panel panel--lavender" aria-labelledby="meta-panel-title">
+          <div class="panel-title">
+            <span id="meta-panel-title">2. Bundle Details &amp; Palette 🎨</span>
+          </div>
+          <p class="panel-sub">When you load an existing <code>.mochibundle</code>, these fields populate automatically from its <code>manifest.json</code>.</p>
+
+          <div class="field-grid">
+            <div class="field">
+              <label for="bundle-name">Bundle Name</label>
+              <input type="text" id="bundle-name" value="Strawberry Bunbun ♡" maxlength="48">
+            </div>
+            <div class="field">
+              <label for="bundle-author">Author</label>
+              <input type="text" id="bundle-author" value="Mochi User" maxlength="36">
+            </div>
+            <div class="field">
+              <label for="mascot-name">Mascot Name</label>
+              <input type="text" id="mascot-name" value="Mochibunny" maxlength="32">
+            </div>
+            <div class="field">
+              <label for="greeting-name">Greeting Name</label>
+              <input type="text" id="greeting-name" value="Mochi User" maxlength="32">
+            </div>
+          </div>
+
+          <div style="margin-bottom: 0.45rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.4rem;">
+            <strong style="font-size:0.84rem;">Theme Presets:</strong>
+            <div style="display:flex; flex-wrap:wrap; gap:0.3rem;" id="preset-buttons"></div>
+          </div>
+
+          <div class="color-row">
+            <div class="color-cell">
+              <span>Background</span>
+              <div class="color-picker-wrap">
+                <input type="color" id="color-bg-picker" value="#FFF5F8" aria-label="Background color picker">
+                <input type="text" id="color-bg-hex" value="#FFF5F8" maxlength="9" aria-label="Background color hex">
+              </div>
+            </div>
+            <div class="color-cell">
+              <span>Card Surface</span>
+              <div class="color-picker-wrap">
+                <input type="color" id="color-card-picker" value="#FCE4EC" aria-label="Card surface color picker">
+                <input type="text" id="color-card-hex" value="#FCE4EC" maxlength="9" aria-label="Card surface color hex">
+              </div>
+            </div>
+            <div class="color-cell">
+              <span>Greeting Text</span>
+              <div class="color-picker-wrap">
+                <input type="color" id="color-greeting-picker" value="#A04064" aria-label="Greeting text color picker">
+                <input type="text" id="color-greeting-hex" value="#A04064" maxlength="9" aria-label="Greeting text color hex">
+              </div>
+            </div>
+            <div class="color-cell">
+              <span>Accent / Action</span>
+              <div class="color-picker-wrap">
+                <input type="color" id="color-action-picker" value="#A04064" aria-label="Accent color picker">
+                <input type="text" id="color-action-hex" value="#A04064" maxlength="9" aria-label="Accent color hex">
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Full-Width Panel: 7 Mood Dialogue Boxes -->
+      <section class="panel panel--full" aria-labelledby="dialogue-panel-title">
+        <div class="panel-title">
+          <span id="dialogue-panel-title">3. Custom Mascot Speech-Bubble Dialogue 💬</span>
+          <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+            <button class="candy candy--butter candy--sm" type="button" id="fill-sample-dialogue-btn">✨ fill sample lines</button>
+            <button class="candy candy--blue candy--sm" type="button" id="clear-dialogue-btn">🧹 clear all</button>
+          </div>
+        </div>
+        <p class="panel-sub">
+          Optional! Enter <b>one speech-bubble line per row</b> in any pool below (up to <b>20 lines per pool</b>, max <b>48 characters per line</b>). Any pool left blank automatically falls back to Mochibunny's built-in lines on the phone ♡
+        </p>
+
+        <div class="dialogue-grid" id="dialogue-grid"></div>
+      </section>
+
+      <!-- Export Bar -->
+      <div class="export-bar">
+        <div>
+          <h3 style="font-family: var(--font-display); font-size: 1.18rem;">Ready to pack your <code>.mochibundle</code>? 🍡</h3>
+          <p style="font-size: 0.9rem; color: var(--cocoa-soft);" id="export-summary">
+            Packs <code>manifest.json</code> + any loaded <code>mascot_atlas.png</code>, wallpaper, and cursor into one shareable file.
+          </p>
+        </div>
+        <button class="candy candy--pink" type="button" id="export-bundle-btn" style="font-size: 1rem; padding: 0.75rem 1.5rem;">
+          🍡 Download .mochibundle
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <h2>sweet dreams, little flip phone 🌙</h2>
+      <ul class="candy-pills">
+        <li><a class="candy candy--pink" href="./">🐰 community gallery</a></li>
+        <li><a class="candy candy--butter" href="../">🍡 Mochibun home</a></li>
+        <li><a class="candy candy--blue" href="https://github.com/smolstinkyprincess/Mochibun" target="_blank" rel="noopener">🌷 GitHub</a></li>
+      </ul>
+      <p>100% client-side in your browser · made with stardust, ♡ &amp; eepy magic</p>
+    </div>
+  </footer>
+
+  <script>
+    const SLOTS = [
+      { key: 'idle',   row: 0, label: '0 · idle',   pool: 'content' },
+      { key: 'talk',   row: 1, label: '1 · talk',   pool: 'happy' },
+      { key: 'happy',  row: 2, label: '2 · happy',  pool: 'happy' },
+      { key: 'hungry', row: 3, label: '3 · hungry', pool: 'hungry' },
+      { key: 'sulky',  row: 4, label: '4 · sulky',  pool: 'sulky' },
+      { key: 'sleepy', row: 5, label: '5 · sleepy', pool: 'sleepy' },
+      { key: 'eat',    row: 6, label: '6 · eat',    pool: 'fed' },
+      { key: 'pet',    row: 7, label: '7 · pet',    pool: 'happy' }
+    ];
+
+    const DIALOGUE_POOLS = [
+      { key: 'happy',    title: '🌸 Happy',     hint: 'Full & cheerful (petting or chatting when well-fed)', sample: ['( ˶ˆᗜˆ˵ ) ♡', 'yay, best day ever!! ✦', 'boop!! hehe ♡'] },
+      { key: 'content',  title: '🍡 Content',   hint: 'Cozy everyday resting mood',                         sample: ['cozy flip phone loaf~', 'whatcha texting? (˶ᵔ ᵕ ᵔ˶)', 'listening to the keypad clicks ♡'] },
+      { key: 'hungry',   title: '🍓 Hungry',    hint: 'Tummy rumbling — wants a treat!',                    sample: ['tummy says grrr... (｡•́︿•̀｡)', 'got any strawberry mochi?', 'snack break soon? ♡'] },
+      { key: 'sulky',    title: '💢 Sulky',     hint: 'Neglected for a while (pouting)',                    sample: ['hmph... missed u ( ` ᴖ ´ )', 'poke poke... remember me?', 'need headpats stat!!'] },
+      { key: 'sleepy',   title: '🌙 Sleepy',    hint: 'Late-night eepy hours (22:00–06:00)',                sample: ['*yawn*... eepy time zzZ', 'one more text then bed... ( ᴗ _ ᴗ )', 'sweet dreams, little flip phone ✦'] },
+      { key: 'fed',      title: '🍰 Fed',       hint: 'Spoken right after eating a treat',                  sample: ['nom nom nom!! thank u ♡', 'so yummy!! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧', 'best treat ever!!'] },
+      { key: 'noTreats', title: '🧺 No Treats', hint: 'When Feed is pressed with 0 treats in the jar',      sample: ['treat jar is empty! clear notifs or plug in ♡', 'no snacks left yet~ (｡•́︿•̀｡)'] }
+    ];
+
+    const THEME_PRESETS = [
+      { id: 'sakura_dream',  name: '🌸 Sakura',   bg: '#FFF5F8', card: '#FCE4EC', greeting: '#A04064', action: '#A04064' },
+      { id: 'lavender_mist', name: '💜 Lavender', bg: '#F8F5FF', card: '#EDE7F6', greeting: '#5E35B1', action: '#6A4C93' },
+      { id: 'minty_matcha',  name: '🍵 Matcha',   bg: '#F4FBF7', card: '#E0F2E9', greeting: '#2E6F4E', action: '#3B7A57' },
+      { id: 'milky_peach',   name: '🍑 Peach',    bg: '#FFF9F5', card: '#FFE8D6', greeting: '#B5543C', action: '#C86446' },
+      { id: 'midnight_mochi',name: '🌙 Midnight', bg: '#1E162B', card: '#2D2240', greeting: '#FFB7D5', action: '#F48FB1' }
+    ];
+
+    const MAX_LINE_CHARS = 48;
+    const MAX_POOL_LINES = 20;
+    const MAX_ATLAS_BYTES = 1536 * 1024; // 1.5 MB
+
+    // Preserved state from an imported .mochibundle
+    let importedManifest = null;
+    let preservedWallpaperBytes = null;
+    let preservedCursorEntryName = null;
+    let preservedCursorBytes = null;
+
+    // Active mascot atlas state
+    let atlasBytes = null;
+    let atlasImage = null;
+    let atlasLayout = null; // { frameWidth, frameHeight, slots: { idle: {row, frames}, ... } }
+    let activeSlotIndex = 0;
+    let animTick = 0;
+
+    // Build slot tabs
+    const slotTabsEl = document.getElementById('slot-tabs');
+    SLOTS.forEach((slot, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'slot-btn' + (idx === 0 ? ' active' : '');
+      btn.textContent = slot.label;
+      btn.addEventListener('click', () => {
+        activeSlotIndex = idx;
+        document.querySelectorAll('.slot-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+        updatePreviewBubble();
+      });
+      slotTabsEl.appendChild(btn);
+    });
+
+    // Build preset buttons
+    const presetWrap = document.getElementById('preset-buttons');
+    THEME_PRESETS.forEach((preset) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'slot-btn';
+      btn.textContent = preset.name;
+      btn.addEventListener('click', () => {
+        setColorField('bg', preset.bg);
+        setColorField('card', preset.card);
+        setColorField('greeting', preset.greeting);
+        setColorField('action', preset.action);
+        if (importedManifest && importedManifest.palette) {
+          importedManifest.palette.activePresetId = preset.id;
+        }
+        updateStageColors();
+      });
+      presetWrap.appendChild(btn);
+    });
+
+    // Build 7 dialogue cards
+    const dialogueGridEl = document.getElementById('dialogue-grid');
+    DIALOGUE_POOLS.forEach((pool) => {
+      const card = document.createElement('div');
+      card.className = 'dialogue-card';
+      card.innerHTML = `
+        <div class="dialogue-header">
+          <span>${pool.title}</span>
+          <span class="dialogue-count" id="count-${pool.key}">0 / ${MAX_POOL_LINES} lines</span>
+        </div>
+        <div class="dialogue-hint">${pool.hint}</div>
+        <textarea id="dialogue-${pool.key}" placeholder="One line per row (≤${MAX_LINE_CHARS} chars)..."></textarea>
+      `;
+      dialogueGridEl.appendChild(card);
+
+      const ta = card.querySelector('textarea');
+      ta.addEventListener('input', () => {
+        updateDialogueCounter(pool.key);
+        updatePreviewBubble();
+      });
+      ta.addEventListener('focus', () => {
+        const matchingSlotIdx = SLOTS.findIndex((s) => s.pool === pool.key);
+        if (matchingSlotIdx >= 0) {
+          activeSlotIndex = matchingSlotIdx;
+          document.querySelectorAll('.slot-btn').forEach((b, i) => b.classList.toggle('active', i === matchingSlotIdx));
+        }
+        updatePreviewBubble();
+      });
+    });
+
+    // Sync color pickers and hex inputs
+    ['bg', 'card', 'greeting', 'action'].forEach((key) => {
+      const picker = document.getElementById(`color-${key}-picker`);
+      const hex = document.getElementById(`color-${key}-hex`);
+      picker.addEventListener('input', () => {
+        hex.value = picker.value.toUpperCase();
+        updateStageColors();
+      });
+      hex.addEventListener('input', () => {
+        const v = hex.value.trim();
+        if (/^#[0-9A-Fa-f]{6}$/.test(v)) {
+          picker.value = v;
+          updateStageColors();
+        }
+      });
+    });
+
+    function setColorField(key, hexVal) {
+      const clean = String(hexVal || '#FFF5F8').replace(/^#([0-9A-Fa-f]{2})([0-9A-Fa-f]{6})$/, '#$2').toUpperCase();
+      const hexInput = document.getElementById(`color-${key}-hex`);
+      const pickerInput = document.getElementById(`color-${key}-picker`);
+      hexInput.value = clean;
+      if (/^#[0-9A-Fa-f]{6}$/.test(clean)) {
+        pickerInput.value = clean;
+      }
+    }
+
+    function updateStageColors() {
+      const stage = document.getElementById('preview-stage');
+      const bubble = document.getElementById('preview-bubble');
+      const bg = document.getElementById('color-bg-hex').value;
+      const card = document.getElementById('color-card-hex').value;
+      const greeting = document.getElementById('color-greeting-hex').value;
+      const action = document.getElementById('color-action-hex').value;
+      stage.style.background = `linear-gradient(180deg, ${bg}, ${card})`;
+      stage.style.borderColor = action;
+      bubble.style.borderColor = action;
+      bubble.style.color = greeting;
+    }
+
+    // Exact match to MascotAtlasValidator.sanitizeDialogueLine
+    function sanitizeDialogueLine(line) {
+      if (!line || !line.trim()) return null;
+      let out = '';
+      let lastWasSpace = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        const code = line.charCodeAt(i);
+        if (ch === '\r' || ch === '\n' || ch === '\t' || ch === ' ') {
+          if (out.length > 0 && !lastWasSpace) {
+            out += ' ';
+            lastWasSpace = true;
+          }
+        } else if ((code >= 0 && code <= 0x1F) || (code >= 0x7F && code <= 0x9F)) {
+          // strip ISO control characters
+        } else {
+          out += ch;
+          lastWasSpace = false;
+        }
+      }
+      const cleaned = out.trim();
+      if (!cleaned) return null;
+      const clamped = cleaned.length > MAX_LINE_CHARS
+        ? cleaned.slice(0, MAX_LINE_CHARS).trimEnd()
+        : cleaned;
+      return clamped || null;
+    }
+
+    function getRawPoolLines(poolKey) {
+      const raw = document.getElementById(`dialogue-${poolKey}`).value || '';
+      return raw.split(/\r?\n/);
+    }
+
+    function getSanitizedPool(poolKey) {
+      return getRawPoolLines(poolKey)
+        .map(sanitizeDialogueLine)
+        .filter(Boolean)
+        .slice(0, MAX_POOL_LINES);
+    }
+
+    function updateDialogueCounter(poolKey) {
+      const rawLines = getRawPoolLines(poolKey).map((l) => l.trim()).filter(Boolean);
+      const longest = rawLines.reduce((m, l) => Math.max(m, l.length), 0);
+      const badge = document.getElementById(`count-${poolKey}`);
+      const overLines = rawLines.length > MAX_POOL_LINES;
+      const overChars = longest > MAX_LINE_CHARS;
+      if (overLines || overChars) {
+        badge.classList.add('warn');
+        badge.textContent = overChars
+          ? `${rawLines.length}/${MAX_POOL_LINES} · max ${longest}/${MAX_LINE_CHARS} chars!`
+          : `${rawLines.length}/${MAX_POOL_LINES} lines (caps at 20)`;
+      } else {
+        badge.classList.remove('warn');
+        badge.textContent = `${rawLines.length} / ${MAX_POOL_LINES} lines`;
+      }
+    }
+
+    function updatePreviewBubble() {
+      const bubble = document.getElementById('preview-bubble');
+      const slot = SLOTS[activeSlotIndex] || SLOTS[0];
+      const lines = getSanitizedPool(slot.pool);
+      if (lines.length > 0) {
+        const pick = lines[animTick % lines.length];
+        bubble.textContent = pick;
+      } else {
+        const poolDef = DIALOGUE_POOLS.find((p) => p.key === slot.pool);
+        bubble.textContent = poolDef ? poolDef.sample[0] : '( ˶ˆᗜˆ˵ ) ♡';
+      }
+    }
+
+    // Sample & Clear buttons
+    document.getElementById('fill-sample-dialogue-btn').addEventListener('click', () => {
+      DIALOGUE_POOLS.forEach((pool) => {
+        const ta = document.getElementById(`dialogue-${pool.key}`);
+        if (!ta.value.trim()) {
+          ta.value = pool.sample.join('\n');
+        }
+        updateDialogueCounter(pool.key);
+      });
+      updatePreviewBubble();
+    });
+
+    document.getElementById('clear-dialogue-btn').addEventListener('click', () => {
+      DIALOGUE_POOLS.forEach((pool) => {
+        document.getElementById(`dialogue-${pool.key}`).value = '';
+        updateDialogueCounter(pool.key);
+      });
+      updatePreviewBubble();
+    });
+
+    // Validate & infer layout matching MascotAtlasValidator
+    function validateAndBuildLayout(width, height, configFromManifest) {
+      if (width <= 0 || height <= 0) return { valid: false, reason: "Couldn't read image dimensions" };
+      if (width > 2048 || height > 2048) return { valid: false, reason: 'Atlas must be at most 2048 × 2048 px' };
+
+      let fw, fh, slotsMap = {};
+      if (configFromManifest && configFromManifest.frameWidth && configFromManifest.frameHeight) {
+        fw = configFromManifest.frameWidth;
+        fh = configFromManifest.frameHeight;
+        if (fw < 16 || fw > 256 || fh < 16 || fh > 256) {
+          return { valid: false, reason: 'Frames must be 16–256 px' };
+        }
+        const defaultFrames = Math.min(16, Math.max(1, Math.floor(width / fw)));
+        SLOTS.forEach((s) => {
+          const decl = configFromManifest.slots && configFromManifest.slots[s.key];
+          slotsMap[s.key] = decl
+            ? { row: decl.row, frames: decl.frames }
+            : { row: s.row, frames: defaultFrames };
+        });
+      } else {
+        if (height % 8 !== 0) {
+          return { valid: false, reason: `Height (${height}px) must divide evenly into 8 rows` };
+        }
+        fh = height / 8;
+        fw = fh;
+        if (fh < 16 || fh > 256) {
+          return { valid: false, reason: `Frame height (${fh}px) must be 16–256 px` };
+        }
+        if (width % fw !== 0) {
+          return { valid: false, reason: `Width (${width}px) must be a multiple of ${fw}px square frames` };
+        }
+        const frames = width / fw;
+        if (frames < 1 || frames > 16) {
+          return { valid: false, reason: `Each row needs 1–16 frames (found ${frames})` };
+        }
+        SLOTS.forEach((s) => {
+          slotsMap[s.key] = { row: s.row, frames };
+        });
+      }
+
+      if (width > fw * 16 || height > fh * 8) {
+        return { valid: false, reason: 'Atlas is bigger than 8 rows × 16 frames' };
+      }
+      for (const s of SLOTS) {
+        const slot = slotsMap[s.key];
+        if (!slot || slot.row < 0 || slot.row >= 8) return { valid: false, reason: `Row for ${s.key} must be 0–7` };
+        if (slot.frames < 1 || slot.frames > 16) return { valid: false, reason: `${s.key} needs 1–16 frames` };
+        if ((slot.row + 1) * fh > height) return { valid: false, reason: `Row for ${s.key} is below the image` };
+        if (slot.frames * fw > width) return { valid: false, reason: `${s.key} frames run past the image edge` };
+      }
+
+      return {
+        valid: true,
+        layout: { frameWidth: fw, frameHeight: fh, slots: slotsMap }
+      };
+    }
+
+    function renderStatusBadges(extraError) {
+      const wrap = document.getElementById('status-badges');
+      const badges = [];
+      if (extraError) {
+        badges.push(`<span class="badge badge--warn">⚠️ ${escapeHtml(extraError)}</span>`);
+      }
+      if (importedManifest) {
+        badges.push(`<span class="badge badge--ok">📦 Loaded base bundle: ${escapeHtml(importedManifest.bundleName || 'bundle')}</span>`);
+      }
+      if (atlasLayout && atlasBytes) {
+        const firstSlot = atlasLayout.slots.idle || { frames: 4 };
+        badges.push(`<span class="badge badge--ok">🐰 Atlas: ${atlasLayout.frameWidth}×${atlasLayout.frameHeight}px · ${firstSlot.frames}f (${(atlasBytes.byteLength / 1024).toFixed(1)} KB)</span>`);
+      } else {
+        badges.push(`<span class="badge">🐰 No custom atlas loaded (will export theme/settings)</span>`);
+      }
+      if (preservedWallpaperBytes) {
+        badges.push(`<span class="badge badge--ok">🖼️ wallpaper.png preserved (${(preservedWallpaperBytes.byteLength / 1024).toFixed(0)} KB)</span>`);
+      }
+      if (preservedCursorBytes && preservedCursorEntryName) {
+        badges.push(`<span class="badge badge--ok">🖱️ ${escapeHtml(preservedCursorEntryName)} preserved</span>`);
+      }
+      wrap.innerHTML = badges.join('');
+      document.getElementById('clear-atlas-btn').style.display = atlasBytes ? 'inline-flex' : 'none';
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function loadAtlasFromBytes(uint8Array, configFromManifest) {
+      if (uint8Array.byteLength > MAX_ATLAS_BYTES) {
+        renderStatusBadges('mascot_atlas.png exceeds 1.5 MB limit');
+        return false;
+      }
+      const blob = new Blob([uint8Array], { type: 'image/png' });
+      const url = URL.createObjectURL(blob);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('Could not decode PNG image'));
+          i.src = url;
+        });
+        const check = validateAndBuildLayout(img.naturalWidth, img.naturalHeight, configFromManifest);
+        if (!check.valid) {
+          renderStatusBadges(check.reason);
+          return false;
+        }
+        atlasBytes = uint8Array;
+        atlasImage = img;
+        atlasLayout = check.layout;
+        renderStatusBadges();
+        drawCurrentFrame();
+        return true;
+      } catch (err) {
+        renderStatusBadges(err.message || 'Invalid PNG file');
+        return false;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    // Handle mascot_atlas.png file input
+    document.getElementById('atlas-input').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const buf = await file.arrayBuffer();
+      await loadAtlasFromBytes(new Uint8Array(buf), null);
+    });
+
+    document.getElementById('clear-atlas-btn').addEventListener('click', () => {
+      atlasBytes = null;
+      atlasImage = null;
+      atlasLayout = null;
+      document.getElementById('atlas-input').value = '';
+      drawCurrentFrame();
+      renderStatusBadges();
+    });
+
+    // Handle .mochibundle / .mochibun file input
+    document.getElementById('bundle-input').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const manifestFile = zip.file('manifest.json');
+        if (!manifestFile) {
+          renderStatusBadges('No manifest.json found inside bundle');
+          return;
+        }
+        const manifestText = await manifestFile.async('string');
+        const manifest = JSON.parse(manifestText);
+        importedManifest = manifest;
+
+        // Populate metadata & palette fields
+        document.getElementById('bundle-name').value = manifest.bundleName || 'Custom Setup';
+        document.getElementById('bundle-author').value = manifest.author || 'Mochi User';
+        document.getElementById('greeting-name').value = (manifest.greeting && manifest.greeting.userName) || 'Mochi User';
+        document.getElementById('mascot-name').value = (manifest.mascot && manifest.mascot.name) || 'Mochibunny';
+
+        if (manifest.palette) {
+          setColorField('bg', manifest.palette.bgColorHex || '#FFF5F8');
+          setColorField('card', manifest.palette.cardColorHex || '#FCE4EC');
+          setColorField('greeting', manifest.palette.greetingColorHex || '#A04064');
+          setColorField('action', manifest.palette.actionColorHex || '#A04064');
+          updateStageColors();
+        }
+
+        // Populate 7 dialogue pools
+        const dlg = (manifest.mascot && manifest.mascot.dialogue) || {};
+        DIALOGUE_POOLS.forEach((pool) => {
+          const lines = Array.isArray(dlg[pool.key]) ? dlg[pool.key] : [];
+          document.getElementById(`dialogue-${pool.key}`).value = lines.join('\n');
+          updateDialogueCounter(pool.key);
+        });
+
+        // Preserve wallpaper & cursor entries if present
+        const wpEntry = zip.file('wallpaper.png');
+        preservedWallpaperBytes = wpEntry ? await wpEntry.async('uint8array') : null;
+
+        const cursorGif = zip.file('cursor.gif');
+        const cursorPng = zip.file('cursor.png');
+        if (cursorGif) {
+          preservedCursorEntryName = 'cursor.gif';
+          preservedCursorBytes = await cursorGif.async('uint8array');
+        } else if (cursorPng) {
+          preservedCursorEntryName = 'cursor.png';
+          preservedCursorBytes = await cursorPng.async('uint8array');
+        } else {
+          preservedCursorEntryName = null;
+          preservedCursorBytes = null;
+        }
+
+        // Load mascot_atlas.png if present
+        const mascotEntry = zip.file('mascot_atlas.png');
+        if (mascotEntry) {
+          const bytes = await mascotEntry.async('uint8array');
+          await loadAtlasFromBytes(bytes, manifest.mascot || null);
+        } else {
+          renderStatusBadges();
+        }
+        updatePreviewBubble();
+      } catch (err) {
+        renderStatusBadges('Could not read bundle: ' + (err.message || 'invalid zip'));
+      }
+    });
+
+    // 4 Hz animation loop (250ms per step, matching Home's rememberKeitaiStep)
+    const canvas = document.getElementById('sprite-canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    function drawCurrentFrame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = false;
+
+      const slotDef = SLOTS[activeSlotIndex] || SLOTS[0];
+      if (atlasImage && atlasLayout) {
+        const slot = atlasLayout.slots[slotDef.key] || atlasLayout.slots.idle || { row: 0, frames: 4 };
+        const frameIdx = animTick % Math.max(1, slot.frames);
+        const sx = frameIdx * atlasLayout.frameWidth;
+        const sy = slot.row * atlasLayout.frameHeight;
+        ctx.drawImage(
+          atlasImage,
+          sx, sy, atlasLayout.frameWidth, atlasLayout.frameHeight,
+          0, 0, canvas.width, canvas.height
+        );
+      } else {
+        // Cozy placeholder bunny bounce when no custom atlas is loaded yet
+        const bob = (animTick % 2 === 0) ? 0 : -4;
+        ctx.save();
+        ctx.font = '56px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🐰', canvas.width / 2, canvas.height / 2 + bob);
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#8B3A62';
+        ctx.fillText(slotDef.label, canvas.width / 2, canvas.height - 14);
+        ctx.restore();
+      }
+    }
+
+    setInterval(() => {
+      animTick = (animTick + 1) % 720720;
+      drawCurrentFrame();
+      if (animTick % 12 === 0) {
+        updatePreviewBubble();
+      }
+    }, 250);
+
+    // Download 8x4 starter grid template PNG (256x512, 64x64 cells)
+    document.getElementById('download-template-btn').addEventListener('click', () => {
+      const cell = 64;
+      const cols = 4;
+      const rows = 8;
+      const tCanvas = document.createElement('canvas');
+      tCanvas.width = cell * cols;
+      tCanvas.height = cell * rows;
+      const tCtx = tCanvas.getContext('2d');
+
+      const rowColors = ['#FFB7D5', '#DCC4F8', '#FFE082', '#FFCCBC', '#B3E5FC', '#C5CAE9', '#C8E6C9', '#F8BBD0'];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = c * cell;
+          const y = r * cell;
+          tCtx.strokeStyle = rowColors[r];
+          tCtx.lineWidth = 1;
+          tCtx.strokeRect(x + 0.5, y + 0.5, cell - 1, cell - 1);
+          tCtx.fillStyle = 'rgba(74, 46, 86, 0.55)';
+          tCtx.font = 'bold 9px monospace';
+          tCtx.fillText(`${SLOTS[r].key}[${c}]`, x + 4, y + 11);
+        }
+      }
+      tCanvas.toBlob((blob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'mascot_atlas_template_256x512.png';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+      }, 'image/png');
+    });
+
+    // Export .mochibundle
+    document.getElementById('export-bundle-btn').addEventListener('click', async () => {
+      const bundleName = (document.getElementById('bundle-name').value || '').trim() || 'Kawaii Setup';
+      const author = (document.getElementById('bundle-author').value || '').trim() || 'Mochi User';
+      const mascotName = (document.getElementById('mascot-name').value || '').trim() || 'Mochibunny';
+      const greetingUser = (document.getElementById('greeting-name').value || '').trim() || 'Mochi User';
+
+      // Build sanitized dialogue object
+      const dialogueObj = {};
+      let hasAnyDialogue = false;
+      DIALOGUE_POOLS.forEach((pool) => {
+        const cleanLines = getSanitizedPool(pool.key);
+        dialogueObj[pool.key] = cleanLines;
+        if (cleanLines.length > 0) hasAnyDialogue = true;
+      });
+
+      const base = importedManifest ? JSON.parse(JSON.stringify(importedManifest)) : {};
+      const hasMascot = Boolean(atlasBytes && atlasLayout);
+
+      let mascotConfig = null;
+      if (hasMascot) {
+        mascotConfig = {
+          name: mascotName,
+          frameWidth: atlasLayout.frameWidth,
+          frameHeight: atlasLayout.frameHeight,
+          slots: atlasLayout.slots,
+          dialogue: hasAnyDialogue ? dialogueObj : null
+        };
+      } else if (hasAnyDialogue && base.mascot) {
+        mascotConfig = Object.assign({}, base.mascot, {
+          name: mascotName,
+          dialogue: dialogueObj
+        });
+      }
+
+      const manifest = {
+        bundleVersion: 1,
+        bundleName: bundleName,
+        author: author,
+        createdAtEpochSec: Math.floor(Date.now() / 1000),
+        greeting: {
+          userName: greetingUser,
+          showSparkles: base.greeting && typeof base.greeting.showSparkles === 'boolean' ? base.greeting.showSparkles : true
+        },
+        palette: {
+          activePresetId: (base.palette && base.palette.activePresetId) || 'sakura_dream',
+          isCustom: true,
+          bgColorHex: document.getElementById('color-bg-hex').value.trim() || '#FFF5F8',
+          cardColorHex: document.getElementById('color-card-hex').value.trim() || '#FCE4EC',
+          greetingColorHex: document.getElementById('color-greeting-hex').value.trim() || '#A04064',
+          actionColorHex: document.getElementById('color-action-hex').value.trim() || '#A04064',
+          cardRoundnessDp: (base.palette && typeof base.palette.cardRoundnessDp === 'number') ? base.palette.cardRoundnessDp : 24.0
+        },
+        cursor: base.cursor || {
+          baseVelocity: 5.0,
+          accelerationMulti: 1.8,
+          pointerSizeDp: 24.0,
+          clickMethod: 'AUTO',
+          hotspot: 'TOP_LEFT',
+          tapStepPx: 8,
+          maxSpeedPxPerSec: 420,
+          accelRampMs: 320
+        },
+        hasWallpaper: Boolean(preservedWallpaperBytes),
+        hasCustomCursor: Boolean(preservedCursorBytes && preservedCursorEntryName),
+        hasCustomMascot: Boolean(mascotConfig),
+        mascot: mascotConfig
+      };
+
+      const zip = new JSZip();
+      zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+      if (preservedWallpaperBytes) {
+        zip.file('wallpaper.png', preservedWallpaperBytes);
+      }
+      if (preservedCursorBytes && preservedCursorEntryName) {
+        zip.file(preservedCursorEntryName, preservedCursorBytes);
+      }
+      if (atlasBytes && atlasLayout) {
+        zip.file('mascot_atlas.png', atlasBytes);
+      }
+
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      const sanitizedFile = bundleName.toLowerCase().replace(/[^a-z0-9_-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'mochibun_theme';
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${sanitizedFile}.mochibundle`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    });
+
+    updateStageColors();
+    drawCurrentFrame();
+  </script>
+</body>
+</html>

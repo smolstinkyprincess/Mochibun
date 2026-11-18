@@ -22,6 +22,7 @@ import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.CursorPreferences
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.HardwareRemapManager
 import one.crinklecod.mochibun.service.InputArbiter
 import one.crinklecod.mochibun.service.VirtualCursorService
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
@@ -54,6 +55,21 @@ internal fun CursorHardwareSettingsScreen(
     val softKeyNav by PreferencesManager.isSoftKeyNavEnabled.collectAsState()
     val dpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
     val boundaryHaptics by PreferencesManager.isDpadBoundaryHaptics.collectAsState()
+    var lastKeyPressedReadout by remember { mutableStateOf("Press any key...") }
+
+    DisposableEffect(Unit) {
+        val observer: (KeyEvent) -> Unit = { event ->
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                lastKeyPressedReadout = formatKeyDiagnosticReadout(event.keyCode, event.scanCode)
+            }
+        }
+        HardwareRemapManager.keyDiagnosticListener = observer
+        onDispose {
+            if (HardwareRemapManager.keyDiagnosticListener === observer) {
+                HardwareRemapManager.keyDiagnosticListener = null
+            }
+        }
+    }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
@@ -167,6 +183,9 @@ internal fun CursorHardwareSettingsScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
+                if (event.type == KeyEventType.KeyDown) {
+                    lastKeyPressedReadout = formatKeyDiagnosticReadout(native.keyCode, native.scanCode)
+                }
                 if (native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
                     if (event.type == KeyEventType.KeyUp) {
                         SoundEffectManager.play(context, SoundEffect.BACK)
@@ -330,6 +349,11 @@ internal fun CursorHardwareSettingsScreen(
                         onDecrement = { stepToggleKey(-1) },
                         onIncrement = { stepToggleKey(1) }
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsInfoRow(
+                        label = "Last Key Pressed",
+                        value = lastKeyPressedReadout
+                    )
                 }
             }
 
@@ -356,4 +380,9 @@ internal fun CursorHardwareSettingsScreen(
             }
         }
     }
+}
+
+internal fun formatKeyDiagnosticReadout(keyCode: Int, scanCode: Int): String {
+    val name = KeyEvent.keyCodeToString(keyCode).removePrefix("KEYCODE_")
+    return "$name ($keyCode / scan $scanCode)"
 }

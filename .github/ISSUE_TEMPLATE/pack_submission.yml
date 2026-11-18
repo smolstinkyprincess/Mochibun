@@ -1,0 +1,69 @@
+name: "🎀 Submit a Community Pack (.mochibundle / .mochibunled)"
+description: "Share your custom theme bundle, pocket-pet mascot + dialogue, or Lid LED animation for the Mochibun Community Gallery ♡"
+title: "[Pack] "
+labels: ["community-pack"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for sharing your creation with the Mochibun community! (˶ᵔ ᵕ ᵔ˶) ♡
+        Need to pack an 8×4 `mascot_atlas.png` or add custom speech-bubble dialogue to your `.mochibundle`? Try the **[Mochibun Bundle & Mascot Workshop](https://crinklecod.one/Mochibun/community/workshop.html)**!
+
+  - type: dropdown
+    id: pack_type
+    attributes:
+      label: "Pack Type"
+      description: "What kind of pack are you sharing?"
+      options:
+        - "🎀 Theme / Custom Mascot Bundle (.mochibundle)"
+        - "💡 Lid LED Studio Animation (.mochibunled)"
+    validations:
+      required: true
+
+  - type: input
+    id: pack_name
+    attributes:
+      label: "Pack Name"
+      description: "Display title shown on the gallery card"
+      placeholder: "e.g., Strawberry Lavender Bunbun ♡"
+    validations:
+      required: true
+
+  - type: input
+    id: author
+    attributes:
+      label: "Author / Handle"
+      description: "How should we credit you on the card?"
+      placeholder: "e.g., emii"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contents
+    attributes:
+      label: "What's inside this pack?"
+      options:
+        - label: "Custom color palette"
+        - label: "Custom wallpaper"
+        - label: "Custom cursor sprite (.png / .gif)"
+        - label: "Custom 8×4 mascot sprite sheet (mascot_atlas.png)"
+        - label: "Custom mascot speech-bubble dialogue (mascot.dialogue)"
+        - label: "5-window Lid LED animation steps"
+
+  - type: textarea
+    id: files
+    attributes:
+      label: "Pack File & Preview Screenshot"
+      description: |
+        Drag and drop your `.mochibundle` or `.mochibunled` file and a preview screenshot (`.png` / `.gif`) here.
+        *(Note: If GitHub rejects the `.mochibundle` or `.mochibunled` extension directly in the attachment box, rename or zip it as `.zip` before dragging it in!)*
+      placeholder: "Drop your pack file and preview screenshot here..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Notes / Inspiration (Optional)"
+      description: "Anything else you'd like to share about your theme, mascot, or light show?"
+      placeholder: "Optional notes..."

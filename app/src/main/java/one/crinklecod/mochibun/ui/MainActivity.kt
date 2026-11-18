@@ -288,6 +288,7 @@ class MainActivity : ComponentActivity() {
 
     @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        HardwareRemapManager.keyDiagnosticListener?.invoke(event)
         if (settingsBackKeyHandler?.invoke(event) == true) return true
         if (HardwareRemapManager.keyCaptureListener?.invoke(event) == true) return true
         val interceptor = keyEventInterceptor

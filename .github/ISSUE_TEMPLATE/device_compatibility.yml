@@ -1,0 +1,76 @@
+name: "📟 Device Compatibility Report"
+description: "Report how Mochibun runs on another Android flip phone or keitai (Kyocera, CAT S22, Galaxy Folder2, Sharp Aquos, Qin, etc.)"
+title: "[Device] "
+labels: ["device-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Testing Mochibun on a flip phone other than the **ALT Mive Style Folder (AT-M120)**? Let us know how it runs so we can help tune keypad mappings and document compatibility for everyone! ♡
+
+  - type: input
+    id: device_model
+    attributes:
+      label: "Device Name & Model Number"
+      placeholder: "e.g., Kyocera DIGNO Keitai 3 (902KC), CAT S22 Flip, Samsung Galaxy Folder2 (SM-G1650)"
+    validations:
+      required: true
+
+  - type: input
+    id: android_version
+    attributes:
+      label: "Android Version & RAM"
+      placeholder: "e.g., Android 8.1 (1 GB RAM) or Android 11 Go (2 GB RAM)"
+    validations:
+      required: true
+
+  - type: input
+    id: mochibun_version
+    attributes:
+      label: "Mochibun Version"
+      placeholder: "e.g., v2.3.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: setup_mode
+    attributes:
+      label: "Root / LSPosed Status"
+      options:
+        - "🌷 Stock / Unrooted (Standard Mode)"
+        - "🌷 Stock / Unrooted + Mochibun Accessibility Helper enabled"
+        - "🔮 Rooted (Magisk / KernelSU) without LSPosed"
+        - "🔮 Rooted + LSPosed / Vector active"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: working_features
+    attributes:
+      label: "What works as expected?"
+      options:
+        - label: "Home screen & 480×800 / screen scaling"
+        - label: "D-pad navigation & Center key selection"
+        - label: "App drawer & T9 numeric search"
+        - label: "Mochibun Keitai IME (multi-tap keyboard & floating pill)"
+        - label: "Kaomoji Wheel (# long-press)"
+        - label: "Virtual Cursor overlay & clicking"
+        - label: "Screen-Off Flip Reset (closing the flip resets to Home)"
+        - label: "Mochibunny pocket pet & animations"
+
+  - type: textarea
+    id: key_diagnostics
+    attributes:
+      label: "Hardware Key Codes (Optional)"
+      description: |
+        If any physical button (side key, soft keys, call/back/clear) isn't recognized, open **Settings › Cursor & Hardware**, press the button, and copy the **Last Key Pressed (`keyCode` / `scanCode`)** readout here!
+      placeholder: "e.g., Side key shows keyCode=27 (KEYCODE_CAMERA), scanCode=212"
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Layout, Performance, or Quirks"
+      description: "Did anything clip on your screen resolution? Any lag or missing keys? Feel free to attach a screenshot!"
+      placeholder: "Share any details or screenshots here..."
+    validations:
+      required: true

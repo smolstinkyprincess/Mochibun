@@ -54,6 +54,13 @@ object HardwareRemapManager {
     @Volatile
     var keyCaptureListener: ((KeyEvent) -> Boolean)? = null
 
+    /**
+     * Passive read-only observer for hardware key diagnostics (e.g. in Cursor & Hardware settings).
+     * Never consumes events.
+     */
+    @Volatile
+    var keyDiagnosticListener: ((KeyEvent) -> Unit)? = null
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -141,6 +148,7 @@ object HardwareRemapManager {
      * Returns true if consumed.
      */
     fun onKeyEvent(context: Context, event: KeyEvent): Boolean {
+        keyDiagnosticListener?.invoke(event)
         keyCaptureListener?.let { listener ->
             if (listener(event)) return true
         }

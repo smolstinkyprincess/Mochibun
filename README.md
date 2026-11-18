@@ -139,7 +139,7 @@ Want a different little friend on Home? Draw your own! Mochibunny lives on one P
 
 - Frames can be 16–256 px, up to 16 per row, the whole sheet up to 2048 × 2048 and 1.5 MB.
 - She's drawn with crisp nearest-neighbor pixels, so tiny pixel art stays sharp ♡
-- Inside a `.mochibundle` pack, `manifest.json` can also include optional `mascot.dialogue` pools (`happy`, `content`, `hungry`, `sulky`, `sleepy`, `fed`, `noTreats`; up to 20 lines of 48 chars each) so your custom mascot talks in character!
+- Inside a `.mochibundle` pack, `manifest.json` can also include optional `mascot.dialogue` pools (`happy`, `content`, `hungry`, `sulky`, `sleepy`, `fed`, `noTreats`; up to 20 lines of 48 chars each) so your custom mascot talks in character! Use the **[Mascot & Bundle Workshop](https://crinklecod.one/Mochibun/community/workshop.html)** in your browser to preview your 8×4 sprite sheet at 4 Hz, download a starter grid, or add custom dialogue to an existing `.mochibundle` without losing its wallpaper or cursor.
 - If a file doesn't fit, nothing breaks: you get a little note and your current mascot stays.
 
 ### 📝 Hand-Crafted YAML Themes (`kaml`)
