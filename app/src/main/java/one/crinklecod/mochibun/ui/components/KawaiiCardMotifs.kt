@@ -6,10 +6,8 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -1145,56 +1143,72 @@ fun TopLavenderClouds(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
-    val backPath = remember { Path() }
-    val frontPath = remember { Path() }
-    val outlineStroke = rememberCloudOutlineStroke()
     val drift = rememberCloudDriftPx()
 
-    Canvas(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .height(58.dp)
     ) {
-        val w = size.width
-        val d = density
-        // Paths overhang both screen edges so the drift never uncovers a gap
-        val pad = cloudDriftOverhang(d)
-        val dx = drift.value.toFloat()
+        // Back cloud layer (static path built once per size in drawWithCache; shifted via RenderNode)
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer { translationX = -drift.value.toFloat() }
+                .drawWithCache {
+                    val w = size.width
+                    val d = density
+                    // Path overhangs both screen edges so the drift never uncovers a gap
+                    val pad = cloudDriftOverhang(d)
+                    val outlineStroke = Stroke(width = 1.5f * d)
+                    val backPath = Path().apply {
+                        moveTo(-pad, 0f)
+                        lineTo(-pad, 28f * d)
+                        lineTo(0f, 28f * d)
+                        cubicTo(w * 0.05f, 54f * d, w * 0.14f, 56f * d, w * 0.20f, 38f * d)
+                        cubicTo(w * 0.27f, 62f * d, w * 0.40f, 64f * d, w * 0.47f, 40f * d)
+                        cubicTo(w * 0.54f, 60f * d, w * 0.67f, 62f * d, w * 0.74f, 42f * d)
+                        cubicTo(w * 0.81f, 58f * d, w * 0.93f, 57f * d, w, 32f * d)
+                        lineTo(w + pad, 32f * d)
+                        lineTo(w + pad, 0f)
+                        close()
+                    }
+                    onDrawBehind {
+                        drawPath(backPath, palette.cloudMid)
+                        drawPath(backPath, palette.outline, style = outlineStroke)
+                    }
+                }
+        )
 
-        // Back cloud layer (drifts opposite to the front layer)
-        backPath.reset()
-        backPath.moveTo(-pad, 0f)
-        backPath.lineTo(-pad, 28f * d)
-        backPath.lineTo(0f, 28f * d)
-        backPath.cubicTo(w * 0.05f, 54f * d, w * 0.14f, 56f * d, w * 0.20f, 38f * d)
-        backPath.cubicTo(w * 0.27f, 62f * d, w * 0.40f, 64f * d, w * 0.47f, 40f * d)
-        backPath.cubicTo(w * 0.54f, 60f * d, w * 0.67f, 62f * d, w * 0.74f, 42f * d)
-        backPath.cubicTo(w * 0.81f, 58f * d, w * 0.93f, 57f * d, w, 32f * d)
-        backPath.lineTo(w + pad, 32f * d)
-        backPath.lineTo(w + pad, 0f)
-        backPath.close()
-        translate(left = -dx) {
-            drawPath(backPath, palette.cloudMid)
-            drawPath(backPath, palette.outline, style = outlineStroke)
-        }
-
-        // Front cloud layer
-        frontPath.reset()
-        frontPath.moveTo(-pad, 0f)
-        frontPath.lineTo(-pad, 18f * d)
-        frontPath.lineTo(0f, 18f * d)
-        frontPath.cubicTo(w * 0.04f, 42f * d, w * 0.12f, 44f * d, w * 0.17f, 26f * d)
-        frontPath.cubicTo(w * 0.24f, 48f * d, w * 0.35f, 49f * d, w * 0.42f, 28f * d)
-        frontPath.cubicTo(w * 0.48f, 46f * d, w * 0.59f, 48f * d, w * 0.65f, 30f * d)
-        frontPath.cubicTo(w * 0.72f, 49f * d, w * 0.85f, 48f * d, w * 0.91f, 28f * d)
-        frontPath.cubicTo(w * 0.96f, 38f * d, w * 0.99f, 36f * d, w, 20f * d)
-        frontPath.lineTo(w + pad, 20f * d)
-        frontPath.lineTo(w + pad, 0f)
-        frontPath.close()
-        translate(left = dx) {
-            drawPath(frontPath, palette.cloudFront)
-            drawPath(frontPath, palette.primary, style = outlineStroke)
-        }
+        // Front cloud layer (drifts opposite to the back layer)
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer { translationX = drift.value.toFloat() }
+                .drawWithCache {
+                    val w = size.width
+                    val d = density
+                    val pad = cloudDriftOverhang(d)
+                    val outlineStroke = Stroke(width = 1.5f * d)
+                    val frontPath = Path().apply {
+                        moveTo(-pad, 0f)
+                        lineTo(-pad, 18f * d)
+                        lineTo(0f, 18f * d)
+                        cubicTo(w * 0.04f, 42f * d, w * 0.12f, 44f * d, w * 0.17f, 26f * d)
+                        cubicTo(w * 0.24f, 48f * d, w * 0.35f, 49f * d, w * 0.42f, 28f * d)
+                        cubicTo(w * 0.48f, 46f * d, w * 0.59f, 48f * d, w * 0.65f, 30f * d)
+                        cubicTo(w * 0.72f, 49f * d, w * 0.85f, 48f * d, w * 0.91f, 28f * d)
+                        cubicTo(w * 0.96f, 38f * d, w * 0.99f, 36f * d, w, 20f * d)
+                        lineTo(w + pad, 20f * d)
+                        lineTo(w + pad, 0f)
+                        close()
+                    }
+                    onDrawBehind {
+                        drawPath(frontPath, palette.cloudFront)
+                        drawPath(frontPath, palette.primary, style = outlineStroke)
+                    }
+                }
+        )
     }
 }
 
@@ -1207,56 +1221,73 @@ fun BottomLavenderClouds(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
-    val backPath = remember { Path() }
-    val frontPath = remember { Path() }
-    val outlineStroke = rememberCloudOutlineStroke()
     val drift = rememberCloudDriftPx()
 
-    Canvas(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .height(72.dp)
     ) {
-        val w = size.width
-        val h = size.height
-        val d = density
-        val pad = cloudDriftOverhang(d)
-        val dx = drift.value.toFloat()
-
         // Back cloud layer rising from bottom
-        backPath.reset()
-        backPath.moveTo(-pad, h)
-        backPath.lineTo(-pad, h - 30f * d)
-        backPath.lineTo(0f, h - 30f * d)
-        backPath.cubicTo(w * 0.06f, h - 58f * d, w * 0.17f, h - 60f * d, w * 0.24f, h - 40f * d)
-        backPath.cubicTo(w * 0.31f, h - 64f * d, w * 0.44f, h - 66f * d, w * 0.51f, h - 44f * d)
-        backPath.cubicTo(w * 0.58f, h - 62f * d, w * 0.71f, h - 64f * d, w * 0.77f, h - 42f * d)
-        backPath.cubicTo(w * 0.84f, h - 58f * d, w * 0.95f, h - 57f * d, w, h - 28f * d)
-        backPath.lineTo(w + pad, h - 28f * d)
-        backPath.lineTo(w + pad, h)
-        backPath.close()
-        translate(left = -dx) {
-            drawPath(backPath, palette.cloudMid)
-            drawPath(backPath, palette.outline, style = outlineStroke)
-        }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer { translationX = -drift.value.toFloat() }
+                .drawWithCache {
+                    val w = size.width
+                    val h = size.height
+                    val d = density
+                    val pad = cloudDriftOverhang(d)
+                    val outlineStroke = Stroke(width = 1.5f * d)
+                    val backPath = Path().apply {
+                        moveTo(-pad, h)
+                        lineTo(-pad, h - 30f * d)
+                        lineTo(0f, h - 30f * d)
+                        cubicTo(w * 0.06f, h - 58f * d, w * 0.17f, h - 60f * d, w * 0.24f, h - 40f * d)
+                        cubicTo(w * 0.31f, h - 64f * d, w * 0.44f, h - 66f * d, w * 0.51f, h - 44f * d)
+                        cubicTo(w * 0.58f, h - 62f * d, w * 0.71f, h - 64f * d, w * 0.77f, h - 42f * d)
+                        cubicTo(w * 0.84f, h - 58f * d, w * 0.95f, h - 57f * d, w, h - 28f * d)
+                        lineTo(w + pad, h - 28f * d)
+                        lineTo(w + pad, h)
+                        close()
+                    }
+                    onDrawBehind {
+                        drawPath(backPath, palette.cloudMid)
+                        drawPath(backPath, palette.outline, style = outlineStroke)
+                    }
+                }
+        )
 
         // Front cloud layer rising from bottom
-        frontPath.reset()
-        frontPath.moveTo(-pad, h)
-        frontPath.lineTo(-pad, h - 20f * d)
-        frontPath.lineTo(0f, h - 20f * d)
-        frontPath.cubicTo(w * 0.05f, h - 42f * d, w * 0.13f, h - 44f * d, w * 0.19f, h - 26f * d)
-        frontPath.cubicTo(w * 0.25f, h - 48f * d, w * 0.37f, h - 50f * d, w * 0.43f, h - 30f * d)
-        frontPath.cubicTo(w * 0.50f, h - 46f * d, w * 0.61f, h - 48f * d, w * 0.67f, h - 32f * d)
-        frontPath.cubicTo(w * 0.73f, h - 50f * d, w * 0.86f, h - 48f * d, w * 0.92f, h - 30f * d)
-        frontPath.cubicTo(w * 0.97f, h - 38f * d, w * 0.99f, h - 36f * d, w, h - 20f * d)
-        frontPath.lineTo(w + pad, h - 20f * d)
-        frontPath.lineTo(w + pad, h)
-        frontPath.close()
-        translate(left = dx) {
-            drawPath(frontPath, palette.cloudFront)
-            drawPath(frontPath, palette.primary, style = outlineStroke)
-        }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer { translationX = drift.value.toFloat() }
+                .drawWithCache {
+                    val w = size.width
+                    val h = size.height
+                    val d = density
+                    val pad = cloudDriftOverhang(d)
+                    val outlineStroke = Stroke(width = 1.5f * d)
+                    val frontPath = Path().apply {
+                        moveTo(-pad, h)
+                        lineTo(-pad, h - 20f * d)
+                        lineTo(0f, h - 20f * d)
+                        cubicTo(w * 0.05f, h - 42f * d, w * 0.13f, h - 44f * d, w * 0.19f, h - 26f * d)
+                        cubicTo(w * 0.25f, h - 48f * d, w * 0.37f, h - 50f * d, w * 0.43f, h - 30f * d)
+                        cubicTo(w * 0.50f, h - 46f * d, w * 0.61f, h - 48f * d, w * 0.67f, h - 32f * d)
+                        cubicTo(w * 0.73f, h - 50f * d, w * 0.86f, h - 48f * d, w * 0.92f, h - 30f * d)
+                        cubicTo(w * 0.97f, h - 38f * d, w * 0.99f, h - 36f * d, w, h - 20f * d)
+                        lineTo(w + pad, h - 20f * d)
+                        lineTo(w + pad, h)
+                        close()
+                    }
+                    onDrawBehind {
+                        drawPath(frontPath, palette.cloudFront)
+                        drawPath(frontPath, palette.primary, style = outlineStroke)
+                    }
+                }
+        )
     }
 }
 
@@ -1267,19 +1298,13 @@ private const val CLOUD_DRIFT_STEP_MS = 100L
 /** Path overhang past each screen edge: the drift plus the outline stroke width. */
 private fun cloudDriftOverhang(density: Float): Float = CLOUD_DRIFT_PX + 2f * density
 
-@Composable
-private fun rememberCloudOutlineStroke(): Stroke {
-    val density = LocalDensity.current.density
-    return remember(density) { Stroke(width = 1.5f * density) }
-}
-
 /**
  * Gentle horizontal cloud drift: ±[CLOUD_DRIFT_PX] over a 4 s sine period, in whole pixels.
  *
  * Keitai-stepped like the mascot bob: sampled every [CLOUD_DRIFT_STEP_MS] instead of animated per
- * frame, and the Canvas redraws only when the pixel offset changes (about 10 times a period). It
- * reads the frame clock directly, so it pauses while the launcher is stopped. Unlike an
- * InfiniteTransition, it isn't skipped when the system animator duration scale is 0.
+ * frame, and shifted on the RenderNode via graphicsLayer without mutating paths or re-recording
+ * draw blocks. It reads the frame clock directly, so it pauses while the launcher is stopped.
+ * Unlike an InfiniteTransition, it isn't skipped when the system animator duration scale is 0.
  */
 @Composable
 private fun rememberCloudDriftPx(): State<Int> {

@@ -27,8 +27,8 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run JVM Unit Tests, Android Lint & Release Manifest Merge
-        run: ./gradlew testDebugUnitTest lintDebug processReleaseManifest --stacktrace
+      - name: Run JVM Unit Tests, Android Lint & Release APK Build
+        run: ./gradlew testDebugUnitTest lintDebug assembleRelease --stacktrace
 
       - name: Verify 0 NewApi Lint Violations (minSdk 27 guard)
         run: |

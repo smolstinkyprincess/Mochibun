@@ -60,6 +60,8 @@
 -keep class one.crinklecod.mochibun.data.model.YamlTheme { *; }
 -keep class one.crinklecod.mochibun.data.model.YamlThemeColors { *; }
 -keep class one.crinklecod.mochibun.data.model.YamlThemeDecorations { *; }
+-keep class one.crinklecod.mochibun.data.model.LidLedAnimation { *; }
+-keep class one.crinklecod.mochibun.data.model.LidLedStep { *; }
 -keep class one.crinklecod.mochibun.data.repository.BackupPreviewSummary { *; }
 
 # Annotations, generics and inner classes are needed by serialization and by reflection

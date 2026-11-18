@@ -62,6 +62,19 @@ body:
       required: true
 
   - type: textarea
+    id: catalog_snippet
+    attributes:
+      label: "Workshop Catalog Snippet (Optional)"
+      description: "If you used the Workshop's **Preview PNG + catalog.json** export, paste the generated JSON snippet here!"
+      placeholder: |
+        {
+          "id": "my-pack",
+          ...
+        }
+    validations:
+      required: false
+
+  - type: textarea
     id: notes
     attributes:
       label: "Notes / Inspiration (Optional)"

@@ -7,6 +7,7 @@ body:
     attributes:
       value: |
         Testing Mochibun on a flip phone other than the **ALT Mive Style Folder (AT-M120)**? Let us know how it runs so we can help tune keypad mappings and document compatibility for everyone! ♡
+        *(Note: Mochibun targets Android 8.1+ `armeabi-v7a`—32-bit or dual-ABI ARM phones. `arm64`-only devices and x86 emulators will reject the APK.)*
 
   - type: input
     id: device_model

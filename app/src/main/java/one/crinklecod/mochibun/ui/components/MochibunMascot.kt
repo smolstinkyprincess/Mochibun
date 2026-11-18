@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
@@ -45,7 +46,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -528,39 +528,36 @@ fun SpeechBubble(
             )
         }
 
-        val fillPath = remember { Path() }
-        val strokePath = remember { Path() }
-        val density = LocalDensity.current.density
-        val tailStroke = remember(density) { Stroke(width = 1.5f * density, cap = StrokeCap.Round) }
-
-        Canvas(
+        Box(
             modifier = Modifier
                 .padding(end = 20.dp)
                 .offset(y = (-1.5).dp)
                 .size(width = 9.dp, height = 5.5.dp)
-        ) {
-            val width = size.width
-            val height = size.height
-
-            // Fill triangle with background color overlapping the pill bottom stroke
-            fillPath.rewind()
-            fillPath.moveTo(0f, 0f)
-            fillPath.lineTo(width, 0f)
-            fillPath.lineTo(width * 0.55f, height)
-            fillPath.close()
-            drawPath(path = fillPath, color = bgColor)
-
-            // Outline the two downward slanted sides
-            strokePath.rewind()
-            strokePath.moveTo(0f, 0f)
-            strokePath.lineTo(width * 0.55f, height)
-            strokePath.lineTo(width, 0f)
-            drawPath(
-                path = strokePath,
-                color = borderColor,
-                style = tailStroke
-            )
-        }
+                .drawWithCache {
+                    val width = size.width
+                    val height = size.height
+                    val fillPath = Path().apply {
+                        moveTo(0f, 0f)
+                        lineTo(width, 0f)
+                        lineTo(width * 0.55f, height)
+                        close()
+                    }
+                    val strokePath = Path().apply {
+                        moveTo(0f, 0f)
+                        lineTo(width * 0.55f, height)
+                        lineTo(width, 0f)
+                    }
+                    val tailStroke = Stroke(width = 1.5f * density, cap = StrokeCap.Round)
+                    onDrawBehind {
+                        drawPath(path = fillPath, color = bgColor)
+                        drawPath(
+                            path = strokePath,
+                            color = borderColor,
+                            style = tailStroke
+                        )
+                    }
+                }
+        )
     }
 }
 
