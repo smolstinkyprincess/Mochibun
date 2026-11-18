@@ -294,6 +294,12 @@ Distributed under the [Apache 2.0 License](LICENSE). Feel free to fork, customiz
 
 ---
 
+## ♡ Support
+
+Mochibun is free, offline, and open-source forever with zero paywalls or subscriptions. If it makes your flip phone cuter or easier to use and you'd like to buy me boba or a snack, you can leave a tip on [Liberapay](https://liberapay.com/crinklecodone/) 🌸✨
+
+---
+
 <div align="center">
 
 made with stardust, ♡ & eepy magic
