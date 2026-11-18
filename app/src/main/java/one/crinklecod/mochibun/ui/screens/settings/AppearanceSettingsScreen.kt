@@ -1,6 +1,7 @@
 package one.crinklecod.mochibun.ui.screens.settings
 
 import one.crinklecod.mochibun.ui.dialogs.ResizeWithKeyboard
+import android.content.Intent
 import android.net.Uri
 import android.view.KeyEvent
 import android.widget.Toast
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -56,6 +58,16 @@ import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.loadSavedTheme
 import one.crinklecod.mochibun.ui.theme.saveTheme
+
+internal const val COMMUNITY_GALLERY_URL = "https://crinklecod.one/Mochibun/community/"
+
+internal fun openCommunityGallery(context: android.content.Context) {
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, COMMUNITY_GALLERY_URL.toUri()))
+    }.onFailure {
+        Toast.makeText(context, "Visit crinklecod.one/Mochibun/community/", Toast.LENGTH_SHORT).show()
+    }
+}
 
 /**
  * Tier 1: Look & Aesthetic Sub-Screen
@@ -143,6 +155,7 @@ internal fun AppearanceSettingsScreen(
         buildList {
             add("theme")
             add("typography")
+            add("community_gallery")
             add("border_style")
             add("pick_border")
             if (hasCustomBorder) add("reset_border")
@@ -168,7 +181,7 @@ internal fun AppearanceSettingsScreen(
 
     val targetCardIndex = remember(focusedIndex, items) {
         when (items.getOrNull(focusedIndex)) {
-            "theme", "typography", "border_style", "pick_border", "reset_border" -> 0
+            "theme", "typography", "community_gallery", "border_style", "pick_border", "reset_border" -> 0
             "name", "sub_display_ticker", "sub_display_style" -> 1
             "icon_pack", "pick_wallpaper", "reset_wallpaper", "pick_mascot", "reset_mascot",
             "mascot_size", "wallpaper_stickers" -> 2
@@ -198,6 +211,10 @@ internal fun AppearanceSettingsScreen(
                 val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
                 PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
                 SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "community_gallery" -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                openCommunityGallery(context)
             }
             "border_style" -> {
                 val nextStyle = activeBorderStyle.next()
@@ -409,6 +426,15 @@ internal fun AppearanceSettingsScreen(
                             PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
                             SoundEffectManager.play(context, SoundEffect.NAV)
                         }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "Community Gallery & Workshop",
+                        subtitle = "crinklecod.one/Mochibun ♡",
+                        icon = "✨",
+                        isFocused = items.getOrNull(focusedIndex) == "community_gallery",
+                        jumpNumber = (items.indexOf("community_gallery") + 1).takeIf { it <= 9 },
+                        onClick = { activateAppearanceItem(items.indexOf("community_gallery")) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(

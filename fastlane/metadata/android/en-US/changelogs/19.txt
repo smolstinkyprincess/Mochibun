@@ -1,0 +1,4 @@
+Mochibun v2.4.0 ♡
+- Custom 9-Slice Card Borders: Add a 16×16 to 256×256 card_border.png inside .mochibundle packs (or pick one in Theme Studio) with crisp pixel-locked corner scaling and clean corner bows.
+- 1-Bit Docomo Icons: Added classic keitai 1-bit Docomo icon styling.
+- Community Gallery & Web Workshop: Added a direct shortcut in Appearance settings to browse themes, Lid LED shows, and build full packs in your browser.

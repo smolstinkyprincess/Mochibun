@@ -222,7 +222,7 @@ private fun LidLedLibrary(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // Row 0 = Create / Import, row 1 = classic shimmer, rows 2.. = animations
+    // Row 0 = Create / Import, row 1 = Community packs link, row 2 = classic shimmer, rows 3.. = animations
     var focusedRow by remember { mutableIntStateOf(0) }
     var focusedCol by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
@@ -230,10 +230,10 @@ private fun LidLedLibrary(
     var pendingExport by remember { mutableStateOf<LidLedAnimation?>(null) }
     // Each animation card has two D-pad rows matching its two chip lines:
     // part 0 = Set Notif / Set Charging, part 1 = Edit / Export / Delete
-    val rowCount = 2 + animations.size * 2
+    val rowCount = 3 + animations.size * 2
 
-    fun animIndexOf(row: Int): Int = if (row < 2) -1 else (row - 2) / 2
-    fun partOf(row: Int): Int = if (row < 2) 0 else (row - 2) % 2
+    fun animIndexOf(row: Int): Int = if (row < 3) -1 else (row - 3) / 2
+    fun partOf(row: Int): Int = if (row < 3) 0 else (row - 3) % 2
 
     LaunchedEffect(rowCount) { focusedRow = focusedRow.coerceIn(0, rowCount - 1) }
 
@@ -270,7 +270,8 @@ private fun LidLedLibrary(
 
     fun colCount(row: Int): Int = when (row) {
         0 -> 2
-        1 -> SET_ACTION_COUNT
+        1 -> 1
+        2 -> SET_ACTION_COUNT
         else -> animations.getOrNull(animIndexOf(row))?.let { anim ->
             if (partOf(row) == 0) SET_ACTION_COUNT else actionsFor(anim).size - SET_ACTION_COUNT
         } ?: 1
@@ -282,6 +283,10 @@ private fun LidLedLibrary(
             return
         }
         if (row == 1) {
+            openCommunityGallery(context)
+            return
+        }
+        if (row == 2) {
             onApply(if (col == 0) LidAnimationSlot.NOTIFICATION else LidAnimationSlot.CHARGING, CLASSIC_ID)
             return
         }
@@ -387,25 +392,38 @@ private fun LidLedLibrary(
                 }
             }
             item {
+                StudioChip(
+                    label = "Get more .mochibunled packs ♡",
+                    isFocused = focusedRow == 1,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        focusedRow = 1
+                        focusedCol = 0
+                        activate(1, 0)
+                    }
+                )
+            }
+            item {
                 AnimationCard(
                     title = "Classic Keitai Light",
                     subtitle = "Shimmer / solid • Outer LED Color",
                     previewColors = null,
                     isNotif = notifId == CLASSIC_ID,
                     isCharging = chargingId == CLASSIC_ID,
-                    isFocused = focusedRow == 1,
+                    isFocused = focusedRow == 2,
                     actions = listOf(LibraryAction.SET_NOTIF.label, LibraryAction.SET_CHARGING.label),
-                    focusedAction = if (focusedRow == 1) focusedCol else -1,
+                    focusedAction = if (focusedRow == 2) focusedCol else -1,
                     armedDelete = false,
                     onAction = { col ->
-                        focusedRow = 1
+                        focusedRow = 2
                         focusedCol = col
-                        activate(1, col)
+                        activate(2, col)
                     }
                 )
             }
             itemsIndexed(animations, key = { _, anim -> anim.id }) { index, anim ->
-                val firstRow = 2 + index * 2
+                val firstRow = 3 + index * 2
                 val cardFocused = animIndexOf(focusedRow) == index
                 val builtIn = LidLedAnimationRepository.isBuiltIn(anim.id)
                 AnimationCard(
