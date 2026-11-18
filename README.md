@@ -7,6 +7,10 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 [Download Latest APK](https://github.com/smolstinkyprincess/Mochibun/releases/latest) • [Setup](#-downloads--setup) • [Screenshots](#-gallery--showcase-) • [Keypad Guide](#️-physical-key-map)
 
+[![Android CI](https://github.com/smolstinkyprincess/Mochibun/actions/workflows/android-ci.yml/badge.svg)](https://github.com/smolstinkyprincess/Mochibun/actions/workflows/android-ci.yml)
+[![Build & Deploy F-Droid Repo + Pages](https://github.com/smolstinkyprincess/Mochibun/actions/workflows/fdroid-pages.yml/badge.svg)](https://github.com/smolstinkyprincess/Mochibun/actions/workflows/fdroid-pages.yml)
+[![F-Droid Repo](https://img.shields.io/badge/F--Droid-Self--Hosted%20Repo-1976D2?style=flat&logo=f-droid&logoColor=white)](https://crinklecod.one/Mochibun/fdroid/repo)
+
 </div>
 
 ---
