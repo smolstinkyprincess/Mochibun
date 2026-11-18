@@ -288,6 +288,102 @@
       font-size: 3rem;
     }
 
+    /* 💡 5-window Lid LED live preview */
+    .led-preview {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 1.1rem 0.85rem;
+      background:
+        radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.88) 0%, transparent 62%),
+        linear-gradient(160deg, var(--whisper-pink) 0%, var(--lavender-haze) 52%, var(--powder-blue) 100%);
+    }
+
+    .led-lid-shell {
+      width: 100%;
+      max-width: 218px;
+      background: rgba(255, 255, 255, 0.86);
+      border: 2px solid rgba(246, 179, 200, 0.75);
+      border-radius: 20px;
+      padding: 0.85rem 0.7rem 0.65rem;
+      box-shadow: var(--shadow-soft), inset 0 2px 0 rgba(255, 255, 255, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .led-lid-caption {
+      font-family: var(--font-display);
+      font-size: 0.72rem;
+      color: var(--cocoa-soft);
+      letter-spacing: 0.03em;
+    }
+
+    .led-window-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.42rem;
+      width: 100%;
+      padding: 0.35rem 0.4rem;
+      border-radius: 14px;
+      background: rgba(244, 235, 253, 0.65);
+      border: 1.5px solid rgba(185, 195, 245, 0.55);
+    }
+
+    .led-window-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.22rem;
+    }
+
+    .led-window {
+      --led-color: #000000;
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      min-height: 30px;
+      border-radius: 9px;
+      background: rgba(234, 221, 248, 0.65);
+      border: 1.5px solid rgba(185, 195, 245, 0.7);
+      box-shadow: inset 0 1px 3px rgba(74, 62, 61, 0.08);
+      transition: background-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease, border-color 0.12s ease;
+    }
+
+    .led-window.is-lit {
+      background:
+        radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.75) 0%, transparent 45%),
+        var(--led-color);
+      border-color: #FFFFFF;
+      box-shadow:
+        0 0 12px var(--led-color),
+        0 0 4px var(--led-color),
+        inset 0 1px 2px rgba(255, 255, 255, 0.75);
+      transform: translateY(-1px);
+    }
+
+    .led-window-label {
+      font-size: 0.62rem;
+      font-weight: 800;
+      color: var(--cocoa-soft);
+      line-height: 1;
+    }
+
+    .led-step-meta {
+      font-family: var(--font-display);
+      font-size: 0.72rem;
+      color: var(--cocoa-soft);
+      background: rgba(255, 255, 255, 0.88);
+      border: 1.5px solid var(--strawberry-milk);
+      border-radius: var(--radius-pill);
+      padding: 0.16rem 0.65rem;
+      box-shadow: var(--shadow-soft);
+    }
+
     .mascot-badge {
       position: absolute;
       top: 10px;
@@ -559,8 +655,15 @@
   </div>
 
   <script>
+    const LID_WINDOW_COUNT = 5;
+    const LID_DEFAULT_STEP_MS = 350;
+    const LID_OFF_HEX = '#000000';
+
     let allItems = [];
     let activeFilter = 'all';
+    const ledSpecCache = new Map();
+    const activeLedControllers = new Map();
+    let ledObserver = null;
 
     function escapeHtml(str) {
       return String(str ?? '')
@@ -570,6 +673,253 @@
         .replace(/"/g, '&quot;');
     }
 
+    function normalizeLidHex(raw) {
+      const clean = String(raw ?? '')
+        .trim()
+        .replace(/^['"]|['"]$/g, '')
+        .replace(/^(?:#|0x|0X)/, '');
+      const rgb = clean.length === 6
+        ? clean
+        : (clean.length === 8 ? clean.slice(2) : '');
+      if (!/^[0-9a-fA-F]{6}$/.test(rgb)) return LID_OFF_HEX;
+      return '#' + rgb.toUpperCase();
+    }
+
+    function sanitizeStepMs(val) {
+      const num = Number(val);
+      if (!Number.isFinite(num) || num <= 0) return LID_DEFAULT_STEP_MS;
+      return Math.min(5000, Math.max(100, Math.round(num)));
+    }
+
+    function sanitizeStepWindows(arr) {
+      const list = Array.isArray(arr) ? arr : (arr && Array.isArray(arr.windows) ? arr.windows : []);
+      const windows = [];
+      for (let i = 0; i < LID_WINDOW_COUNT; i++) {
+        windows.push(normalizeLidHex(list[i] ?? LID_OFF_HEX));
+      }
+      return windows;
+    }
+
+    function buildFallbackSteps(colors) {
+      const palette = (Array.isArray(colors) ? colors : [])
+        .map(normalizeLidHex)
+        .filter((hex) => hex !== LID_OFF_HEX);
+      const safePalette = palette.length ? palette : ['#FF1493'];
+
+      if (safePalette.length === 1) {
+        const c = safePalette[0];
+        return Array.from({ length: LID_WINDOW_COUNT }, (_, lit) =>
+          Array.from({ length: LID_WINDOW_COUNT }, (_, i) => (i === lit ? c : LID_OFF_HEX))
+        );
+      }
+
+      return Array.from({ length: LID_WINDOW_COUNT }, (_, stepIdx) =>
+        Array.from({ length: LID_WINDOW_COUNT }, (_, winIdx) =>
+          safePalette[(winIdx + stepIdx) % safePalette.length]
+        )
+      );
+    }
+
+    function parseLidLedSpec(text) {
+      const trimmed = String(text ?? '').replace(/^\uFEFF/, '').trim();
+      if (!trimmed) return null;
+
+      if (trimmed.startsWith('{')) {
+        const parsed = JSON.parse(trimmed);
+        const stepMs = sanitizeStepMs(parsed.step_ms ?? parsed.stepMs ?? LID_DEFAULT_STEP_MS);
+        const rawSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
+        const steps = rawSteps.slice(0, 16).map(sanitizeStepWindows);
+        return steps.length ? { stepMs, steps } : null;
+      }
+
+      const stepMsMatch = trimmed.match(/^\s*(?:step_ms|stepMs)\s*:\s*(\d+)/m);
+      const stepMs = sanitizeStepMs(stepMsMatch ? Number(stepMsMatch[1]) : LID_DEFAULT_STEP_MS);
+
+      const steps = [];
+      const inlineRegex = /windows\s*:\s*\[([^\]]*)\]/g;
+      let match;
+      while ((match = inlineRegex.exec(trimmed)) !== null && steps.length < 16) {
+        const tokens = match[1]
+          .split(',')
+          .map((tok) => tok.trim().replace(/^['"]|['"]$/g, ''))
+          .filter(Boolean);
+        steps.push(sanitizeStepWindows(tokens));
+      }
+
+      return steps.length ? { stepMs, steps } : null;
+    }
+
+    async function loadLedSpecForItem(item) {
+      const inlineStepMs = item.step_ms ?? item.stepMs;
+      if (Array.isArray(item.steps) && item.steps.length) {
+        return {
+          stepMs: sanitizeStepMs(inlineStepMs ?? LID_DEFAULT_STEP_MS),
+          steps: item.steps.slice(0, 16).map(sanitizeStepWindows)
+        };
+      }
+
+      const fileUrl = item.file;
+      if (fileUrl) {
+        if (ledSpecCache.has(fileUrl)) {
+          return ledSpecCache.get(fileUrl);
+        }
+        try {
+          const res = await fetch(fileUrl);
+          if (res.ok) {
+            const text = await res.text();
+            const parsed = parseLidLedSpec(text);
+            if (parsed && parsed.steps.length) {
+              ledSpecCache.set(fileUrl, parsed);
+              return parsed;
+            }
+          }
+        } catch (err) {
+          console.warn(`Falling back to swatch cycle for ${fileUrl}`, err);
+        }
+      }
+
+      return {
+        stepMs: sanitizeStepMs(inlineStepMs ?? LID_DEFAULT_STEP_MS),
+        steps: buildFallbackSteps(item.colors)
+      };
+    }
+
+    function teardownLedAnimations() {
+      if (ledObserver) {
+        ledObserver.disconnect();
+        ledObserver = null;
+      }
+      activeLedControllers.forEach((ctrl) => ctrl.stop());
+      activeLedControllers.clear();
+    }
+
+    function createLedPreviewMarkup(item, index) {
+      const windowsHtml = Array.from({ length: LID_WINDOW_COUNT }, (_, i) => `
+        <div class="led-window-col">
+          <span class="led-window" data-window-index="${i}"></span>
+          <span class="led-window-label">W${i + 1}</span>
+        </div>
+      `).join('');
+
+      return `
+        <div class="led-preview" data-led-index="${index}" role="img" aria-label="${escapeHtml(item.name)} 5-window lid LED preview">
+          <div class="led-lid-shell">
+            <span class="led-lid-caption">💡 outer lid · 5 windows</span>
+            <div class="led-window-bar">
+              ${windowsHtml}
+            </div>
+          </div>
+          <span class="led-step-meta" data-led-meta>loading pattern...</span>
+        </div>
+      `;
+    }
+
+    function setupLedAnimations(filteredItems) {
+      teardownLedAnimations();
+
+      const previewEls = document.querySelectorAll('.led-preview[data-led-index]');
+      if (!previewEls.length) return;
+
+      if ('IntersectionObserver' in window) {
+        ledObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            const ctrl = activeLedControllers.get(entry.target);
+            if (!ctrl) return;
+            ctrl.inView = entry.isIntersecting;
+            if (entry.isIntersecting && !document.hidden) {
+              ctrl.start();
+            } else {
+              ctrl.stop();
+            }
+          });
+        }, { threshold: 0.1 });
+      }
+
+      previewEls.forEach((el) => {
+        const idx = Number(el.dataset.ledIndex);
+        const item = filteredItems[idx];
+        if (!item) return;
+
+        const windowCells = Array.from(el.querySelectorAll('.led-window'));
+        const metaEl = el.querySelector('[data-led-meta]');
+
+        const ctrl = {
+          steps: buildFallbackSteps(item.colors),
+          stepMs: sanitizeStepMs(item.step_ms ?? item.stepMs ?? LID_DEFAULT_STEP_MS),
+          frame: 0,
+          timerId: null,
+          inView: !ledObserver,
+          renderFrame() {
+            const step = this.steps[this.frame % this.steps.length] || [];
+            for (let i = 0; i < windowCells.length; i++) {
+              const hex = normalizeLidHex(step[i] ?? LID_OFF_HEX);
+              const cell = windowCells[i];
+              if (hex === LID_OFF_HEX) {
+                cell.classList.remove('is-lit');
+                cell.style.setProperty('--led-color', LID_OFF_HEX);
+                cell.title = `W${i + 1}: off`;
+              } else {
+                cell.classList.add('is-lit');
+                cell.style.setProperty('--led-color', hex);
+                cell.title = `W${i + 1}: ${hex}`;
+              }
+            }
+            if (metaEl) {
+              metaEl.textContent = `${this.steps.length} ${this.steps.length === 1 ? 'step' : 'steps'} · ${this.stepMs}ms`;
+            }
+          },
+          start() {
+            if (this.timerId !== null || this.steps.length <= 1) return;
+            this.timerId = window.setInterval(() => {
+              this.frame = (this.frame + 1) % this.steps.length;
+              this.renderFrame();
+            }, this.stepMs);
+          },
+          stop() {
+            if (this.timerId !== null) {
+              window.clearInterval(this.timerId);
+              this.timerId = null;
+            }
+          },
+          updateSpec(spec) {
+            this.stop();
+            this.steps = spec.steps;
+            this.stepMs = spec.stepMs;
+            this.frame = 0;
+            this.renderFrame();
+            if (this.inView && !document.hidden) {
+              this.start();
+            }
+          }
+        };
+
+        ctrl.renderFrame();
+        activeLedControllers.set(el, ctrl);
+
+        if (ledObserver) {
+          ledObserver.observe(el);
+        } else {
+          ctrl.start();
+        }
+
+        loadLedSpecForItem(item).then((spec) => {
+          if (activeLedControllers.get(el) === ctrl && spec) {
+            ctrl.updateSpec(spec);
+          }
+        });
+      });
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      activeLedControllers.forEach((ctrl) => {
+        if (document.hidden) {
+          ctrl.stop();
+        } else if (ctrl.inView) {
+          ctrl.start();
+        }
+      });
+    });
+
     function renderCatalog() {
       const container = document.getElementById('catalog-container');
       const filtered = activeFilter === 'all'
@@ -577,11 +927,12 @@
         : allItems.filter((item) => item.type === activeFilter);
 
       if (!filtered.length) {
+        teardownLedAnimations();
         container.innerHTML = `<div class="status-box" style="grid-column: 1 / -1;">no packs in this category yet — be the first to share one! ♡</div>`;
         return;
       }
 
-      container.innerHTML = filtered.map((item) => {
+      container.innerHTML = filtered.map((item, index) => {
         const isLed = item.type === 'led';
         const pillLabel = isLed ? '💡 lid LED' : '🎀 theme';
         const btnClass = isLed ? 'candy--butter' : 'candy--pink';
@@ -593,9 +944,11 @@
           ? `<span class="mascot-badge">🐰 custom mascot</span>`
           : '';
 
-        const previewHtml = item.preview
-          ? `<img src="${escapeHtml(item.preview)}" alt="${escapeHtml(item.name)} preview" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'preview-placeholder',textContent:'${isLed ? '💡' : '🐰'}'}))">`
-          : `<div class="preview-placeholder">${isLed ? '💡' : '🐰'}</div>`;
+        const previewHtml = isLed
+          ? createLedPreviewMarkup(item, index)
+          : (item.preview
+              ? `<img src="${escapeHtml(item.preview)}" alt="${escapeHtml(item.name)} preview" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'preview-placeholder',textContent:'🐰'}))">`
+              : `<div class="preview-placeholder">🐰</div>`);
 
         return `
           <article class="pack-card">
@@ -615,6 +968,8 @@
           </article>
         `;
       }).join('');
+
+      setupLedAnimations(filtered);
     }
 
     document.querySelectorAll('.filter-btn').forEach((btn) => {

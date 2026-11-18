@@ -1,0 +1,10 @@
+name: "Keitai Rainbow"
+author: "crinklecod.one"
+step_ms: 400
+loop: true
+steps:
+  - windows: ["#FF1493", "#9D00FF", "#00BFFF", "#00FF7F", "#FFD000"]
+  - windows: ["#FFD000", "#FF1493", "#9D00FF", "#00BFFF", "#00FF7F"]
+  - windows: ["#00FF7F", "#FFD000", "#FF1493", "#9D00FF", "#00BFFF"]
+  - windows: ["#00BFFF", "#00FF7F", "#FFD000", "#FF1493", "#9D00FF"]
+  - windows: ["#9D00FF", "#00BFFF", "#00FF7F", "#FFD000", "#FF1493"]

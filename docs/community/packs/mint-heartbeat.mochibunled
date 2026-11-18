@@ -1,0 +1,10 @@
+name: "Mint Heartbeat"
+author: "crinklecod.one"
+step_ms: 280
+loop: true
+steps:
+  - windows: ["#000000", "#000000", "#00FF7F", "#000000", "#000000"]
+  - windows: ["#000000", "#00FF7F", "#00BFFF", "#00FF7F", "#000000"]
+  - windows: ["#00FF7F", "#00BFFF", "#00FF7F", "#00BFFF", "#00FF7F"]
+  - windows: ["#000000", "#00FF7F", "#00BFFF", "#00FF7F", "#000000"]
+  - windows: ["#000000", "#000000", "#000000", "#000000", "#000000"]

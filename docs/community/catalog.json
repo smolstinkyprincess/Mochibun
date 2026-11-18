@@ -1,5 +1,5 @@
 [
-    {
+  {
     "id":              "strawberry_lavender_bunbun",
     "name":            "Strawberry Lavender Bunbun ♡",
     "author":          "emii",
@@ -7,6 +7,31 @@
     "file":            "themes/strawberry_lavender_bunbun.mochibundle",
     "preview":         "previews/strawberry_lavender_bunbun.png",
     "colors":          ["#FFB7D5", "#DCC4F8", "#FFF5F8"],
-    "hasCustomMascot": true
-    }
+    "hasCustomMascot": true,
+    "hasCustomBorder": true
+  },
+  {
+    "id":              "sakura_chase",
+    "name":            "Sakura Chase ♡",
+    "author":          "emii",
+    "type":            "led",
+    "file":            "packs/sakura-chase.mochibunled",
+    "colors":          ["#FF1493"]
+  },
+  {
+    "id":              "keitai_rainbow",
+    "name":            "Keitai Rainbow",
+    "author":          "emii",
+    "type":            "led",
+    "file":            "packs/keitai-rainbow.mochibunled",
+    "colors":          ["#FF1493", "#9D00FF", "#00BFFF", "#00FF7F", "#FFD000"]
+  },
+  {
+    "id":              "mint_heartbeat",
+    "name":            "Mint Heartbeat",
+    "author":          "emii",
+    "type":            "led",
+    "file":            "packs/mint-heartbeat.mochibunled",
+    "colors":          ["#00FF7F", "#00BFFF"]
+  }
 ]

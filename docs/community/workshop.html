@@ -598,6 +598,256 @@
       cursor: pointer;
     }
 
+    /* Wallpaper, Cursor & Live Phone Mockup Section */
+    .wallpaper-cursor-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 1.35rem;
+      align-items: start;
+    }
+    @media (max-width: 820px) {
+      .wallpaper-cursor-grid { grid-template-columns: 1fr; }
+    }
+    .asset-picker-card {
+      background: #FFFDF9;
+      border: 2px solid var(--whisper-pink);
+      border-radius: 18px;
+      padding: 0.9rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+    .asset-picker-card--lavender {
+      border-color: var(--lavender-haze);
+    }
+    .asset-picker-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      font-family: var(--font-display);
+      font-size: 0.98rem;
+      color: var(--cocoa);
+    }
+    .cursor-upload-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.75rem;
+      align-items: stretch;
+    }
+    @media (max-width: 520px) {
+      .cursor-upload-row { grid-template-columns: 1fr; }
+    }
+    .cursor-card-preview-box {
+      width: 112px;
+      min-height: 96px;
+      border-radius: 14px;
+      border: 1.5px dashed rgba(139, 58, 98, 0.32);
+      background: repeating-conic-gradient(rgba(255,255,255,0.65) 0% 25%, rgba(246,179,200,0.2) 0% 50%) 50% / 12px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+      padding: 0.45rem;
+      position: relative;
+      margin-inline: auto;
+    }
+    .cursor-sprite-stage {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #cursor-card-preview-img {
+      max-width: 44px;
+      max-height: 44px;
+      width: auto;
+      height: auto;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      display: none;
+    }
+    .cursor-hotspot-dot {
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #E91E63;
+      border: 1.5px solid #FFFFFF;
+      box-shadow: 0 0 4px rgba(233, 30, 99, 0.75);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      top: 4px;
+      left: 4px;
+    }
+    .cursor-hotspot-dot.is-center {
+      top: 50%;
+      left: 50%;
+    }
+    .phone-mockup-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .phone-mockup-screen {
+      position: relative;
+      width: 240px;
+      height: 400px;
+      max-width: 100%;
+      aspect-ratio: 480 / 800;
+      border-radius: 26px;
+      border: 4px solid #F3D1DC;
+      background: #FFF5F8;
+      box-shadow: var(--shadow-plush), inset 0 0 0 2px rgba(255, 255, 255, 0.75);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 0.55rem 0.65rem 0.65rem;
+      cursor: crosshair;
+      user-select: none;
+    }
+    #phone-wallpaper-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      display: none;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .phone-ui-layer {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      justify-content: space-between;
+      gap: 0.42rem;
+      pointer-events: none;
+    }
+    .phone-statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      font-weight: 800;
+      padding: 0.12rem 0.45rem;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.78);
+      color: #4A2E56;
+    }
+    .phone-card {
+      background: #FCE4EC;
+      border: 2px solid #A04064;
+      border-radius: 14px;
+      padding: 0.42rem 0.55rem;
+      box-shadow: 0 3px 10px rgba(74, 46, 86, 0.12);
+      text-align: center;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+    .phone-greeting-title {
+      font-family: var(--font-display);
+      font-size: 0.78rem;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .phone-greeting-sub {
+      font-size: 0.64rem;
+      font-weight: 700;
+      opacity: 0.82;
+    }
+    .phone-mascot-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+      margin-block: auto;
+    }
+    .phone-mascot-bubble {
+      background: rgba(255, 255, 255, 0.94);
+      border: 1.5px solid #A04064;
+      color: #A04064;
+      font-size: 0.66rem;
+      font-weight: 800;
+      padding: 0.18rem 0.55rem;
+      border-radius: var(--radius-pill);
+      max-width: 96%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 2px 6px rgba(74, 46, 86, 0.12);
+    }
+    #phone-mascot-canvas {
+      width: 76px;
+      height: 76px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    .phone-fav-row {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      gap: 0.35rem;
+      padding-block: 0.15rem;
+    }
+    .phone-fav-slot {
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1.5px solid rgba(160, 64, 100, 0.35);
+      display: grid;
+      place-items: center;
+      font-size: 1.05rem;
+    }
+    .phone-fav-dots {
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      margin-top: 0.1rem;
+    }
+    .phone-cursor-floater {
+      position: absolute;
+      z-index: 3;
+      left: 66%;
+      top: 56%;
+      pointer-events: none;
+      transition: left 0.08s ease-out, top 0.08s ease-out;
+    }
+    .phone-cursor-floater.hotspot-top-left {
+      transform: translate(0, 0);
+    }
+    .phone-cursor-floater.hotspot-center {
+      transform: translate(-50%, -50%);
+    }
+    #phone-cursor-img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      filter: drop-shadow(0 2px 4px rgba(40, 20, 50, 0.28));
+      display: none;
+    }
+    .phone-cursor-default {
+      font-size: 1.15rem;
+      line-height: 1;
+      filter: drop-shadow(0 2px 4px rgba(40, 20, 50, 0.25));
+      display: inline-block;
+    }
+
     .site-footer {
       position: relative;
       background: linear-gradient(180deg, #DCD3F5 0%, #C9C4EE 100%);
@@ -619,11 +869,11 @@
     <div class="wrap">
       <span class="welcome-ribbon">౨ৎ mochibun bundle &amp; mascot workshop ౨ৎ</span>
       <h1>Mascot &amp; Bundle Packer <span class="jp">もちぶん ワークショップ ♡</span></h1>
-      <p class="tagline">Build a fresh <code>.mochibundle</code> from an 8 × 4 <code>mascot_atlas.png</code>, custom card borders &amp; 9-slice <code>card_border.png</code> frames, and 7 custom speech-bubble mood pools — or load an existing <code>.mochibundle</code> to edit without losing its wallpaper, cursor, or palette ♡</p>
+      <p class="tagline">Build a fresh <code>.mochibundle</code> with a custom <code>480 × 800</code> wallpaper, animated <code>.gif</code> / <code>.png</code> cursor, 8 × 4 <code>mascot_atlas.png</code>, custom card borders &amp; 9-slice <code>card_border.png</code> frames, and 7 speech-bubble mood pools — or load an existing <code>.mochibundle</code> to edit and remix ♡</p>
 
       <ul class="candy-pills">
         <li><a class="candy candy--blue" href="./">← back to community gallery</a></li>
-        <li><button class="candy candy--butter" type="button" id="download-template-btn">🎨 download 8×4 starter grid (.png)</button></li>
+        <li><a class="candy candy--butter" href="./templates/mascot_atlas_template.png" download="mascot_atlas_template_256x512.png" id="download-template-btn">🎨 download 8×4 starter grid (.png)</a></li>
         <li><a class="candy candy--pink" href="https://github.com/smolstinkyprincess/Mochibun/issues/new?template=pack_submission.yml" target="_blank" rel="noopener">🎀 submit pack on GitHub</a></li>
       </ul>
     </div>
@@ -736,6 +986,129 @@
         </section>
       </div>
 
+      <!-- Full-Width Panel: Custom Wallpaper, Custom Cursor & Live AT-M120 Phone Mockup -->
+      <section class="panel panel--full" aria-labelledby="wallpaper-cursor-panel-title">
+        <div class="panel-title">
+          <span id="wallpaper-cursor-panel-title">🖼️ Custom Wallpaper, Cursor &amp; Live Phone Mockup 📱</span>
+          <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+            <button class="candy candy--butter candy--sm" type="button" id="clear-wallpaper-btn" style="display:none;">✕ Clear / Remove wallpaper</button>
+            <button class="candy candy--butter candy--sm" type="button" id="clear-cursor-btn" style="display:none;">✕ Clear / Remove cursor</button>
+          </div>
+        </div>
+        <p class="panel-sub">
+          Upload any image as a custom wallpaper (automatically center-cropped &amp; resized on an offscreen <code>480 × 800</code> canvas as <code>wallpaper.png</code>) and a custom <code>.png</code> or animated <code>.gif</code> virtual cursor (preserving raw animation bytes as <code>cursor.png</code> or <code>cursor.gif</code>). Move or tap inside the phone mockup to test your cursor live ♡
+        </p>
+
+        <div class="wallpaper-cursor-grid">
+          <div class="border-controls-stack">
+            <!-- Custom Wallpaper Upload Card -->
+            <div class="asset-picker-card">
+              <div class="asset-picker-header">
+                <span>🌸 Custom Wallpaper (<code>wallpaper.png</code> · 480 × 800 PNG)</span>
+                <button class="candy candy--butter candy--sm" type="button" id="clear-wallpaper-inline-btn" style="display:none;">✕ Clear / Remove</button>
+              </div>
+              <label class="dropzone" id="wallpaper-dropzone">
+                <input type="file" id="wallpaper-input" accept="image/*" aria-label="Pick custom wallpaper image">
+                <span class="dropzone-icon">🏞️</span>
+                <span class="dropzone-title" style="display:block;">Pick custom wallpaper image</span>
+                <span class="dropzone-hint" style="display:block;">Any image/* · Auto-cropped to 480 × 800 PNG (≤ 5 MB)</span>
+              </label>
+              <div class="asset-badges" id="wallpaper-badges" style="margin-top:0.1rem;">
+                <span class="badge">🌸 No custom wallpaper (using palette Background color)</span>
+              </div>
+            </div>
+
+            <!-- Custom Cursor Upload Card -->
+            <div class="asset-picker-card asset-picker-card--lavender">
+              <div class="asset-picker-header">
+                <span>🖱️ Custom Virtual Cursor (<code>cursor.png</code> / <code>cursor.gif</code>)</span>
+                <button class="candy candy--butter candy--sm" type="button" id="clear-cursor-inline-btn" style="display:none;">✕ Clear / Remove</button>
+              </div>
+
+              <div class="cursor-upload-row">
+                <label class="dropzone dropzone--lavender" id="cursor-dropzone">
+                  <input type="file" id="cursor-input" accept="image/png,image/gif,.png,.gif" aria-label="Pick custom cursor PNG or GIF">
+                  <span class="dropzone-icon">🐾</span>
+                  <span class="dropzone-title" style="display:block;">Pick cursor.png or cursor.gif</span>
+                  <span class="dropzone-hint" style="display:block;">Raw bytes preserved so animated GIFs keep every frame (≤ 2 MB)</span>
+                </label>
+
+                <div class="cursor-card-preview-box" title="Crisp pixelated cursor preview with active hotspot marker">
+                  <div class="cursor-sprite-stage">
+                    <img id="cursor-card-preview-img" alt="Custom cursor sprite preview">
+                    <span id="cursor-card-preview-placeholder" style="font-size:1.5rem;">🖱️</span>
+                    <span class="cursor-hotspot-dot" id="cursor-card-hotspot-dot" title="Click hotspot"></span>
+                  </div>
+                  <span style="font-size:0.7rem; font-weight:800; color:var(--cocoa-soft);" id="cursor-card-preview-label">Default pointer</span>
+                </div>
+              </div>
+
+              <div class="field" style="margin-top:0.15rem;">
+                <label for="cursor-hotspot-select">
+                  <span>Cursor Hotspot Alignment (<code>cursor.hotspot</code>)</span>
+                  <span id="cursor-hotspot-subtitle" style="font-weight:600; color:var(--cocoa-soft); font-size:0.76rem;">Top-Left Tip (arrows &amp; wands)</span>
+                </label>
+                <div class="border-select-row">
+                  <select id="cursor-hotspot-select" class="border-select" aria-label="Cursor hotspot alignment">
+                    <option value="TOP_LEFT">TOP_LEFT — Top-Left Tip (ideal for arrows &amp; wands)</option>
+                    <option value="CENTER">CENTER — Center (ideal for crosshairs &amp; paws)</option>
+                  </select>
+                  <div class="slot-tabs" id="cursor-hotspot-pills" style="margin-top:0;" role="group" aria-label="Cursor hotspot quick pills">
+                    <button type="button" class="slot-btn active" data-hotspot="TOP_LEFT">↖ TOP_LEFT</button>
+                    <button type="button" class="slot-btn" data-hotspot="CENTER">⊕ CENTER</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="asset-badges" id="cursor-badges" style="margin-top:0.1rem;">
+                <span class="badge">🖱️ No custom cursor loaded · Hotspot: TOP_LEFT</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive Live AT-M120 Phone Mockup (480x800 aspect) -->
+          <div class="phone-mockup-wrap">
+            <div class="phone-mockup-screen" id="phone-mockup-screen" aria-label="Interactive AT-M120 480x800 live phone preview">
+              <img id="phone-wallpaper-img" alt="Live 480x800 wallpaper preview">
+
+              <div class="phone-ui-layer">
+                <div class="phone-statusbar" id="phone-statusbar">
+                  <span>12:34</span>
+                  <span>📶 ♥♥♥♥ 100%</span>
+                </div>
+
+                <div class="phone-card" id="phone-greeting-card">
+                  <div class="phone-greeting-title" id="phone-greeting-title">✦ Welcome, Mochi User ♡</div>
+                  <div class="phone-greeting-sub" id="phone-greeting-sub">AT-M120 · 480 × 800 preview</div>
+                </div>
+
+                <div class="phone-mascot-zone">
+                  <div class="phone-mascot-bubble" id="phone-mascot-bubble">( ˶ˆᗜˆ˵ ) ♡</div>
+                  <canvas id="phone-mascot-canvas" width="76" height="76"></canvas>
+                </div>
+
+                <div class="phone-card" id="phone-favorites-card">
+                  <div class="phone-fav-row">
+                    <div class="phone-fav-slot" id="phone-fav-slot-0">📞</div>
+                    <div class="phone-fav-slot" id="phone-fav-slot-1">💬</div>
+                    <div class="phone-fav-slot" id="phone-fav-slot-2">🎀</div>
+                  </div>
+                  <div class="phone-fav-dots" id="phone-fav-dots">♥ • •</div>
+                </div>
+              </div>
+
+              <div class="phone-cursor-floater hotspot-top-left" id="phone-cursor-floater">
+                <img id="phone-cursor-img" alt="Floating custom cursor on phone preview">
+                <span class="phone-cursor-default" id="phone-cursor-default">🏹</span>
+              </div>
+            </div>
+            <span style="font-size:0.76rem; color:var(--cocoa-soft); font-weight:700; text-align:center;" id="phone-mockup-caption">
+              Hover or tap phone screen to move cursor · 480 × 800 portrait ratio
+            </span>
+          </div>
+        </div>
+      </section>
+
       <!-- Full-Width Panel: Card Border & 9-Slice Frame -->
       <section class="panel panel--full" aria-labelledby="border-panel-title">
         <div class="panel-title">
@@ -749,12 +1122,12 @@
         <div class="border-workshop-grid">
           <div class="border-controls-stack">
             <div class="field">
-              <label for="border-style-select">
+              <label>
                 <span>Procedural Border Style (<code>palette.borderStyle</code>)</span>
                 <span id="border-style-subtitle" style="font-weight:600; color:var(--cocoa-soft); font-size:0.78rem;">Solid (default 1.5 dp rounded border)</span>
               </label>
               <div class="border-select-row">
-                <select id="border-style-select" class="border-select" aria-label="Procedural card border style">
+                <select id="border-style-select" class="border-select" aria-label="Procedural card border style" style="display:none;">
                   <option value="solid">solid — Solid (default 1.5 dp rounded border)</option>
                   <option value="double">double — Double (concentric double-line trim)</option>
                   <option value="lace">lace — Lace (scalloped keitai lace trim)</option>
@@ -765,13 +1138,21 @@
               </div>
             </div>
 
-            <div class="drop-row" style="margin-bottom:0;">
-              <label class="dropzone" id="card-border-dropzone">
-                <input type="file" id="card-border-input" accept="image/png" aria-label="Pick card_border.png 9-slice file">
-                <span class="dropzone-icon">🖼️</span>
-                <span class="dropzone-title" style="display:block;">Pick card_border.png</span>
-                <span class="dropzone-hint" style="display:block;">16×16 to 256×256 px · PNG ≤ 512 KB</span>
-              </label>
+            <div class="drop-row" style="margin-bottom:0; align-items:stretch;">
+              <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                <label class="dropzone" id="card-border-dropzone" style="flex:1;">
+                  <input type="file" id="card-border-input" accept="image/png" aria-label="Pick card_border.png 9-slice file">
+                  <span class="dropzone-icon">🖼️</span>
+                  <span class="dropzone-title" style="display:block;">Pick card_border.png</span>
+                  <span class="dropzone-hint" style="display:block;">16×16 to 256×256 px · PNG ≤ 512 KB</span>
+                </label>
+                <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.45rem;">
+                  <a class="candy candy--butter candy--sm" href="./templates/card_border_template.png" download="card_border_template.png" id="download-border-template-btn">📐 download border template (.png)</a>
+                </div>
+                <p id="card-border-helper-note" style="font-size:0.78rem; font-weight:700; color:var(--cocoa-soft); margin:0;">
+                  128 × 128 px recommended, 16–256 px supported — 25% corner insets stay unstretched
+                </p>
+              </div>
 
               <div class="slice-control-box">
                 <div class="slice-control-header">
@@ -892,17 +1273,26 @@
     const MAX_POOL_LINES = 20;
     const MAX_ATLAS_BYTES = 1536 * 1024; // 1.5 MB
     const MAX_CARD_BORDER_BYTES = 512 * 1024; // 512 KB
+    const MAX_WALLPAPER_BYTES = 5 * 1024 * 1024; // 5 MB (matches ThemeBundleManager.MAX_WALLPAPER_BYTES)
+    const MAX_CURSOR_BYTES = 2 * 1024 * 1024; // 2 MB (matches ThemeBundleManager.MAX_CURSOR_BYTES)
+    const WALLPAPER_TARGET_WIDTH = 480;
+    const WALLPAPER_TARGET_HEIGHT = 800;
     const MIN_CARD_BORDER_DIM = 16;
     const MAX_CARD_BORDER_DIM = 256;
     const MIN_CARD_BORDER_SLICE = 4;
     const MAX_CARD_BORDER_SLICE = 64;
     const DEFAULT_CARD_BORDER_SLICE = 16;
 
-    // Preserved state from an imported .mochibundle
+    // Preserved / active bundle state
     let importedManifest = null;
     let preservedWallpaperBytes = null;
+    let wallpaperObjectUrl = null;
+    let wallpaperSourceMeta = '';
     let preservedCursorEntryName = null;
     let preservedCursorBytes = null;
+    let cursorObjectUrl = null;
+    let cursorDimensionsLabel = '';
+    let activeCursorHotspot = 'TOP_LEFT';
 
     // Active mascot atlas state
     let atlasBytes = null;
@@ -1101,8 +1491,60 @@
         borderStage.style.background = `linear-gradient(180deg, ${bg}, ${card})`;
         borderStage.style.borderColor = action;
       }
+      updatePhoneMockupTheme();
       drawCardBorderPreview();
     }
+
+    function updatePhoneMockupTheme() {
+      const screen = document.getElementById('phone-mockup-screen');
+      if (!screen) return;
+      const bg = document.getElementById('color-bg-hex').value || '#FFF5F8';
+      const card = document.getElementById('color-card-hex').value || '#FCE4EC';
+      const greeting = document.getElementById('color-greeting-hex').value || '#A04064';
+      const action = document.getElementById('color-action-hex').value || '#A04064';
+      const greetingName = (document.getElementById('greeting-name').value || '').trim() || 'Mochi User';
+      const mascotName = (document.getElementById('mascot-name').value || '').trim() || 'Mochibunny';
+
+      screen.style.background = `linear-gradient(180deg, ${bg} 0%, ${card} 100%)`;
+      screen.style.borderColor = action;
+
+      const greetingCard = document.getElementById('phone-greeting-card');
+      const favCard = document.getElementById('phone-favorites-card');
+      const greetingTitle = document.getElementById('phone-greeting-title');
+      const greetingSub = document.getElementById('phone-greeting-sub');
+      const mascotBubble = document.getElementById('phone-mascot-bubble');
+      const favDots = document.getElementById('phone-fav-dots');
+
+      const cardBgStyle = wallpaperObjectUrl
+        ? `color-mix(in srgb, ${card} 88%, transparent)`
+        : card;
+      [greetingCard, favCard].forEach((el) => {
+        if (!el) return;
+        el.style.backgroundColor = card;
+        el.style.background = cardBgStyle;
+        el.style.borderColor = action;
+        el.style.color = greeting;
+        el.style.borderRadius = activeBorderStyleId === 'pixel' ? '4px' : '14px';
+        el.style.borderStyle = activeBorderStyleId === 'stitch' ? 'dashed' : (activeBorderStyleId === 'double' ? 'double' : 'solid');
+        el.style.borderWidth = activeBorderStyleId === 'double' ? '3px' : '2px';
+      });
+      if (greetingTitle) greetingTitle.textContent = `✦ Welcome, ${greetingName} ♡`;
+      if (greetingSub) greetingSub.textContent = `${mascotName} · 480 × 800`;
+      if (mascotBubble) {
+        mascotBubble.style.borderColor = action;
+        mascotBubble.style.color = greeting;
+      }
+      if (favDots) {
+        favDots.style.color = action;
+      }
+    }
+
+    ['greeting-name', 'mascot-name', 'bundle-name'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', () => updatePhoneMockupTheme());
+      }
+    });
 
     // Exact match to MascotAtlasValidator.sanitizeDialogueLine
     function sanitizeDialogueLine(line) {
@@ -1163,15 +1605,18 @@
 
     function updatePreviewBubble() {
       const bubble = document.getElementById('preview-bubble');
+      const phoneBubble = document.getElementById('phone-mascot-bubble');
       const slot = SLOTS[activeSlotIndex] || SLOTS[0];
       const lines = getSanitizedPool(slot.pool);
+      let text;
       if (lines.length > 0) {
-        const pick = lines[animTick % lines.length];
-        bubble.textContent = pick;
+        text = lines[animTick % lines.length];
       } else {
         const poolDef = DIALOGUE_POOLS.find((p) => p.key === slot.pool);
-        bubble.textContent = poolDef ? poolDef.sample[0] : '( ˶ˆᗜˆ˵ ) ♡';
+        text = poolDef ? poolDef.sample[0] : '( ˶ˆᗜˆ˵ ) ♡';
       }
+      bubble.textContent = text;
+      if (phoneBubble) phoneBubble.textContent = text;
     }
 
     // Sample & Clear buttons
@@ -1272,10 +1717,14 @@
         badges.push(`<span class="badge">🎀 Border style: ${escapeHtml(activeBorderStyleId)}</span>`);
       }
       if (preservedWallpaperBytes) {
-        badges.push(`<span class="badge badge--ok">🖼️ wallpaper.png preserved (${(preservedWallpaperBytes.byteLength / 1024).toFixed(0)} KB)</span>`);
+        badges.push(`<span class="badge badge--ok">🖼️ wallpaper.png: 480×800px (${(preservedWallpaperBytes.byteLength / 1024).toFixed(0)} KB)</span>`);
+      } else {
+        badges.push(`<span class="badge">🖼️ No custom wallpaper</span>`);
       }
       if (preservedCursorBytes && preservedCursorEntryName) {
-        badges.push(`<span class="badge badge--ok">🖱️ ${escapeHtml(preservedCursorEntryName)} preserved</span>`);
+        badges.push(`<span class="badge badge--ok">🖱️ ${escapeHtml(preservedCursorEntryName)} (${(preservedCursorBytes.byteLength / 1024).toFixed(1)} KB · ${escapeHtml(activeCursorHotspot)})</span>`);
+      } else {
+        badges.push(`<span class="badge">🖱️ Default cursor · ${escapeHtml(activeCursorHotspot)}</span>`);
       }
       wrap.innerHTML = badges.join('');
       document.getElementById('clear-atlas-btn').style.display = atlasBytes ? 'inline-flex' : 'none';
@@ -1474,6 +1923,12 @@
         document.getElementById('greeting-name').value = (manifest.greeting && manifest.greeting.userName) || 'Mochi User';
         document.getElementById('mascot-name').value = (manifest.mascot && manifest.mascot.name) || 'Mochibunny';
 
+        if (manifest.cursor && manifest.cursor.hotspot) {
+          setCursorHotspot(manifest.cursor.hotspot);
+        } else {
+          setCursorHotspot('TOP_LEFT');
+        }
+
         if (manifest.palette) {
           setColorField('bg', manifest.palette.bgColorHex || '#FFF5F8');
           setColorField('card', manifest.palette.cardColorHex || '#FCE4EC');
@@ -1488,6 +1943,7 @@
         } else {
           setBorderStyleId('solid');
           syncSliceControls(DEFAULT_CARD_BORDER_SLICE);
+          updateStageColors();
         }
 
         // Populate 7 dialogue pools
@@ -1498,21 +1954,26 @@
           updateDialogueCounter(pool.key);
         });
 
-        // Preserve wallpaper & cursor entries if present
+        // Load wallpaper.png if present in bundle
         const wpEntry = zip.file('wallpaper.png');
-        preservedWallpaperBytes = wpEntry ? await wpEntry.async('uint8array') : null;
+        if (wpEntry && manifest.hasWallpaper !== false) {
+          const wpBytes = await wpEntry.async('uint8array');
+          await loadWallpaperFromPngBytes(wpBytes, 'from bundle');
+        } else {
+          clearCustomWallpaper();
+        }
 
+        // Load cursor.gif or cursor.png if present in bundle
         const cursorGif = zip.file('cursor.gif');
         const cursorPng = zip.file('cursor.png');
-        if (cursorGif) {
-          preservedCursorEntryName = 'cursor.gif';
-          preservedCursorBytes = await cursorGif.async('uint8array');
-        } else if (cursorPng) {
-          preservedCursorEntryName = 'cursor.png';
-          preservedCursorBytes = await cursorPng.async('uint8array');
+        if (cursorGif && manifest.hasCustomCursor !== false) {
+          const curBytes = await cursorGif.async('uint8array');
+          await loadCursorFromBytes(curBytes, 'cursor.gif');
+        } else if (cursorPng && manifest.hasCustomCursor !== false) {
+          const curBytes = await cursorPng.async('uint8array');
+          await loadCursorFromBytes(curBytes, 'cursor.png');
         } else {
-          preservedCursorEntryName = null;
-          preservedCursorBytes = null;
+          clearCustomCursor();
         }
 
         // Load card_border.png if present (respecting manifest.palette.hasCustomCardBorder !== false)
@@ -1545,6 +2006,394 @@
       } catch (err) {
         renderStatusBadges('Could not read bundle: ' + (err.message || 'invalid zip'));
       }
+    });
+
+    // ── Custom Wallpaper (480x800 offscreen PNG resize/crop) & Custom Cursor (.png/.gif) ──
+
+    function hasGifSignature(uint8Array) {
+      if (!uint8Array || uint8Array.byteLength < 6) return false;
+      // GIF87a or GIF89a
+      return (
+        uint8Array[0] === 0x47 &&
+        uint8Array[1] === 0x49 &&
+        uint8Array[2] === 0x46 &&
+        uint8Array[3] === 0x38 &&
+        (uint8Array[4] === 0x37 || uint8Array[4] === 0x39) &&
+        uint8Array[5] === 0x61
+      );
+    }
+
+    function normalizeHotspot(raw) {
+      const cleaned = String(raw || '').trim().toUpperCase();
+      return cleaned === 'CENTER' ? 'CENTER' : 'TOP_LEFT';
+    }
+
+    function setCursorHotspot(rawHotspot) {
+      activeCursorHotspot = normalizeHotspot(rawHotspot);
+      const selectEl = document.getElementById('cursor-hotspot-select');
+      if (selectEl) selectEl.value = activeCursorHotspot;
+      const pillsEl = document.getElementById('cursor-hotspot-pills');
+      if (pillsEl) {
+        pillsEl.querySelectorAll('.slot-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.hotspot === activeCursorHotspot);
+        });
+      }
+      const subEl = document.getElementById('cursor-hotspot-subtitle');
+      if (subEl) {
+        subEl.textContent = activeCursorHotspot === 'CENTER'
+          ? 'Center (crosshairs & paws)'
+          : 'Top-Left Tip (arrows & wands)';
+      }
+      const dotEl = document.getElementById('cursor-card-hotspot-dot');
+      if (dotEl) {
+        dotEl.classList.toggle('is-center', activeCursorHotspot === 'CENTER');
+      }
+      const floaterEl = document.getElementById('phone-cursor-floater');
+      if (floaterEl) {
+        floaterEl.classList.toggle('hotspot-center', activeCursorHotspot === 'CENTER');
+        floaterEl.classList.toggle('hotspot-top-left', activeCursorHotspot !== 'CENTER');
+      }
+      renderCursorBadges();
+      renderStatusBadges();
+    }
+
+    document.getElementById('cursor-hotspot-select').addEventListener('change', (e) => {
+      setCursorHotspot(e.target.value);
+    });
+    document.querySelectorAll('#cursor-hotspot-pills .slot-btn').forEach((btn) => {
+      btn.addEventListener('click', () => setCursorHotspot(btn.dataset.hotspot));
+    });
+
+    function renderWallpaperBadges(extraError) {
+      const wrap = document.getElementById('wallpaper-badges');
+      if (!wrap) return;
+      const badges = [];
+      if (extraError) {
+        badges.push(`<span class="badge badge--warn">⚠️ ${escapeHtml(extraError)}</span>`);
+      }
+      if (preservedWallpaperBytes) {
+        const kb = (preservedWallpaperBytes.byteLength / 1024).toFixed(1);
+        const metaSuffix = wallpaperSourceMeta ? ` · ${escapeHtml(wallpaperSourceMeta)}` : '';
+        badges.push(`<span class="badge badge--ok">🖼️ wallpaper.png ready: 480×800 px · ${kb} KB${metaSuffix}</span>`);
+      } else {
+        badges.push(`<span class="badge">🌸 No custom wallpaper (using palette Background color)</span>`);
+      }
+      wrap.innerHTML = badges.join('');
+
+      const hasWp = Boolean(preservedWallpaperBytes);
+      const topBtn = document.getElementById('clear-wallpaper-btn');
+      const inlineBtn = document.getElementById('clear-wallpaper-inline-btn');
+      if (topBtn) topBtn.style.display = hasWp ? 'inline-flex' : 'none';
+      if (inlineBtn) inlineBtn.style.display = hasWp ? 'inline-flex' : 'none';
+    }
+
+    function applyWallpaperPreviewUrl(nextUrl) {
+      if (wallpaperObjectUrl && wallpaperObjectUrl !== nextUrl) {
+        URL.revokeObjectURL(wallpaperObjectUrl);
+      }
+      wallpaperObjectUrl = nextUrl || null;
+      const phoneWpImg = document.getElementById('phone-wallpaper-img');
+      if (phoneWpImg) {
+        if (wallpaperObjectUrl) {
+          phoneWpImg.src = wallpaperObjectUrl;
+          phoneWpImg.style.display = 'block';
+        } else {
+          phoneWpImg.removeAttribute('src');
+          phoneWpImg.style.display = 'none';
+        }
+      }
+      updatePhoneMockupTheme();
+    }
+
+    async function cropAndEncodeWallpaperFile(file) {
+      const srcUrl = URL.createObjectURL(file);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('Could not decode selected wallpaper image'));
+          i.src = srcUrl;
+        });
+        const srcW = img.naturalWidth;
+        const srcH = img.naturalHeight;
+        if (srcW <= 0 || srcH <= 0) {
+          renderWallpaperBadges('Invalid image dimensions');
+          return false;
+        }
+
+        // Center-crop (cover) onto an offscreen 480 x 800 canvas and encode as PNG
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = WALLPAPER_TARGET_WIDTH;
+        offCanvas.height = WALLPAPER_TARGET_HEIGHT;
+        const offCtx = offCanvas.getContext('2d');
+        const scale = Math.max(WALLPAPER_TARGET_WIDTH / srcW, WALLPAPER_TARGET_HEIGHT / srcH);
+        const cropW = WALLPAPER_TARGET_WIDTH / scale;
+        const cropH = WALLPAPER_TARGET_HEIGHT / scale;
+        const cropX = (srcW - cropW) / 2;
+        const cropY = (srcH - cropH) / 2;
+        offCtx.drawImage(
+          img,
+          cropX, cropY, cropW, cropH,
+          0, 0, WALLPAPER_TARGET_WIDTH, WALLPAPER_TARGET_HEIGHT
+        );
+
+        const pngBlob = await new Promise((resolve, reject) => {
+          offCanvas.toBlob((b) => {
+            if (b) resolve(b);
+            else reject(new Error('Failed to encode 480×800 wallpaper.png'));
+          }, 'image/png');
+        });
+        const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
+        if (pngBytes.byteLength > MAX_WALLPAPER_BYTES) {
+          renderWallpaperBadges('Encoded wallpaper.png exceeds 5 MB limit');
+          return false;
+        }
+
+        preservedWallpaperBytes = pngBytes;
+        wallpaperSourceMeta = (srcW === WALLPAPER_TARGET_WIDTH && srcH === WALLPAPER_TARGET_HEIGHT)
+          ? 'exact 480×800'
+          : `cropped from ${srcW}×${srcH}`;
+        const previewUrl = URL.createObjectURL(pngBlob);
+        applyWallpaperPreviewUrl(previewUrl);
+        renderWallpaperBadges();
+        renderStatusBadges();
+        return true;
+      } catch (err) {
+        renderWallpaperBadges(err.message || 'Could not process wallpaper image');
+        return false;
+      } finally {
+        URL.revokeObjectURL(srcUrl);
+      }
+    }
+
+    async function loadWallpaperFromPngBytes(uint8Array, sourceLabel) {
+      if (!uint8Array || uint8Array.byteLength === 0) {
+        clearCustomWallpaper();
+        return false;
+      }
+      if (uint8Array.byteLength > MAX_WALLPAPER_BYTES) {
+        renderWallpaperBadges('wallpaper.png exceeds 5 MB limit');
+        return false;
+      }
+      const blob = new Blob([uint8Array], { type: 'image/png' });
+      const previewUrl = URL.createObjectURL(blob);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('Could not decode wallpaper.png'));
+          i.src = previewUrl;
+        });
+        // If imported bundle wallpaper is not 480x800 PNG, normalize it to 480x800 PNG
+        if (img.naturalWidth !== WALLPAPER_TARGET_WIDTH || img.naturalHeight !== WALLPAPER_TARGET_HEIGHT || !hasPngSignature(uint8Array)) {
+          URL.revokeObjectURL(previewUrl);
+          const normFile = new File([uint8Array], 'wallpaper.png', { type: 'image/png' });
+          return await cropAndEncodeWallpaperFile(normFile);
+        }
+        preservedWallpaperBytes = uint8Array;
+        wallpaperSourceMeta = sourceLabel || `${img.naturalWidth}×${img.naturalHeight}`;
+        applyWallpaperPreviewUrl(previewUrl);
+        renderWallpaperBadges();
+        renderStatusBadges();
+        return true;
+      } catch (err) {
+        URL.revokeObjectURL(previewUrl);
+        renderWallpaperBadges(err.message || 'Invalid wallpaper.png');
+        return false;
+      }
+    }
+
+    function clearCustomWallpaper() {
+      preservedWallpaperBytes = null;
+      wallpaperSourceMeta = '';
+      applyWallpaperPreviewUrl(null);
+      const input = document.getElementById('wallpaper-input');
+      if (input) input.value = '';
+      renderWallpaperBadges();
+      renderStatusBadges();
+    }
+
+    document.getElementById('wallpaper-input').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      await cropAndEncodeWallpaperFile(file);
+    });
+    document.getElementById('clear-wallpaper-btn').addEventListener('click', clearCustomWallpaper);
+    document.getElementById('clear-wallpaper-inline-btn').addEventListener('click', clearCustomWallpaper);
+
+    function renderCursorBadges(extraError) {
+      const wrap = document.getElementById('cursor-badges');
+      if (!wrap) return;
+      const badges = [];
+      if (extraError) {
+        badges.push(`<span class="badge badge--warn">⚠️ ${escapeHtml(extraError)}</span>`);
+      }
+      if (preservedCursorBytes && preservedCursorEntryName) {
+        const kb = (preservedCursorBytes.byteLength / 1024).toFixed(1);
+        const dimText = cursorDimensionsLabel ? ` · ${escapeHtml(cursorDimensionsLabel)}` : '';
+        badges.push(`<span class="badge badge--ok">🖱️ ${escapeHtml(preservedCursorEntryName)}${dimText} · ${kb} KB · Hotspot: ${escapeHtml(activeCursorHotspot)}</span>`);
+      } else {
+        badges.push(`<span class="badge">🖱️ No custom cursor loaded · Hotspot: ${escapeHtml(activeCursorHotspot)}</span>`);
+      }
+      wrap.innerHTML = badges.join('');
+
+      const hasCur = Boolean(preservedCursorBytes && preservedCursorEntryName);
+      const topBtn = document.getElementById('clear-cursor-btn');
+      const inlineBtn = document.getElementById('clear-cursor-inline-btn');
+      if (topBtn) topBtn.style.display = hasCur ? 'inline-flex' : 'none';
+      if (inlineBtn) inlineBtn.style.display = hasCur ? 'inline-flex' : 'none';
+    }
+
+    function applyCursorPreviewUrl(nextUrl, entryName, dimLabel) {
+      if (cursorObjectUrl && cursorObjectUrl !== nextUrl) {
+        URL.revokeObjectURL(cursorObjectUrl);
+      }
+      cursorObjectUrl = nextUrl || null;
+      cursorDimensionsLabel = dimLabel || '';
+
+      const cardImg = document.getElementById('cursor-card-preview-img');
+      const cardPlaceholder = document.getElementById('cursor-card-preview-placeholder');
+      const cardLabel = document.getElementById('cursor-card-preview-label');
+      const phoneCursorImg = document.getElementById('phone-cursor-img');
+      const phoneCursorDefault = document.getElementById('phone-cursor-default');
+
+      if (cursorObjectUrl && entryName) {
+        if (cardImg) {
+          cardImg.src = cursorObjectUrl;
+          cardImg.style.display = 'block';
+        }
+        if (cardPlaceholder) cardPlaceholder.style.display = 'none';
+        if (cardLabel) cardLabel.textContent = entryName;
+        if (phoneCursorImg) {
+          phoneCursorImg.src = cursorObjectUrl;
+          phoneCursorImg.style.display = 'block';
+        }
+        if (phoneCursorDefault) phoneCursorDefault.style.display = 'none';
+      } else {
+        if (cardImg) {
+          cardImg.removeAttribute('src');
+          cardImg.style.display = 'none';
+        }
+        if (cardPlaceholder) cardPlaceholder.style.display = 'inline';
+        if (cardLabel) cardLabel.textContent = 'Default pointer';
+        if (phoneCursorImg) {
+          phoneCursorImg.removeAttribute('src');
+          phoneCursorImg.style.display = 'none';
+        }
+        if (phoneCursorDefault) phoneCursorDefault.style.display = 'inline-block';
+      }
+    }
+
+    async function loadCursorFromBytes(uint8Array, filenameHint) {
+      if (!uint8Array || uint8Array.byteLength === 0) {
+        clearCustomCursor();
+        return false;
+      }
+      if (uint8Array.byteLength > MAX_CURSOR_BYTES) {
+        renderCursorBadges('Cursor file exceeds 2 MB limit');
+        return false;
+      }
+
+      const isGif = hasGifSignature(uint8Array);
+      const isPng = hasPngSignature(uint8Array);
+      if (!isGif && !isPng) {
+        renderCursorBadges('Cursor must be a valid .png or .gif image');
+        return false;
+      }
+
+      const entryName = isGif ? 'cursor.gif' : 'cursor.png';
+      const mimeType = isGif ? 'image/gif' : 'image/png';
+      const blob = new Blob([uint8Array], { type: mimeType });
+      const previewUrl = URL.createObjectURL(blob);
+
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error(`Could not decode ${filenameHint || entryName}`));
+          i.src = previewUrl;
+        });
+        // Keep exact raw bytes so animated GIFs keep all frames
+        preservedCursorBytes = uint8Array;
+        preservedCursorEntryName = entryName;
+        applyCursorPreviewUrl(previewUrl, entryName, `${img.naturalWidth}×${img.naturalHeight} px`);
+        renderCursorBadges();
+        renderStatusBadges();
+        return true;
+      } catch (err) {
+        URL.revokeObjectURL(previewUrl);
+        renderCursorBadges(err.message || 'Invalid cursor file');
+        return false;
+      }
+    }
+
+    function clearCustomCursor() {
+      preservedCursorBytes = null;
+      preservedCursorEntryName = null;
+      applyCursorPreviewUrl(null, null, '');
+      const input = document.getElementById('cursor-input');
+      if (input) input.value = '';
+      renderCursorBadges();
+      renderStatusBadges();
+    }
+
+    document.getElementById('cursor-input').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const buf = await file.arrayBuffer();
+      await loadCursorFromBytes(new Uint8Array(buf), file.name);
+    });
+    document.getElementById('clear-cursor-btn').addEventListener('click', clearCustomCursor);
+    document.getElementById('clear-cursor-inline-btn').addEventListener('click', clearCustomCursor);
+
+    // Interactive cursor positioning inside the live phone mockup
+    const phoneScreenEl = document.getElementById('phone-mockup-screen');
+    const phoneCursorFloaterEl = document.getElementById('phone-cursor-floater');
+    function movePhoneMockupCursor(clientX, clientY) {
+      if (!phoneScreenEl || !phoneCursorFloaterEl) return;
+      const rect = phoneScreenEl.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const relX = Math.max(8, Math.min(rect.width - 16, clientX - rect.left));
+      const relY = Math.max(8, Math.min(rect.height - 16, clientY - rect.top));
+      phoneCursorFloaterEl.style.left = `${((relX / rect.width) * 100).toFixed(1)}%`;
+      phoneCursorFloaterEl.style.top = `${((relY / rect.height) * 100).toFixed(1)}%`;
+    }
+    if (phoneScreenEl) {
+      phoneScreenEl.addEventListener('mousemove', (e) => movePhoneMockupCursor(e.clientX, e.clientY));
+      phoneScreenEl.addEventListener('click', (e) => movePhoneMockupCursor(e.clientX, e.clientY));
+      phoneScreenEl.addEventListener('touchmove', (e) => {
+        if (e.touches && e.touches[0]) {
+          movePhoneMockupCursor(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: true });
+    }
+
+    // Drag-and-drop highlight & file routing for all dropzones
+    [
+      { zoneId: 'wallpaper-dropzone', inputId: 'wallpaper-input' },
+      { zoneId: 'cursor-dropzone', inputId: 'cursor-input' },
+      { zoneId: 'bundle-dropzone', inputId: 'bundle-input' },
+      { zoneId: 'atlas-dropzone', inputId: 'atlas-input' },
+      { zoneId: 'card-border-dropzone', inputId: 'card-border-input' }
+    ].forEach(({ zoneId, inputId }) => {
+      const zone = document.getElementById(zoneId);
+      const input = document.getElementById(inputId);
+      if (!zone || !input) return;
+      zone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        zone.classList.add('dragover');
+      });
+      zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          const dt = new DataTransfer();
+          dt.items.add(e.dataTransfer.files[0]);
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change'));
+        }
+      });
     });
 
     // Live Mini Card Border Preview (240 x 120 px)
@@ -1831,9 +2680,17 @@
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
+    const phoneMascotCanvas = document.getElementById('phone-mascot-canvas');
+    const phoneMascotCtx = phoneMascotCanvas ? phoneMascotCanvas.getContext('2d') : null;
+    if (phoneMascotCtx) phoneMascotCtx.imageSmoothingEnabled = false;
+
     function drawCurrentFrame() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.imageSmoothingEnabled = false;
+      if (phoneMascotCtx && phoneMascotCanvas) {
+        phoneMascotCtx.clearRect(0, 0, phoneMascotCanvas.width, phoneMascotCanvas.height);
+        phoneMascotCtx.imageSmoothingEnabled = false;
+      }
 
       const slotDef = SLOTS[activeSlotIndex] || SLOTS[0];
       if (atlasImage && atlasLayout) {
@@ -1846,6 +2703,13 @@
           sx, sy, atlasLayout.frameWidth, atlasLayout.frameHeight,
           0, 0, canvas.width, canvas.height
         );
+        if (phoneMascotCtx && phoneMascotCanvas) {
+          phoneMascotCtx.drawImage(
+            atlasImage,
+            sx, sy, atlasLayout.frameWidth, atlasLayout.frameHeight,
+            0, 0, phoneMascotCanvas.width, phoneMascotCanvas.height
+          );
+        }
       } else {
         // Cozy placeholder bunny bounce when no custom atlas is loaded yet
         const bob = (animTick % 2 === 0) ? 0 : -4;
@@ -1858,6 +2722,15 @@
         ctx.fillStyle = '#8B3A62';
         ctx.fillText(slotDef.label, canvas.width / 2, canvas.height - 14);
         ctx.restore();
+
+        if (phoneMascotCtx && phoneMascotCanvas) {
+          phoneMascotCtx.save();
+          phoneMascotCtx.font = '38px sans-serif';
+          phoneMascotCtx.textAlign = 'center';
+          phoneMascotCtx.textBaseline = 'middle';
+          phoneMascotCtx.fillText('🐰', phoneMascotCanvas.width / 2, phoneMascotCanvas.height / 2 + (bob / 2));
+          phoneMascotCtx.restore();
+        }
       }
     }
 
@@ -1870,7 +2743,9 @@
     }, 250);
 
     // Download 8x4 starter grid template PNG (256x512, 64x64 cells)
-    document.getElementById('download-template-btn').addEventListener('click', () => {
+    document.getElementById('download-template-btn').addEventListener('click', (e) => {
+      if (window.location.protocol !== 'file:') return; // allow native <a download> over HTTP/HTTPS
+      e.preventDefault();
       const cell = 64;
       const cols = 4;
       const rows = 8;
@@ -1896,6 +2771,66 @@
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'mascot_atlas_template_256x512.png';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+      }, 'image/png');
+    });
+
+    // Download 128x128 9-slice card border template PNG (32x32 corners, 32px edges, 64x64 transparent center cutout)
+    document.getElementById('download-border-template-btn').addEventListener('click', (e) => {
+      if (window.location.protocol !== 'file:') return; // allow native <a download> over HTTP/HTTPS
+      e.preventDefault();
+      const W = 128;
+      const H = 128;
+      const slice = 32;
+      const bCanvas = document.createElement('canvas');
+      bCanvas.width = W;
+      bCanvas.height = H;
+      const bCtx = bCanvas.getContext('2d');
+      bCtx.imageSmoothingEnabled = false;
+
+      // 4x4 pixel-grid tiles in corners (pink) and edges (lavender), leaving 64x64 center (32..95, 32..95) transparent
+      for (let y = 0; y < H; y += 4) {
+        for (let x = 0; x < W; x += 4) {
+          if (x >= slice && x < W - slice && y >= slice && y < H - slice) continue;
+          const isCorner = (x < slice || x >= W - slice) && (y < slice || y >= H - slice);
+          const parity = ((x / 4) + (y / 4)) % 2;
+          if (isCorner) {
+            bCtx.fillStyle = parity === 0 ? 'rgba(255, 228, 238, 0.86)' : 'rgba(255, 209, 225, 0.86)';
+          } else {
+            bCtx.fillStyle = parity === 0 ? 'rgba(239, 232, 253, 0.80)' : 'rgba(226, 214, 250, 0.80)';
+          }
+          bCtx.fillRect(x, y, 4, 4);
+        }
+      }
+
+      // 4 corner 32x32 outlines
+      bCtx.strokeStyle = '#D85A88';
+      bCtx.lineWidth = 1;
+      [[0, 0, 'TL'], [W - slice, 0, 'TR'], [0, H - slice, 'BL'], [W - slice, H - slice, 'BR']].forEach(([cx, cy, label]) => {
+        bCtx.strokeRect(cx + 0.5, cy + 0.5, slice - 1, slice - 1);
+        bCtx.fillStyle = '#8B3A62';
+        bCtx.font = 'bold 8px monospace';
+        bCtx.textAlign = 'center';
+        bCtx.fillText(label, cx + 16, cy + 14);
+        bCtx.fillText('32×32', cx + 16, cy + 24);
+      });
+
+      // 4 edge stretch labels & 64x64 cutout inner border
+      bCtx.strokeStyle = '#7E62B8';
+      bCtx.strokeRect(slice - 0.5, slice - 0.5, 65, 65);
+      bCtx.fillStyle = '#5E35B1';
+      bCtx.font = 'bold 8px monospace';
+      bCtx.textAlign = 'center';
+      bCtx.fillText('↔ 64×32', 64, 19);
+      bCtx.fillText('↔ 64×32', 64, 115);
+      bCtx.fillText('↕', 16, 67);
+      bCtx.fillText('↕', 112, 67);
+
+      bCanvas.toBlob((blob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'card_border_template.png';
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 1500);
       }, 'image/png');
@@ -1938,6 +2873,20 @@
         });
       }
 
+      const baseCursor = (base.cursor && typeof base.cursor === 'object') ? base.cursor : {
+        baseVelocity: 10.0,
+        accelerationMulti: 1.08,
+        pointerSizeDp: 32.0,
+        clickMethod: 'ACCESSIBILITY_GESTURE',
+        hotspot: 'TOP_LEFT',
+        tapStepPx: 3,
+        maxSpeedPxPerSec: 650,
+        accelRampMs: 750
+      };
+      const cursorConfig = Object.assign({}, baseCursor, {
+        hotspot: normalizeHotspot(activeCursorHotspot)
+      });
+
       const manifest = {
         bundleVersion: 1,
         bundleName: bundleName,
@@ -1959,16 +2908,7 @@
           hasCustomCardBorder: hasCustomCardBorder,
           cardBorderSlicePx: exportedSlicePx
         },
-        cursor: base.cursor || {
-          baseVelocity: 5.0,
-          accelerationMulti: 1.8,
-          pointerSizeDp: 24.0,
-          clickMethod: 'AUTO',
-          hotspot: 'TOP_LEFT',
-          tapStepPx: 8,
-          maxSpeedPxPerSec: 420,
-          accelRampMs: 320
-        },
+        cursor: cursorConfig,
         hasWallpaper: Boolean(preservedWallpaperBytes),
         hasCustomCursor: Boolean(preservedCursorBytes && preservedCursorEntryName),
         hasCustomMascot: Boolean(mascotConfig),
@@ -1999,6 +2939,9 @@
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     });
 
+    setCursorHotspot('TOP_LEFT');
+    renderWallpaperBadges();
+    renderCursorBadges();
     updateStageColors();
     renderCardBorderBadges();
     drawCardBorderPreview();
