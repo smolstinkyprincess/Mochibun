@@ -27,8 +27,8 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run JVM Unit Tests & Android Lint
-        run: ./gradlew testDebugUnitTest lintDebug --stacktrace
+      - name: Run JVM Unit Tests, Android Lint & Release Manifest Merge
+        run: ./gradlew testDebugUnitTest lintDebug processReleaseManifest --stacktrace
 
       - name: Verify 0 NewApi Lint Violations (minSdk 27 guard)
         run: |
@@ -38,3 +38,19 @@ jobs:
             grep -C 3 'id="NewApi"' "$REPORT"
             exit 1
           fi
+
+      - name: Verify No INTERNET or CAMERA Permission in Merged Release Manifest
+        run: |
+          MANIFEST="app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "::error::Missing merged release manifest at $MANIFEST"
+            exit 1
+          fi
+          if grep -Eq 'android\.permission\.(INTERNET|CAMERA)' "$MANIFEST"; then
+            echo "::error::Unexpected network or camera permission in merged release manifest:"
+            grep -E 'android\.permission\.(INTERNET|CAMERA)' "$MANIFEST"
+            exit 1
+          fi
+
+      - name: Validate Community Gallery Catalog & Packs
+        run: python3 tools/validate_community_packs.py

@@ -1132,6 +1132,262 @@
         padding: 0.9rem 0.75rem;
       }
     }
+
+    /* Mode Switcher & New Panels */
+    .mode-tabs {
+      display: flex;
+      gap: 0.65rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+
+    .mode-tab {
+      font-family: var(--font-display);
+      font-size: 0.96rem;
+      border-radius: var(--radius-pill);
+      padding: 0.62rem 1.35rem;
+      border: 2px solid var(--periwinkle);
+      background: var(--card-solid);
+      color: var(--cocoa);
+      cursor: pointer;
+      box-shadow: var(--shadow-soft);
+      transition: transform 0.2s var(--bounce), background 0.15s, border-color 0.15s;
+    }
+
+    .mode-tab:hover { transform: translateY(-2px); }
+    .mode-tab.active {
+      background: linear-gradient(135deg, #FFD3E2, #EADDF8);
+      border-color: var(--strawberry-deep);
+      color: #4A2E56;
+    }
+
+    .slot-frames-box {
+      margin-top: 0.75rem;
+      padding: 0.65rem 0.75rem;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1.5px solid var(--lavender-haze);
+    }
+
+    .slot-frames-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.45rem;
+      margin-top: 0.45rem;
+    }
+
+    @media (max-width: 640px) {
+      .slot-frames-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    .slot-frame-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: var(--cocoa-soft);
+      background: var(--cream);
+      border: 1px solid #F0D9E8;
+      border-radius: 10px;
+      padding: 0.25rem 0.45rem;
+    }
+
+    .slot-frame-item input {
+      width: 46px;
+      border: 1.5px solid #EADDF8;
+      border-radius: 8px;
+      padding: 0.15rem 0.25rem;
+      font-family: monospace;
+      font-weight: 800;
+      font-size: 0.78rem;
+      text-align: center;
+      color: var(--cocoa);
+      background: #fff;
+    }
+
+    .roundness-control {
+      margin-top: 0.75rem;
+      padding: 0.55rem 0.7rem;
+      border-radius: 14px;
+      background: var(--cream);
+      border: 1.5px solid #EADDF8;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .roundness-control-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: var(--cocoa);
+    }
+
+    .roundness-control input[type="range"] {
+      width: 100%;
+      accent-color: #D85A88;
+    }
+
+    .submission-box {
+      margin-top: 0.9rem;
+      background: var(--card-solid);
+      border: 2px dashed var(--periwinkle);
+      border-radius: 20px;
+      padding: 0.95rem 1.1rem;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .submission-box pre {
+      margin-top: 0.5rem;
+      background: #2B1F36;
+      color: #FFE8F2;
+      padding: 0.75rem 0.9rem;
+      border-radius: 14px;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* Lid LED Studio */
+    .led-lid-stage {
+      background: #1B1325;
+      border: 2.5px solid #4A2E56;
+      border-radius: 22px;
+      padding: 1rem 0.95rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.65rem;
+      box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35);
+    }
+
+    .led-window-bar {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.55rem;
+      width: 100%;
+      max-width: 340px;
+    }
+
+    .led-win-cell {
+      aspect-ratio: 1 / 1.18;
+      border-radius: 12px;
+      background: #100B17;
+      border: 2px solid #3C2A4F;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0.28rem;
+      cursor: pointer;
+      transition: transform 0.12s, box-shadow 0.15s, background 0.15s;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 0.68rem;
+      font-weight: 800;
+    }
+
+    .led-win-cell:hover { transform: translateY(-2px); }
+
+    .led-win-cell.is-lit {
+      background: var(--led-color, #FF1493);
+      border-color: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 18px var(--led-color, #FF1493);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+    }
+
+    .led-swatch-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin: 0.55rem 0 0.75rem;
+    }
+
+    .led-swatch-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.38rem;
+      border-radius: var(--radius-pill);
+      padding: 0.32rem 0.72rem;
+      font-size: 0.78rem;
+      font-weight: 800;
+      border: 2px solid #EADDF8;
+      background: var(--card-solid);
+      color: var(--cocoa);
+      cursor: pointer;
+    }
+
+    .led-swatch-chip.active {
+      border-color: var(--cocoa);
+      background: var(--whisper-pink);
+      transform: translateY(-1px);
+    }
+
+    .led-swatch-dot {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(0, 0, 0, 0.22);
+      flex-shrink: 0;
+    }
+
+    .led-steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      max-height: 390px;
+      overflow-y: auto;
+      padding-right: 0.2rem;
+    }
+
+    .led-step-row {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.42rem 0.55rem;
+      border-radius: 14px;
+      background: var(--cream);
+      border: 1.5px solid #EADDF8;
+      flex-wrap: wrap;
+    }
+
+    .led-step-row.active {
+      border-color: var(--strawberry-deep);
+      background: var(--whisper-pink);
+    }
+
+    .led-step-num {
+      font-family: monospace;
+      font-weight: 800;
+      font-size: 0.78rem;
+      color: var(--cocoa-soft);
+      min-width: 28px;
+      cursor: pointer;
+    }
+
+    .led-step-cells {
+      display: flex;
+      gap: 0.32rem;
+      flex: 1;
+    }
+
+    .led-step-mini {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 2px solid #D7C4EC;
+      background: #1F1828;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    .led-step-mini:hover { transform: scale(1.08); }
   </style>
 </head>
 <body>
@@ -1156,6 +1412,13 @@
 
   <main class="workshop-main">
     <div class="wrap">
+
+      <div class="mode-tabs" role="tablist" aria-label="Workshop tool mode">
+        <button type="button" class="mode-tab active" id="mode-tab-bundle" role="tab" aria-selected="true">🎀 Theme &amp; Mascot (.mochibundle)</button>
+        <button type="button" class="mode-tab" id="mode-tab-led" role="tab" aria-selected="false">💡 Lid LED Studio (.mochibunled)</button>
+      </div>
+
+      <div id="bundle-workspace">
 
       <div class="workshop-grid">
         <!-- Left Panel: Load Bundle / Atlas & Live 4Hz Sprite Preview -->
@@ -1186,6 +1449,14 @@
             <div class="speech-bubble" id="preview-bubble">( ˶ˆᗜˆ˵ ) ♡ drop a sprite sheet or test dialogue!</div>
             <canvas id="sprite-canvas" width="128" height="128"></canvas>
             <div class="slot-tabs" id="slot-tabs" role="tablist" aria-label="Animation row preview"></div>
+          </div>
+
+          <div class="slot-frames-box" id="mascot-slots-editor" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+              <strong style="font-size:0.78rem;">Per-Row Frame Counts (<code>mascot.slots</code>)</strong>
+              <span style="font-size:0.72rem; color:var(--cocoa-soft);" id="mascot-slots-max-hint">1–16 frames</span>
+            </div>
+            <div class="slot-frames-grid" id="mascot-slots-grid"></div>
           </div>
 
           <div class="asset-badges" id="status-badges">
@@ -1253,6 +1524,14 @@
                 <input type="text" id="color-action-hex" value="#A04064" maxlength="9" aria-label="Accent color hex">
               </div>
             </div>
+          </div>
+
+          <div class="roundness-control">
+            <div class="roundness-control-head">
+              <label for="card-roundness-range">Card Roundness (<code>cardRoundnessDp</code>)</label>
+              <span id="card-roundness-value">24 dp</span>
+            </div>
+            <input type="range" id="card-roundness-range" min="8" max="32" step="1" value="24" aria-label="Card roundness in dp">
           </div>
         </section>
       </div>
@@ -1482,10 +1761,121 @@
             Packs <code>manifest.json</code> + any loaded <code>mascot_atlas.png</code>, <code>card_border.png</code>, wallpaper, and cursor into one shareable file.
           </p>
         </div>
-        <button class="candy candy--pink" type="button" id="export-bundle-btn" style="font-size: 1rem; padding: 0.75rem 1.5rem;">
-          🍡 Download .mochibundle
-        </button>
+        <div style="display:flex; gap:0.55rem; flex-wrap:wrap;">
+          <button class="candy candy--butter" type="button" id="export-bundle-gallery-btn" style="font-size: 0.92rem; padding: 0.7rem 1.15rem;">
+            📸 Preview PNG + Catalog JSON
+          </button>
+          <button class="candy candy--pink" type="button" id="export-bundle-btn" style="font-size: 1rem; padding: 0.75rem 1.5rem;">
+            🍡 Download .mochibundle
+          </button>
+        </div>
       </div>
+
+      <div class="submission-box" id="bundle-submission-box" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+          <strong style="font-size:0.9rem;">🎀 Gallery Submission Snippet (<code>docs/community/catalog.json</code>)</strong>
+          <button class="candy candy--blue candy--sm" type="button" id="copy-bundle-catalog-btn">📋 Copy JSON</button>
+        </div>
+        <pre id="bundle-catalog-snippet"></pre>
+      </div>
+
+      </div><!-- /#bundle-workspace -->
+
+      <!-- Lid LED Studio Workspace (.mochibunled) -->
+      <div id="led-workspace" style="display:none;">
+        <div class="workshop-grid">
+          <section class="panel" aria-labelledby="led-preview-title">
+            <div class="panel-title">
+              <span id="led-preview-title">1. Load &amp; Preview Outer Lid Show 💡</span>
+              <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                <button class="candy candy--butter candy--sm" type="button" id="led-play-toggle-btn">⏸ Pause</button>
+              </div>
+            </div>
+            <p class="panel-sub">Preview the 5 physical lid windows (<code>W1</code>–<code>W5</code>) at real <code>step_ms</code> timing, or drop an existing <code>.mochibunled</code> / <code>.yaml</code> / <code>.json</code> file to remix.</p>
+
+            <div class="drop-row">
+              <label class="dropzone dropzone--lavender" id="led-dropzone">
+                <input type="file" id="led-file-input" accept=".mochibunled,.yaml,.yml,.json" aria-label="Load .mochibunled or YAML animation">
+                <span class="dropzone-icon">💡</span>
+                <span class="dropzone-title" style="display:block;">Load .mochibunled / .yaml</span>
+                <span class="dropzone-hint" style="display:block;">Parses YAML or JSON step sequences</span>
+              </label>
+
+              <div class="asset-picker-card" style="justify-content:center;">
+                <span style="font-size:0.82rem; font-weight:800;">Starter Presets</span>
+                <div class="slot-tabs" id="led-preset-buttons" style="margin-top:0.2rem;"></div>
+              </div>
+            </div>
+
+            <div class="led-lid-stage">
+              <span style="color:#F6E7FF; font-size:0.75rem; font-weight:800; letter-spacing:0.04em;">✨ AT-M120 OUTER LID · 5 WINDOWS ✨</span>
+              <div class="led-window-bar" id="led-stage-windows"></div>
+              <span style="color:#DCC4F8; font-size:0.75rem; font-weight:700;" id="led-stage-meta">Step 1 / 1 · 500 ms</span>
+            </div>
+
+            <div class="asset-badges" id="led-status-badges">
+              <span class="badge badge--ok">💡 Note: On the AT-M120 lid, each step lights in its most common lit color</span>
+            </div>
+          </section>
+
+          <section class="panel panel--lavender" aria-labelledby="led-editor-title">
+            <div class="panel-title">
+              <span id="led-editor-title">2. Animation Details &amp; Step Sequencer 🎨</span>
+              <button class="candy candy--pink candy--sm" type="button" id="led-add-step-btn">+ Add Step</button>
+            </div>
+
+            <div class="field-grid">
+              <div class="field">
+                <label for="led-name">Animation Name</label>
+                <input type="text" id="led-name" value="Sakura Chase ♡" maxlength="40">
+              </div>
+              <div class="field">
+                <label for="led-author">Author</label>
+                <input type="text" id="led-author" value="Mochi User" maxlength="40">
+              </div>
+              <div class="field">
+                <label for="led-step-ms">Step Duration (100–5000 ms)</label>
+                <input type="number" id="led-step-ms" min="100" max="5000" step="50" value="500">
+              </div>
+              <div class="field">
+                <label for="led-loop-check">Loop Playback</label>
+                <label style="display:flex; align-items:center; gap:0.45rem; font-size:0.86rem; font-weight:800; padding:0.42rem 0.2rem; cursor:pointer;">
+                  <input type="checkbox" id="led-loop-check" checked style="accent-color:#D85A88; width:16px; height:16px;">
+                  <span>Loop ~60s then rest on last frame</span>
+                </label>
+              </div>
+            </div>
+
+            <strong style="font-size:0.82rem;">Active Paint Swatch (tap a window below to paint):</strong>
+            <div class="led-swatch-bar" id="led-swatch-bar"></div>
+
+            <div class="led-steps-list" id="led-steps-list"></div>
+          </section>
+        </div>
+
+        <div class="export-bar">
+          <div>
+            <h3 style="font-family: var(--font-display); font-size: 1.18rem;">Ready to share your <code>.mochibunled</code>? 💡</h3>
+            <p style="font-size: 0.9rem; color: var(--cocoa-soft);">Exports clean YAML compatible with Lid LED Studio &amp; the Community Gallery.</p>
+          </div>
+          <div style="display:flex; gap:0.55rem; flex-wrap:wrap;">
+            <button class="candy candy--butter" type="button" id="export-led-catalog-btn" style="font-size: 0.92rem; padding: 0.7rem 1.15rem;">
+              📋 YAML + Catalog JSON
+            </button>
+            <button class="candy candy--pink" type="button" id="export-led-btn" style="font-size: 1rem; padding: 0.75rem 1.5rem;">
+              💡 Download .mochibunled
+            </button>
+          </div>
+        </div>
+
+        <div class="submission-box" id="led-submission-box" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <strong style="font-size:0.9rem;">💡 Generated <code>.mochibunled</code> YAML &amp; <code>catalog.json</code> Snippet</strong>
+            <button class="candy candy--blue candy--sm" type="button" id="copy-led-catalog-btn">📋 Copy Catalog JSON</button>
+          </div>
+          <pre id="led-catalog-snippet"></pre>
+        </div>
+      </div><!-- /#led-workspace -->
 
     </div>
   </main>
@@ -1574,6 +1964,8 @@
 
     // Active card border & 9-slice state
     let activeBorderStyleId = 'solid';
+    let activePresetId = 'sakura_dream';
+    let cardRoundnessDp = 24;
     let cardBorderBytes = null;
     let cardBorderImage = null;
     let cardBorderWidth = 0;
@@ -1677,6 +2069,7 @@
       btn.className = 'slot-btn';
       btn.textContent = preset.name;
       btn.addEventListener('click', () => {
+        activePresetId = preset.id;
         setColorField('bg', preset.bg);
         setColorField('card', preset.card);
         setColorField('greeting', preset.greeting);
@@ -1688,6 +2081,20 @@
       });
       presetWrap.appendChild(btn);
     });
+
+    const roundnessRange = document.getElementById('card-roundness-range');
+    const roundnessValueEl = document.getElementById('card-roundness-value');
+    function syncRoundnessControl(val) {
+      const n = Math.max(8, Math.min(32, Math.round(Number(val) || 24)));
+      cardRoundnessDp = n;
+      if (roundnessRange) roundnessRange.value = String(n);
+      if (roundnessValueEl) roundnessValueEl.textContent = `${n} dp`;
+      updatePhoneMockupTheme();
+      drawCardBorderPreview();
+    }
+    if (roundnessRange) {
+      roundnessRange.addEventListener('input', (e) => syncRoundnessControl(e.target.value));
+    }
 
     // Build 7 dialogue cards
     const dialogueGridEl = document.getElementById('dialogue-grid');
@@ -1789,13 +2196,16 @@
       const cardBgStyle = wallpaperObjectUrl
         ? `color-mix(in srgb, ${card} 88%, transparent)`
         : card;
+      const cardRadiusPx = activeBorderStyleId === 'pixel'
+        ? '4px'
+        : `${Math.round(Math.max(6, Math.min(20, cardRoundnessDp * 0.58)))}px`;
       [greetingCard, favCard].forEach((el) => {
         if (!el) return;
         el.style.backgroundColor = card;
         el.style.background = cardBgStyle;
         el.style.borderColor = action;
         el.style.color = greeting;
-        el.style.borderRadius = activeBorderStyleId === 'pixel' ? '4px' : '14px';
+        el.style.borderRadius = cardRadiusPx;
         el.style.borderStyle = activeBorderStyleId === 'stitch' ? 'dashed' : (activeBorderStyleId === 'double' ? 'double' : 'solid');
         el.style.borderWidth = activeBorderStyleId === 'double' ? '3px' : '2px';
       });
@@ -2145,6 +2555,7 @@
         atlasBytes = uint8Array;
         atlasImage = img;
         atlasLayout = check.layout;
+        renderMascotSlotCounts();
         renderStatusBadges();
         drawCurrentFrame();
         return true;
@@ -2156,12 +2567,51 @@
       }
     }
 
+    function renderMascotSlotCounts() {
+      const box = document.getElementById('mascot-slots-editor');
+      const grid = document.getElementById('mascot-slots-grid');
+      const hint = document.getElementById('mascot-slots-max-hint');
+      if (!box || !grid) return;
+      if (!atlasLayout || !atlasImage) {
+        box.style.display = 'none';
+        grid.innerHTML = '';
+        return;
+      }
+      const maxCols = Math.min(16, Math.max(1, Math.floor(atlasImage.naturalWidth / atlasLayout.frameWidth)));
+      if (hint) hint.textContent = `1–${maxCols} frames per row`;
+      box.style.display = 'block';
+      grid.innerHTML = '';
+      SLOTS.forEach((s) => {
+        const cur = (atlasLayout.slots[s.key] && atlasLayout.slots[s.key].frames) || maxCols;
+        const item = document.createElement('label');
+        item.className = 'slot-frame-item';
+        item.innerHTML = `<span>${escapeHtml(s.key)}</span>`;
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '1';
+        input.max = String(maxCols);
+        input.value = String(Math.max(1, Math.min(maxCols, cur)));
+        input.addEventListener('change', () => {
+          const v = Math.max(1, Math.min(maxCols, Math.round(Number(input.value) || 1)));
+          input.value = String(v);
+          if (atlasLayout && atlasLayout.slots[s.key]) {
+            atlasLayout.slots[s.key].frames = v;
+            drawCurrentFrame();
+            renderStatusBadges();
+          }
+        });
+        item.appendChild(input);
+        grid.appendChild(item);
+      });
+    }
+
     // Handle mascot_atlas.png file input
     document.getElementById('atlas-input').addEventListener('change', async (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       const buf = await file.arrayBuffer();
       await loadAtlasFromBytes(new Uint8Array(buf), null);
+      renderMascotSlotCounts();
     });
 
     document.getElementById('clear-atlas-btn').addEventListener('click', () => {
@@ -2169,6 +2619,7 @@
       atlasImage = null;
       atlasLayout = null;
       document.getElementById('atlas-input').value = '';
+      renderMascotSlotCounts();
       drawCurrentFrame();
       renderStatusBadges();
     });
@@ -2201,10 +2652,12 @@
         }
 
         if (manifest.palette) {
+          activePresetId = manifest.palette.activePresetId || 'sakura_dream';
           setColorField('bg', manifest.palette.bgColorHex || '#FFF5F8');
           setColorField('card', manifest.palette.cardColorHex || '#FCE4EC');
           setColorField('greeting', manifest.palette.greetingColorHex || '#A04064');
           setColorField('action', manifest.palette.actionColorHex || '#A04064');
+          syncRoundnessControl(typeof manifest.palette.cardRoundnessDp === 'number' ? manifest.palette.cardRoundnessDp : 24);
           setBorderStyleId(manifest.palette.borderStyle || 'solid');
           const manifestSlicePx = typeof manifest.palette.cardBorderSlicePx === 'number'
             ? manifest.palette.cardBorderSlicePx
@@ -2212,6 +2665,8 @@
           syncSliceControls(manifestSlicePx);
           updateStageColors();
         } else {
+          activePresetId = 'sakura_dream';
+          syncRoundnessControl(24);
           setBorderStyleId('solid');
           syncSliceControls(DEFAULT_CARD_BORDER_SLICE);
           updateStageColors();
@@ -2645,7 +3100,8 @@
       { zoneId: 'cursor-dropzone', inputId: 'cursor-input' },
       { zoneId: 'bundle-dropzone', inputId: 'bundle-input' },
       { zoneId: 'atlas-dropzone', inputId: 'atlas-input' },
-      { zoneId: 'card-border-dropzone', inputId: 'card-border-input' }
+      { zoneId: 'card-border-dropzone', inputId: 'card-border-input' },
+      { zoneId: 'led-dropzone', inputId: 'led-file-input' }
     ].forEach(({ zoneId, inputId }) => {
       const zone = document.getElementById(zoneId);
       const input = document.getElementById(inputId);
@@ -3168,13 +3624,13 @@
           showSparkles: base.greeting && typeof base.greeting.showSparkles === 'boolean' ? base.greeting.showSparkles : true
         },
         palette: {
-          activePresetId: (base.palette && base.palette.activePresetId) || 'sakura_dream',
+          activePresetId: activePresetId || (base.palette && base.palette.activePresetId) || 'sakura_dream',
           isCustom: true,
           bgColorHex: document.getElementById('color-bg-hex').value.trim() || '#FFF5F8',
           cardColorHex: document.getElementById('color-card-hex').value.trim() || '#FCE4EC',
           greetingColorHex: document.getElementById('color-greeting-hex').value.trim() || '#A04064',
           actionColorHex: document.getElementById('color-action-hex').value.trim() || '#A04064',
-          cardRoundnessDp: (base.palette && typeof base.palette.cardRoundnessDp === 'number') ? base.palette.cardRoundnessDp : 24.0,
+          cardRoundnessDp: cardRoundnessDp,
           borderStyle: normalizeBorderStyleId(activeBorderStyleId),
           hasCustomCardBorder: hasCustomCardBorder,
           cardBorderSlicePx: exportedSlicePx
@@ -3210,13 +3666,512 @@
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     });
 
+    // Gallery Submission Helper for Theme Bundles (Preview PNG + catalog.json snippet)
+    function slugifyId(text, fallback) {
+      return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || fallback;
+    }
+
+    document.getElementById('export-bundle-gallery-btn').addEventListener('click', async () => {
+      const bundleName = (document.getElementById('bundle-name').value || '').trim() || 'Kawaii Setup';
+      const author = (document.getElementById('bundle-author').value || '').trim() || 'Mochi User';
+      const mascotName = (document.getElementById('mascot-name').value || '').trim() || 'Mochibunny';
+      const greetingUser = (document.getElementById('greeting-name').value || '').trim() || 'Mochi User';
+      const bg = document.getElementById('color-bg-hex').value.trim() || '#FFF5F8';
+      const card = document.getElementById('color-card-hex').value.trim() || '#FCE4EC';
+      const greeting = document.getElementById('color-greeting-hex').value.trim() || '#A04064';
+      const action = document.getElementById('color-action-hex').value.trim() || '#A04064';
+      const slug = slugifyId(bundleName, 'mochibun_theme');
+
+      // Render 360x600 preview card PNG
+      const pCanvas = document.createElement('canvas');
+      pCanvas.width = 360;
+      pCanvas.height = 600;
+      const pc = pCanvas.getContext('2d');
+      pc.imageSmoothingEnabled = false;
+
+      const grad = pc.createLinearGradient(0, 0, 0, 600);
+      grad.addColorStop(0, bg);
+      grad.addColorStop(1, card);
+      pc.fillStyle = grad;
+      pc.fillRect(0, 0, 360, 600);
+
+      if (wallpaperObjectUrl) {
+        try {
+          const wpImg = await new Promise((resolve, reject) => {
+            const i = new Image();
+            i.onload = () => resolve(i);
+            i.onerror = reject;
+            i.src = wallpaperObjectUrl;
+          });
+          pc.drawImage(wpImg, 0, 0, 360, 600);
+        } catch (_) {}
+      }
+
+      const drawCard = (x, y, w, h, r) => {
+        pc.save();
+        traceRoundedRect(pc, x, y, w, h, r);
+        pc.fillStyle = card;
+        pc.globalAlpha = wallpaperObjectUrl ? 0.88 : 1;
+        pc.fill();
+        pc.globalAlpha = 1;
+        pc.strokeStyle = action;
+        pc.lineWidth = 2.5;
+        pc.stroke();
+        pc.restore();
+      };
+
+      const rPx = Math.round(cardRoundnessDp * 0.75);
+      drawCard(22, 46, 316, 92, rPx);
+      pc.fillStyle = greeting;
+      pc.font = 'bold 20px Nunito, sans-serif';
+      pc.textAlign = 'center';
+      pc.fillText(`✦ Welcome, ${greetingUser} ♡`, 180, 86);
+      pc.font = '700 13px Nunito, sans-serif';
+      pc.fillText(`${mascotName} · ${bundleName}`, 180, 114);
+
+      if (atlasImage && atlasLayout) {
+        const idleSlot = atlasLayout.slots.idle || { row: 0, frames: 4 };
+        pc.drawImage(
+          atlasImage,
+          0, idleSlot.row * atlasLayout.frameHeight, atlasLayout.frameWidth, atlasLayout.frameHeight,
+          120, 210, 120, 120
+        );
+      } else {
+        pc.font = '72px sans-serif';
+        pc.fillText('🐰', 180, 285);
+      }
+
+      drawCard(22, 370, 316, 130, rPx);
+      pc.fillStyle = greeting;
+      pc.font = 'bold 14px Nunito, sans-serif';
+      pc.fillText('📞    💬    🎀    ⚙️', 180, 428);
+      pc.fillStyle = action;
+      pc.fillText('♥  •  •', 180, 470);
+
+      pCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${slug}.png`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+      }, 'image/png');
+
+      const entry = {
+        id: slug,
+        name: bundleName,
+        author: author,
+        type: 'theme',
+        file: `themes/${slug}.mochibundle`,
+        preview: `previews/${slug}.png`,
+        colors: [bg, card, action],
+        hasCustomMascot: Boolean(atlasBytes && atlasLayout),
+        hasCustomBorder: Boolean(cardBorderBytes && cardBorderImage),
+        hasWallpaper: Boolean(preservedWallpaperBytes),
+        hasCustomCursor: Boolean(preservedCursorBytes && preservedCursorEntryName)
+      };
+      const box = document.getElementById('bundle-submission-box');
+      const pre = document.getElementById('bundle-catalog-snippet');
+      if (pre) pre.textContent = JSON.stringify(entry, null, 2);
+      if (box) box.style.display = 'block';
+    });
+
+    document.getElementById('copy-bundle-catalog-btn').addEventListener('click', async () => {
+      const text = document.getElementById('bundle-catalog-snippet').textContent || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        document.getElementById('copy-bundle-catalog-btn').textContent = '✓ Copied!';
+        setTimeout(() => {
+          document.getElementById('copy-bundle-catalog-btn').textContent = '📋 Copy JSON';
+        }, 1400);
+      } catch (_) {}
+    });
+
+    // ── Mode Switcher (Theme Bundle vs Lid LED Studio) ──
+    const modeTabBundle = document.getElementById('mode-tab-bundle');
+    const modeTabLed = document.getElementById('mode-tab-led');
+    const bundleWorkspace = document.getElementById('bundle-workspace');
+    const ledWorkspace = document.getElementById('led-workspace');
+
+    function setWorkshopMode(mode) {
+      const isLed = mode === 'led';
+      bundleWorkspace.style.display = isLed ? 'none' : 'block';
+      ledWorkspace.style.display = isLed ? 'block' : 'none';
+      modeTabBundle.classList.toggle('active', !isLed);
+      modeTabLed.classList.toggle('active', isLed);
+      modeTabBundle.setAttribute('aria-selected', String(!isLed));
+      modeTabLed.setAttribute('aria-selected', String(isLed));
+    }
+
+    modeTabBundle.addEventListener('click', () => setWorkshopMode('bundle'));
+    modeTabLed.addEventListener('click', () => setWorkshopMode('led'));
+
+    // ── Lid LED Studio (.mochibunled) ──
+    const LID_SWATCHES = [
+      { label: 'Off', hex: '#000000' },
+      { label: 'Sakura Pink', hex: '#FF1493' },
+      { label: 'Violet', hex: '#9D00FF' },
+      { label: 'Sky Blue', hex: '#00BFFF' },
+      { label: 'Emerald Mint', hex: '#00FF7F' },
+      { label: 'Tangerine', hex: '#FF5E00' },
+      { label: 'Lemon Gold', hex: '#FFD000' }
+    ];
+
+    const LED_STARTERS = [
+      {
+        name: 'Sakura Chase ♡',
+        author: 'emii',
+        stepMs: 500,
+        loop: true,
+        steps: [
+          ['#FF1493', '#000000', '#000000', '#000000', '#000000'],
+          ['#000000', '#FF1493', '#000000', '#000000', '#000000'],
+          ['#000000', '#000000', '#FF1493', '#000000', '#000000'],
+          ['#000000', '#000000', '#000000', '#FF1493', '#000000'],
+          ['#000000', '#000000', '#000000', '#000000', '#FF1493']
+        ]
+      },
+      {
+        name: 'Keitai Rainbow',
+        author: 'emii',
+        stepMs: 400,
+        loop: true,
+        steps: [
+          ['#FF1493', '#000000', '#000000', '#000000', '#000000'],
+          ['#000000', '#9D00FF', '#000000', '#000000', '#000000'],
+          ['#000000', '#000000', '#00BFFF', '#000000', '#000000'],
+          ['#000000', '#000000', '#000000', '#00FF7F', '#000000'],
+          ['#000000', '#000000', '#000000', '#000000', '#FFD000']
+        ]
+      },
+      {
+        name: 'Mint Heartbeat',
+        author: 'emii',
+        stepMs: 350,
+        loop: true,
+        steps: [
+          ['#000000', '#000000', '#00FF7F', '#000000', '#000000'],
+          ['#000000', '#00FF7F', '#00BFFF', '#00FF7F', '#000000'],
+          ['#00FF7F', '#00BFFF', '#00FF7F', '#00BFFF', '#00FF7F'],
+          ['#000000', '#000000', '#000000', '#000000', '#000000']
+        ]
+      }
+    ];
+
+    let ledActiveSwatchHex = '#FF1493';
+    let ledSteps = LED_STARTERS[0].steps.map((s) => s.slice());
+    let ledActiveStepIdx = 0;
+    let ledPlayIdx = 0;
+    let ledPlaying = true;
+    let ledTimerId = null;
+
+    function normalizeLidHexWeb(raw) {
+      const clean = String(raw || '').trim().replace(/^#|^0x/i, '');
+      const rgb = clean.length === 8 ? clean.slice(2) : clean;
+      if (!/^[0-9a-fA-F]{6}$/.test(rgb)) return '#000000';
+      return '#' + rgb.toUpperCase();
+    }
+
+    function encodeLidYamlWeb() {
+      const name = (document.getElementById('led-name').value || '').trim().slice(0, 40) || 'Custom Wave ♡';
+      const author = (document.getElementById('led-author').value || '').trim().slice(0, 40) || 'Mochi User';
+      const stepMs = Math.max(100, Math.min(5000, Math.round(Number(document.getElementById('led-step-ms').value) || 500)));
+      const loop = Boolean(document.getElementById('led-loop-check').checked);
+      const q = (s) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+      const lines = [
+        `name: ${q(name)}`,
+        `author: ${q(author)}`,
+        `step_ms: ${stepMs}`,
+        `loop: ${loop}`,
+        'steps:'
+      ];
+      ledSteps.forEach((row) => {
+        lines.push(`  - windows: [${row.map(q).join(', ')}]`);
+      });
+      return lines.join('\n') + '\n';
+    }
+
+    function parseLidAnimationTextWeb(text) {
+      const trimmed = String(text || '').trim();
+      if (trimmed.startsWith('{')) {
+        const obj = JSON.parse(trimmed);
+        return {
+          name: obj.name || 'Imported ♡',
+          author: obj.author || 'Community',
+          stepMs: obj.step_ms ?? obj.stepMs ?? 500,
+          loop: obj.loop !== false,
+          steps: (obj.steps || []).slice(0, 16).map((s) => {
+            const w = Array.isArray(s.windows) ? s.windows : [];
+            return [0, 1, 2, 3, 4].map((i) => normalizeLidHexWeb(w[i]));
+          })
+        };
+      }
+      const res = { name: 'Imported ♡', author: 'Community', stepMs: 500, loop: true, steps: [] };
+      const lines = trimmed.split(/\r?\n/);
+      for (const rawLine of lines) {
+        const line = rawLine.replace(/#(?![0-9a-fA-F]{6}\b).*$/, '').trim();
+        if (!line) continue;
+        const winMatch = line.match(/^-\s*windows\s*:\s*\[([^\]]*)\]/);
+        if (winMatch) {
+          const vals = winMatch[1].split(',').map((v) => normalizeLidHexWeb(v.replace(/["']/g, '')));
+          res.steps.push([0, 1, 2, 3, 4].map((i) => vals[i] || '#000000'));
+          continue;
+        }
+        const kv = line.match(/^([a-zA-Z_]+)\s*:\s*(.+)$/);
+        if (kv) {
+          const k = kv[1];
+          const v = kv[2].trim().replace(/^["']|["']$/g, '');
+          if (k === 'name') res.name = v;
+          else if (k === 'author') res.author = v;
+          else if (k === 'step_ms' || k === 'stepMs') res.stepMs = Number(v) || 500;
+          else if (k === 'loop') res.loop = v !== 'false';
+        }
+      }
+      return res;
+    }
+
+    function renderLedSwatches() {
+      const bar = document.getElementById('led-swatch-bar');
+      bar.innerHTML = '';
+      LID_SWATCHES.forEach((sw) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'led-swatch-chip' + (sw.hex === ledActiveSwatchHex ? ' active' : '');
+        btn.innerHTML = `<span class="led-swatch-dot" style="background:${sw.hex}"></span><span>${escapeHtml(sw.label)}</span>`;
+        btn.addEventListener('click', () => {
+          ledActiveSwatchHex = sw.hex;
+          renderLedSwatches();
+        });
+        bar.appendChild(btn);
+      });
+    }
+
+    function renderLedStage() {
+      const stage = document.getElementById('led-stage-windows');
+      const meta = document.getElementById('led-stage-meta');
+      const step = ledSteps[ledPlayIdx % Math.max(1, ledSteps.length)] || ['#000000', '#000000', '#000000', '#000000', '#000000'];
+      const stepMs = Math.max(100, Math.min(5000, Math.round(Number(document.getElementById('led-step-ms').value) || 500)));
+      stage.innerHTML = '';
+      step.forEach((hex, idx) => {
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        const lit = hex !== '#000000';
+        cell.className = 'led-win-cell' + (lit ? ' is-lit' : '');
+        cell.style.setProperty('--led-color', hex);
+        cell.textContent = `W${idx + 1}`;
+        cell.title = `Paint W${idx + 1} in step ${(ledPlayIdx % ledSteps.length) + 1}`;
+        cell.addEventListener('click', () => {
+          const targetIdx = ledPlaying ? ledActiveStepIdx : (ledPlayIdx % ledSteps.length);
+          ledSteps[targetIdx][idx] = (ledSteps[targetIdx][idx] === ledActiveSwatchHex) ? '#000000' : ledActiveSwatchHex;
+          renderLedStage();
+          renderLedStepList();
+        });
+        stage.appendChild(cell);
+      });
+      if (meta) {
+        meta.textContent = `Step ${(ledPlayIdx % Math.max(1, ledSteps.length)) + 1} / ${ledSteps.length} · ${stepMs} ms`;
+      }
+    }
+
+    function renderLedStepList() {
+      const list = document.getElementById('led-steps-list');
+      list.innerHTML = '';
+      ledSteps.forEach((row, idx) => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'led-step-row' + (idx === ledActiveStepIdx ? ' active' : '');
+
+        const num = document.createElement('span');
+        num.className = 'led-step-num';
+        num.textContent = `#${idx + 1}`;
+        num.addEventListener('click', () => {
+          ledActiveStepIdx = idx;
+          ledPlayIdx = idx;
+          renderLedStage();
+          renderLedStepList();
+        });
+        rowEl.appendChild(num);
+
+        const cells = document.createElement('div');
+        cells.className = 'led-step-cells';
+        row.forEach((hex, wIdx) => {
+          const mini = document.createElement('button');
+          mini.type = 'button';
+          mini.className = 'led-step-mini';
+          mini.style.background = hex === '#000000' ? '#1F1828' : hex;
+          mini.title = `Step ${idx + 1} W${wIdx + 1}: ${hex}`;
+          mini.addEventListener('click', () => {
+            ledActiveStepIdx = idx;
+            ledSteps[idx][wIdx] = (ledSteps[idx][wIdx] === ledActiveSwatchHex) ? '#000000' : ledActiveSwatchHex;
+            renderLedStage();
+            renderLedStepList();
+          });
+          cells.appendChild(mini);
+        });
+        rowEl.appendChild(cells);
+
+        const dupBtn = document.createElement('button');
+        dupBtn.type = 'button';
+        dupBtn.className = 'candy candy--butter candy--sm';
+        dupBtn.textContent = '⧉';
+        dupBtn.title = 'Duplicate step';
+        dupBtn.disabled = ledSteps.length >= 16;
+        dupBtn.addEventListener('click', () => {
+          if (ledSteps.length >= 16) return;
+          ledSteps.splice(idx + 1, 0, row.slice());
+          ledActiveStepIdx = idx + 1;
+          renderLedStage();
+          renderLedStepList();
+        });
+        rowEl.appendChild(dupBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'candy candy--blue candy--sm';
+        delBtn.textContent = '✕';
+        delBtn.title = 'Delete step';
+        delBtn.disabled = ledSteps.length <= 1;
+        delBtn.addEventListener('click', () => {
+          if (ledSteps.length <= 1) return;
+          ledSteps.splice(idx, 1);
+          ledActiveStepIdx = Math.min(ledActiveStepIdx, ledSteps.length - 1);
+          ledPlayIdx = ledPlayIdx % ledSteps.length;
+          renderLedStage();
+          renderLedStepList();
+        });
+        rowEl.appendChild(delBtn);
+
+        list.appendChild(rowEl);
+      });
+    }
+
+    function restartLedTimer() {
+      if (ledTimerId !== null) {
+        clearInterval(ledTimerId);
+        ledTimerId = null;
+      }
+      if (!ledPlaying) return;
+      const stepMs = Math.max(100, Math.min(5000, Math.round(Number(document.getElementById('led-step-ms').value) || 500)));
+      ledTimerId = setInterval(() => {
+        if (ledSteps.length > 1) {
+          ledPlayIdx = (ledPlayIdx + 1) % ledSteps.length;
+          renderLedStage();
+        }
+      }, stepMs);
+    }
+
+    function loadLedSpecIntoStudio(spec) {
+      document.getElementById('led-name').value = (spec.name || 'Custom Wave ♡').slice(0, 40);
+      document.getElementById('led-author').value = (spec.author || 'Mochi User').slice(0, 40);
+      document.getElementById('led-step-ms').value = String(Math.max(100, Math.min(5000, Math.round(spec.stepMs || 500))));
+      document.getElementById('led-loop-check').checked = spec.loop !== false;
+      ledSteps = (spec.steps && spec.steps.length ? spec.steps : [['#000000', '#000000', '#000000', '#000000', '#000000']]).slice(0, 16);
+      ledActiveStepIdx = 0;
+      ledPlayIdx = 0;
+      renderLedStage();
+      renderLedStepList();
+      restartLedTimer();
+    }
+
+    const ledPresetWrap = document.getElementById('led-preset-buttons');
+    LED_STARTERS.forEach((starter) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'slot-btn';
+      btn.textContent = starter.name;
+      btn.addEventListener('click', () => loadLedSpecIntoStudio(starter));
+      ledPresetWrap.appendChild(btn);
+    });
+
+    document.getElementById('led-play-toggle-btn').addEventListener('click', () => {
+      ledPlaying = !ledPlaying;
+      document.getElementById('led-play-toggle-btn').textContent = ledPlaying ? '⏸ Pause' : '▶ Play';
+      restartLedTimer();
+    });
+
+    document.getElementById('led-step-ms').addEventListener('input', () => {
+      renderLedStage();
+      restartLedTimer();
+    });
+
+    document.getElementById('led-add-step-btn').addEventListener('click', () => {
+      if (ledSteps.length >= 16) return;
+      ledSteps.push(['#000000', '#000000', '#000000', '#000000', '#000000']);
+      ledActiveStepIdx = ledSteps.length - 1;
+      ledPlayIdx = ledActiveStepIdx;
+      renderLedStage();
+      renderLedStepList();
+    });
+
+    document.getElementById('led-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const parsed = parseLidAnimationTextWeb(text);
+      if (parsed.steps.length > 0) {
+        loadLedSpecIntoStudio(parsed);
+      }
+    });
+
+    document.getElementById('export-led-btn').addEventListener('click', () => {
+      const yaml = encodeLidYamlWeb();
+      const name = (document.getElementById('led-name').value || '').trim() || 'custom_led';
+      const slug = slugifyId(name, 'custom_led').replace(/_/g, '-');
+      const blob = new Blob([yaml], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${slug}.mochibunled`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    });
+
+    document.getElementById('export-led-catalog-btn').addEventListener('click', () => {
+      const name = (document.getElementById('led-name').value || '').trim() || 'Custom Wave ♡';
+      const author = (document.getElementById('led-author').value || '').trim() || 'Mochi User';
+      const idSlug = slugifyId(name, 'custom_led');
+      const fileSlug = idSlug.replace(/_/g, '-');
+      const usedColors = [];
+      ledSteps.forEach((row) => row.forEach((hex) => {
+        if (hex !== '#000000' && !usedColors.includes(hex)) usedColors.push(hex);
+      }));
+      const entry = {
+        id: idSlug,
+        name: name,
+        author: author,
+        type: 'led',
+        file: `packs/${fileSlug}.mochibunled`,
+        colors: usedColors.length ? usedColors : ['#FF1493']
+      };
+      const yaml = encodeLidYamlWeb();
+      document.getElementById('led-catalog-snippet').textContent =
+        `${yaml}\n---\n${JSON.stringify(entry, null, 2)}`;
+      document.getElementById('led-catalog-snippet').dataset.catalogJson = JSON.stringify(entry, null, 2);
+      document.getElementById('led-submission-box').style.display = 'block';
+    });
+
+    document.getElementById('copy-led-catalog-btn').addEventListener('click', async () => {
+      const pre = document.getElementById('led-catalog-snippet');
+      const text = pre.dataset.catalogJson || pre.textContent || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        document.getElementById('copy-led-catalog-btn').textContent = '✓ Copied!';
+        setTimeout(() => {
+          document.getElementById('copy-led-catalog-btn').textContent = '📋 Copy Catalog JSON';
+        }, 1400);
+      } catch (_) {}
+    });
+
     setCursorHotspot('TOP_LEFT');
+    syncRoundnessControl(24);
     renderWallpaperBadges();
     renderCursorBadges();
     updateStageColors();
     renderCardBorderBadges();
     drawCardBorderPreview();
     drawCurrentFrame();
+    renderLedSwatches();
+    renderLedStage();
+    renderLedStepList();
+    restartLedTimer();
   </script>
 </body>
 </html>

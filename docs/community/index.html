@@ -237,6 +237,39 @@
       border-color: #FFFFFF;
     }
 
+    .search-input {
+      font-family: var(--font-body);
+      font-weight: 700;
+      font-size: 0.86rem;
+      color: var(--cocoa);
+      background: var(--card-solid);
+      border: 2px solid var(--periwinkle);
+      border-radius: var(--radius-pill);
+      padding: 0.42rem 1rem;
+      min-width: 195px;
+      outline: none;
+      box-shadow: var(--shadow-soft);
+    }
+    .search-input:focus {
+      border-color: var(--strawberry-deep);
+    }
+
+    .asset-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-bottom: 0.65rem;
+    }
+    .asset-pill {
+      font-size: 0.71rem;
+      font-weight: 800;
+      color: var(--cocoa-soft);
+      background: var(--lavender-haze);
+      border: 1px solid #DFCFEF;
+      border-radius: var(--radius-pill);
+      padding: 0.14rem 0.55rem;
+    }
+
     /* catalog grid */
     .catalog-grid {
       display: grid;
@@ -600,6 +633,7 @@
           <button class="filter-btn active" data-filter="all" type="button">✨ all packs</button>
           <button class="filter-btn" data-filter="theme" type="button">🎀 themes &amp; mascots</button>
           <button class="filter-btn" data-filter="led" type="button">💡 lid LEDs</button>
+          <input class="search-input" id="catalog-search" type="search" placeholder="🔍 search packs or authors..." aria-label="Search packs by name or author">
         </div>
 
         <div id="catalog-container" class="catalog-grid">
@@ -661,6 +695,7 @@
 
     let allItems = [];
     let activeFilter = 'all';
+    let searchQuery = '';
     const ledSpecCache = new Map();
     const activeLedControllers = new Map();
     let ledObserver = null;
@@ -922,13 +957,20 @@
 
     function renderCatalog() {
       const container = document.getElementById('catalog-container');
-      const filtered = activeFilter === 'all'
-        ? allItems
-        : allItems.filter((item) => item.type === activeFilter);
+      const query = searchQuery.trim().toLowerCase();
+      const filtered = allItems.filter((item) => {
+        if (activeFilter !== 'all' && item.type !== activeFilter) return false;
+        if (!query) return true;
+        const haystack = `${item.name || ''} ${item.author || ''}`.toLowerCase();
+        return haystack.includes(query);
+      });
 
       if (!filtered.length) {
         teardownLedAnimations();
-        container.innerHTML = `<div class="status-box" style="grid-column: 1 / -1;">no packs in this category yet — be the first to share one! ♡</div>`;
+        const emptyMsg = query
+          ? `no packs matched "${escapeHtml(searchQuery.trim())}" ♡`
+          : 'no packs in this category yet — be the first to share one! ♡';
+        container.innerHTML = `<div class="status-box" style="grid-column: 1 / -1;">${emptyMsg}</div>`;
         return;
       }
 
@@ -942,6 +984,14 @@
 
         const mascotBadge = item.hasCustomMascot
           ? `<span class="mascot-badge">🐰 custom mascot</span>`
+          : '';
+
+        const assetPills = [];
+        if (item.hasCustomBorder) assetPills.push('<span class="asset-pill">🎀 9-slice</span>');
+        if (item.hasWallpaper) assetPills.push('<span class="asset-pill">🖼️ wallpaper</span>');
+        if (item.hasCustomCursor) assetPills.push('<span class="asset-pill">🖱️ cursor</span>');
+        const assetPillsHtml = assetPills.length
+          ? `<div class="asset-pills" aria-label="Included pack assets">${assetPills.join('')}</div>`
           : '';
 
         const previewHtml = isLed
@@ -962,6 +1012,7 @@
             </div>
             <p class="pack-author">by ${escapeHtml(item.author || 'anonymous')}</p>
             ${swatches ? `<div class="swatches" aria-label="Color palette">${swatches}</div>` : ''}
+            ${assetPillsHtml}
             <a class="candy ${btnClass} pack-download" href="${escapeHtml(item.file)}" download>
               🍡 download ${isLed ? '.mochibunled' : '.mochibundle'}
             </a>
@@ -980,6 +1031,14 @@
         renderCatalog();
       });
     });
+
+    const searchInput = document.getElementById('catalog-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value || '';
+        renderCatalog();
+      });
+    }
 
     (async () => {
       const container = document.getElementById('catalog-container');

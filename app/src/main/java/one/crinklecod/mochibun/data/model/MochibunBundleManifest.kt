@@ -84,7 +84,10 @@ data class BundlePaletteConfig(
     val cardRoundnessDp: Float,
     val borderStyle: String = CardBorderStyle.DEFAULT_ID,
     val hasCustomCardBorder: Boolean = false,
-    val cardBorderSlicePx: Int = CardBorderStyle.DEFAULT_SLICE_PX
+    val cardBorderSlicePx: Int = CardBorderStyle.DEFAULT_SLICE_PX,
+    val outlineColorHex: String? = null,
+    val textColorHex: String? = null,
+    val fontFamilyId: String? = null
 )
 
 @Serializable

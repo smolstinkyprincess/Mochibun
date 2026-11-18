@@ -674,6 +674,90 @@ class ThemeBundleManagerTest {
         assertEquals(current, decoded)
     }
 
+    @Test
+    fun paletteExtraTokens_roundTripAndRemainOptionalForLegacyBundles() {
+        val legacyPaletteJson = """
+            {"activePresetId": "sakura_dream", "isCustom": false, "bgColorHex": "#FFF5F8",
+             "cardColorHex": "#FCE4EC", "greetingColorHex": "#A04064", "actionColorHex": "#A04064",
+             "cardRoundnessDp": 24.0}
+        """.trimIndent()
+        val legacyPalette = bundleJsonFormat.decodeFromString<BundlePaletteConfig>(legacyPaletteJson)
+        assertNull(legacyPalette.outlineColorHex)
+        assertNull(legacyPalette.textColorHex)
+        assertNull(legacyPalette.fontFamilyId)
+
+        withTestContext { context ->
+            val manifest = validManifest().copy(
+                palette = validManifest().palette.copy(
+                    activePresetId = "midnight_mochi",
+                    outlineColorHex = "#FF112233",
+                    textColorHex = "#FF445566",
+                    fontFamilyId = "pixel"
+                )
+            )
+            val bundle = createZip("manifest.json" to manifestBytes(manifest))
+            assertTrue(ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)).isSuccess)
+
+            val prefs = one.crinklecod.mochibun.data.prefs.PreferencesManager.getPrefs(context)
+            assertEquals(0xFF112233.toInt(), prefs.getInt(one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_THEME_GREETING_OUTLINE_COLOR, 0))
+            assertEquals(0xFF445566.toInt(), prefs.getInt(one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_THEME_FG_TEXT_COLOR, 0))
+            assertEquals("pixel", one.crinklecod.mochibun.data.prefs.PreferencesManager.getThemeFontFamily(context))
+
+            // Export round-trip preserves those tokens
+            val exported = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(context, exported, bundleName = "Token Trip").getOrThrow()
+            val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(exported.toByteArray())).getOrThrow()
+            assertEquals("#FF112233", preview.manifest.palette.outlineColorHex)
+            assertEquals("#FF445566", preview.manifest.palette.textColorHex)
+            assertEquals("pixel", preview.manifest.palette.fontFamilyId)
+
+            // Unknown font IDs are ignored instead of overwriting the valid font
+            val unknownFontManifest = manifest.copy(
+                palette = manifest.palette.copy(fontFamilyId = "nonexistent_font_xyz")
+            )
+            val unknownBundle = createZip("manifest.json" to manifestBytes(unknownFontManifest))
+            assertTrue(ThemeBundleManager.applyBundle(context, ByteArrayInputStream(unknownBundle)).isSuccess)
+            assertEquals("pixel", one.crinklecod.mochibun.data.prefs.PreferencesManager.getThemeFontFamily(context))
+        }
+    }
+
+    @Test
+    fun clearUnbundledAssets_resetsPreviousWallpaperCursorAndMascotWhenEnabled() {
+        val minimalBundle = createZip("manifest.json" to manifestBytes())
+        val mascotPng = fakePng(192, 384)
+        val mascotBundle = createZip("manifest.json" to manifestBytes(), "mascot_atlas.png" to mascotPng)
+
+        withTestContext { context ->
+            // Seed wallpaper, cursor, and custom mascot
+            one.crinklecod.mochibun.data.prefs.PreferencesManager.setWallpaperUri(context, "file:///tmp/wall.png")
+            val cursorPrefs = context.getSharedPreferences(
+                one.crinklecod.mochibun.data.prefs.CursorPreferences.PREFS_NAME,
+                android.content.Context.MODE_PRIVATE
+            )
+            cursorPrefs.edit().putString("cursor_custom_uri", "file:///tmp/cur.png").apply()
+            val staged = File(context.cacheDir, "seed.png").apply { writeBytes(mascotPng) }
+            CustomMascotManager.installStaged(context, staged, config = null).getOrThrow()
+            staged.delete()
+
+            // Default (clearUnbundledAssets = false) preserves all three
+            ThemeBundleManager.applyBundle(context, ByteArrayInputStream(minimalBundle), clearUnbundledAssets = false).getOrThrow()
+            assertEquals("file:///tmp/wall.png", one.crinklecod.mochibun.data.prefs.PreferencesManager.getWallpaperUri(context))
+            assertEquals("file:///tmp/cur.png", cursorPrefs.getString("cursor_custom_uri", null))
+            assertTrue(CustomMascotManager.isActive())
+
+            // Applying a bundle with mascot_atlas.png and clearUnbundledAssets = true keeps the new mascot & clears wallpaper/cursor
+            ThemeBundleManager.applyBundle(context, ByteArrayInputStream(mascotBundle), clearUnbundledAssets = true).getOrThrow()
+            assertNull(one.crinklecod.mochibun.data.prefs.PreferencesManager.getWallpaperUri(context))
+            assertNull(cursorPrefs.getString("cursor_custom_uri", null))
+            assertTrue(CustomMascotManager.isActive())
+
+            // Applying a minimal bundle with clearUnbundledAssets = true resets the custom mascot too
+            ThemeBundleManager.applyBundle(context, ByteArrayInputStream(minimalBundle), clearUnbundledAssets = true).getOrThrow()
+            assertEquals(MascotSpriteSource.BuiltIn, MascotSpriteStore.source.value)
+            assertFalse(CustomMascotManager.atlasFile(context).exists())
+        }
+    }
+
     private fun validManifest() = MochibunBundleManifest(
         bundleVersion = 1,
         bundleName = "Test Theme",

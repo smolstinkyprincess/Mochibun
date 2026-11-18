@@ -31,7 +31,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Clamshell tricks**: Choose what opens when you flip the phone open (Home, Resume Last App, or Notifications), plus an optional snap sound when you close it. **Screen-Off Flip Reset** tidies up (back to Home, menus closed, cursor hidden) whenever the screen goes dark, so unrooted phones get a clean flip-shut too.
 - **Soft-key navigation**: Recents and Back act as little LSK / RSK soft keys on Home and in the drawer, and you can switch that off in *Settings > Virtual Cursor*.
 - **Mochibunny pocket pet 🐰**: The little bunny on Home is yours to look after now! Press Center on her (or tap her) to pop open a tiny **Feed / Pet / Chat** pill, or use `1` / `2` / `3` on the keypad. Treats show up on their own: walk a little (1 per 1,000 steps, if your phone has a step counter), clear your notifications, or plug in your charger. She gets peckish, sulky, and sleepy as the day goes on, and her little speech bubbles change with her mood. No guilt, no game over, just a cozy loaf ♡
-- **Offline & private**: No internet permission, no camera permission, no telemetry.
+- **Offline & private**: No internet permission, no camera permission, no telemetry (verified on the merged release manifest in CI).
 
 ### Make it yours
 - **5 pastel themes**: *Sakura Dream*, *Lavender Mist*, *Minty Matcha*, *Milky Peach*, and *Midnight Mochi* for night owls 🌙. Switch live, or write your own in simple YAML.
@@ -137,57 +137,14 @@ Never wrestle with tiny touch keyboards just to send a cute face:
 > Browse and download `.mochibundle` and `.mochibunled` packs from the **[Mochibun Community Gallery](https://crinklecod.one/Mochibun/community/)** — tap any downloaded file on your phone to preview and apply in one click ♡
 
 ### 🎀 Shareable Theme Packs (`.mochibundle`)
-Want to show off your setup on r/flipphones or Discord? Export a `.mochibundle` bundle to pack up your colors, greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), and your custom Mochibunny sprite sheet (`mascot_atlas.png`) + optional speech-bubble dialogue. Opening a `.mochibundle` file (or a legacy `.mochibun` bundle) on your phone shows a live color swatch card, and it applies in one click!
+Export a `.mochibundle` bundle to pack your colors, typography, greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), 9-slice card border, and custom Mochibunny sprite sheet + dialogue. Opening a `.mochibundle` (or legacy `.mochibun`) on your phone shows a live swatch and asset preview before applying in one tap.
 
-### 🐰 Custom Mochibunny Sprites (`mascot_atlas.png`)
-Want a different little friend on Home? Draw your own! Mochibunny lives on one PNG sprite sheet: **8 rows × 4 columns** of square frames, one row per mood or action, top to bottom: `idle`, `talk`, `happy`, `hungry`, `sulky`, `sleepy`, `eat`, `pet`. Pick yours in *Settings > Appearance > Custom Mascot* (and **Reset to Default Mochibunny** brings her back).
+### 🐰 Custom Mascots, YAML Themes & Lid Animations
+- **Custom Mochibunny (`mascot_atlas.png`)**: Swap the pocket pet with an 8-row pixel-art sprite sheet in *Settings > Appearance > Custom Mascot*, plus optional mood dialogue pools inside `.mochibundle` packs.
+- **YAML Themes (`kaml`)**: Drop `.yaml` palettes into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/`.
+- **Lid LED Animations (`.mochibunled`)**: Share and import 5-window light shows into **Lid LED Studio** (or build them visually in the **[Mascot & Bundle Workshop](https://crinklecod.one/Mochibun/community/workshop.html)**).
 
-- Frames can be 16–256 px, up to 16 per row, the whole sheet up to 2048 × 2048 and 1.5 MB.
-- She's drawn with crisp nearest-neighbor pixels, so tiny pixel art stays sharp ♡
-- Inside a `.mochibundle` pack, `manifest.json` can also include optional `mascot.dialogue` pools (`happy`, `content`, `hungry`, `sulky`, `sleepy`, `fed`, `noTreats`; up to 20 lines of 48 chars each) so your custom mascot talks in character! Use the **[Mascot & Bundle Workshop](https://crinklecod.one/Mochibun/community/workshop.html)** in your browser to preview your 8×4 sprite sheet at 4 Hz, download a starter grid, or add custom dialogue to an existing `.mochibundle` without losing its wallpaper or cursor.
-- If a file doesn't fit, nothing breaks: you get a little note and your current mascot stays.
-
-### 📝 Hand-Crafted YAML Themes (`kaml`)
-Writing JSON on a flip-phone keypad is nobody's idea of a good time. Mochibun uses clean, readable YAML for custom color palettes and card styling—drop your `.yaml` files into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/` *(to bundle images like `mascot_atlas.png`, wallpapers, or cursors, export a `.mochibundle` pack above)*:
-
-```yaml
-# /sdcard/Android/data/one.crinklecod.mochibun/files/themes/sweet_sakura.yaml
-id: "sweet_sakura"
-name: "Sweet Sakura ♡"
-author: "emii"
-version: "1.0"
-
-colors:
-  primary: "#FFB7C5"
-  container: "#FFF0F5"
-  cardBorder: "#F3D1DC"
-  accentDeep: "#8B3A62"
-  background: "#FFF5F8"
-  outline: "#F8BBD0"
-  selectionGlow: "#FF8DA1"
-  textColor: "#4A154B"
-
-decorations:
-  greetingText: "— ♡ Sweet Sakura ♡ —"
-  glowExpansionDp: 4.0
-  cardRoundnessDp: 24.0
-```
-
-### 💡 Lid Light Animations (`.yaml`)
-Lid LED Studio animations are little YAML files too, so you can hand-write one or share it. Each step lists the five lid windows (`W1`–`W5`, left to right); `#000000` means off. The lid lights each step in one color (the most-used one in that step):
-
-```yaml
-name: "Sakura Chase ♡"
-author: "emii"
-step_ms: 500        # 100–5000 ms per step
-loop: true          # false = play once
-steps:              # up to 16
-  - windows: ["#FF1493", "#000000", "#000000", "#000000", "#000000"]
-  - windows: ["#000000", "#FF1493", "#000000", "#000000", "#000000"]
-  - windows: ["#000000", "#000000", "#FF1493", "#000000", "#000000"]
-```
-
-Exports are saved as `.mochibunled` files (it's the same YAML inside, just with a cute extension). Open one on your phone and it pops straight into your Studio library ♡ Plain `.yaml` or `.json` files with the same fields work too, through **Import** in the Studio.
+See **[Theme, Mascot & Lid LED Formats](docs/theming_formats.md)** for full YAML schemas, sprite sheet dimensions, and `.mochibundle` layout details.
 
 ### 📦 Full Backups (`.json`)
 Head to **Settings > Backup & Restore** to save your pinned favorites, folders, hidden apps, key remaps, cursor tweaks, and mochibunny's stats to a simple `.json` file. Restoring shows a preview summary first and reloads everything instantly, no reboot needed.
@@ -229,7 +186,7 @@ This is the default, and it's how most flip phones will run Mochibun. Root-only 
 
 1. **Default Home App**: *Settings > Apps > Default Apps > Home app*, then pick Mochibun.
 2. **Display Over Other Apps** (`SYSTEM_ALERT_WINDOW`): lets the virtual mouse pointer float on top of every app.
-3. **Mochibun Accessibility Service (Optional)**: *Settings > Accessibility > Mochibun Cursor & Keys*. This lets the cursor tap and scroll in touch-only apps, makes the side key (F4) toggle the cursor anywhere, and lets keypad shortcuts open Recents, notifications, and Quick Settings, all without root. It never reads what's on your screen, and it steps aside automatically if the LSPosed hook is running.
+3. **Mochibun Accessibility Service (Optional)**: *Settings > Accessibility > Mochibun Cursor & Keys*. This lets the cursor tap and scroll in touch-only apps, makes the side key (F4) toggle the cursor anywhere, and lets keypad shortcuts open Recents, notifications, and Quick Settings, all without root. [`accessibility_service_config.xml`](app/src/main/res/xml/accessibility_service_config.xml) explicitly sets `android:canRetrieveWindowContent="false"` and requests no accessibility event types, so it never reads what's on your screen, and it steps aside automatically if the LSPosed hook is running.
 4. **Notification Access (Optional)**: *Settings > Apps > Special app access > Notification access*. Powers the Now Playing music card and the notifications page.
 
 The checklist also has rows for the **Mochibun Keitai IME** (see [Mochibun Keitai Keyboard](#-mochibun-keitai-keyboard)) and the virtual cursor, which shows whether it's ready to go. The cursor only runs (with its little status-bar notification) while it's actually on screen, so your notification shade stays quiet the rest of the time.
@@ -265,13 +222,17 @@ No LSPosed? No problem! The launcher, drawer, T9 search, widgets, themes, backup
 
 ## 🛠️ Building from Source
 
+**Requirements:** **JDK 21**, **Android SDK 37** (`compileSdk 37`), and **Android NDK + CMake** (3.18.1+, used for the native `evinject` and `lidled` helpers).
+
 ```bash
 git clone https://github.com/smolstinkyprincess/Mochibun.git
 cd Mochibun
-./gradlew assembleRelease
+./gradlew assembleDebug
 ```
 
-The APK will be waiting for you in `app/build/outputs/apk/release/app-release.apk`!
+The debug APK (signed with the default debug key) will be at `app/build/outputs/apk/debug/app-debug.apk`.
+
+> **Building a release APK:** `./gradlew assembleRelease` produces an **unsigned** `app/build/outputs/apk/release/app-release-unsigned.apk` unless you provide a `keystore.properties` file in the repo root (`RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`)—see [`app/build.gradle.kts`](app/build.gradle.kts#L38-L66). With `keystore.properties` configured, Gradle outputs the signed `app/build/outputs/apk/release/app-release.apk`.
 
 ---
 

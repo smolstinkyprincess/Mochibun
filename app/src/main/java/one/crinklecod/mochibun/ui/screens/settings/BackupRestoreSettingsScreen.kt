@@ -401,13 +401,17 @@ internal fun BackupRestoreSettingsScreen(
     pendingImportPreviewData?.let { preview ->
         PresetPreviewDialog(
             previewData = preview,
-            onApply = {
+            onApply = { clearUnbundledAssets ->
                 val uri = pendingImportUri
                 if (uri != null) {
                     try {
                         context.contentResolver.openInputStream(uri)?.use { stream ->
                             var mascotNote: String? = null
-                            val applyRes = ThemeBundleManager.applyBundle(context, stream) { mascotNote = it }
+                            val applyRes = ThemeBundleManager.applyBundle(
+                                context = context,
+                                inputStream = stream,
+                                clearUnbundledAssets = clearUnbundledAssets
+                            ) { mascotNote = it }
                             if (applyRes.isSuccess) {
                                 onSettingsRestored?.invoke()
                                 statusMessage = "Preset '${preview.manifest.bundleName}' applied! ♡" +
@@ -423,6 +427,8 @@ internal fun BackupRestoreSettingsScreen(
                 }
                 try {
                     preview.wallpaperPreview?.recycle()
+                    preview.mascotPreview?.recycle()
+                    preview.cardBorderPreview?.recycle()
                 } catch (_: Exception) {}
                 pendingImportPreviewData = null
                 pendingImportUri = null
@@ -430,6 +436,8 @@ internal fun BackupRestoreSettingsScreen(
             onDismiss = {
                 try {
                     preview.wallpaperPreview?.recycle()
+                    preview.mascotPreview?.recycle()
+                    preview.cardBorderPreview?.recycle()
                 } catch (_: Exception) {}
                 pendingImportPreviewData = null
                 pendingImportUri = null

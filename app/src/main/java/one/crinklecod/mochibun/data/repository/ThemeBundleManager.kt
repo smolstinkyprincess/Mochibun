@@ -3,7 +3,10 @@ package one.crinklecod.mochibun.data.repository
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapRegionDecoder
+import android.graphics.Rect
 import android.net.Uri
+import android.os.Build
 import androidx.compose.ui.graphics.toArgb
 import one.crinklecod.mochibun.core.util.calculateInSampleSize
 import one.crinklecod.mochibun.core.util.downsampleAndSaveImage
@@ -23,6 +26,7 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import kotlinx.serialization.encodeToString
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -47,7 +51,9 @@ data class BundlePreviewData(
     /** A `mascot_atlas.png` within the 1.5 MB limit that is a PNG (fully validated on apply). */
     val hasMascotAsset: Boolean = false,
     /** A `card_border.png` within the 512 KB limit that is a PNG (fully validated on apply). */
-    val hasCardBorderAsset: Boolean = false
+    val hasCardBorderAsset: Boolean = false,
+    val mascotPreview: Bitmap? = null,
+    val cardBorderPreview: Bitmap? = null
 ) {
     val hasCustomMascot: Boolean
         get() = hasMascotAsset
@@ -132,6 +138,9 @@ object ThemeBundleManager {
             val cardColorHex = colorIntToHex(currentTheme.cardBgColor.toArgb())
             val greetingColorHex = colorIntToHex(currentTheme.greetingColor.toArgb())
             val actionColorHex = colorIntToHex(currentTheme.appActionColor.toArgb())
+            val outlineColorHex = colorIntToHex(currentTheme.greetingOutlineColor.toArgb())
+            val textColorHex = colorIntToHex(currentTheme.fgTextColor.toArgb())
+            val fontFamilyId = PreferencesManager.getThemeFontFamily(context)
             val cardRoundness = currentTheme.cardRoundnessDp
             val borderStyleId = CardBorderStyle.normalizeId(currentTheme.borderStyle)
 
@@ -176,7 +185,10 @@ object ThemeBundleManager {
                     cardRoundnessDp = cardRoundness,
                     borderStyle = borderStyleId,
                     hasCustomCardBorder = hasCustomBorderToBundle,
-                    cardBorderSlicePx = customBorderSlicePx
+                    cardBorderSlicePx = customBorderSlicePx,
+                    outlineColorHex = outlineColorHex,
+                    textColorHex = textColorHex,
+                    fontFamilyId = fontFamilyId
                 ),
                 cursor = BundleCursorConfig(
                     baseVelocity = CursorPreferences.getMoveSpeed(context),
@@ -281,6 +293,8 @@ object ThemeBundleManager {
             var hasCursor = false
             var hasMascot = false
             var hasCardBorder = false
+            var mascotBytes: ByteArray? = null
+            var cardBorderBytes: ByteArray? = null
 
             ZipInputStream(bufferedIn).use { zipIn ->
                 var entry = zipIn.nextEntry
@@ -309,21 +323,32 @@ object ThemeBundleManager {
                             hasCursor = true
                         }
                         MASCOT_ENTRY -> {
-                            // Keeps only the 24-byte PNG header; the rest is counted and discarded
-                            val header = PngHeaderCapture()
-                            val withinLimit = readMascotEntry(zipIn, header, totalBytes)
-                            hasMascot = withinLimit && MascotAtlasValidator.readPngSize(header.bytes()) != null
+                            val captured = ByteArrayOutputStream()
+                            val withinLimit = readMascotEntry(zipIn, captured, totalBytes)
+                            if (withinLimit) {
+                                val bytes = captured.toByteArray()
+                                if (MascotAtlasValidator.readPngSize(bytes) != null) {
+                                    hasMascot = true
+                                    mascotBytes = bytes
+                                }
+                            }
                         }
                         CARD_BORDER_ENTRY -> {
-                            val header = PngHeaderCapture()
-                            val withinLimit = readCardBorderEntry(zipIn, header, totalBytes)
-                            val pngSize = MascotAtlasValidator.readPngSize(header.bytes())
-                            hasCardBorder = withinLimit && pngSize != null &&
-                                CustomCardBorderManager.validateDimensions(
-                                    pngSize.first,
-                                    pngSize.second,
-                                    CardBorderStyle.MIN_SLICE_PX
-                                ).isSuccess
+                            val captured = ByteArrayOutputStream()
+                            val withinLimit = readCardBorderEntry(zipIn, captured, totalBytes)
+                            if (withinLimit) {
+                                val bytes = captured.toByteArray()
+                                val pngSize = MascotAtlasValidator.readPngSize(bytes)
+                                if (pngSize != null && CustomCardBorderManager.validateDimensions(
+                                        pngSize.first,
+                                        pngSize.second,
+                                        CardBorderStyle.MIN_SLICE_PX
+                                    ).isSuccess
+                                ) {
+                                    hasCardBorder = true
+                                    cardBorderBytes = bytes
+                                }
+                            }
                         }
                         else -> copyBounded(
                             zipIn,
@@ -337,16 +362,25 @@ object ThemeBundleManager {
                 }
             }
 
-            if (manifest == null) {
+            val parsedManifest = manifest
+            if (parsedManifest == null) {
                 Result.failure(IllegalArgumentException("Invalid .mochibundle bundle: missing manifest.json"))
             } else {
+                val mascotPreview = if (hasMascot) {
+                    mascotBytes?.let { decodeMascotFirstFramePreview(it, parsedManifest) }
+                } else null
+                val cardBorderPreview = if (hasCardBorder) {
+                    cardBorderBytes?.let { decodeBoundedThumbnail(it) }
+                } else null
                 Result.success(
                     BundlePreviewData(
-                        manifest = manifest!!,
+                        manifest = parsedManifest,
                         wallpaperPreview = wallpaperBitmap,
                         hasCursorAsset = hasCursor,
                         hasMascotAsset = hasMascot,
-                        hasCardBorderAsset = hasCardBorder
+                        hasCardBorderAsset = hasCardBorder,
+                        mascotPreview = mascotPreview,
+                        cardBorderPreview = cardBorderPreview
                     )
                 )
             }
@@ -364,6 +398,7 @@ object ThemeBundleManager {
     fun applyBundle(
         context: Context,
         inputStream: InputStream,
+        clearUnbundledAssets: Boolean = false,
         onMascotSkipped: (String) -> Unit = {}
     ): Result<MochibunBundleManifest> {
         val stagedFiles = mutableListOf<File>()
@@ -495,19 +530,27 @@ object ThemeBundleManager {
             val cardInt = hexToColorInt(p.cardColorHex, DEFAULT_FALLBACK_CARD_INT)
             val greetingInt = hexToColorInt(p.greetingColorHex, DEFAULT_FALLBACK_GREETING_INT)
             val actionInt = hexToColorInt(p.actionColorHex, DEFAULT_FALLBACK_ACTION_INT)
+            val textInt = p.textColorHex?.let { safeParseColorInt(it, greetingInt) } ?: greetingInt
+            val outlineInt = p.outlineColorHex?.let { safeParseColorInt(it, cardInt) } ?: cardInt
             val resolvedBorderStyle = CardBorderStyle.fromId(p.borderStyle)
 
             editor.putInt(PreferencesManager.KEY_THEME_BG_COLOR, bgInt)
-            editor.putInt(PreferencesManager.KEY_THEME_FG_TEXT_COLOR, greetingInt)
+            editor.putInt(PreferencesManager.KEY_THEME_FG_TEXT_COLOR, textInt)
             editor.putInt(PreferencesManager.KEY_THEME_CARD_BG_COLOR, cardInt)
-            editor.putInt(PreferencesManager.KEY_THEME_CARD_TEXT_COLOR, greetingInt)
+            editor.putInt(PreferencesManager.KEY_THEME_CARD_TEXT_COLOR, textInt)
             editor.putInt(PreferencesManager.KEY_THEME_GREETING_COLOR, greetingInt)
-            editor.putInt(PreferencesManager.KEY_THEME_GREETING_OUTLINE_COLOR, cardInt)
+            editor.putInt(PreferencesManager.KEY_THEME_GREETING_OUTLINE_COLOR, outlineInt)
             editor.putInt(PreferencesManager.KEY_THEME_GREETING_BG_COLOR, bgInt)
             editor.putInt(PreferencesManager.KEY_THEME_APP_ACTION_COLOR, actionInt)
             editor.putFloat(PreferencesManager.KEY_THEME_CARD_ROUNDNESS, p.cardRoundnessDp)
             editor.putString(PreferencesManager.KEY_THEME_BORDER_STYLE, resolvedBorderStyle.id)
             CustomCardBorderManager.setBorderStyle(context, resolvedBorderStyle)
+
+            p.fontFamilyId?.takeIf { it.isNotBlank() }?.let { requestedFontId ->
+                if (TypographyManager.options.value.any { it.id == requestedFontId }) {
+                    PreferencesManager.setThemeFontFamily(context, requestedFontId)
+                }
+            }
 
             // 2. Apply Greeting
             if (targetManifest.greeting.userName.isNotBlank() &&
@@ -535,26 +578,36 @@ object ThemeBundleManager {
                 android.util.Log.w(TAG, "Unknown hotspot alignment: ${c.hotspot}", e)
             }
 
-            // 4. Set Assets if present
+            // 4. Set Assets if present (or clear unbundled ones if requested)
             if (extractedWallpaperFile != null && extractedWallpaperFile.exists()) {
                 val wallUri = Uri.fromFile(extractedWallpaperFile)
                 PreferencesManager.setWallpaperUri(context, wallUri.toString())
+            } else if (clearUnbundledAssets) {
+                PreferencesManager.setWallpaperUri(context, null)
+                File(context.filesDir, "bundle_wallpaper.png").delete()
             }
 
             if (extractedCursorFile != null && extractedCursorFile.exists()) {
                 val curUri = Uri.fromFile(extractedCursorFile)
                 CursorPreferences.setCustomCursorUri(context, curUri)
+            } else if (clearUnbundledAssets) {
+                CursorPreferences.setCustomCursorUri(context, null)
+                File(context.filesDir, "bundle_cursor.png").delete()
+                File(context.filesDir, "bundle_cursor.gif").delete()
             }
 
             // Custom mascot: validated against the manifest's layout (or inferred). A bad or
             // oversized atlas is skipped and the current mascot is kept.
-            stagedMascotFile?.let { staged ->
+            val stagedMascot = stagedMascotFile
+            if (stagedMascot != null) {
                 if (!mascotWithinLimit) {
                     onMascotSkipped("Custom mascot skipped: bigger than 1.5 MB")
                 } else {
-                    CustomMascotManager.installStaged(context, staged, targetManifest.mascot)
+                    CustomMascotManager.installStaged(context, stagedMascot, targetManifest.mascot)
                         .onFailure { onMascotSkipped("Custom mascot skipped: ${it.message}") }
                 }
+            } else if (clearUnbundledAssets) {
+                CustomMascotManager.reset(context)
             }
 
             // Custom 9-slice card border:
@@ -662,6 +715,52 @@ object ThemeBundleManager {
 
     fun hexToColorInt(hex: String, defaultColor: Int): Int =
         safeParseColorInt(hex, defaultColor)
+
+    private fun decodeMascotFirstFramePreview(
+        bytes: ByteArray,
+        manifest: MochibunBundleManifest
+    ): Bitmap? {
+        return try {
+            val (w, h) = MascotAtlasValidator.readPngSize(bytes) ?: return null
+            val fw = (manifest.mascot?.frameWidth ?: (w / 4)).coerceIn(1, w)
+            val fh = (manifest.mascot?.frameHeight ?: (h / 8)).coerceIn(1, h)
+            val opts = BitmapFactory.Options().apply {
+                outWidth = fw
+                outHeight = fh
+            }
+            val sample = calculateInSampleSize(opts, 96, 96)
+            val decodeOpts = BitmapFactory.Options().apply {
+                inSampleSize = sample
+            }
+            val decoder = if (Build.VERSION.SDK_INT >= 31) {
+                ByteArrayInputStream(bytes).use { BitmapRegionDecoder.newInstance(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false)
+            } ?: return null
+            try {
+                decoder.decodeRegion(Rect(0, 0, fw, fh), decodeOpts)
+            } finally {
+                decoder.recycle()
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun decodeBoundedThumbnail(bytes: ByteArray): Bitmap? {
+        return try {
+            val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOpts)
+            if (boundsOpts.outWidth <= 0 || boundsOpts.outHeight <= 0) return null
+            val decodeOpts = BitmapFactory.Options().apply {
+                inSampleSize = calculateInSampleSize(boundsOpts, 96, 96)
+            }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts)
+        } catch (_: Throwable) {
+            null
+        }
+    }
 }
 
 /** Adds every byte read to the whole-bundle total and fails once the bundle is too big. */
@@ -673,24 +772,4 @@ private class BundleByteCounter(input: InputStream, private val total: AtomicLon
         }
         return n
     }
-}
-
-/** Keeps the first 24 bytes written (a PNG signature + IHDR) and discards the rest. */
-private class PngHeaderCapture : OutputStream() {
-    private val header = ByteArray(24)
-    private var size = 0
-
-    override fun write(value: Int) {
-        if (size < header.size) header[size++] = value.toByte()
-    }
-
-    override fun write(buffer: ByteArray, offset: Int, length: Int) {
-        val n = minOf(length, header.size - size)
-        if (n > 0) {
-            System.arraycopy(buffer, offset, header, size, n)
-            size += n
-        }
-    }
-
-    fun bytes(): ByteArray = header.copyOf(size)
 }

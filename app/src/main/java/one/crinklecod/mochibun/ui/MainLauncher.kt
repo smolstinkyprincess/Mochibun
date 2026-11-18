@@ -1642,13 +1642,17 @@ fun MainLauncher(
                 }
 
                 is ActiveModal.IncomingBundlePreview -> {
-                    val onApplyBundle: () -> Unit = remember(modal, context, preferences, launcherVm) {
-                        {
+                    val onApplyBundle: (Boolean) -> Unit = remember(modal, context, preferences, launcherVm) {
+                        { clearUnbundledAssets ->
                             scope.launch(Dispatchers.IO) {
                                 try {
                                     var mascotNote: String? = null
                                     context.contentResolver.openInputStream(modal.uri)?.use { stream ->
-                                        ThemeBundleManager.applyBundle(context, stream) { mascotNote = it }
+                                        ThemeBundleManager.applyBundle(
+                                            context = context,
+                                            inputStream = stream,
+                                            clearUnbundledAssets = clearUnbundledAssets
+                                        ) { mascotNote = it }
                                     }
                                     mascotNote?.let { note ->
                                         withContext(Dispatchers.Main) {
@@ -1666,6 +1670,8 @@ fun MainLauncher(
                                     withContext(Dispatchers.Main) {
                                         try {
                                             modal.preview.wallpaperPreview?.recycle()
+                                            modal.preview.mascotPreview?.recycle()
+                                            modal.preview.cardBorderPreview?.recycle()
                                         } catch (_: Exception) {}
                                         if (activeModal == modal) {
                                             activeModal = null
@@ -1680,6 +1686,8 @@ fun MainLauncher(
                         {
                             try {
                                 modal.preview.wallpaperPreview?.recycle()
+                                modal.preview.mascotPreview?.recycle()
+                                modal.preview.cardBorderPreview?.recycle()
                             } catch (_: Exception) {}
                             activeModal = null
                             onConsumeIncomingBundleUri()

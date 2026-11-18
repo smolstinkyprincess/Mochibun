@@ -23,11 +23,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -292,14 +294,19 @@ fun ExportBundleDialog(
 @Composable
 fun PresetPreviewDialog(
     previewData: BundlePreviewData,
-    onApply: () -> Unit,
+    onApply: (clearUnbundledAssets: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
     val manifest = previewData.manifest
+    val hasUnbundledAssets = previewData.wallpaperPreview == null ||
+        !previewData.hasCursorAsset ||
+        !previewData.hasMascotAsset
+    var clearUnbundledAssets by remember(manifest) { mutableStateOf(true) }
 
     val focusRequester = remember { FocusRequester() }
-    var focusedButton by remember { mutableIntStateOf(1) } // 0: Cancel, 1: Apply
+    // 0: Reset unbundled checkbox (when shown), 1: Cancel, 2: Apply
+    var focusedControl by remember { mutableIntStateOf(2) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
     val formattedDate = remember(manifest.createdAtEpochSec) {
@@ -339,7 +346,11 @@ fun PresetPreviewDialog(
                             sawCenterDown = true
                         } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                             sawCenterDown = false
-                            if (focusedButton == 1) onApply() else onDismiss()
+                            when (focusedControl) {
+                                0 -> if (hasUnbundledAssets) clearUnbundledAssets = !clearUnbundledAssets
+                                1 -> onDismiss()
+                                else -> onApply(hasUnbundledAssets && clearUnbundledAssets)
+                            }
                         }
                         return@onPreviewKeyEvent true
                     }
@@ -347,15 +358,28 @@ fun PresetPreviewDialog(
 
                     when (native.keyCode) {
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
-                            focusedButton = 0
+                            focusedControl = 1
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            focusedButton = 1
+                            focusedControl = 2
                             true
                         }
-                        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            focusedButton = if (focusedButton == 0) 1 else 0
+                        KeyEvent.KEYCODE_DPAD_UP -> {
+                            focusedControl = when {
+                                hasUnbundledAssets && focusedControl != 0 -> 0
+                                focusedControl == 2 -> 1
+                                else -> 2
+                            }
+                            true
+                        }
+                        KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            focusedControl = when {
+                                focusedControl == 0 -> 2
+                                focusedControl == 1 -> 2
+                                hasUnbundledAssets -> 0
+                                else -> 1
+                            }
                             true
                         }
                         else -> false
@@ -430,6 +454,8 @@ fun PresetPreviewDialog(
                         Image(
                             bitmap = previewData.wallpaperPreview.asImageBitmap(),
                             contentDescription = null,
+                            filterQuality = FilterQuality.None,
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(width = 36.dp, height = 48.dp)
                                 .clip(RoundedCornerShape(6.dp))
@@ -444,6 +470,89 @@ fun PresetPreviewDialog(
                     Spacer(modifier = Modifier.height(6.dp))
                 }
 
+                if (previewData.hasMascotAsset && previewData.mascotPreview != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(theme.greetingBgColor.copy(alpha = 0.6f))
+                            .padding(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            bitmap = previewData.mascotPreview.asImageBitmap(),
+                            contentDescription = null,
+                            filterQuality = FilterQuality.None,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .border(1.dp, theme.greetingOutlineColor, RoundedCornerShape(6.dp))
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = manifest.mascot?.name?.ifBlank { "Custom Mascot" } ?: "Custom Mascot",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = theme.fgTextColor
+                            )
+                            Text(
+                                text = previewMascotBadgeText(previewData),
+                                fontSize = 10.sp,
+                                color = theme.greetingColor
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                } else if (previewData.hasMascotAsset) {
+                    Text(
+                        text = previewMascotBadgeText(previewData),
+                        fontSize = 11.sp,
+                        color = theme.greetingColor,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                }
+
+                if (previewData.hasCardBorderAsset && previewData.cardBorderPreview != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(theme.greetingBgColor.copy(alpha = 0.6f))
+                            .padding(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            bitmap = previewData.cardBorderPreview.asImageBitmap(),
+                            contentDescription = null,
+                            filterQuality = FilterQuality.None,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .border(1.dp, theme.greetingOutlineColor, RoundedCornerShape(6.dp))
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("9-Slice Card Border", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = theme.fgTextColor)
+                            Text("Included in bundle", fontSize = 10.sp, color = theme.greetingColor)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                } else {
+                    previewCardBorderBadgeText(previewData)?.let { borderBadge ->
+                        Text(
+                            text = borderBadge,
+                            fontSize = 11.sp,
+                            color = theme.greetingColor,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                    }
+                }
+
                 if (previewData.hasCursorAsset) {
                     Text(
                         text = "🖱️ Custom cursor included",
@@ -454,22 +563,11 @@ fun PresetPreviewDialog(
                     )
                 }
 
-                if (previewData.hasMascotAsset) {
+                manifest.palette.fontFamilyId?.takeIf { it.isNotBlank() && it != "default" }?.let { fontId ->
                     Text(
-                        text = previewMascotBadgeText(previewData),
-                        fontSize = 11.sp,
-                        color = theme.greetingColor,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    )
-                }
-
-                previewCardBorderBadgeText(previewData)?.let { borderBadge ->
-                    Text(
-                        text = borderBadge,
-                        fontSize = 11.sp,
-                        color = theme.greetingColor,
-                        fontWeight = FontWeight.SemiBold,
+                        text = "🔤 Font: $fontId",
+                        fontSize = 10.5.sp,
+                        color = theme.cardTextColor,
                         modifier = Modifier.padding(vertical = 2.dp)
                     )
                 }
@@ -483,7 +581,17 @@ fun PresetPreviewDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                if (hasUnbundledAssets) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    CheckboxRow(
+                        label = "Reset unbundled wallpaper / cursor / mascot",
+                        checked = clearUnbundledAssets,
+                        isFocused = focusedControl == 0,
+                        onToggle = { clearUnbundledAssets = !clearUnbundledAssets }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Actions with unclipped focus rings
                 Row(
@@ -492,16 +600,16 @@ fun PresetPreviewDialog(
                 ) {
                     KawaiiClosePill(
                         label = "Cancel",
-                        isFocused = focusedButton == 0,
+                        isFocused = focusedControl == 1,
                         onClick = { onDismiss() },
                         modifier = Modifier.weight(1f)
                     )
 
                     KawaiiDialogPillButton(
                         text = "Apply Setup ♡",
-                        isFocused = focusedButton == 1,
+                        isFocused = focusedControl == 2,
                         isPrimary = true,
-                        onClick = { onApply() },
+                        onClick = { onApply(hasUnbundledAssets && clearUnbundledAssets) },
                         modifier = Modifier.weight(1.3f)
                     )
                 }
