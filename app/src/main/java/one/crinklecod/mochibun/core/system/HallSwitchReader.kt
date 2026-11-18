@@ -26,8 +26,20 @@ internal class HallSwitchReader(
     var isStreaming = false
         private set
 
+    @Volatile
+    var isRunning = false
+        private set
+
     fun start() {
-        Thread(::run, "mochibun-hall").apply { isDaemon = true }.start()
+        if (isRunning) return
+        isRunning = true
+        Thread({
+            try {
+                run()
+            } finally {
+                isRunning = false
+            }
+        }, "mochibun-hall").apply { isDaemon = true }.start()
     }
 
     private fun run() {

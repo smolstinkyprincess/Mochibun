@@ -19,10 +19,14 @@ data class DailyGrants(
     val stepTreats: Int = 0,
     val notifClearTreats: Int = 0,
     val chargeTreats: Int = 0,
+    val dailyCheckInTreats: Int = 0,
 )
 
 /** Where a treat came from. Each source has its own daily cap. */
-enum class TreatSource { STEPS, NOTIF_CLEAR, CHARGER }
+enum class TreatSource { STEPS, NOTIF_CLEAR, CHARGER, DAILY_CHECKIN }
+
+/** Outcome of trying to feed Mochibunny. */
+enum class FeedResult { FED, NO_TREATS, ALREADY_FULL }
 
 data class PetState(
     val fullness: Float = 0.8f,        // 0f..1f
@@ -49,6 +53,8 @@ object PetTuning {
 
     const val MAX_TREATS = 9
     const val FEED_FULLNESS = 0.30f
+    /** Above this fullness, feeding is refused so treats aren't wasted on a full tummy. */
+    const val FULL_THRESHOLD = 0.99f
     const val PET_JOY = 0.12f
     const val PET_COOLDOWN_MS = 5_000L
     const val CHARGER_JOY = 0.08f
@@ -60,6 +66,7 @@ object PetTuning {
     const val DAILY_CAP_STEPS = 5
     const val DAILY_CAP_NOTIF_CLEAR = 3
     const val DAILY_CAP_CHARGER = 2
+    const val DAILY_CAP_DAILY_CHECKIN = 1
 
     const val HUNGRY_BELOW = 0.30f
     const val SULKY_BELOW = 0.30f
@@ -72,6 +79,7 @@ object PetTuning {
         TreatSource.STEPS -> DAILY_CAP_STEPS
         TreatSource.NOTIF_CLEAR -> DAILY_CAP_NOTIF_CLEAR
         TreatSource.CHARGER -> DAILY_CAP_CHARGER
+        TreatSource.DAILY_CHECKIN -> DAILY_CAP_DAILY_CHECKIN
     }
 }
 
@@ -94,17 +102,26 @@ object PetLogic {
     }
 
     /**
-     * Spends one treat for +[PetTuning.FEED_FULLNESS] fullness. Returns `false` (and an otherwise
-     * unchanged, advanced state) when there are no treats, so the UI can show "no treats yet".
+     * Tries to spend one treat for +[PetTuning.FEED_FULLNESS] fullness.
+     * - If already full (>= [PetTuning.FULL_THRESHOLD]), returns [FeedResult.ALREADY_FULL] without
+     *   spending a treat.
+     * - If out of treats, returns [FeedResult.NO_TREATS].
      */
-    fun feed(s: PetState, nowMs: Long, currentEpochDay: Long): Pair<PetState, Boolean> {
+    fun tryFeed(s: PetState, nowMs: Long, currentEpochDay: Long): Pair<PetState, FeedResult> {
         val a = advance(s, nowMs, currentEpochDay)
-        if (a.treats <= 0) return a to false
+        if (a.fullness >= PetTuning.FULL_THRESHOLD) return a to FeedResult.ALREADY_FULL
+        if (a.treats <= 0) return a to FeedResult.NO_TREATS
         val fed = a.copy(
             treats = a.treats - 1,
             fullness = (a.fullness + PetTuning.FEED_FULLNESS).coerceAtMost(1f),
         )
-        return fed to true
+        return fed to FeedResult.FED
+    }
+
+    /** Convenience wrapper returning `true` only when a treat was actually eaten. */
+    fun feed(s: PetState, nowMs: Long, currentEpochDay: Long): Pair<PetState, Boolean> {
+        val (next, result) = tryFeed(s, nowMs, currentEpochDay)
+        return next to (result == FeedResult.FED)
     }
 
     /**
@@ -179,6 +196,7 @@ object PetLogic {
             TreatSource.STEPS -> grants.stepTreats
             TreatSource.NOTIF_CLEAR -> grants.notifClearTreats
             TreatSource.CHARGER -> grants.chargeTreats
+            TreatSource.DAILY_CHECKIN -> grants.dailyCheckInTreats
         }
         val capLeft = (PetTuning.dailyCap(source) - usedToday).coerceAtLeast(0)
         val bagRoom = (PetTuning.MAX_TREATS - a.treats).coerceAtLeast(0)
@@ -189,6 +207,7 @@ object PetLogic {
             TreatSource.STEPS -> grants.copy(stepTreats = grants.stepTreats + granted)
             TreatSource.NOTIF_CLEAR -> grants.copy(notifClearTreats = grants.notifClearTreats + granted)
             TreatSource.CHARGER -> grants.copy(chargeTreats = grants.chargeTreats + granted)
+            TreatSource.DAILY_CHECKIN -> grants.copy(dailyCheckInTreats = grants.dailyCheckInTreats + granted)
         }
         val newJoy = if (source == TreatSource.CHARGER) {
             (a.joy + PetTuning.CHARGER_JOY).coerceAtMost(1f)
@@ -196,6 +215,22 @@ object PetLogic {
             a.joy
         }
         return a.copy(treats = a.treats + granted, joy = newJoy, dailyGrants = newGrants)
+    }
+
+    /** Formats a 0..1 stat as 4 monochrome hearts (`♥` / `♡`), matching the SystemUI battery meter. */
+    fun statHearts(value: Float): String {
+        val v = if (value.isNaN()) 0f else value.coerceIn(0f, 1f)
+        val filled = when {
+            v >= 0.875f -> 4
+            v >= 0.625f -> 3
+            v >= 0.375f -> 2
+            v >= 0.125f -> 1
+            else -> 0
+        }
+        return buildString(4) {
+            repeat(filled) { append('♥') }
+            repeat(4 - filled) { append('♡') }
+        }
     }
 
     /**
@@ -218,6 +253,7 @@ object PetLogic {
                 stepTreats = s.dailyGrants.stepTreats.coerceIn(0, PetTuning.DAILY_CAP_STEPS),
                 notifClearTreats = s.dailyGrants.notifClearTreats.coerceIn(0, PetTuning.DAILY_CAP_NOTIF_CLEAR),
                 chargeTreats = s.dailyGrants.chargeTreats.coerceIn(0, PetTuning.DAILY_CAP_CHARGER),
+                dailyCheckInTreats = s.dailyGrants.dailyCheckInTreats.coerceIn(0, PetTuning.DAILY_CAP_DAILY_CHECKIN),
             ),
         )
     }

@@ -95,7 +95,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         fun hideCursor() {
             val service = instance ?: return
             if (!isCursorVisible) return
-            service.mainHandler.post { service.handleLidClosed() }
+            service.mainHandler.post { service.handleDisplaySleep() }
         }
 
         /**
@@ -147,11 +147,11 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
 
     private val clamshellListener = object : ClamshellListener {
         override fun onDisplaySleep() {
-            handleLidClosed()
+            handleDisplaySleep()
         }
 
         override fun onDisplayWake() {
-            handleLidOpened()
+            handleDisplayWake()
         }
     }
 
@@ -300,7 +300,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         }
     }
 
-    private fun handleLidClosed() {
+    private fun handleDisplaySleep() {
         Log.d(TAG, "Display asleep: suspending cursor ticker and auto-dismissing overlay")
         stopMovementTicker()
         overlayView?.pauseAnimation()
@@ -314,7 +314,7 @@ class VirtualCursorService : Service(), Choreographer.FrameCallback {
         stopIfHidden()
     }
 
-    private fun handleLidOpened() {
+    private fun handleDisplayWake() {
         Log.d(TAG, "Display awake: refreshing display bounds")
         val metrics = resources.displayMetrics
         val width = metrics.widthPixels.toFloat().coerceAtLeast(480f)

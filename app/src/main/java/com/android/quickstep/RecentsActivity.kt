@@ -16,7 +16,6 @@
 
 package com.android.quickstep
 
-import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.os.Bundle
@@ -63,6 +62,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.MochibunSystemBarsEffect
@@ -132,7 +132,7 @@ class RecentsActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             val prefs = remember {
-                context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
+                PreferencesManager.getPrefs(context)
             }
             val savedTheme = remember { loadSavedTheme(prefs) }
 
@@ -228,7 +228,7 @@ fun RecentsScreen(
         val dismissedId = task.taskId
         val pkg = task.packageName
         tasks = tasks.filter { it.taskId != dismissedId }
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+        tasksManager.ioScope.launch {
             tasksManager.removeTask(dismissedId, pkg)
         }
         if (tasks.isEmpty()) {
@@ -239,7 +239,7 @@ fun RecentsScreen(
     val clearAllTasks: () -> Unit = {
         val currentTasks = tasks
         tasks = emptyList()
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+        tasksManager.ioScope.launch {
             tasksManager.clearAllTasks(currentTasks)
         }
         onDismissActivity()
@@ -248,7 +248,7 @@ fun RecentsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Transparent) // Recents background color
+            .background(Color.Transparent)
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->

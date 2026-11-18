@@ -68,6 +68,12 @@ object HardwareRemapManager {
     private var longPressFired = false
 
     private var isInitialized = false
+    private var appContextRef: Context? = null
+
+    // Held as a strong field because SharedPreferences stores listeners in a WeakHashMap
+    private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        appContextRef?.let(::reloadActiveConfig)
+    }
 
     private val hardwareKeyReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -90,10 +96,9 @@ object HardwareRemapManager {
         if (isInitialized) return
         isInitialized = true
         val appContext = context.applicationContext
+        appContextRef = appContext
         reloadActiveConfig(appContext)
-        getPrefs(appContext).registerOnSharedPreferenceChangeListener { _, _ ->
-            reloadActiveConfig(appContext)
-        }
+        getPrefs(appContext).registerOnSharedPreferenceChangeListener(prefChangeListener)
         val filter = android.content.IntentFilter(MochibunSystemActions.ACTION_HARDWARE_KEY_TRIGGER)
         androidx.core.content.ContextCompat.registerReceiver(
             appContext,
@@ -234,6 +239,7 @@ object HardwareRemapManager {
                     context.packageManager.getLaunchIntentForPackage(action.packageName)?.let { intent ->
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         context.startActivity(intent)
+                        PreferencesManager.setLastLaunchedPackage(context, action.packageName)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to launch app ${action.packageName}", e)

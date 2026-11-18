@@ -50,7 +50,7 @@ import java.util.Date
  * Tier 1: Backup & Restore Sub-Screen
  */
 @Composable
-internal fun BackupRestoreSettingsSubScreen(
+internal fun BackupRestoreSettingsScreen(
     onBack: () -> Unit,
     onSettingsRestored: (() -> Unit)?,
     onPreviewDialogBackHandlerChanged: (( (() -> Unit)? ) -> Unit),
@@ -77,9 +77,9 @@ internal fun BackupRestoreSettingsSubScreen(
     var pendingIncludeDisplayName by remember { mutableStateOf(true) }
     var pendingIncludeMascot by remember { mutableStateOf(true) }
 
-    // Setup Bundle (.mochibun) Create launcher
+    // Setup Bundle (.mochibundle) Create launcher
     val bundleCreateLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/zip")
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         if (uri != null) {
             try {
@@ -280,7 +280,7 @@ internal fun BackupRestoreSettingsSubScreen(
             item {
                 SettingsCard(categoryTitle = "Share & Theme Presets") {
                     SettingsNavigationRow(
-                        title = "Export Setup Bundle (.mochibun)",
+                        title = "Export Setup Bundle (.mochibundle)",
                         subtitle = "Share theme, colors, greeting & cursor in a safe archive",
                         icon = "🎀",
                         isFocused = focusedIndex == 0,
@@ -291,8 +291,8 @@ internal fun BackupRestoreSettingsSubScreen(
                     )
 
                     SettingsNavigationRow(
-                        title = "Import Setup Bundle (.mochibun)",
-                        subtitle = "Preview and apply a shared .mochibun preset",
+                        title = "Import Setup Bundle (.mochibundle)",
+                        subtitle = "Preview and apply a shared .mochibundle preset",
                         icon = "✨",
                         isFocused = focusedIndex == 1,
                         jumpNumber = 2,

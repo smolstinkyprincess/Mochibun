@@ -11,6 +11,9 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import android.util.LruCache
 import androidx.annotation.VisibleForTesting
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import one.crinklecod.mochibun.core.util.drawableToBitmap
 import one.crinklecod.mochibun.data.model.MochibunNotificationItem
 import one.crinklecod.mochibun.service.MochibunNotificationListenerService
 import one.crinklecod.mochibun.pet.PetManager
@@ -47,8 +50,14 @@ object NotificationTracker {
     private var activeServiceRef: WeakReference<MochibunNotificationListenerService>? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    private data class CachedAppMeta(
+        val name: String,
+        val icon: Drawable?,
+        val iconBitmap: ImageBitmap?
+    )
+
     // Low-overhead memory cache for app metadata to avoid repeated IPC lookups
-    private val appMetadataCache = LruCache<String, Pair<String, Drawable?>>(40)
+    private val appMetadataCache = LruCache<String, CachedAppMeta>(40)
 
     private sealed interface Update {
         class Posted(val context: Context, val sbn: StatusBarNotification, val rankedKeys: Array<String>?) : Update
@@ -170,7 +179,8 @@ object NotificationTracker {
             return null
         }
 
-        val (appName, appIcon) = getAppMetadata(context.packageManager, pkg)
+        val meta = getAppMetadata(context.packageManager, pkg)
+        val appName = meta.name
         val finalTitle = when {
             title.isNotEmpty() -> title
             text.isNotEmpty() -> appName
@@ -185,8 +195,9 @@ object NotificationTracker {
             text = text,
             postTime = sbn.postTime,
             contentIntent = sbn.notification.contentIntent,
-            appIcon = appIcon,
-            isIncomingCall = isIncomingCall(sbn.notification)
+            appIcon = meta.icon,
+            isIncomingCall = isIncomingCall(sbn.notification),
+            appIconBitmap = meta.iconBitmap
         )
     }
 
@@ -200,17 +211,21 @@ object NotificationTracker {
         return callType == Notification.CallStyle.CALL_TYPE_INCOMING || notification.fullScreenIntent != null
     }
 
-    private fun getAppMetadata(pm: PackageManager, packageName: String): Pair<String, Drawable?> {
+    private fun getAppMetadata(pm: PackageManager, packageName: String): CachedAppMeta {
         appMetadataCache.get(packageName)?.let { return it }
-        val (name, icon) = try {
+        val result = try {
             val appInfo = pm.getApplicationInfo(packageName, 0)
             val label = pm.getApplicationLabel(appInfo).toString()
             val drawable = pm.getApplicationIcon(appInfo)
-            Pair(label, drawable)
+            val bitmap = try {
+                drawableToBitmap(drawable, 48).asImageBitmap()
+            } catch (_: Exception) {
+                null
+            }
+            CachedAppMeta(label, drawable, bitmap)
         } catch (_: Exception) {
-            Pair(packageName, null)
+            CachedAppMeta(packageName, null, null)
         }
-        val result = Pair(name, icon)
         appMetadataCache.put(packageName, result)
         return result
     }

@@ -56,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.data.prefs.HomeMascotSize
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.NotificationTracker
 import androidx.compose.ui.graphics.ImageBitmap
@@ -177,6 +178,7 @@ fun HomeScreen(
     isHomeVisible: Boolean = isHomeScreenActive,
     isPetPillOpen: Boolean = false,
     petPillSelection: Int = 0,
+    showPetStats: Boolean = false,
     mascotReaction: MascotReaction = MascotReaction(),
     onMascotClick: () -> Unit = {},
     onPetPillOptionClick: (Int) -> Unit = {},
@@ -197,7 +199,11 @@ fun HomeScreen(
     val unreadNotifCount = notifications.size
     val isTickerEnabled by PreferencesManager.isSubDisplayTickerEnabled.collectAsState()
     val isTickerDark by PreferencesManager.isSubDisplayTickerDark.collectAsState()
+    val homeMascotSize by PreferencesManager.homeMascotSize.collectAsState()
     val petPillBounds = remember { PetPillBounds() }
+    if (!isTickerEnabled) {
+        StepCounterResumeSync()
+    }
 
     Box(
         modifier = modifier
@@ -248,7 +254,9 @@ fun HomeScreen(
                 isMascotFocused = isHomeVisible && homeFocusArea == 4,
                 isPetPillOpen = isPetPillOpen,
                 petPillSelection = petPillSelection,
+                showPetStats = showPetStats,
                 petPillBounds = petPillBounds,
+                mascotSize = homeMascotSize,
                 mascotReaction = mascotReaction,
                 onMascotClick = onMascotClick,
                 onPetPillOptionClick = onPetPillOptionClick,
@@ -556,8 +564,10 @@ fun launchClockApp(context: Context) {
         val alarmIntent = Intent(AlarmClock.ACTION_SHOW_ALARMS).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        if (alarmIntent.resolveActivity(pm) != null) {
+        val resolved = alarmIntent.resolveActivity(pm)
+        if (resolved != null) {
             context.startActivity(alarmIntent)
+            PreferencesManager.setLastLaunchedPackage(context, resolved.packageName)
             return
         }
     } catch (_: Exception) {
@@ -570,8 +580,10 @@ fun launchClockApp(context: Context) {
             addCategory(Intent.CATEGORY_APP_CALENDAR)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        if (categoryIntent.resolveActivity(pm) != null) {
+        val resolved = categoryIntent.resolveActivity(pm)
+        if (resolved != null) {
             context.startActivity(categoryIntent)
+            PreferencesManager.setLastLaunchedPackage(context, resolved.packageName)
             return
         }
     } catch (_: Exception) {
@@ -592,6 +604,7 @@ fun launchClockApp(context: Context) {
             }
             if (launchIntent != null) {
                 context.startActivity(launchIntent)
+                PreferencesManager.setLastLaunchedPackage(context, pkg)
                 return
             }
         } catch (_: Exception) {
@@ -789,7 +802,9 @@ fun FavoritesCard(
     isMascotFocused: Boolean = false,
     isPetPillOpen: Boolean = false,
     petPillSelection: Int = 0,
+    showPetStats: Boolean = false,
     petPillBounds: PetPillBounds? = null,
+    mascotSize: HomeMascotSize = HomeMascotSize.SMALL,
     mascotReaction: MascotReaction = MascotReaction(),
     onMascotClick: () -> Unit = {},
     onPetPillOptionClick: (Int) -> Unit = {},
@@ -833,11 +848,31 @@ fun FavoritesCard(
         Modifier
     }
 
+    val mascotSizeDp = mascotSize.sizeDp.dp
+    val mascotTopPadding = when (mascotSize) {
+        HomeMascotSize.SMALL -> 26.dp
+        HomeMascotSize.MEDIUM -> 37.dp
+        HomeMascotSize.LARGE -> 45.dp
+    }
+    // Shift her slightly right as she grows so she stays over the top-right corner and leaves
+    // room on the left for PetActionPill on 320dp-wide screens.
+    val mascotOffsetX = when (mascotSize) {
+        HomeMascotSize.SMALL -> (-14).dp
+        HomeMascotSize.MEDIUM -> (-8).dp
+        HomeMascotSize.LARGE -> (-2).dp
+    }
+    val mascotOffsetY = -mascotTopPadding
+    val pillGap = when (mascotSize) {
+        HomeMascotSize.SMALL -> 6.dp
+        HomeMascotSize.MEDIUM -> 4.dp
+        HomeMascotSize.LARGE -> 2.dp
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
-            .padding(top = 26.dp)
+            .padding(top = mascotTopPadding)
     ) {
         // Dainty keitai lace + pearl rim. Fill/rim use the LauncherTheme card colors (identical
         // to ActiveTheme.surface / cardBorder on built-in palettes, but also honoring custom presets).
@@ -960,14 +995,14 @@ fun FavoritesCard(
     MochibunnyWithSpeechBubble(
         baseSlot = moodSlot,
         frameTick = mascotTick,
-        size = 56.dp,
+        size = mascotSizeDp,
         themeTintColor = theme.mascotTintColor,
         isFocused = isMascotFocused,
         reaction = mascotReaction,
         onTap = onMascotClick,
         modifier = Modifier
             .align(Alignment.TopEnd)
-            .offset(x = (-14).dp, y = (-26).dp)
+            .offset(x = mascotOffsetX, y = mascotOffsetY)
             .keitaiMascotBob(mascotTick)
     )
 
@@ -978,9 +1013,13 @@ fun FavoritesCard(
         PetActionPill(
             selectedIndex = petPillSelection,
             onOptionClick = onPetPillOptionClick,
+            showStats = showPetStats,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = (-76).dp, y = (-15).dp)
+                .offset(
+                    x = mascotOffsetX - mascotSizeDp - pillGap,
+                    y = mascotOffsetY + (mascotSizeDp / 2) - 17.dp
+                )
                 .onGloballyPositioned { petPillBounds?.pill = it }
         )
     }
@@ -1117,7 +1156,7 @@ private fun FavoriteFolderSlot(
         folderIconRefreshKey
     ) {
         withContext(Dispatchers.IO) {
-            val preferences = context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
+            val preferences = PreferencesManager.getPrefs(context)
             val folderIconName = preferences.getString("custom_folder_icon_${folder.id}", null)
             value = IconPackManager.getCachedImageBitmap(context, folderIconName, 96)
         }
@@ -1255,8 +1294,6 @@ private fun AnimatedMenuIndicator(isAnimating: Boolean, color: Color) {
         Glyph(heart)
     }
 }
-
-// SoftKeyPromptPill moved to one.crinklecod.mochibun.ui.components.SoftKeyPromptPill
 
 /**
  * Lightweight 4-pointed sparkle star drawn using vector geometry.

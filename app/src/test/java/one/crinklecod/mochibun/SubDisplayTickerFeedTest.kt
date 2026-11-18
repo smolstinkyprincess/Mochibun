@@ -1,6 +1,6 @@
 package one.crinklecod.mochibun
 
-import one.crinklecod.mochibun.ui.components.COZY_FORTUNES
+import one.crinklecod.mochibun.ui.components.COZY_FORTUNES_BY_DAY
 import one.crinklecod.mochibun.ui.components.buildSubDisplayFeed
 import one.crinklecod.mochibun.ui.components.formatNextAlarmTime
 import one.crinklecod.mochibun.ui.components.dailyFortuneLabel
@@ -11,9 +11,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
 import java.util.TimeZone
+import java.time.DayOfWeek
 
 /** Feed text and daily fortune of the Home greeting sub-display marquee. */
-class SubDisplayTickerTest {
+class SubDisplayTickerFeedTest {
 
     @Test
     fun fullFeedIsJoinedInOrder() {
@@ -91,8 +92,9 @@ class SubDisplayTickerTest {
 
     @Test
     fun fortuneIsStablePerDayAndVaries() {
+        val allFortunes = COZY_FORTUNES_BY_DAY.values.flatten()
         assertEquals(dailyFortuneLabel(2026, 318), dailyFortuneLabel(2026, 318))
-        assertTrue(dailyFortuneLabel(2026, 318) in COZY_FORTUNES)
+        assertTrue(dailyFortuneLabel(2026, 318) in allFortunes)
         val week = (318..324).map { dailyFortuneLabel(2026, it) }.toSet()
         assertTrue(week.size > 1)
         assertNotEquals(dailyFortuneLabel(2026, 318), dailyFortuneLabel(2026, 319))
@@ -100,11 +102,15 @@ class SubDisplayTickerTest {
 
     @Test
     fun cozyFortunesArePlainText() {
-        // No numbers and no kaomoji brackets: just short cozy text
-        for (fortune in COZY_FORTUNES) {
-            assertFalse(fortune, fortune.any { it.isDigit() })
-            assertFalse(fortune, fortune.any { it in "()（）" })
-            assertTrue(fortune, fortune.length <= 40)
+        assertEquals(DayOfWeek.entries.toSet(), COZY_FORTUNES_BY_DAY.keys)
+        for ((day, fortunes) in COZY_FORTUNES_BY_DAY) {
+            assertTrue("Expected fortunes for $day", fortunes.isNotEmpty())
+            // No numbers and no kaomoji brackets: just short cozy text
+            for (fortune in fortunes) {
+                assertFalse(fortune, fortune.any { it.isDigit() })
+                assertFalse(fortune, fortune.any { it in "()（）" })
+                assertTrue(fortune, fortune.length <= 40)
+            }
         }
     }
 

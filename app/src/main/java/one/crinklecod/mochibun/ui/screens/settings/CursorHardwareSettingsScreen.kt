@@ -33,7 +33,7 @@ import java.util.Locale
  * Tier 2: Virtual Cursor Sub-Screen
  */
 @Composable
-internal fun CursorHardwareSettingsSubScreen(
+internal fun CursorHardwareSettingsScreen(
     onBack: () -> Unit,
     onOpenHardwareButtons: (() -> Unit)?,
     modifier: Modifier = Modifier

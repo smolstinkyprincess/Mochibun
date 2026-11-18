@@ -45,7 +45,14 @@ data class BundlePreviewData(
     val hasCursorAsset: Boolean = false,
     /** A `mascot_atlas.png` within the 1.5 MB limit that is a PNG (fully validated on apply). */
     val hasMascotAsset: Boolean = false
-)
+) {
+    val hasCustomMascot: Boolean
+        get() = hasMascotAsset
+
+    val hasCustomMascotDialogue: Boolean
+        get() = (hasMascotAsset || manifest.hasCustomMascot) &&
+            MascotAtlasValidator.sanitizeMascotDialogue(manifest.mascot?.dialogue) != null
+}
 
 /**
  * Core engine for exporting and importing `.mochibun` Theme & Setup preset archives.
@@ -86,7 +93,7 @@ object ThemeBundleManager {
             .replace(Regex("[^a-z0-9_-]"), "_")
             .ifBlank { "mochibun_theme" }
         val dateFormat = SimpleDateFormat("yyyyMMdd", Locale.US)
-        return "${sanitized}_${dateFormat.format(Date())}.mochibun"
+        return "${sanitized}_${dateFormat.format(Date())}.mochibundle"
     }
 
     /**
@@ -279,7 +286,7 @@ object ThemeBundleManager {
             }
 
             if (manifest == null) {
-                Result.failure(IllegalArgumentException("Invalid .mochibun bundle: missing manifest.json"))
+                Result.failure(IllegalArgumentException("Invalid .mochibundle bundle: missing manifest.json"))
             } else {
                 Result.success(
                     BundlePreviewData(

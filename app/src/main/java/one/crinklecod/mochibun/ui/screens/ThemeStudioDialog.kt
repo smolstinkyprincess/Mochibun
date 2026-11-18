@@ -84,10 +84,7 @@ fun ThemeStudioDialog(
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val prefs = remember {
-        context.getSharedPreferences(
-            "launcher_preferences",
-            Context.MODE_PRIVATE
-        )
+        PreferencesManager.getPrefs(context)
     }
 
     val currentSavedFont = remember { PreferencesManager.getThemeFontFamily(context) }

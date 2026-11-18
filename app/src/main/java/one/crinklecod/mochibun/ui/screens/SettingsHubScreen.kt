@@ -130,7 +130,7 @@ fun SettingsHubScreen(
             )
         }
         SettingsDestination.Appearance -> {
-            AppearanceSettingsSubScreen(
+            AppearanceSettingsScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onOpenThemeStudio = onOpenThemeStudio,
                 onOpenIconPackDialog = onOpenIconPackDialog,
@@ -141,20 +141,20 @@ fun SettingsHubScreen(
             )
         }
         SettingsDestination.CursorHardware -> {
-            CursorHardwareSettingsSubScreen(
+            CursorHardwareSettingsScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onOpenHardwareButtons = onOpenHardwareButtons,
                 modifier = settingsModifier
             )
         }
         SettingsDestination.SoundFeedback -> {
-            SoundFeedbackSettingsSubScreen(
+            SoundFeedbackSettingsScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.Behavior -> {
-            BehaviorSettingsSubScreen(
+            BehaviorSettingsScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onOpenHiddenApps = onOpenHiddenApps,
                 onCreateFolderClick = onCreateFolderClick,
@@ -163,20 +163,20 @@ fun SettingsHubScreen(
             )
         }
         SettingsDestination.LidLedStudio -> {
-            LidLedStudioSubScreen(
+            LidLedStudioScreen(
                 onBack = { currentDestination = SettingsDestination.Behavior },
                 onNestedBackHandlerChanged = { lidStudioBackHandler = it },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.PermissionsRoot -> {
-            PermissionsRootSettingsSubScreen(
+            PermissionsRootSettingsScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.BackupRestore -> {
-            BackupRestoreSettingsSubScreen(
+            BackupRestoreSettingsScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 onSettingsRestored = onSettingsRestored,
                 onPreviewDialogBackHandlerChanged = { backupPreviewBackHandler = it },
@@ -184,13 +184,13 @@ fun SettingsHubScreen(
             )
         }
         SettingsDestination.About -> {
-            AboutMochibunSubScreen(
+            AboutMochibunScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.Keyboard -> {
-            KeyboardSettingsSubScreen(
+            KeyboardSettingsScreen(
                 onBack = { currentDestination = SettingsDestination.Hub },
                 modifier = settingsModifier
             )

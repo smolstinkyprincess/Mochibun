@@ -16,10 +16,14 @@ enum class MascotReactionKind(val slot: MascotAnimSlot) {
     CHAT(MascotAnimSlot.TALK),
     /** Feed succeeded. */
     FED(MascotAnimSlot.EAT),
+    /** Feed refused because her tummy is already full. */
+    ALREADY_FULL(MascotAnimSlot.TALK),
     /** Feed with no treats: she explains how to earn some. */
     NO_TREATS(MascotAnimSlot.TALK),
     /** Pet. */
     PETTED(MascotAnimSlot.PET),
+    /** Returned to Home after earning treats (charging / clearing notifs / daily check-in). */
+    TREATS_EARNED(MascotAnimSlot.HAPPY),
 }
 
 /**
@@ -27,4 +31,8 @@ enum class MascotReactionKind(val slot: MascotAnimSlot) {
  * [MochibunnyWithSpeechBubble] plays each id once (and never replays an old one on re-entry).
  */
 @Immutable
-data class MascotReaction(val id: Int = 0, val kind: MascotReactionKind = MascotReactionKind.CHAT)
+data class MascotReaction(
+    val id: Int = 0,
+    val kind: MascotReactionKind = MascotReactionKind.CHAT,
+    val earnedCount: Int = 0,
+)

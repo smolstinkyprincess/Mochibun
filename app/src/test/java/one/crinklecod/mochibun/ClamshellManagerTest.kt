@@ -152,4 +152,62 @@ class ClamshellManagerTest {
         assertNull(HallSwitchReader.parseHallLine("EV_KEY       KEY_5                DOWN"))
         assertNull(HallSwitchReader.parseHallLine("EV_SYN       SYN_REPORT           00000000"))
     }
+
+    @Test
+    fun hardwareCloseAndOpenIncrementsPendingOpenActionSequence() {
+        ClamshellManager.hardwareLidSourceOverride = true
+        var fakeUptime = 1_000L
+        ClamshellManager.uptimeMillisProvider = { fakeUptime }
+
+        ClamshellManager.onHallChanged(closed = true)
+        ClamshellManager.onDisplayPowerChanged(awake = false, allowScreenOffFallback = false)
+        assertEquals(1, ClamshellManager.lidCloseSequence.value)
+        assertEquals(0, ClamshellManager.pendingOpenActionSequence.value)
+
+        fakeUptime = 2_500L
+        ClamshellManager.onHallChanged(closed = false)
+        ClamshellManager.onDisplayPowerChanged(awake = true, allowScreenOffFallback = false)
+
+        assertEquals(1, ClamshellManager.pendingOpenActionSequence.value)
+        assertEquals(2_500L, ClamshellManager.lastPendingOpenActionUptimeMs)
+    }
+
+    @Test
+    fun displayTimeoutWithHardwareLidDoesNotTriggerPendingOpenAction() {
+        ClamshellManager.hardwareLidSourceOverride = true
+
+        ClamshellManager.onDisplayPowerChanged(awake = false, allowScreenOffFallback = false)
+        ClamshellManager.onDisplayPowerChanged(awake = true, allowScreenOffFallback = false)
+
+        assertEquals(0, ClamshellManager.lidCloseSequence.value)
+        assertEquals(0, ClamshellManager.pendingOpenActionSequence.value)
+        assertEquals(1, ClamshellManager.openAwakeSequence.value)
+    }
+
+    @Test
+    fun nonHardwareScreenOffFallbackTriggersPendingOpenActionOnWake() {
+        ClamshellManager.hardwareLidSourceOverride = false
+        var fakeUptime = 5_000L
+        ClamshellManager.uptimeMillisProvider = { fakeUptime }
+
+        ClamshellManager.onDisplayPowerChanged(awake = false, allowScreenOffFallback = true)
+        assertEquals(ClamshellState.OPEN_DOZING, ClamshellManager.state.value)
+        assertFalse(ClamshellManager.isLidClosed.value)
+        assertEquals(0, ClamshellManager.pendingOpenActionSequence.value)
+
+        fakeUptime = 7_500L
+        ClamshellManager.onDisplayPowerChanged(awake = true, allowScreenOffFallback = true)
+        assertEquals(ClamshellState.OPEN_AWAKE, ClamshellManager.state.value)
+        assertEquals(1, ClamshellManager.pendingOpenActionSequence.value)
+        assertEquals(7_500L, ClamshellManager.lastPendingOpenActionUptimeMs)
+    }
+
+    @Test
+    fun hingeAngleThresholdsUseHysteresis() {
+        assertEquals(true, ClamshellManager.hingeAngleToClosed(0f))
+        assertEquals(true, ClamshellManager.hingeAngleToClosed(15f))
+        assertNull(ClamshellManager.hingeAngleToClosed(22f))
+        assertEquals(false, ClamshellManager.hingeAngleToClosed(30f))
+        assertEquals(false, ClamshellManager.hingeAngleToClosed(180f))
+    }
 }

@@ -1,15 +1,18 @@
 package one.crinklecod.mochibun
 
 import one.crinklecod.mochibun.data.model.BundleMascotConfig
+import one.crinklecod.mochibun.data.model.BundleMascotDialogue
 import one.crinklecod.mochibun.data.model.BundleMascotSlot
 import one.crinklecod.mochibun.data.model.MascotAtlasValidator
 import one.crinklecod.mochibun.data.model.MascotAtlasValidator.Result
+import one.crinklecod.mochibun.data.model.sanitizeMascotDialogue
 import one.crinklecod.mochibun.ui.components.MascotAnimSlot
 import one.crinklecod.mochibun.ui.components.MascotAtlasLayout
 import one.crinklecod.mochibun.ui.components.MascotAtlasMath
 import one.crinklecod.mochibun.ui.components.MascotSlotLayout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,7 +20,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
-class MascotAtlasValidationTest {
+class MascotAtlasValidatorTest {
 
     private fun valid(r: Result): MascotAtlasLayout {
         assertTrue("expected valid, got $r", r is Result.Valid)
@@ -128,6 +131,43 @@ class MascotAtlasValidationTest {
         val layout = valid(MascotAtlasValidator.inferLayout(192, 384))
         val again = valid(MascotAtlasValidator.layoutFromConfig(MascotAtlasValidator.toConfig(layout), 192, 384))
         assertEquals(layout, again)
+    }
+
+    // ── Custom dialogue sanitization ────────────────────────────────────────
+
+    @Test
+    fun sanitizeMascotDialogue_stripsBlanksControlChars_clampsLength_andCapsPoolSize() {
+        assertNull(sanitizeMascotDialogue(null))
+        assertNull(
+            sanitizeMascotDialogue(
+                BundleMascotDialogue(
+                    happy = listOf("", "   ", "\r\n\t", "\u0000\u0007")
+                )
+            )
+        )
+
+        val overlong = "a".repeat(64)
+        val many = (1..25).map { "line $it" }
+        val sanitized = sanitizeMascotDialogue(
+            BundleMascotDialogue(
+                happy = listOf("  hello\r\nworld\t!  ", " \n ", "ribbit\u0000~", overlong),
+                fed = many
+            )
+        )
+        assertNotNull(sanitized!!)
+        assertEquals(3, sanitized.happy.size)
+        assertEquals("hello world !", sanitized.happy[0])
+        assertEquals("ribbit~", sanitized.happy[1])
+        assertEquals(48, sanitized.happy[2].length)
+        assertEquals("a".repeat(48), sanitized.happy[2])
+
+        assertEquals(20, sanitized.fed.size)
+        assertEquals((1..20).map { "line $it" }, sanitized.fed)
+        assertTrue(sanitized.content.isEmpty())
+        assertTrue(sanitized.hungry.isEmpty())
+        assertTrue(sanitized.sulky.isEmpty())
+        assertTrue(sanitized.sleepy.isEmpty())
+        assertTrue(sanitized.noTreats.isEmpty())
     }
 
     // ── PNG header & byte limit ─────────────────────────────────────────────

@@ -57,7 +57,7 @@ import one.crinklecod.mochibun.ui.theme.ActiveTheme
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun AppearanceSettingsSubScreen(
+internal fun AppearanceSettingsScreen(
     onBack: () -> Unit,
     onOpenThemeStudio: (() -> Unit)?,
     onOpenIconPackDialog: (() -> Unit)?,
@@ -82,6 +82,7 @@ internal fun AppearanceSettingsSubScreen(
     val isPhotoFrameEnabled by PreferencesManager.isPhotoFrameEnabled.collectAsState()
     val isSubDisplayTickerEnabled by PreferencesManager.isSubDisplayTickerEnabled.collectAsState()
     val isSubDisplayTickerDark by PreferencesManager.isSubDisplayTickerDark.collectAsState()
+    val homeMascotSize by PreferencesManager.homeMascotSize.collectAsState()
     val fontId by PreferencesManager.themeFontFamily.collectAsState()
     val fontOptions by TypographyManager.options.collectAsState()
     val mascotSource by MascotSpriteStore.source.collectAsState()
@@ -121,6 +122,7 @@ internal fun AppearanceSettingsSubScreen(
             }
             add("pick_mascot")
             if (hasCustomMascot) add("reset_mascot")
+            add("mascot_size")
             add("icon_pack")
             add("wallpaper_stickers")
             add("system_monitor")
@@ -136,7 +138,7 @@ internal fun AppearanceSettingsSubScreen(
             "theme", "typography" -> 0
             "name", "sub_display_ticker", "sub_display_style" -> 1
             "icon_pack", "pick_wallpaper", "reset_wallpaper", "pick_mascot", "reset_mascot",
-            "wallpaper_stickers" -> 2
+            "mascot_size", "wallpaper_stickers" -> 2
             "system_monitor", "monitor_interval", "photo_frame" -> 3
             else -> 0
         }
@@ -190,6 +192,10 @@ internal fun AppearanceSettingsSubScreen(
                 CustomMascotManager.reset(context)
                 focusedIndex = items.indexOf("pick_mascot").coerceAtLeast(0)
                 Toast.makeText(context, "♡ Mochibunny is back to default", Toast.LENGTH_SHORT).show()
+            }
+            "mascot_size" -> {
+                PreferencesManager.setHomeMascotSize(context, homeMascotSize.next())
+                SoundEffectManager.play(context, SoundEffect.SELECT)
             }
             "wallpaper_stickers" -> {
                 PreferencesManager.setWallpaperOverlayEnabled(context, !isWallpaperOverlayEnabled)
@@ -285,6 +291,14 @@ internal fun AppearanceSettingsSubScreen(
                         } else if (items.getOrNull(focusedIndex) == "sub_display_style") {
                             // Two-value stepper: Left / Right both flip the style.
                             PreferencesManager.setSubDisplayTickerDark(context, !isSubDisplayTickerDark)
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        } else if (items.getOrNull(focusedIndex) == "mascot_size") {
+                            val nextSize = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                                homeMascotSize.previous()
+                            } else {
+                                homeMascotSize.next()
+                            }
+                            PreferencesManager.setHomeMascotSize(context, nextSize)
                             SoundEffectManager.play(context, SoundEffect.NAV)
                         } else {
                             val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
@@ -415,6 +429,22 @@ internal fun AppearanceSettingsSubScreen(
                             onClick = { activateAppearanceItem(items.indexOf("reset_mascot")) }
                         )
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Home Mascot Size",
+                        subtitle = "Size of Mochibunny on the home screen",
+                        valueDisplay = homeMascotSize.label,
+                        isFocused = items.getOrNull(focusedIndex) == "mascot_size",
+                        jumpNumber = (items.indexOf("mascot_size") + 1).takeIf { it <= 9 },
+                        onDecrement = {
+                            PreferencesManager.setHomeMascotSize(context, homeMascotSize.previous())
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        },
+                        onIncrement = {
+                            PreferencesManager.setHomeMascotSize(context, homeMascotSize.next())
+                            SoundEffectManager.play(context, SoundEffect.NAV)
+                        }
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Installed Icon Packs",

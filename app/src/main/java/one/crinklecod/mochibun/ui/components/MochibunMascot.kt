@@ -3,6 +3,8 @@ package one.crinklecod.mochibun.ui.components
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.os.BatteryManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -43,6 +45,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.data.model.BundleMascotDialogue
+import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.data.repository.MediaSessionTracker
 import one.crinklecod.mochibun.pet.PetManager
@@ -323,12 +328,22 @@ val PET_FED_LINES = listOf(
     "munch munch ₍ᐢ. ̫.ᐢ₎"
 )
 
+val PET_ALREADY_FULL_LINES = listOf(
+    "tummy's already full! ♡",
+    "no room left~ (˶ᵔ ᵕ ᵔ˶)",
+    "save that treat! 🍡",
+    "bursting with mochi! ♡"
+)
+
+internal const val STEP_NO_TREATS_HINT = "go for a walk? ♡"
+
 val PET_NO_TREATS_LINES = listOf(
     "no treats yet... ( ´･ω･)",
-    "go for a walk? ♡",
+    STEP_NO_TREATS_HINT,
     "plug me in for a treat? 🔋",
     "clear notifs = treats! ✨",
-    "treat bag's empty (｡•́︿•̀｡)"
+    "treat bag's empty (｡•́︿•̀｡)",
+    "daily visit = 1 treat! ♡"
 )
 
 val PET_PETTED_LINES = listOf(
@@ -339,27 +354,50 @@ val PET_PETTED_LINES = listOf(
     "best friend ever ♡"
 )
 
+fun noTreatsLines(
+    hasStepSensor: Boolean,
+    customDialogue: BundleMascotDialogue? = CustomMascotManager.activeDialogue()
+): List<String> =
+    customDialogue?.noTreats?.takeIf { it.isNotEmpty() }
+        ?: if (hasStepSensor) PET_NO_TREATS_LINES else PET_NO_TREATS_LINES.filter { it != STEP_NO_TREATS_HINT }
+
 /**
  * The bubble line for a pill reaction, never repeating [previousLine]. [chatLine] supplies the
  * mood-driven Chat line (it needs a Context and her current mood, so the caller provides it).
+ * If the active custom mascot declares non-empty lines for `fed` or `noTreats`, those pools are
+ * used; otherwise Mochibunny's built-in pools are used.
  */
 fun selectReactionLine(
     kind: MascotReactionKind,
     previousLine: String?,
+    hasStepSensor: Boolean = true,
+    earnedCount: Int = 1,
+    customDialogue: BundleMascotDialogue? = CustomMascotManager.activeDialogue(),
     chatLine: () -> String
 ): String = when (kind) {
     MascotReactionKind.CHAT -> chatLine()
-    MascotReactionKind.FED -> pickLineAvoiding(PET_FED_LINES, previousLine)
-    MascotReactionKind.NO_TREATS -> pickLineAvoiding(PET_NO_TREATS_LINES, previousLine)
+    MascotReactionKind.FED -> pickLineAvoiding(
+        customDialogue?.fed?.takeIf { it.isNotEmpty() } ?: PET_FED_LINES,
+        previousLine
+    )
+    MascotReactionKind.ALREADY_FULL -> pickLineAvoiding(PET_ALREADY_FULL_LINES, previousLine)
+    MascotReactionKind.NO_TREATS -> pickLineAvoiding(
+        noTreatsLines(hasStepSensor, customDialogue),
+        previousLine
+    )
     MascotReactionKind.PETTED -> pickLineAvoiding(PET_PETTED_LINES, previousLine)
+    MascotReactionKind.TREATS_EARNED -> if (earnedCount <= 1) "+1 🍡 treat earned! ♡" else "+$earnedCount 🍡 treats earned! ♡"
 }
 
-fun petMoodLines(mood: PetMood): List<String> = when (mood) {
-    PetMood.HAPPY -> PET_HAPPY_LINES
-    PetMood.CONTENT -> PET_CONTENT_LINES
-    PetMood.HUNGRY -> PET_HUNGRY_LINES
-    PetMood.SULKY -> PET_SULKY_LINES
-    PetMood.SLEEPY -> PET_SLEEPY_LINES
+fun petMoodLines(
+    mood: PetMood,
+    customDialogue: BundleMascotDialogue? = CustomMascotManager.activeDialogue()
+): List<String> = when (mood) {
+    PetMood.HAPPY -> customDialogue?.happy?.takeIf { it.isNotEmpty() } ?: PET_HAPPY_LINES
+    PetMood.CONTENT -> customDialogue?.content?.takeIf { it.isNotEmpty() } ?: PET_CONTENT_LINES
+    PetMood.HUNGRY -> customDialogue?.hungry?.takeIf { it.isNotEmpty() } ?: PET_HUNGRY_LINES
+    PetMood.SULKY -> customDialogue?.sulky?.takeIf { it.isNotEmpty() } ?: PET_SULKY_LINES
+    PetMood.SLEEPY -> customDialogue?.sleepy?.takeIf { it.isNotEmpty() } ?: PET_SLEEPY_LINES
 }
 
 /** A random line from [pool] that isn't [previousLine] (unless the pool has nothing else). */
@@ -413,10 +451,11 @@ fun selectSpeechBubbleDialogue(
     hour: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
     isLowBattery: Boolean? = null,
     isMusicPlaying: Boolean? = null,
-    petMood: PetMood? = null
+    petMood: PetMood? = null,
+    customDialogue: BundleMascotDialogue? = CustomMascotManager.activeDialogue()
 ): String {
     if (petMood != null) {
-        val moodPool = petMoodLines(petMood)
+        val moodPool = petMoodLines(petMood, customDialogue)
         if (petMood == PetMood.HUNGRY || petMood == PetMood.SULKY || petMood == PetMood.SLEEPY) {
             return pickLineAvoiding(moodPool, previousLine)
         }
@@ -489,6 +528,11 @@ fun SpeechBubble(
             )
         }
 
+        val fillPath = remember { Path() }
+        val strokePath = remember { Path() }
+        val density = LocalDensity.current.density
+        val tailStroke = remember(density) { Stroke(width = 1.5f * density, cap = StrokeCap.Round) }
+
         Canvas(
             modifier = Modifier
                 .padding(end = 20.dp)
@@ -497,27 +541,24 @@ fun SpeechBubble(
         ) {
             val width = size.width
             val height = size.height
-            val strokePx = 1.5.dp.toPx()
 
             // Fill triangle with background color overlapping the pill bottom stroke
-            val fillPath = Path().apply {
-                moveTo(0f, 0f)
-                lineTo(width, 0f)
-                lineTo(width * 0.55f, height)
-                close()
-            }
+            fillPath.rewind()
+            fillPath.moveTo(0f, 0f)
+            fillPath.lineTo(width, 0f)
+            fillPath.lineTo(width * 0.55f, height)
+            fillPath.close()
             drawPath(path = fillPath, color = bgColor)
 
             // Outline the two downward slanted sides
-            val strokePath = Path().apply {
-                moveTo(0f, 0f)
-                lineTo(width * 0.55f, height)
-                lineTo(width, 0f)
-            }
+            strokePath.rewind()
+            strokePath.moveTo(0f, 0f)
+            strokePath.lineTo(width * 0.55f, height)
+            strokePath.lineTo(width, 0f)
             drawPath(
                 path = strokePath,
                 color = borderColor,
-                style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                style = tailStroke
             )
         }
     }
@@ -550,6 +591,10 @@ fun MochibunnyWithSpeechBubble(
     onTap: () -> Unit // Home opens the pet pill
 ) {
     val context = LocalContext.current
+    val hasStepSensor = remember(context) {
+        (context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager)
+            ?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) != null
+    }
     val theme = LocalLauncherTheme.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -599,11 +644,14 @@ fun MochibunnyWithSpeechBubble(
         }
     }
 
+    val customDialogue by CustomMascotManager.dialogue.collectAsState()
+
     val chatLine = {
         selectSpeechBubbleDialogue(
             context,
             lastSpokenLine ?: currentDialogue,
-            petMood = PetManager.currentMood()
+            petMood = PetManager.currentMood(),
+            customDialogue = customDialogue
         )
     }
 
@@ -613,7 +661,14 @@ fun MochibunnyWithSpeechBubble(
     LaunchedEffect(reaction.id) {
         if (reaction.id > handledReactionId) {
             handledReactionId = reaction.id
-            val line = selectReactionLine(reaction.kind, lastSpokenLine ?: currentDialogue, chatLine)
+            val line = selectReactionLine(
+                kind = reaction.kind,
+                previousLine = lastSpokenLine ?: currentDialogue,
+                hasStepSensor = hasStepSensor,
+                earnedCount = reaction.earnedCount,
+                customDialogue = customDialogue,
+                chatLine = chatLine
+            )
             speak(line, reaction.kind.slot)
         }
     }

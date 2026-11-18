@@ -32,7 +32,7 @@ import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 
 @Composable
-internal fun SoundFeedbackSettingsSubScreen(
+internal fun SoundFeedbackSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {

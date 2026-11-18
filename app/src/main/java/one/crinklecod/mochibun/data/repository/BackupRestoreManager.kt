@@ -9,6 +9,7 @@ import one.crinklecod.mochibun.data.model.FavoriteFolder
 import one.crinklecod.mochibun.data.model.PhysicalKey
 import one.crinklecod.mochibun.data.prefs.ClickMethod
 import one.crinklecod.mochibun.data.prefs.CursorPreferences
+import one.crinklecod.mochibun.data.prefs.HomeMascotSize
 import one.crinklecod.mochibun.data.prefs.HotspotAlignment
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.pet.PetBackupCodec
@@ -84,6 +85,7 @@ object BackupRestoreManager {
         themeObj.put("preset", PreferencesManager.getThemePreset(context))
         themeObj.put("custom_user_name", PreferencesManager.getCustomUserName(context))
         themeObj.put("wallpaper_overlay_enabled", PreferencesManager.isWallpaperOverlayEnabled(context))
+        themeObj.put("home_mascot_size", PreferencesManager.getHomeMascotSize(context).id)
 
         val colorsObj = JSONObject()
         PreferencesManager.THEME_COLOR_KEYS.forEach { key ->
@@ -274,6 +276,9 @@ object BackupRestoreManager {
         }
         theme.requiredString("custom_user_name", maxLength = 128, allowBlank = true)
         theme.requiredBoolean("wallpaper_overlay_enabled")
+        if (theme.has("home_mascot_size")) {
+            theme.requiredString("home_mascot_size", maxLength = 32)
+        }
         val colors = theme.requiredObject("colors")
         colors.keys().forEach { key ->
             val value = colors.get(key)
@@ -559,6 +564,12 @@ object BackupRestoreManager {
                 PreferencesManager.setWallpaperOverlayEnabled(
                     context,
                     themeObj.optBoolean("wallpaper_overlay_enabled", true)
+                )
+            }
+            if (themeObj?.has("home_mascot_size") == true) {
+                PreferencesManager.setHomeMascotSize(
+                    context,
+                    HomeMascotSize.fromId(themeObj.optString("home_mascot_size"))
                 )
             }
 

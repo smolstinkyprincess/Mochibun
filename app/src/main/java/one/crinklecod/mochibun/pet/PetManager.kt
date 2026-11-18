@@ -53,6 +53,10 @@ object PetManager {
     private val _state = MutableStateFlow(PetState())
     val state: StateFlow<PetState> = _state.asStateFlow()
 
+    /** Treats granted since Home last acknowledged them (drives the transient `+N 🍡` bubble). */
+    private val _pendingEarnedTreats = MutableStateFlow(0)
+    val pendingEarnedTreats: StateFlow<Int> = _pendingEarnedTreats.asStateFlow()
+
     @Volatile
     private var prefs: SharedPreferences? = null
 
@@ -95,22 +99,25 @@ object PetManager {
     }
 
     /**
-     * Spends a treat if she has one. Returns `true` when she was fed, `false` when there were no
-     * treats (the UI shows the "no treats yet" bubble from this, outside any state lambda).
+     * Tries to spend a treat. Returns [FeedResult.FED] when she ate, [FeedResult.ALREADY_FULL]
+     * when her tummy is already full, or [FeedResult.NO_TREATS] when the treat bag is empty.
      */
-    fun feed(): Boolean {
+    fun tryFeed(): FeedResult {
         val now = clock.nowMs()
         val day = clock.epochDay(now)
-        // A compare-and-set loop instead of update {}: update can't hand back the fed flag safely.
+        // A compare-and-set loop instead of update {}: update can't hand back the result safely.
         while (true) {
             val current = _state.value
-            val (next, fed) = PetLogic.feed(current, now, day)
+            val (next, result) = PetLogic.tryFeed(current, now, day)
             if (_state.compareAndSet(current, next)) {
-                if (fed) persist()
-                return fed
+                if (result == FeedResult.FED) persist()
+                return result
             }
         }
     }
+
+    /** Convenience wrapper returning `true` only when a treat was eaten. */
+    fun feed(): Boolean = tryFeed() == FeedResult.FED
 
     /** Petting is free; joy only grows once per cooldown (see [PetLogic.pet]). */
     fun pet() {
@@ -124,7 +131,7 @@ object PetManager {
     fun onStepsRead(rawStepCounter: Int, bootEpochMs: Long) {
         val now = clock.nowMs()
         val day = clock.epochDay(now)
-        _state.update { PetLogic.onStepsRead(it, rawStepCounter, bootEpochMs, now, day) }
+        updateStateAndTrackEarned { PetLogic.onStepsRead(it, rawStepCounter, bootEpochMs, now, day) }
         persist()
     }
 
@@ -149,10 +156,29 @@ object PetManager {
         grant(TreatSource.CHARGER)
     }
 
+    /** Grants today's daily check-in treat if not yet claimed; returns treats granted (0 or 1). */
+    fun claimDailyCheckIn(): Int {
+        val now = clock.nowMs()
+        val day = clock.epochDay(now)
+        val earned = updateStateAndTrackEarned { PetLogic.grantTreats(it, 1, TreatSource.DAILY_CHECKIN, now, day) }
+        if (earned > 0) persist()
+        return earned
+    }
+
+    /** Atomically reads and clears [pendingEarnedTreats]. */
+    fun consumePendingEarnedTreats(): Int {
+        while (true) {
+            val n = _pendingEarnedTreats.value
+            if (n <= 0) return 0
+            if (_pendingEarnedTreats.compareAndSet(n, 0)) return n
+        }
+    }
+
     /** Replaces her state from a backup. The values are user-supplied, so they are sanitized first. */
     fun restore(context: Context, restored: PetState) {
         init(context)
         _state.value = PetLogic.sanitize(restored, clock.nowMs())
+        _pendingEarnedTreats.value = 0
         persist(force = true)
     }
 
@@ -165,8 +191,20 @@ object PetManager {
     private fun grant(source: TreatSource) {
         val now = clock.nowMs()
         val day = clock.epochDay(now)
-        _state.update { PetLogic.grantTreats(it, 1, source, now, day) }
+        updateStateAndTrackEarned { PetLogic.grantTreats(it, 1, source, now, day) }
         persist()
+    }
+
+    private inline fun updateStateAndTrackEarned(transform: (PetState) -> PetState): Int {
+        while (true) {
+            val current = _state.value
+            val next = transform(current)
+            if (_state.compareAndSet(current, next)) {
+                val earned = (next.treats - current.treats).coerceAtLeast(0)
+                if (earned > 0) _pendingEarnedTreats.update { it + earned }
+                return earned
+            }
+        }
     }
 
     /**
@@ -205,6 +243,7 @@ object PetManager {
             prefs = null
             lastWrittenKey = null
             _state.value = PetState()
+            _pendingEarnedTreats.value = 0
             this.clock = clock
             this.writeDispatcher = writeDispatcher
         }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -85,6 +86,18 @@ class MainActivity : ComponentActivity() {
     var lidClosedCount by mutableIntStateOf(0)
         private set
 
+    var isActivityResumed by mutableStateOf(false)
+        private set
+
+    var isKeyguardLocked by mutableStateOf(false)
+        private set
+
+    var lastUnlockUptimeMs by mutableLongStateOf(0L)
+        private set
+
+    var lastUserHomePressUptimeMs by mutableLongStateOf(0L)
+        private set
+
     // Keyguard dismissed (ACTION_USER_PRESENT): MainLauncher closes the drawer so unlocking lands on Home
     var unlockCount by mutableIntStateOf(0)
         private set
@@ -111,6 +124,7 @@ class MainActivity : ComponentActivity() {
             if (current.isClosed && !previous.isClosed) lidClosedCount++
             if (current == ClamshellState.OPEN_AWAKE) {
                 lastWakeOrUnlockUptime = SystemClock.uptimeMillis()
+                isKeyguardLocked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
                 lidOpenCount++
             }
         }
@@ -119,7 +133,10 @@ class MainActivity : ComponentActivity() {
     private val userPresentReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_USER_PRESENT) {
-                lastWakeOrUnlockUptime = SystemClock.uptimeMillis()
+                val now = SystemClock.uptimeMillis()
+                lastWakeOrUnlockUptime = now
+                lastUnlockUptimeMs = now
+                isKeyguardLocked = false
                 unlockCount++
             }
         }
@@ -194,6 +211,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        isKeyguardLocked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
+        ClamshellManager.ensureHallReaderRunning()
         widgetHost.startListeningFor(this)
         launcherViewModel.restoreAfterMemoryRelease()
     }
@@ -214,6 +233,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         isForeground = true
+        isActivityResumed = true
+        isKeyguardLocked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
         activeInstance = java.lang.ref.WeakReference(this)
         one.crinklecod.mochibun.core.system.CursorServiceWatchdog.checkAsync(this, force = false)
         SystemUiThemeBridge.broadcastSavedTheme(this)
@@ -222,6 +243,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         isForeground = false
+        isActivityResumed = false
     }
 
     companion object {
@@ -260,6 +282,7 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             LauncherKeyHandler.isQuickSettingsExpanded = false
+            isKeyguardLocked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
         }
     }
 
@@ -331,7 +354,12 @@ class MainActivity : ComponentActivity() {
                 startActivity(recentsIntent)
             } else {
                 val keyguardLocked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
-                val justWokeOrUnlocked = SystemClock.uptimeMillis() - lastWakeOrUnlockUptime < WAKE_SETTLE_MS
+                isKeyguardLocked = keyguardLocked
+                val now = SystemClock.uptimeMillis()
+                val justWokeOrUnlocked = now - lastWakeOrUnlockUptime < WAKE_SETTLE_MS
+                if (!keyguardLocked && !justWokeOrUnlocked && !ClamshellManager.state.value.isClosed) {
+                    lastUserHomePressUptimeMs = now
+                }
                 homePressedWhileVisible = hasWindowFocus() &&
                     !keyguardLocked &&
                     !justWokeOrUnlocked &&
@@ -428,6 +456,10 @@ class MainActivity : ComponentActivity() {
                         lidClosedCount = lidClosedCount,
                         screenOffResetCount = screenOffResetCount,
                         unlockCount = unlockCount,
+                        isActivityResumed = isActivityResumed,
+                        isKeyguardLocked = isKeyguardLocked,
+                        lastUnlockUptimeMs = lastUnlockUptimeMs,
+                        lastUserHomePressUptimeMs = lastUserHomePressUptimeMs,
                         settingsRequestCount = settingsRequestCount,
                         quickMemoRequestCount = quickMemoRequestCount,
                         requestedPage = requestedPage,

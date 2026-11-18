@@ -21,6 +21,7 @@ internal object PetPrefsStore {
     private const val KEY_GRANTS_STEPS = "grants_steps"
     private const val KEY_GRANTS_NOTIF_CLEAR = "grants_notif_clear"
     private const val KEY_GRANTS_CHARGER = "grants_charger"
+    private const val KEY_GRANTS_DAILY_CHECKIN = "grants_daily_checkin"
 
     /** Missing keys (first run) fall back to [PetState] defaults. Callers should [PetLogic.sanitize]. */
     fun read(prefs: SharedPreferences): PetState {
@@ -38,6 +39,7 @@ internal object PetPrefsStore {
                 stepTreats = prefs.getInt(KEY_GRANTS_STEPS, d.dailyGrants.stepTreats),
                 notifClearTreats = prefs.getInt(KEY_GRANTS_NOTIF_CLEAR, d.dailyGrants.notifClearTreats),
                 chargeTreats = prefs.getInt(KEY_GRANTS_CHARGER, d.dailyGrants.chargeTreats),
+                dailyCheckInTreats = prefs.getInt(KEY_GRANTS_DAILY_CHECKIN, d.dailyGrants.dailyCheckInTreats),
             ),
         )
     }
@@ -55,6 +57,7 @@ internal object PetPrefsStore {
             .putInt(KEY_GRANTS_STEPS, s.dailyGrants.stepTreats)
             .putInt(KEY_GRANTS_NOTIF_CLEAR, s.dailyGrants.notifClearTreats)
             .putInt(KEY_GRANTS_CHARGER, s.dailyGrants.chargeTreats)
+            .putInt(KEY_GRANTS_DAILY_CHECKIN, s.dailyGrants.dailyCheckInTreats)
             .apply()
     }
 }
@@ -80,6 +83,7 @@ internal object PetBackupCodec {
             put("step_treats", s.dailyGrants.stepTreats)
             put("notif_clear_treats", s.dailyGrants.notifClearTreats)
             put("charge_treats", s.dailyGrants.chargeTreats)
+            put("daily_check_in_treats", s.dailyGrants.dailyCheckInTreats)
         })
     }
 
@@ -100,6 +104,7 @@ internal object PetBackupCodec {
                 stepTreats = g?.optInt("step_treats", dg.stepTreats) ?: dg.stepTreats,
                 notifClearTreats = g?.optInt("notif_clear_treats", dg.notifClearTreats) ?: dg.notifClearTreats,
                 chargeTreats = g?.optInt("charge_treats", dg.chargeTreats) ?: dg.chargeTreats,
+                dailyCheckInTreats = g?.optInt("daily_check_in_treats", dg.dailyCheckInTreats) ?: dg.dailyCheckInTreats,
             ),
         )
     }

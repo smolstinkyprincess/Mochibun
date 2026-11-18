@@ -26,6 +26,7 @@ class MochibunNotificationListenerService : NotificationListenerService() {
         super.onListenerDisconnected()
         Log.d(TAG, "NotificationListenerService disconnected")
         NotificationTracker.onNotificationListenerDisconnected()
+        MediaSessionTracker.stopTracking()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {

@@ -282,7 +282,8 @@ class MochibunKeyHook : IXposedHookLoadPackage {
 
         // 4. Media Volume Lock: route the volume rocker to STREAM_MUSIC instead of the ringer
         if (MochibunSystemActions.mediaVolumeDirection(keyCode) != null) {
-            if (handleMediaVolumeKey(context, event)) {
+            val policyFlags = param.args[1] as? Int ?: 0
+            if (handleMediaVolumeKey(phoneWindowManager, context, event, policyFlags)) {
                 param.result = 0
                 return
             }
@@ -526,15 +527,29 @@ class MochibunKeyHook : IXposedHookLoadPackage {
     /**
      * Media Volume Lock: steps STREAM_MUSIC on volume key down/repeat and reports whether the key
      * should be swallowed. Returns false (stock handling) when the lock is off or a call is active.
+     *
+     * On the owned path, forwards events to PhoneWindowManager.mKeyCombinationManager.interceptKey
+     * so hardware chords (e.g. POWER + VOLUME_DOWN screenshot) still trigger normally.
      */
-    private fun handleMediaVolumeKey(context: Context?, event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_UP) {
-            // Swallow the release only if we handled the matching press
+    private fun handleMediaVolumeKey(
+        phoneWindowManager: Any,
+        context: Context?,
+        event: KeyEvent,
+        policyFlags: Int
+    ): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN) {
+            // Swallow the release (or any follow-up non-down event) only if we owned the press
             val owned = isVolumePressRoutedToMedia
-            isVolumePressRoutedToMedia = false
+            if (event.action == KeyEvent.ACTION_UP) {
+                isVolumePressRoutedToMedia = false
+            }
+            if (owned) {
+                KeyCombinationBridge.interceptKey(phoneWindowManager, event, policyFlags) { t ->
+                    XposedBridge.log("$TAG: KeyCombinationManager check failed: ${t.message}")
+                }
+            }
             return owned
         }
-        if (event.action != KeyEvent.ACTION_DOWN) return false
 
         if (event.repeatCount == 0) isVolumePressRoutedToMedia = false
         if (!isMediaVolumeLockEnabled || context == null) return false
@@ -545,6 +560,19 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             ?: return false
         if (!MochibunSystemActions.shouldRouteVolumeToMedia(audioManager.mode)) return false
+
+        val chordConsumed = KeyCombinationBridge.interceptKey(
+            phoneWindowManager,
+            event,
+            policyFlags
+        ) { t ->
+            XposedBridge.log("$TAG: KeyCombinationManager check failed: ${t.message}")
+        }
+        if (chordConsumed) {
+            // A hardware chord (e.g. POWER + VOLUME_DOWN) matched; let it consume the key
+            isVolumePressRoutedToMedia = true
+            return true
+        }
 
         val token = Binder.clearCallingIdentity()
         try {
@@ -766,5 +794,93 @@ class MochibunKeyHook : IXposedHookLoadPackage {
             }
         } catch (_: Throwable) {}
         return false
+    }
+}
+
+/**
+ * Reflection bridge to Android 12+ PhoneWindowManager.mKeyCombinationManager.interceptKey.
+ * Kept independent of Xposed classes so it can be verified in JVM unit tests.
+ */
+internal object KeyCombinationBridge {
+    internal const val FLAG_INTERACTIVE = 0x20000000
+
+    @Volatile
+    private var cachedOwner: Any? = null
+
+    @Volatile
+    private var cachedManager: Any? = null
+
+    @Volatile
+    private var cachedInterceptKeyMethod: java.lang.reflect.Method? = null
+
+    internal fun isInteractive(policyFlags: Int): Boolean = (policyFlags and FLAG_INTERACTIVE) != 0
+
+    internal fun interceptKey(
+        phoneWindowManager: Any,
+        event: KeyEvent,
+        policyFlags: Int,
+        onError: ((Throwable) -> Unit)? = null
+    ): Boolean {
+        if (phoneWindowManager !== cachedOwner) {
+            synchronized(this) {
+                if (phoneWindowManager !== cachedOwner) {
+                    var manager: Any?
+                    var method: java.lang.reflect.Method? = null
+                    try {
+                        val field = findKeyCombinationManagerField(phoneWindowManager.javaClass)
+                        field.isAccessible = true
+                        manager = field.get(phoneWindowManager)
+                        if (manager != null) {
+                            method = findInterceptKeyMethod(manager.javaClass)
+                            method.isAccessible = true
+                        }
+                    } catch (t: Throwable) {
+                        manager = null
+                        method = null
+                        onError?.invoke(t)
+                    }
+                    cachedManager = manager
+                    cachedInterceptKeyMethod = method
+                    cachedOwner = phoneWindowManager
+                }
+            }
+        }
+
+        val manager = cachedManager ?: return false
+        val method = cachedInterceptKeyMethod ?: return false
+        return try {
+            (method.invoke(manager, event, isInteractive(policyFlags)) as? Boolean) == true
+        } catch (t: Throwable) {
+            onError?.invoke(t)
+            false
+        }
+    }
+
+    private fun findKeyCombinationManagerField(clazz: Class<*>): java.lang.reflect.Field {
+        var current: Class<*>? = clazz
+        while (current != null) {
+            try {
+                return current.getDeclaredField("mKeyCombinationManager")
+            } catch (_: NoSuchFieldException) {
+                current = current.superclass
+            }
+        }
+        throw NoSuchFieldException("mKeyCombinationManager")
+    }
+
+    private fun findInterceptKeyMethod(clazz: Class<*>): java.lang.reflect.Method {
+        var current: Class<*>? = clazz
+        while (current != null) {
+            try {
+                return current.getDeclaredMethod(
+                    "interceptKey",
+                    KeyEvent::class.java,
+                    Boolean::class.javaPrimitiveType!!
+                )
+            } catch (_: NoSuchMethodException) {
+                current = current.superclass
+            }
+        }
+        throw NoSuchMethodException("interceptKey")
     }
 }

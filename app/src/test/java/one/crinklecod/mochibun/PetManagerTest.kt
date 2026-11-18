@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import one.crinklecod.mochibun.pet.DailyGrants
+import one.crinklecod.mochibun.pet.FeedResult
 import one.crinklecod.mochibun.pet.PetBackupCodec
 import one.crinklecod.mochibun.pet.PetManager
 import one.crinklecod.mochibun.pet.PetPrefsStore
@@ -92,6 +93,15 @@ class PetManagerTest {
     }
 
     @Test
+    fun tryFeed_whenAlreadyFull_refusesWithoutSpendingOrWriting() {
+        seed(PetState(fullness = 1f, treats = 2, lastUpdatedMs = t0))
+        assertEquals(FeedResult.ALREADY_FULL, PetManager.tryFeed())
+        assertEquals(2, PetManager.state.value.treats)
+        assertEquals(2, saved().treats)
+        assertEquals(t0, saved().lastUpdatedMs)
+    }
+
+    @Test
     fun refresh_decaysInMemoryButNeverWrites() {
         seed(PetState(fullness = 0.8f, treats = 1, lastUpdatedMs = t0))
         clock.now = t0 + 10 * hour
@@ -170,6 +180,24 @@ class PetManagerTest {
         assertEquals(0.66f, PetManager.state.value.joy, 1e-4f)
     }
 
+    @Test
+    fun dailyCheckIn_grantsOncePerDay_andPendingEarnedTracksGrants() {
+        seed(PetState(treats = 1, lastUpdatedMs = t0, dailyGrants = DailyGrants(epochDay = clock.day)))
+        assertEquals(1, PetManager.claimDailyCheckIn())
+        assertEquals(0, PetManager.claimDailyCheckIn())
+        assertEquals(2, PetManager.state.value.treats)
+        assertEquals(1, PetManager.consumePendingEarnedTreats())
+        assertEquals(0, PetManager.consumePendingEarnedTreats())
+
+        PetManager.onChargerConnected()
+        PetManager.onNotifClearAll(1)
+        assertEquals(2, PetManager.consumePendingEarnedTreats())
+
+        clock.day += 1
+        assertEquals(1, PetManager.claimDailyCheckIn())
+        assertEquals(5, PetManager.state.value.treats)
+    }
+
     // ── Concurrency ─────────────────────────────────────────────────────────
 
     private fun runConcurrently(threads: Int, action: () -> Unit) {
@@ -193,8 +221,9 @@ class PetManagerTest {
         val fedCount = AtomicInteger()
         runConcurrently(16) { if (PetManager.feed()) fedCount.incrementAndGet() }
 
-        assertEquals(PetTuning.MAX_TREATS, fedCount.get())
-        assertEquals(0, PetManager.state.value.treats)
+        // 0.2 -> 0.5 -> 0.8 -> 1.0 takes 3 feeds; the remaining 13 calls see ALREADY_FULL
+        assertEquals(3, fedCount.get())
+        assertEquals(PetTuning.MAX_TREATS - 3, PetManager.state.value.treats)
     }
 
     @Test
@@ -225,7 +254,13 @@ class PetManagerTest {
         val s = PetState(
             fullness = 0.42f, joy = 0.9f, treats = 7, lastUpdatedMs = t0, lastPetMs = t0 - 5_000L,
             stepBaseline = 12_345, lastBootEpochMs = t0 - hour,
-            dailyGrants = DailyGrants(epochDay = 20_000L, stepTreats = 2, notifClearTreats = 1, chargeTreats = 1),
+            dailyGrants = DailyGrants(
+                epochDay = 20_000L,
+                stepTreats = 2,
+                notifClearTreats = 1,
+                chargeTreats = 1,
+                dailyCheckInTreats = 1,
+            ),
         )
         val json = JSONObject(PetBackupCodec.toJson(s).toString())
         assertEquals(0.42, json.getDouble("fullness"), 0.0) // stored readably, not 0.41999998...

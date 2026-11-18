@@ -23,6 +23,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import one.crinklecod.mochibun.R
+import one.crinklecod.mochibun.data.model.BundleMascotDialogue
 import one.crinklecod.mochibun.data.model.MascotAtlasValidator
 import one.crinklecod.mochibun.isOneGbClassDevice
 import one.crinklecod.mochibun.pet.PetMood
@@ -76,7 +77,12 @@ sealed interface MascotSpriteSource {
      * A validated user atlas PNG in the app's files dir. Falls back to [BuiltIn] if unreadable.
      * [version] changes on every install, so re-picking into the same file still reloads.
      */
-    data class Custom(val file: File, val layout: MascotAtlasLayout, val version: Long = 0L) : MascotSpriteSource
+    data class Custom(
+        val file: File,
+        val layout: MascotAtlasLayout,
+        val version: Long = 0L,
+        val dialogue: BundleMascotDialogue? = null
+    ) : MascotSpriteSource
 }
 
 /** A decoded atlas ready to draw. [layout] is in the decoded image's pixels. */
@@ -165,6 +171,9 @@ object MascotSpriteStore {
     private val _source = MutableStateFlow<MascotSpriteSource>(MascotSpriteSource.BuiltIn)
     val source: StateFlow<MascotSpriteSource> = _source.asStateFlow()
 
+    private val _dialogue = MutableStateFlow<BundleMascotDialogue?>(null)
+    val dialogue: StateFlow<BundleMascotDialogue?> = _dialogue.asStateFlow()
+
     private val loadLock = Mutex()
 
     @Volatile
@@ -176,6 +185,7 @@ object MascotSpriteStore {
     /** Selects the active art. The old atlas is released when the new one loads. */
     fun setSource(source: MascotSpriteSource) {
         _source.value = source
+        _dialogue.value = (source as? MascotSpriteSource.Custom)?.dialogue
     }
 
     /** The already-decoded atlas for [source], if any (no disk access). */

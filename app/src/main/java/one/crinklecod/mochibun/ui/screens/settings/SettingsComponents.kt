@@ -3,6 +3,7 @@ package one.crinklecod.mochibun.ui.screens.settings
 import one.crinklecod.mochibun.ui.components.KawaiiClosePill
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -216,7 +218,8 @@ fun SettingsNavigationRow(
                 fontSize = 13.sp,
                 fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.basicMarquee()
             )
             if (subtitle != null) {
                 Text(
@@ -224,7 +227,8 @@ fun SettingsNavigationRow(
                     color = ActiveTheme.textPrimary.copy(alpha = 0.65f),
                     fontSize = 10.5.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.basicMarquee()
                 )
             }
         }
@@ -287,7 +291,8 @@ fun SettingsToggleRow(
                 fontSize = 13.sp,
                 fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.basicMarquee()
             )
             if (subtitle != null) {
                 Text(
@@ -295,7 +300,8 @@ fun SettingsToggleRow(
                     color = ActiveTheme.textPrimary.copy(alpha = 0.65f),
                     fontSize = 10.5.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.basicMarquee()
                 )
             }
         }
@@ -376,7 +382,8 @@ fun SettingsStepperRow(
                 fontSize = 13.sp,
                 fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.basicMarquee()
             )
             if (subtitle != null) {
                 Text(
@@ -384,7 +391,8 @@ fun SettingsStepperRow(
                     color = ActiveTheme.textPrimary.copy(alpha = 0.65f),
                     fontSize = 10.5.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.basicMarquee()
                 )
             }
         }
@@ -424,6 +432,7 @@ fun SettingsStepperRow(
             // Value badge
             Box(
                 modifier = Modifier
+                    .widthIn(max = 120.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(ActiveTheme.surfaceTint.copy(alpha = 0.45f))
                     .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
@@ -435,7 +444,10 @@ fun SettingsStepperRow(
                     text = valueDisplay,
                     color = ActiveTheme.accentDeep,
                     fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.basicMarquee()
                 )
             }
 
@@ -497,7 +509,8 @@ fun SettingsTextInputRow(
                 fontSize = 13.sp,
                 fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.basicMarquee()
             )
             if (subtitle != null) {
                 Text(
@@ -505,7 +518,8 @@ fun SettingsTextInputRow(
                     color = ActiveTheme.textPrimary.copy(alpha = 0.65f),
                     fontSize = 10.5.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.basicMarquee()
                 )
             }
         }
@@ -523,6 +537,7 @@ fun SettingsTextInputRow(
 
             Box(
                 modifier = Modifier
+                    .widthIn(max = 120.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(ActiveTheme.surfaceTint.copy(alpha = 0.45f))
                     .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(8.dp))
@@ -533,7 +548,10 @@ fun SettingsTextInputRow(
                     text = value.ifBlank { "Not set" },
                     color = ActiveTheme.accentDeep,
                     fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.basicMarquee()
                 )
             }
         }
@@ -566,13 +584,23 @@ fun SettingsInfoRow(
             text = label,
             color = ActiveTheme.textPrimary,
             fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            modifier = Modifier.basicMarquee()
         )
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = value,
             color = ActiveTheme.accentDeep,
             fontSize = 11.5.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            textAlign = TextAlign.End,
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .basicMarquee()
         )
     }
 }
@@ -621,7 +649,12 @@ fun SettingsActionRow(
             text = title,
             color = contentColor,
             fontSize = 12.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            modifier = Modifier
+                .padding(horizontal = if (jumpNumber != null) 22.dp else 0.dp)
+                .basicMarquee()
         )
         if (jumpNumber != null) {
             JumpNumberBadge(

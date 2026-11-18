@@ -40,7 +40,7 @@ import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
  * Tier 4: About & System Sub-Screen
  */
 @Composable
-internal fun AboutMochibunSubScreen(
+internal fun AboutMochibunScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {

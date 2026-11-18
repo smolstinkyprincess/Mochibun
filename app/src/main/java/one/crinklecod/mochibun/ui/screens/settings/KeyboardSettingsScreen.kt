@@ -77,7 +77,7 @@ internal fun activateMochibunKeyboard(
  * guide.
  */
 @Composable
-internal fun KeyboardSettingsSubScreen(
+internal fun KeyboardSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {

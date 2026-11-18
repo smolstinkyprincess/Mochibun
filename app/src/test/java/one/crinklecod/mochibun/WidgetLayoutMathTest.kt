@@ -12,7 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
 
-class WidgetHostTest {
+class WidgetLayoutMathTest {
 
     // AT-M120: 480 px wide at hdpi (1.5x), card = 480 - 2 * 14dp padding = 438 px
     private val cardWidth = 438

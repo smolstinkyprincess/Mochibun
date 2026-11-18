@@ -7,7 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class SoftKeyRemapUnitTest {
+class SoftKeyRemapTest {
 
     private fun createTestState(
         anyModalOpen: Boolean = false,

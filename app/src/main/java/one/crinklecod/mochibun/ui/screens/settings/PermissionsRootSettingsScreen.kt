@@ -86,7 +86,7 @@ internal fun settingsJumpNumber(rows: List<String>, id: String): Int? =
     (rows.indexOf(id) + 1).takeIf { it in 1..10 }
 
 @Composable
-internal fun PermissionsRootSettingsSubScreen(
+internal fun PermissionsRootSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {

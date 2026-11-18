@@ -78,6 +78,8 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.time.DayOfWeek
+import java.time.LocalDate
 
 /** Deep plum/navy LCD backdrop for the dark "sub-OLED" style. */
 internal val SubOledBackdrop = Color(0xFF23182E)
@@ -88,28 +90,166 @@ private const val FEED_SEPARATOR = "  ✦  "
 private const val PLACEHOLDER_ARTIST = "Unknown Artist"
 
 
-/** Cozy, plain-text fortunes (no numbers, no kaomoji). One per day; see [dailyFortuneLabel]. */
-internal val COZY_FORTUNES = arrayOf(
-    "good vibes ahead ♡",
-    "a peaceful little day awaits",
-    "treat yourself to something sweet",
-    "something cute will happen soon",
-    "take a cozy breath & stretch",
-    "small steps still count ♡",
-    "a warm drink would be lovely",
-    "someone is thinking of you",
-    "be gentle with yourself today",
-    "a happy surprise is on its way",
-    "today is a good day to rest",
-    "you are doing better than you think"
+/** Cozy, plain-text fortunes grouped by weekday (no numbers, no kaomoji). */
+internal val COZY_FORTUNES_BY_DAY: Map<DayOfWeek, List<String>> = mapOf(
+    DayOfWeek.MONDAY to listOf(
+        "monday feels soft and slow ♡",
+        "snuggle in and stay cozy ✨",
+        "a warm blanket monday awaits ♡",
+        "sip something sweet and slow 🌸",
+        "little steps, big comfort today ♡",
+        "rest your paws and breathe ✨",
+        "monday hugs are extra soft ♡",
+        "a quiet cozy morning for you 🌸",
+        "treat yourself gently today ♡",
+        "soft skies and warm snacks ✨",
+        "mondays are secretly cozy ♡",
+        "a warm start blooms into warmth 🌸",
+        "be gentle with yourself today ✨",
+        "soft steps make sweet mornings ♡",
+        "something lovely finds you today 🌸",
+        "rest is part of the magic ✨",
+        "little joys are still real joys ♡",
+        "your cozy counts for something 🌸",
+        "take it slow & breathe it in ✨",
+        "today holds a tiny surprise ♡"
+    ),
+    DayOfWeek.TUESDAY to listOf(
+        "tuesday smells like warm vanilla ♡",
+        "a gentle mood carries you far 🌸",
+        "soft things are waiting for you ✨",
+        "sip something warm & just breathe ♡",
+        "little kindnesses bloom today 🌸",
+        "your softness is a superpower ✨",
+        "cozy corners call your name ♡",
+        "something sweet is on its way 🌸",
+        "rest your eyes for a moment ✨",
+        "tuesday holds a tiny warm hug ♡",
+        "tuesday is softer than it seems ♡",
+        "a gentle surprise is on its way 🌸",
+        "take a tiny breather & sip warm tea ✨",
+        "cozy moments are yours to keep ♡",
+        "good things bloom on quiet days 🌸",
+        "wrap up snug & let today unfold ✨",
+        "kindness comes back around today ♡",
+        "a little rest goes a long way 🌸",
+        "something sweet is waiting for you ✨",
+        "you are doing just fine, really ♡"
+    ),
+    DayOfWeek.WEDNESDAY to listOf(
+        "wednesday holds a hidden sweetness ♡",
+        "halfway there & still so lovely 🌸",
+        "breathe deep, the week is gentle ✨",
+        "soft things find soft hearts today ♡",
+        "a warm hug finds you midweek 🌸",
+        "little wins still count so much ✨",
+        "rest whenever your heart needs it ♡",
+        "something blooms quietly today 🌸",
+        "you deserve every cozy moment ✨",
+        "the best part of today is you ♡",
+        "you made it to the middle ♡",
+        "midweek magic is real, promise 🌸",
+        "breathe out & let the soft in ✨",
+        "a cozy nook is calling your name ♡",
+        "little wins still count today 🌸",
+        "the week bends gently toward you ✨",
+        "rest your eyes for just a moment ♡",
+        "something warm finds you today 🌸",
+        "you are exactly where you should be ✨",
+        "wednesday holds a quiet sweetness ♡"
+    ),
+    DayOfWeek.THURSDAY to listOf(
+        "thursday carries quiet good luck ♡",
+        "the weekend whispers from nearby 🌸",
+        "treat yourself to something soft ✨",
+        "a warm hug finds you today ♡",
+        "good things are almost here 🌸",
+        "let today be light & unhurried ✨",
+        "you deserve a little extra sweet ♡",
+        "rest now, good things come soon 🌸",
+        "a cozy moment blooms today ✨",
+        "thursday loves you back, truly ♡",
+        "the weekend warmth is nearly here ♡",
+        "thursday holds a hidden sweetness 🌸",
+        "one soft step at a time today ✨",
+        "a little treat is well deserved ♡",
+        "good things are quietly growing 🌸",
+        "let yourself be carried by today ✨",
+        "snuggle something soft & breathe ♡",
+        "you are closer than you think 🌸",
+        "a warm moment blooms just for you ✨",
+        "almost there & you are doing well ♡"
+    ),
+    DayOfWeek.FRIDAY to listOf(
+        "you made it & you deserve this ♡",
+        "something lovely is just ahead ♡",
+        "rest is your reward today 🌸",
+        "the cozy is all yours tonight ✨",
+        "wrap up warm & let go gently ♡",
+        "a sweet ending blooms for you 🌸",
+        "you did so well this week ♡",
+        "you made it, sweet one ♡",
+        "friday feels like a warm hug 🌸",
+        "let the weekend softness begin ✨",
+        "you earned every cozy moment ♡",
+        "good things bloom at week's end 🌸",
+        "wrap up snug & celebrate today ✨",
+        "the best part of today is you ♡",
+        "a sweet reward is waiting near 🌸",
+        "release the week & breathe easy ✨",
+        "friday magic is all around you ♡"
+    ),
+    DayOfWeek.SATURDAY to listOf(
+        "slow mornings are a gift today ♡",
+        "saturday says sleep in a little 🌸",
+        "no rush, just softness & warmth ✨",
+        "a lazy day is a lovely day ♡",
+        "let yourself do absolutely nothing 🌸",
+        "cozy is the whole plan today ✨",
+        "snacks & blankets & sweet moments ♡",
+        "the day unfolds just for you 🌸",
+        "your comfort matters most today ✨",
+        "saturday holds only good things ♡",
+        "saturdays were made for softness ♡",
+        "sleep in just a little bit more 🌸",
+        "today belongs entirely to you ✨",
+        "no rush, no hurry, just warmth ♡",
+        "a slow morning is a sweet gift 🌸",
+        "wrap yourself in something cozy ✨",
+        "today is yours to fill with joy ♡",
+        "snacks & snuggles are valid plans ♡"
+    ),
+    DayOfWeek.SUNDAY to listOf(
+        "rest deeply, you have earned it 🌸",
+        "let today be slow & unhurried ✨",
+        "a warm drink & a blanket await ♡",
+        "gentle sunday magic surrounds you 🌸",
+        "breathe in the quiet sweetness ✨",
+        "today asks nothing hard of you ♡",
+        "snuggle close & let worries go 🌸",
+        "sunday holds you soft & warm ✨",
+        "tomorrow is gentle, rest for now ♡",
+        "sunday is made of quiet magic ♡",
+        "sip slowly & watch the light ♡",
+        "gentle is the only pace today 🌸",
+        "let the world be still a while ✨",
+        "you deserve this restful moment ♡",
+        "something warm blooms just for you 🌸",
+        "carry softness into the week ✨",
+        "sunday loves you back, always ♡"
+    )
 )
 
 /** Deterministic fortune for a given day: same answer all day, changes at midnight. */
 internal fun dailyFortuneLabel(year: Int, dayOfYear: Int): String {
+    val dayOfWeek = LocalDate.ofYearDay(year, dayOfYear).dayOfWeek
+    val pool = COZY_FORTUNES_BY_DAY[dayOfWeek].orEmpty()
+    if (pool.isEmpty()) return "good vibes ahead ♡"
+
     val seed = year * 400 + dayOfYear
     // Multiply by a prime so consecutive days don't walk the list in order.
-    val index = Math.floorMod(seed * 7919, COZY_FORTUNES.size)
-    return COZY_FORTUNES[index]
+    val index = Math.floorMod(seed * 7919, pool.size)
+    return pool[index]
 }
 
 
@@ -206,15 +346,25 @@ private fun rememberNextAlarmLabel(): String? {
 
 /**
  * Today's steps from TYPE_STEP_COUNTER, or null when the phone has no step sensor (the AT-M120
- * doesn't) or activity recognition isn't granted (API 29+). The sensor is cumulative since boot;
- * [DailyStepState] turns it into a since-midnight count persisted in PreferencesManager. The
- * listener is registered only while RESUMED.
+ * doesn't) or activity recognition isn't granted (API 29+). Reads once per `ON_RESUME`.
  */
 @Composable
 private fun rememberStepsToday(): Long? {
+    var steps by remember { mutableStateOf<Long?>(null) }
+    StepCounterResumeSync { steps = it }
+    return steps
+}
+
+/**
+ * Registers a one-shot [Sensor.TYPE_STEP_COUNTER] read on each `ON_RESUME` and unregisters
+ * immediately after the first reading arrives (or on `ON_PAUSE`). Updates [DailyStepState] and
+ * forwards the cumulative count to [PetManager.onStepCounterSensor].
+ * No-ops cleanly on phones without a step sensor (AT-M120) or `ACTIVITY_RECOGNITION` permission.
+ */
+@Composable
+internal fun StepCounterResumeSync(onStepsToday: ((Long) -> Unit)? = null) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var steps by remember { mutableStateOf<Long?>(null) }
 
     DisposableEffect(context, lifecycleOwner) {
         val sensorManager = context.getSystemService(SensorManager::class.java)
@@ -226,8 +376,14 @@ private fun rememberStepsToday(): Long? {
             return@DisposableEffect onDispose {}
         }
 
-        val listener = object : SensorEventListener {
+        var registered = false
+        lateinit var listener: SensorEventListener
+        listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
+                if (registered) {
+                    sensorManager.unregisterListener(listener)
+                    registered = false
+                }
                 val cal = Calendar.getInstance()
                 val today = DailyStepState.dayStamp(cal.get(Calendar.YEAR), cal.get(Calendar.DAY_OF_YEAR))
                 val state = DailyStepState.update(
@@ -236,14 +392,13 @@ private fun rememberStepsToday(): Long? {
                     event.values[0].toLong()
                 )
                 PreferencesManager.setDailyStepState(context, state)
-                steps = state.stepsToday
+                onStepsToday?.invoke(state.stepsToday)
                 // Mochibunny earns a treat per 1,000 steps (capped daily)
                 PetManager.onStepCounterSensor(event.values[0])
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
-        var registered = false
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> if (!registered) {
@@ -262,7 +417,6 @@ private fun rememberStepsToday(): Long? {
             if (registered) sensorManager.unregisterListener(listener)
         }
     }
-    return steps
 }
 
 @Immutable

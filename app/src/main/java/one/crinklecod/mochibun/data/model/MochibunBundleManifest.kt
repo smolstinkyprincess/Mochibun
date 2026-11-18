@@ -37,7 +37,8 @@ data class BundleMascotConfig(
     val name: String = "Mochibunny",
     val frameWidth: Int,
     val frameHeight: Int,
-    val slots: Map<String, BundleMascotSlot> = emptyMap()
+    val slots: Map<String, BundleMascotSlot> = emptyMap(),
+    val dialogue: BundleMascotDialogue? = null
 )
 
 @Serializable
@@ -45,6 +46,26 @@ data class BundleMascotSlot(
     val row: Int,
     val frames: Int
 )
+
+@Serializable
+data class BundleMascotDialogue(
+    val happy: List<String> = emptyList(),
+    val content: List<String> = emptyList(),
+    val hungry: List<String> = emptyList(),
+    val sulky: List<String> = emptyList(),
+    val sleepy: List<String> = emptyList(),
+    val fed: List<String> = emptyList(),
+    val noTreats: List<String> = emptyList()
+) {
+    fun hasAnyLines(): Boolean =
+        happy.isNotEmpty() ||
+            content.isNotEmpty() ||
+            hungry.isNotEmpty() ||
+            sulky.isNotEmpty() ||
+            sleepy.isNotEmpty() ||
+            fed.isNotEmpty() ||
+            noTreats.isNotEmpty()
+}
 
 @Serializable
 data class BundleGreetingConfig(

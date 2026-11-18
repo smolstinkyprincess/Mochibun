@@ -30,6 +30,23 @@ enum class LidOpenAction(val id: String, val label: String) {
 }
 
 /**
+ * Preset sizes for the Home screen mascot (MochibunnyWithSpeechBubble).
+ * Small matches the original 56.dp layout.
+ */
+enum class HomeMascotSize(val id: String, val label: String, val sizeDp: Int) {
+    SMALL("small", "Small", 56),
+    MEDIUM("medium", "Medium", 72),
+    LARGE("large", "Large", 88);
+
+    companion object {
+        fun fromId(id: String?): HomeMascotSize = entries.firstOrNull { it.id == id } ?: SMALL
+    }
+
+    fun next(): HomeMascotSize = entries[(ordinal + 1) % entries.size]
+    fun previous(): HomeMascotSize = entries[(ordinal - 1 + entries.size) % entries.size]
+}
+
+/**
  * Today's step count from the cumulative-since-boot `TYPE_STEP_COUNTER` sensor.
  *
  * @param day day stamp (`year * 1000 + dayOfYear`) the state belongs to
@@ -117,6 +134,7 @@ object PreferencesManager {
     const val DEFAULT_DPAD_BOUNDARY_HAPTICS = true
     const val KEY_LID_OPEN_ACTION = "pref_lid_open_action"
     val DEFAULT_LID_OPEN_ACTION = LidOpenAction.HOME.id
+    const val KEY_LAST_LAUNCHED_PACKAGE = "pref_last_launched_package"
     const val KEY_LID_CLOSE_SNAP_SOUND = "pref_lid_close_snap_sound"
     const val DEFAULT_LID_CLOSE_SNAP_SOUND = true
 
@@ -212,6 +230,8 @@ object PreferencesManager {
     const val DEFAULT_SUB_DISPLAY_TICKER_ENABLED = true
     const val KEY_SUB_DISPLAY_TICKER_DARK = "pref_sub_display_ticker_dark"
     const val DEFAULT_SUB_DISPLAY_TICKER_DARK = false
+    const val KEY_HOME_MASCOT_SIZE = "pref_home_mascot_size"
+    val DEFAULT_HOME_MASCOT_SIZE = HomeMascotSize.SMALL.id
     const val KEY_QUICK_MEMO_TEXT = "pref_quick_memo_text"
     /** Quick Memo length cap (a keitai-sized sticky note). */
     const val QUICK_MEMO_MAX_CHARS = 140
@@ -310,6 +330,10 @@ object PreferencesManager {
     /** true = dark sub-OLED look, false = pastel theme-matched look. */
     val isSubDisplayTickerDark: StateFlow<Boolean> = _isSubDisplayTickerDark.asStateFlow()
 
+    private val _homeMascotSize = MutableStateFlow(HomeMascotSize.SMALL)
+    /** Preset size of the mascot sitting on the Home favorites card. */
+    val homeMascotSize: StateFlow<HomeMascotSize> = _homeMascotSize.asStateFlow()
+
     private val _quickMemoText = MutableStateFlow("")
     /** Quick Memo text (`#` hold on Home); shown in the sub-display ticker when non-blank. */
     val quickMemoText: StateFlow<String> = _quickMemoText.asStateFlow()
@@ -334,113 +358,114 @@ object PreferencesManager {
      * prefs behind the setters (backup restore, factory reset) so observers update immediately.
      */
     fun reload(context: Context) {
-        run {
-            val prefs = getPrefs(context)
-            _isRootQuickSettingsEnabled.value = prefs.getBoolean(
-                KEY_ROOT_QUICK_SETTINGS_ENABLED,
-                DEFAULT_ROOT_QUICK_SETTINGS_ENABLED
-            )
-            _isWallpaperOverlayEnabled.value = prefs.getBoolean(
-                KEY_WALLPAPER_OVERLAY_ENABLED,
-                DEFAULT_WALLPAPER_OVERLAY_ENABLED
-            )
-            _isSystemMonitorEnabled.value = prefs.getBoolean(
-                KEY_SYSTEM_MONITOR_ENABLED,
-                DEFAULT_SYSTEM_MONITOR_ENABLED
-            )
-            _isFolderGridMode.value = prefs.getBoolean(
-                KEY_FOLDER_GRID_MODE,
-                DEFAULT_FOLDER_GRID_MODE
-            )
-            _systemMonitorInterval.value = prefs.getInt(
-                KEY_SYSTEM_MONITOR_INTERVAL,
-                DEFAULT_SYSTEM_MONITOR_INTERVAL
-            )
-            _customUserName.value = prefs.getString(
-                KEY_CUSTOM_USER_NAME,
-                DEFAULT_CUSTOM_USER_NAME
-            ) ?: DEFAULT_CUSTOM_USER_NAME
-            _themePreset.value = prefs.getString(
-                KEY_THEME_PRESET,
-                DEFAULT_THEME_PRESET
-            ) ?: DEFAULT_THEME_PRESET
-            _isDpadWrapAround.value = prefs.getBoolean(
-                KEY_DPAD_WRAP_AROUND,
-                DEFAULT_DPAD_WRAP_AROUND
-            )
-            _lidOpenAction.value = LidOpenAction.fromId(
-                prefs.getString(KEY_LID_OPEN_ACTION, DEFAULT_LID_OPEN_ACTION)
-            )
-            _isLidCloseSnapSoundEnabled.value = prefs.getBoolean(
-                KEY_LID_CLOSE_SNAP_SOUND,
-                DEFAULT_LID_CLOSE_SNAP_SOUND
-            )
-            _isDpadBoundaryHaptics.value = prefs.getBoolean(
-                KEY_DPAD_BOUNDARY_HAPTICS,
-                DEFAULT_DPAD_BOUNDARY_HAPTICS
-            )
-            _isSoftKeyNavEnabled.value = prefs.getBoolean(
-                KEY_SOFT_KEY_NAV_ENABLED,
-                DEFAULT_SOFT_KEY_NAV_ENABLED
-            )
-            _keypadSoundMode.value = prefs.getString(
-                KEY_KEYPAD_SOUND_MODE,
-                DEFAULT_KEYPAD_SOUND_MODE
-            ) ?: DEFAULT_KEYPAD_SOUND_MODE
-            _launcherAudioStream.value = prefs.getString(
-                KEY_LAUNCHER_AUDIO_STREAM,
-                DEFAULT_LAUNCHER_AUDIO_STREAM
-            ) ?: DEFAULT_LAUNCHER_AUDIO_STREAM
-            _launcherSoundVolume.value = prefs.getInt(
-                KEY_LAUNCHER_SOUND_VOLUME,
-                DEFAULT_LAUNCHER_SOUND_VOLUME
-            )
-            _isLidLedEnabled.value = prefs.getBoolean(
-                KEY_LID_LED_ENABLED,
-                DEFAULT_LID_LED_ENABLED
-            )
-            _isLidLedChargingEnabled.value = prefs.getBoolean(
-                KEY_LID_LED_CHARGING,
-                DEFAULT_LID_LED_CHARGING
-            )
-            val sortStr = prefs.getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
-            _appDrawerSortMode.value = AppDrawerSortMode.entries.firstOrNull { it.name == sortStr }
-                ?: AppDrawerSortMode.ALPHABETICAL
-            _lidLedColor.value = prefs.getString(
-                KEY_LID_LED_COLOR,
-                DEFAULT_LID_LED_COLOR
-            ) ?: DEFAULT_LID_LED_COLOR
-            _isMediaVolumeLockEnabled.value = prefs.getBoolean(
-                KEY_MEDIA_VOLUME_LOCK_ENABLED,
-                DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
-            )
-            _themeFontFamily.value = prefs.getString(
-                KEY_THEME_FONT_FAMILY,
-                DEFAULT_THEME_FONT_FAMILY
-            ) ?: DEFAULT_THEME_FONT_FAMILY
-            _photoFrameUri.value = prefs.getString(KEY_PHOTO_FRAME_URI, null)
-            _photoFrameStyle.value = prefs.getString(
-                KEY_PHOTO_FRAME_STYLE,
-                DEFAULT_PHOTO_FRAME_STYLE
-            ) ?: DEFAULT_PHOTO_FRAME_STYLE
-            _photoFrameLabel.value = prefs.getString(
-                KEY_PHOTO_FRAME_LABEL,
-                DEFAULT_PHOTO_FRAME_LABEL
-            ) ?: DEFAULT_PHOTO_FRAME_LABEL
-            _isPhotoFrameEnabled.value = prefs.getBoolean(
-                KEY_PHOTO_FRAME_ENABLED,
-                DEFAULT_PHOTO_FRAME_ENABLED
-            )
-            _isSubDisplayTickerEnabled.value = prefs.getBoolean(
-                KEY_SUB_DISPLAY_TICKER_ENABLED,
-                DEFAULT_SUB_DISPLAY_TICKER_ENABLED
-            )
-            _isSubDisplayTickerDark.value = prefs.getBoolean(
-                KEY_SUB_DISPLAY_TICKER_DARK,
-                DEFAULT_SUB_DISPLAY_TICKER_DARK
-            )
-            _quickMemoText.value = prefs.getString(KEY_QUICK_MEMO_TEXT, "") ?: ""
-        }
+        val prefs = getPrefs(context)
+        _isRootQuickSettingsEnabled.value = prefs.getBoolean(
+            KEY_ROOT_QUICK_SETTINGS_ENABLED,
+            DEFAULT_ROOT_QUICK_SETTINGS_ENABLED
+        )
+        _isWallpaperOverlayEnabled.value = prefs.getBoolean(
+            KEY_WALLPAPER_OVERLAY_ENABLED,
+            DEFAULT_WALLPAPER_OVERLAY_ENABLED
+        )
+        _isSystemMonitorEnabled.value = prefs.getBoolean(
+            KEY_SYSTEM_MONITOR_ENABLED,
+            DEFAULT_SYSTEM_MONITOR_ENABLED
+        )
+        _isFolderGridMode.value = prefs.getBoolean(
+            KEY_FOLDER_GRID_MODE,
+            DEFAULT_FOLDER_GRID_MODE
+        )
+        _systemMonitorInterval.value = prefs.getInt(
+            KEY_SYSTEM_MONITOR_INTERVAL,
+            DEFAULT_SYSTEM_MONITOR_INTERVAL
+        )
+        _customUserName.value = prefs.getString(
+            KEY_CUSTOM_USER_NAME,
+            DEFAULT_CUSTOM_USER_NAME
+        ) ?: DEFAULT_CUSTOM_USER_NAME
+        _themePreset.value = prefs.getString(
+            KEY_THEME_PRESET,
+            DEFAULT_THEME_PRESET
+        ) ?: DEFAULT_THEME_PRESET
+        _isDpadWrapAround.value = prefs.getBoolean(
+            KEY_DPAD_WRAP_AROUND,
+            DEFAULT_DPAD_WRAP_AROUND
+        )
+        _lidOpenAction.value = LidOpenAction.fromId(
+            prefs.getString(KEY_LID_OPEN_ACTION, DEFAULT_LID_OPEN_ACTION)
+        )
+        _isLidCloseSnapSoundEnabled.value = prefs.getBoolean(
+            KEY_LID_CLOSE_SNAP_SOUND,
+            DEFAULT_LID_CLOSE_SNAP_SOUND
+        )
+        _isDpadBoundaryHaptics.value = prefs.getBoolean(
+            KEY_DPAD_BOUNDARY_HAPTICS,
+            DEFAULT_DPAD_BOUNDARY_HAPTICS
+        )
+        _isSoftKeyNavEnabled.value = prefs.getBoolean(
+            KEY_SOFT_KEY_NAV_ENABLED,
+            DEFAULT_SOFT_KEY_NAV_ENABLED
+        )
+        _keypadSoundMode.value = prefs.getString(
+            KEY_KEYPAD_SOUND_MODE,
+            DEFAULT_KEYPAD_SOUND_MODE
+        ) ?: DEFAULT_KEYPAD_SOUND_MODE
+        _launcherAudioStream.value = prefs.getString(
+            KEY_LAUNCHER_AUDIO_STREAM,
+            DEFAULT_LAUNCHER_AUDIO_STREAM
+        ) ?: DEFAULT_LAUNCHER_AUDIO_STREAM
+        _launcherSoundVolume.value = prefs.getInt(
+            KEY_LAUNCHER_SOUND_VOLUME,
+            DEFAULT_LAUNCHER_SOUND_VOLUME
+        )
+        _isLidLedEnabled.value = prefs.getBoolean(
+            KEY_LID_LED_ENABLED,
+            DEFAULT_LID_LED_ENABLED
+        )
+        _isLidLedChargingEnabled.value = prefs.getBoolean(
+            KEY_LID_LED_CHARGING,
+            DEFAULT_LID_LED_CHARGING
+        )
+        val sortStr = prefs.getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
+        _appDrawerSortMode.value = AppDrawerSortMode.entries.firstOrNull { it.name == sortStr }
+            ?: AppDrawerSortMode.ALPHABETICAL
+        _lidLedColor.value = prefs.getString(
+            KEY_LID_LED_COLOR,
+            DEFAULT_LID_LED_COLOR
+        ) ?: DEFAULT_LID_LED_COLOR
+        _isMediaVolumeLockEnabled.value = prefs.getBoolean(
+            KEY_MEDIA_VOLUME_LOCK_ENABLED,
+            DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
+        )
+        _themeFontFamily.value = prefs.getString(
+            KEY_THEME_FONT_FAMILY,
+            DEFAULT_THEME_FONT_FAMILY
+        ) ?: DEFAULT_THEME_FONT_FAMILY
+        _photoFrameUri.value = prefs.getString(KEY_PHOTO_FRAME_URI, null)
+        _photoFrameStyle.value = prefs.getString(
+            KEY_PHOTO_FRAME_STYLE,
+            DEFAULT_PHOTO_FRAME_STYLE
+        ) ?: DEFAULT_PHOTO_FRAME_STYLE
+        _photoFrameLabel.value = prefs.getString(
+            KEY_PHOTO_FRAME_LABEL,
+            DEFAULT_PHOTO_FRAME_LABEL
+        ) ?: DEFAULT_PHOTO_FRAME_LABEL
+        _isPhotoFrameEnabled.value = prefs.getBoolean(
+            KEY_PHOTO_FRAME_ENABLED,
+            DEFAULT_PHOTO_FRAME_ENABLED
+        )
+        _isSubDisplayTickerEnabled.value = prefs.getBoolean(
+            KEY_SUB_DISPLAY_TICKER_ENABLED,
+            DEFAULT_SUB_DISPLAY_TICKER_ENABLED
+        )
+        _isSubDisplayTickerDark.value = prefs.getBoolean(
+            KEY_SUB_DISPLAY_TICKER_DARK,
+            DEFAULT_SUB_DISPLAY_TICKER_DARK
+        )
+        _homeMascotSize.value = HomeMascotSize.fromId(
+            prefs.getString(KEY_HOME_MASCOT_SIZE, DEFAULT_HOME_MASCOT_SIZE)
+        )
+        _quickMemoText.value = prefs.getString(KEY_QUICK_MEMO_TEXT, "") ?: ""
         _showRootOptions.value = isShowRootOptions(context)
     }
 
@@ -581,6 +606,20 @@ object PreferencesManager {
         _isSubDisplayTickerDark.value = dark
     }
 
+    fun getHomeMascotSize(context: Context): HomeMascotSize =
+        if (initialized) {
+            _homeMascotSize.value
+        } else {
+            HomeMascotSize.fromId(
+                getPrefs(context).getString(KEY_HOME_MASCOT_SIZE, DEFAULT_HOME_MASCOT_SIZE)
+            )
+        }
+
+    fun setHomeMascotSize(context: Context, size: HomeMascotSize) {
+        getPrefs(context).edit().putString(KEY_HOME_MASCOT_SIZE, size.id).apply()
+        _homeMascotSize.value = size
+    }
+
     /** Saves the memo text (trimmed of trailing blank lines, capped at [QUICK_MEMO_MAX_CHARS]). */
     fun setQuickMemoText(context: Context, text: String) {
         val clean = text.take(QUICK_MEMO_MAX_CHARS).trimEnd()
@@ -689,6 +728,17 @@ object PreferencesManager {
         _lidOpenAction.value = action
     }
 
+    fun getLastLaunchedPackage(context: Context): String? {
+        val pkg = getPrefs(context).getString(KEY_LAST_LAUNCHED_PACKAGE, null)?.trim()
+        return if (pkg.isNullOrEmpty() || pkg == context.packageName) null else pkg
+    }
+
+    fun setLastLaunchedPackage(context: Context, packageName: String?) {
+        val pkg = packageName?.trim()
+        if (pkg.isNullOrEmpty() || pkg == context.packageName) return
+        getPrefs(context).edit().putString(KEY_LAST_LAUNCHED_PACKAGE, pkg).apply()
+    }
+
     fun isLidCloseSnapSoundEnabled(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_LID_CLOSE_SNAP_SOUND, DEFAULT_LID_CLOSE_SNAP_SOUND)
 
@@ -716,7 +766,7 @@ object PreferencesManager {
     }
 
     fun setKeypadSoundMode(context: Context, mode: String) {
-        getPrefs(context).edit().putString(KEY_KEYPAD_SOUND_MODE, mode).commit()
+        getPrefs(context).edit().putString(KEY_KEYPAD_SOUND_MODE, mode).apply()
         _keypadSoundMode.value = mode
     }
 
@@ -734,7 +784,7 @@ object PreferencesManager {
     }
 
     fun setLauncherAudioStream(context: Context, stream: String) {
-        getPrefs(context).edit().putString(KEY_LAUNCHER_AUDIO_STREAM, stream).commit()
+        getPrefs(context).edit().putString(KEY_LAUNCHER_AUDIO_STREAM, stream).apply()
         _launcherAudioStream.value = stream
         SoundEffectManager.updateAudioStream(context)
     }
@@ -754,7 +804,7 @@ object PreferencesManager {
 
     fun setLauncherSoundVolume(context: Context, volume: Int) {
         val clamped = volume.coerceIn(0, 100)
-        getPrefs(context).edit().putInt(KEY_LAUNCHER_SOUND_VOLUME, clamped).commit()
+        getPrefs(context).edit().putInt(KEY_LAUNCHER_SOUND_VOLUME, clamped).apply()
         _launcherSoundVolume.value = clamped
     }
 
@@ -851,7 +901,7 @@ object PreferencesManager {
     }
 
     fun setThemeFontFamily(context: Context, family: String) {
-        getPrefs(context).edit().putString(KEY_THEME_FONT_FAMILY, family).commit()
+        getPrefs(context).edit().putString(KEY_THEME_FONT_FAMILY, family).apply()
         _themeFontFamily.value = family
     }
 

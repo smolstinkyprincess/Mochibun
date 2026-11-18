@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import android.util.Log
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -577,7 +578,7 @@ private fun NotificationCard(
     onCardClick: () -> Unit,
     onDismissClick: () -> Unit
 ) {
-    val iconBitmap = remember(item.appIcon) {
+    val iconBitmap = item.appIconBitmap ?: remember(item.packageName, item.appIcon) {
         item.appIcon?.let { drawableToBitmap(it, 48).asImageBitmap() }
     }
 
@@ -701,6 +702,7 @@ private fun launchNotification(context: Context, item: MochibunNotificationItem)
     if (item.contentIntent != null) {
         try {
             item.contentIntent.send()
+            PreferencesManager.setLastLaunchedPackage(context, item.packageName)
             return
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch content intent for ${item.packageName}", e)
@@ -711,6 +713,7 @@ private fun launchNotification(context: Context, item: MochibunNotificationItem)
         if (launchIntent != null) {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(launchIntent)
+            PreferencesManager.setLastLaunchedPackage(context, item.packageName)
         }
     } catch (e: Exception) {
         Log.e(TAG, "Failed to launch package: ${item.packageName}", e)

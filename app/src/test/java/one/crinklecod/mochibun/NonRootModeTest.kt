@@ -30,7 +30,7 @@ import org.robolectric.annotation.Config
 /** v2.1.0 Settings & Polish, batch 2: Non-Root Mode. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])
-class SettingsBatch2Test {
+class NonRootModeTest {
 
     private val context get() = RuntimeEnvironment.getApplication()
 
@@ -327,5 +327,51 @@ class SettingsBatch2Test {
     fun softKeyDispatch_withoutLauncher_isNotConsumed() {
         val event = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_APP_SWITCH)
         assertFalse(one.crinklecod.mochibun.ui.MainActivity.dispatchSoftKeyFromService(event))
+    }
+
+    @Test
+    fun lastLaunchedPackagePersistsAndFiltersSelf() {
+        assertNull(PreferencesManager.getLastLaunchedPackage(context))
+
+        PreferencesManager.setLastLaunchedPackage(context, "mark.via.gp")
+        assertEquals("mark.via.gp", PreferencesManager.getLastLaunchedPackage(context))
+
+        // Self-package and blank values never overwrite a valid last app
+        PreferencesManager.setLastLaunchedPackage(context, context.packageName)
+        PreferencesManager.setLastLaunchedPackage(context, "  ")
+        assertEquals("mark.via.gp", PreferencesManager.getLastLaunchedPackage(context))
+    }
+
+    @Test
+    fun pendingOpenActionFreshnessRespectsUnlockAndHomePress() {
+        // Long PIN entry before unlock: reference time shifts to unlock time
+        assertTrue(
+            one.crinklecod.mochibun.ui.isPendingOpenActionFresh(
+                nowUptimeMs = 15_500L,
+                pendingActionUptimeMs = 1_000L,
+                lastUnlockUptimeMs = 15_000L,
+                lastUserHomePressUptimeMs = 500L
+            )
+        )
+
+        // User woke into another app and only pressed Home much later
+        assertFalse(
+            one.crinklecod.mochibun.ui.isPendingOpenActionFresh(
+                nowUptimeMs = 25_000L,
+                pendingActionUptimeMs = 1_000L,
+                lastUnlockUptimeMs = 15_000L,
+                lastUserHomePressUptimeMs = 24_900L
+            )
+        )
+
+        // Timed out well after unlock without returning to Home
+        assertFalse(
+            one.crinklecod.mochibun.ui.isPendingOpenActionFresh(
+                nowUptimeMs = 25_000L,
+                pendingActionUptimeMs = 1_000L,
+                lastUnlockUptimeMs = 15_000L,
+                lastUserHomePressUptimeMs = 0L
+            )
+        )
     }
 }

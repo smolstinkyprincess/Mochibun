@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.core.system.ClamshellManager
 import one.crinklecod.mochibun.core.system.LidLedManager
 import one.crinklecod.mochibun.data.prefs.LidOpenAction
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
@@ -59,7 +60,7 @@ internal fun showScreenOffResetRow(showRootOptions: Boolean, lidDetectionActive:
     !showRootOptions || !lidDetectionActive
 
 @Composable
-internal fun BehaviorSettingsSubScreen(
+internal fun BehaviorSettingsScreen(
     onBack: () -> Unit,
     onOpenHiddenApps: (() -> Unit)?,
     onCreateFolderClick: (() -> Unit)?,
@@ -275,7 +276,11 @@ internal fun BehaviorSettingsSubScreen(
                 SettingsCard(categoryTitle = "Clamshell & Outer LEDs") {
                     SettingsStepperRow(
                         title = "Lid Open Action",
-                        subtitle = "Action when the clamshell opens",
+                        subtitle = if (ClamshellManager.hasHardwareLidSource()) {
+                            "Action when the clamshell opens"
+                        } else {
+                            "Action when opening or waking the screen"
+                        },
                         valueDisplay = lidAction.label,
                         isFocused = items.getOrNull(focusedIndex) == "lid_open",
                         jumpNumber = jumpNumber("lid_open"),

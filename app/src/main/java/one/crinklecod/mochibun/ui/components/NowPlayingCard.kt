@@ -24,7 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -112,28 +112,35 @@ fun Modifier.nowPlayingCardConcentricBorder(
     cornerRadius: Dp = 22.dp,
     outerColor: Color,
     innerColor: Color
-): Modifier = this.drawWithContent {
-    drawContent()
+): Modifier = this.drawWithCache {
     val r = cornerRadius.toPx()
-    // Outer border
-    drawRoundRect(
-        color = outerColor,
-        topLeft = Offset(0.75.dp.toPx(), 0.75.dp.toPx()),
-        size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-        cornerRadius = CornerRadius(r, r),
-        style = Stroke(width = 1.5.dp.toPx())
-    )
-    // Inner concentric line inset by 3.5 dp
+    val outerHalf = 0.75.dp.toPx()
+    val outerWidth = 1.5.dp.toPx()
+    val outerStroke = Stroke(width = outerWidth)
     val inset = 3.5.dp.toPx()
-    if (size.width > inset * 2 && size.height > inset * 2) {
-        val innerR = (r - inset).coerceAtLeast(0f)
+    val innerStroke = Stroke(width = 1.dp.toPx())
+    val innerR = (r - inset).coerceAtLeast(0f)
+
+    onDrawWithContent {
+        drawContent()
+        // Outer border
         drawRoundRect(
-            color = innerColor,
-            topLeft = Offset(inset, inset),
-            size = Size(size.width - inset * 2, size.height - inset * 2),
-            cornerRadius = CornerRadius(innerR, innerR),
-            style = Stroke(width = 1.dp.toPx())
+            color = outerColor,
+            topLeft = Offset(outerHalf, outerHalf),
+            size = Size(size.width - outerWidth, size.height - outerWidth),
+            cornerRadius = CornerRadius(r, r),
+            style = outerStroke
         )
+        // Inner concentric line inset by 3.5 dp
+        if (size.width > inset * 2 && size.height > inset * 2) {
+            drawRoundRect(
+                color = innerColor,
+                topLeft = Offset(inset, inset),
+                size = Size(size.width - inset * 2, size.height - inset * 2),
+                cornerRadius = CornerRadius(innerR, innerR),
+                style = innerStroke
+            )
+        }
     }
 }
 

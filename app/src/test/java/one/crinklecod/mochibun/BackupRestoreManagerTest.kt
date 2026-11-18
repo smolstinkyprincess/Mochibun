@@ -21,7 +21,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])
-class BackupRestoreTest {
+class BackupRestoreManagerTest {
 
     @Test
     fun testGenerateBackupFileNameFormat() {
@@ -139,7 +139,7 @@ class BackupRestoreTest {
         assertEquals(backedUp.treats, backup.getJSONObject("pet").getInt("treats"))
 
         assertTrue(PetManager.feed())
-        assertTrue(PetManager.feed())
+        assertFalse(PetManager.feed()) // already full at 1.0 after the first feed
         BackupRestoreManager.restoreBackupJson(context, backup.toString()).getOrThrow()
         assertEquals(backedUp, PetManager.state.value)
     }

@@ -19,7 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -259,19 +259,23 @@ private fun PhotoArea(photo: ImageBitmap?) {
                 modifier = Modifier
                     .fillMaxSize()
                     .background(PlaceholderFill)
-                    .drawBehind {
+                    .drawWithCache {
                         val stroke = 1.5.dp.toPx()
                         val inset = stroke / 2f
-                        drawRoundRect(
-                            color = PlaceholderDash,
-                            topLeft = Offset(inset, inset),
-                            size = Size(size.width - stroke, size.height - stroke),
-                            cornerRadius = CornerRadius(8.dp.toPx()),
-                            style = Stroke(
-                                width = stroke,
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))
-                            )
+                        val cornerRadius = CornerRadius(8.dp.toPx())
+                        val dashStroke = Stroke(
+                            width = stroke,
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))
                         )
+                        onDrawBehind {
+                            drawRoundRect(
+                                color = PlaceholderDash,
+                                topLeft = Offset(inset, inset),
+                                size = Size(size.width - stroke, size.height - stroke),
+                                cornerRadius = cornerRadius,
+                                style = dashStroke
+                            )
+                        }
                     },
                 contentAlignment = Alignment.Center
             ) {

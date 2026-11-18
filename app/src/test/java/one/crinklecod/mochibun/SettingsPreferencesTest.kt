@@ -18,7 +18,7 @@ import org.robolectric.annotation.Config
 /** v2.1.0 Settings & Polish, batch 1: new / changed preferences and their helpers. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31])
-class SettingsBatch1Test {
+class SettingsPreferencesTest {
 
     @Test
     fun t9AutoCommitDelayRangeAndStep() {

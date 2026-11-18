@@ -2,10 +2,13 @@ package one.crinklecod.mochibun.data.repository
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.encodeToString
 import one.crinklecod.mochibun.data.model.BundleMascotConfig
+import one.crinklecod.mochibun.data.model.BundleMascotDialogue
 import one.crinklecod.mochibun.data.model.MascotAtlasValidator
 import one.crinklecod.mochibun.data.model.bundleJsonFormat
+import one.crinklecod.mochibun.data.model.sanitizeMascotDialogue
 import one.crinklecod.mochibun.ui.components.MascotAtlasLayout
 import one.crinklecod.mochibun.ui.components.MascotSpriteSource
 import one.crinklecod.mochibun.ui.components.MascotSpriteStore
@@ -19,8 +22,8 @@ import java.io.InputStream
  * wallpaper / cursor, but always as a validated copy in one fixed file
  * (`filesDir/custom_mascot_atlas.png`), never a path or name taken from a picker or bundle.
  *
- * Its layout lives in a small prefs file. Installing or resetting hot-swaps
- * [MascotSpriteStore]'s source; the store keeps only one decoded atlas.
+ * Its layout (and optional custom speech lines) lives in a small prefs file. Installing or
+ * resetting hot-swaps [MascotSpriteStore]'s source; the store keeps only one decoded atlas.
  * File work blocks: call from a background thread (bundle import already runs on one).
  */
 object CustomMascotManager {
@@ -36,30 +39,46 @@ object CustomMascotManager {
      */
     internal var platformBounds: (File) -> Pair<Int, Int>? = ::decodeImageBounds
 
+    /** Reactive custom dialogue for the active custom mascot, or null when using default lines. */
+    val dialogue: StateFlow<BundleMascotDialogue?>
+        get() = MascotSpriteStore.dialogue
+
     fun atlasFile(context: Context): File = File(context.filesDir, ATLAS_FILE_NAME)
 
     /** Whether a custom atlas is the active mascot art. */
     fun isActive(): Boolean = MascotSpriteStore.source.value is MascotSpriteSource.Custom
 
-    /** At startup: re-applies the saved custom atlas, if it is still there. */
+    /** Current custom dialogue when a custom mascot is active, or null otherwise. */
+    fun activeDialogue(): BundleMascotDialogue? =
+        if (isActive()) MascotSpriteStore.dialogue.value else null
+
+    /** At startup: re-applies the saved custom atlas and its dialogue, if still present. */
     fun restore(context: Context) {
         val file = atlasFile(context)
-        val layout = savedLayout(context) ?: return
+        val (config, layout) = savedConfigAndLayout(context) ?: return
         if (!file.isFile) return
         val version = prefs(context).getLong(KEY_VERSION, 0L)
-        MascotSpriteStore.setSource(MascotSpriteSource.Custom(file, layout, version))
+        val sanitizedDialogue = sanitizeMascotDialogue(config.dialogue)
+        MascotSpriteStore.setSource(
+            MascotSpriteSource.Custom(file, layout, version, sanitizedDialogue)
+        )
     }
 
-    /** The active atlas's layout for a bundle manifest, or null when Mochibunny is built-in. */
+    /** The active atlas's layout and dialogue for a bundle manifest, or null when Mochibunny is built-in. */
     fun activeConfig(context: Context): BundleMascotConfig? {
         if (!atlasFile(context).isFile) return null
-        val layout = savedLayout(context) ?: return null
-        return MascotAtlasValidator.toConfig(layout)
+        val (savedConfig, layout) = savedConfigAndLayout(context) ?: return null
+        val activeDialogue = activeDialogue() ?: sanitizeMascotDialogue(savedConfig.dialogue)
+        return MascotAtlasValidator.toConfig(
+            layout = layout,
+            name = savedConfig.name.ifBlank { "Mochibunny" },
+            dialogue = activeDialogue
+        )
     }
 
     /**
      * Picker import: copies at most 1.5 MB of [input] to a staging file, then validates and
-     * installs it with an inferred layout (8 rows of square frames).
+     * installs it with an inferred layout (8 rows of square frames) and no custom dialogue.
      */
     fun importPng(context: Context, input: InputStream): Result<MascotAtlasLayout> {
         val staged = File.createTempFile("mascot_pick_", ".png", context.cacheDir)
@@ -79,7 +98,8 @@ object CustomMascotManager {
 
     /**
      * Validates a staged PNG and, if good, makes it the mascot. [config] is a bundle's declared
-     * layout; without one the layout is inferred. On failure nothing changes.
+     * layout (and optional dialogue); without one the layout is inferred and dialogue is cleared.
+     * On failure nothing changes.
      */
     fun installStaged(context: Context, staged: File, config: BundleMascotConfig?): Result<MascotAtlasLayout> {
         val pngSize = MascotAtlasValidator.readPngSize(staged)
@@ -98,6 +118,8 @@ object CustomMascotManager {
             is MascotAtlasValidator.Result.Valid -> check.layout
             is MascotAtlasValidator.Result.Invalid -> return Result.failure(IllegalArgumentException(check.reason))
         }
+        val sanitizedDialogue = sanitizeMascotDialogue(config?.dialogue)
+        val mascotName = config?.name?.trim()?.ifBlank { "Mochibunny" } ?: "Mochibunny"
 
         return try {
             val target = atlasFile(context)
@@ -108,11 +130,18 @@ object CustomMascotManager {
                 tmp.delete()
             }
             val version = System.currentTimeMillis()
+            val configToSave = MascotAtlasValidator.toConfig(
+                layout = layout,
+                name = mascotName,
+                dialogue = sanitizedDialogue
+            )
             prefs(context).edit()
-                .putString(KEY_LAYOUT_JSON, bundleJsonFormat.encodeToString(MascotAtlasValidator.toConfig(layout)))
+                .putString(KEY_LAYOUT_JSON, bundleJsonFormat.encodeToString(configToSave))
                 .putLong(KEY_VERSION, version)
                 .apply()
-            MascotSpriteStore.setSource(MascotSpriteSource.Custom(target, layout, version))
+            MascotSpriteStore.setSource(
+                MascotSpriteSource.Custom(target, layout, version, sanitizedDialogue)
+            )
             Result.success(layout)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to install custom mascot atlas", e)
@@ -120,19 +149,21 @@ object CustomMascotManager {
         }
     }
 
-    /** Back to the built-in Mochibunny: deletes the custom file and its layout. */
+    /** Back to the built-in Mochibunny: deletes the custom file, layout, and custom dialogue. */
     fun reset(context: Context) {
         MascotSpriteStore.setSource(MascotSpriteSource.BuiltIn)
         atlasFile(context).delete()
         prefs(context).edit().remove(KEY_LAYOUT_JSON).remove(KEY_VERSION).apply()
     }
 
-    private fun savedLayout(context: Context): MascotAtlasLayout? {
+    private fun savedConfigAndLayout(context: Context): Pair<BundleMascotConfig, MascotAtlasLayout>? {
         val json = prefs(context).getString(KEY_LAYOUT_JSON, null) ?: return null
         return try {
             val config = bundleJsonFormat.decodeFromString<BundleMascotConfig>(json)
             val (w, h) = MascotAtlasValidator.readPngSize(atlasFile(context)) ?: return null
-            (MascotAtlasValidator.layoutFromConfig(config, w, h) as? MascotAtlasValidator.Result.Valid)?.layout
+            val layout = (MascotAtlasValidator.layoutFromConfig(config, w, h) as? MascotAtlasValidator.Result.Valid)?.layout
+                ?: return null
+            config to layout
         } catch (e: Exception) {
             Log.w(TAG, "Saved mascot layout unreadable", e)
             null

@@ -4,14 +4,27 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import one.crinklecod.mochibun.data.model.BundleCursorConfig
 import one.crinklecod.mochibun.data.model.BundleMascotConfig
+import one.crinklecod.mochibun.data.model.BundleMascotDialogue
 import one.crinklecod.mochibun.data.model.BundleMascotSlot
 import one.crinklecod.mochibun.data.model.MascotAtlasValidator
 import one.crinklecod.mochibun.data.repository.CustomMascotManager
+import one.crinklecod.mochibun.pet.PetMood
 import one.crinklecod.mochibun.ui.components.MascotAnimSlot
+import one.crinklecod.mochibun.ui.components.MascotReactionKind
 import one.crinklecod.mochibun.ui.components.MascotSlotLayout
 import one.crinklecod.mochibun.ui.components.MascotSpriteSource
 import one.crinklecod.mochibun.ui.components.MascotSpriteStore
+import one.crinklecod.mochibun.ui.components.PET_CONTENT_LINES
+import one.crinklecod.mochibun.ui.components.PET_HUNGRY_LINES
+import one.crinklecod.mochibun.ui.components.PET_NO_TREATS_LINES
+import one.crinklecod.mochibun.ui.components.PET_SLEEPY_LINES
+import one.crinklecod.mochibun.ui.components.PET_SULKY_LINES
+import one.crinklecod.mochibun.ui.components.petMoodLines
+import one.crinklecod.mochibun.ui.components.selectReactionLine
+import one.crinklecod.mochibun.ui.components.selectSpeechBubbleDialogue
+import one.crinklecod.mochibun.ui.dialogs.previewMascotBadgeText
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
 import one.crinklecod.mochibun.data.model.BundleGreetingConfig
@@ -32,7 +45,7 @@ import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-class ThemeBundleTest {
+class ThemeBundleManagerTest {
 
     @Before
     fun resetMascot() {
@@ -53,7 +66,10 @@ class ThemeBundleTest {
         val png = fakePng(192, 384)
         val bundle = createZip("manifest.json" to manifestBytes(), "mascot_atlas.png" to png)
 
-        assertTrue(ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow().hasMascotAsset)
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow()
+        assertTrue(preview.hasMascotAsset)
+        assertFalse(preview.hasCustomMascotDialogue)
+        assertEquals("🐰 Custom mascot included", previewMascotBadgeText(preview))
 
         withTestContext { context ->
             var skipped: String? = null
@@ -66,6 +82,7 @@ class ThemeBundleTest {
             assertEquals(file, source.file)
             assertEquals(48, source.layout.frameWidth) // inferred: 384 / 8
             assertEquals(MascotSlotLayout(6, 4), source.layout.slots[MascotAnimSlot.EAT])
+            assertNull(CustomMascotManager.activeDialogue())
             assertTrue("Staging files cleaned", context.cacheDir.listFiles().isNullOrEmpty())
         }
     }
@@ -110,7 +127,15 @@ class ThemeBundleTest {
     @Test
     fun oversizeMascot_isSkipped_butTheRestOfTheBundleApplies() {
         val tooBig = fakePng(192, 384, totalBytes = MascotAtlasValidator.MAX_ATLAS_BYTES.toInt() + 1)
-        val bundle = createZip("manifest.json" to manifestBytes(), "mascot_atlas.png" to tooBig)
+        val manifest = validManifest().copy(
+            hasCustomMascot = true,
+            mascot = BundleMascotConfig(
+                frameWidth = 48,
+                frameHeight = 48,
+                dialogue = BundleMascotDialogue(happy = listOf("should be skipped!"))
+            )
+        )
+        val bundle = createZip("manifest.json" to manifestBytes(manifest), "mascot_atlas.png" to tooBig)
 
         assertFalse(ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow().hasMascotAsset)
         withTestContext { context ->
@@ -119,6 +144,7 @@ class ThemeBundleTest {
             assertTrue("Bundle still applies", applied.isSuccess)
             assertTrue(skipped!!.contains("1.5 MB"))
             assertEquals(MascotSpriteSource.BuiltIn, MascotSpriteStore.source.value)
+            assertNull("Skipped mascot must not apply custom dialogue", CustomMascotManager.activeDialogue())
             assertFalse(CustomMascotManager.atlasFile(context).exists())
             assertTrue("Staging files cleaned", context.cacheDir.listFiles().isNullOrEmpty())
         }
@@ -127,12 +153,21 @@ class ThemeBundleTest {
     @Test
     fun invalidMascotDimensions_areSkipped() {
         for (png in listOf(fakePng(200, 380), fakePng(16 * 17, 16 * 8), "not a png".toByteArray())) {
-            val bundle = createZip("manifest.json" to manifestBytes(), "mascot_atlas.png" to png)
+            val manifest = validManifest().copy(
+                hasCustomMascot = true,
+                mascot = BundleMascotConfig(
+                    frameWidth = 48,
+                    frameHeight = 48,
+                    dialogue = BundleMascotDialogue(happy = listOf("invalid atlas line"))
+                )
+            )
+            val bundle = createZip("manifest.json" to manifestBytes(manifest), "mascot_atlas.png" to png)
             withTestContext { context ->
                 var skipped: String? = null
                 assertTrue(ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)) { skipped = it }.isSuccess)
                 assertTrue(skipped != null)
                 assertEquals(MascotSpriteSource.BuiltIn, MascotSpriteStore.source.value)
+                assertNull(CustomMascotManager.activeDialogue())
                 assertFalse(CustomMascotManager.atlasFile(context).exists())
             }
         }
@@ -183,12 +218,109 @@ class ThemeBundleTest {
         assertTrue(preview.hasMascotAsset)
         assertTrue(preview.manifest.hasCustomMascot)
         assertEquals(48, preview.manifest.mascot!!.frameWidth)
+        assertNull(preview.manifest.mascot!!.dialogue)
 
         MascotSpriteStore.setSource(MascotSpriteSource.BuiltIn)
         withTestContext { target ->
             ThemeBundleManager.applyBundle(target, ByteArrayInputStream(exported)).getOrThrow()
             assertArrayEquals(png, CustomMascotManager.atlasFile(target).readBytes())
             assertEquals(installedLayout, customSource!!.layout)
+            assertNull(CustomMascotManager.activeDialogue())
+        }
+    }
+
+    @Test
+    fun customMascotDialogue_partialPoolsFallBack_roundTripsAndClearsOnReset() {
+        val png = fakePng(192, 384)
+        val rawDialogue = BundleMascotDialogue(
+            happy = listOf("  kero kero! 🐸  ", "lily pad bliss ♡", "\n\t "),
+            fed = listOf("chomp! 🪰", "yummy bug~")
+        )
+        val expectedDialogue = BundleMascotDialogue(
+            happy = listOf("kero kero! 🐸", "lily pad bliss ♡"),
+            fed = listOf("chomp! 🪰", "yummy bug~")
+        )
+        val initialManifest = validManifest().copy(
+            hasCustomMascot = true,
+            mascot = BundleMascotConfig(
+                name = "Kerobun",
+                frameWidth = 48,
+                frameHeight = 48,
+                dialogue = rawDialogue
+            )
+        )
+        val initialBundle = createZip(
+            "manifest.json" to manifestBytes(initialManifest),
+            "mascot_atlas.png" to png
+        )
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(initialBundle)).getOrThrow()
+        assertTrue(preview.hasMascotAsset)
+        assertTrue(preview.hasCustomMascotDialogue)
+        assertEquals("🐰 Custom mascot + dialogue included", previewMascotBadgeText(preview))
+
+        var reExported = ByteArray(0)
+        withTestContext { source ->
+            ThemeBundleManager.applyBundle(source, ByteArrayInputStream(initialBundle)).getOrThrow()
+            assertEquals(expectedDialogue, CustomMascotManager.activeDialogue())
+
+            // Partial dialogue fallback: happy & fed use custom lines; other moods use built-in pools
+            var prevHappy: String? = null
+            repeat(15) {
+                val line = selectSpeechBubbleDialogue(
+                    previousLine = prevHappy,
+                    hour = 12,
+                    isLowBattery = false,
+                    isMusicPlaying = false,
+                    petMood = PetMood.HAPPY
+                )
+                assertTrue(line in expectedDialogue.happy)
+                assertNotEquals(prevHappy, line)
+                prevHappy = line
+            }
+            var prevFed: String? = null
+            repeat(15) {
+                val line = selectReactionLine(MascotReactionKind.FED, prevFed) { "" }
+                assertTrue(line in expectedDialogue.fed)
+                assertNotEquals(prevFed, line)
+                prevFed = line
+            }
+            assertEquals(PET_CONTENT_LINES, petMoodLines(PetMood.CONTENT))
+            assertEquals(PET_HUNGRY_LINES, petMoodLines(PetMood.HUNGRY))
+            assertEquals(PET_SULKY_LINES, petMoodLines(PetMood.SULKY))
+            assertEquals(PET_SLEEPY_LINES, petMoodLines(PetMood.SLEEPY))
+            assertTrue(selectReactionLine(MascotReactionKind.NO_TREATS, null) { "" } in PET_NO_TREATS_LINES)
+
+            val out = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(source, out, bundleName = "Kerobun Pack").getOrThrow()
+            reExported = out.toByteArray()
+
+            // Resetting to default Mochibunny clears custom dialogue and restores default pools
+            CustomMascotManager.reset(source)
+            assertNull(CustomMascotManager.activeDialogue())
+            assertNull(CustomMascotManager.activeConfig(source))
+            val defaultHappy = selectSpeechBubbleDialogue(
+                hour = 12,
+                isLowBattery = false,
+                isMusicPlaying = false,
+                petMood = PetMood.HAPPY
+            )
+            assertFalse(defaultHappy in expectedDialogue.happy)
+        }
+
+        // Round-trip import into a fresh target context preserves sanitized dialogue and startup restore
+        withTestContext { target ->
+            ThemeBundleManager.applyBundle(target, ByteArrayInputStream(reExported)).getOrThrow()
+            assertEquals(expectedDialogue, CustomMascotManager.activeDialogue())
+
+            MascotSpriteStore.setSource(MascotSpriteSource.BuiltIn)
+            assertNull(CustomMascotManager.activeDialogue())
+            CustomMascotManager.restore(target)
+            assertEquals(expectedDialogue, CustomMascotManager.activeDialogue())
+
+            // Importing a standalone PNG without dialogue clears previous custom dialogue
+            CustomMascotManager.importPng(target, ByteArrayInputStream(png)).getOrThrow()
+            assertNull(CustomMascotManager.activeDialogue())
         }
     }
 
@@ -399,7 +531,7 @@ class ThemeBundleTest {
     fun testGenerateBundleFileNameFormat() {
         val fileName = ThemeBundleManager.generateBundleFileName("Pastel Dreams!")
         assertTrue("Filename should start with sanitized slug", fileName.startsWith("pastel_dreams__"))
-        assertTrue("Filename must end with .mochibun", fileName.endsWith(".mochibun"))
+        assertTrue("Filename must end with .mochibundle", fileName.endsWith(".mochibundle"))
     }
 
     @Test

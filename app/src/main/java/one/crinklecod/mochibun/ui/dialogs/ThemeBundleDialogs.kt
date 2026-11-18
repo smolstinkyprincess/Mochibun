@@ -164,7 +164,7 @@ fun ExportBundleDialog(
                 )
 
                 Text(
-                    text = "Create a shareable .mochibun archive",
+                    text = "Create a shareable .mochibundle archive",
                     color = theme.cardTextColor.copy(alpha = 0.7f),
                     fontSize = 10.5.sp,
                     modifier = Modifier.padding(bottom = 12.dp)
@@ -429,7 +429,7 @@ fun PresetPreviewDialog(
 
                 if (previewData.hasMascotAsset) {
                     Text(
-                        text = "🐰 Custom mascot included",
+                        text = previewMascotBadgeText(previewData),
                         fontSize = 11.sp,
                         color = theme.greetingColor,
                         fontWeight = FontWeight.SemiBold,
@@ -472,6 +472,13 @@ fun PresetPreviewDialog(
         }
     }
 }
+
+internal fun previewMascotBadgeText(preview: BundlePreviewData): String =
+    if (preview.hasCustomMascotDialogue) {
+        "🐰 Custom mascot + dialogue included"
+    } else {
+        "🐰 Custom mascot included"
+    }
 
 @Composable
 private fun ColorDot(color: Color) {

@@ -2,7 +2,7 @@
 <resources>
 
     <!-- Android 12+ only: the system splash screen attributes do not exist on older releases. -->
-    <style name="Theme.M120Launcher" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.Mochibun" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">#FFFFEAF5</item>
         <item name="android:colorAccent">#FFD791E3</item>
         <item name="android:windowSplashScreenBackground">#FFFFEAF5</item>

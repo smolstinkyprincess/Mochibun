@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
@@ -609,8 +610,8 @@ private fun DrawScope.drawRetroArcadeExplosion(progress: Float, origin: Offset) 
         // stepped diagonal flash accents
         val diag = currentR * 0.70f
         val diagSize = stepPx * 1.8f
-        for (sx in listOf(-1f, 1f)) {
-            for (sy in listOf(-1f, 1f)) {
+        for (sx in -1..1 step 2) {
+            for (sy in -1..1 step 2) {
                 drawRect(
                     color = Color(0xFFFF78C0).copy(alpha = flashAlpha * 0.85f),
                     topLeft = Offset(origin.x + sx * diag - diagSize / 2f, origin.y + sy * diag - diagSize / 2f),
@@ -955,29 +956,26 @@ fun StickerExplosion() {
 }
 
 // ============================================================================
-// Status Bar Wi-Fi Icon (Preserved for LauncherComponents.kt StatusCard)
+// Status Bar Wi-Fi Icon
 // ============================================================================
 
-// custom vector drawn Wi-Fi status icon for StatusCard
 @Composable
 fun TinyWifiIcon(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified
 ) {
+    val density = LocalDensity.current.density
+    val arcStroke = remember(density) { Stroke(width = 2f * density, cap = StrokeCap.Round) }
+
     Canvas(
         modifier = modifier.size(16.dp)
     ) {
-        val strokeWidth = 2.dp.toPx()
-
         drawArc(
             color = color,
             startAngle = 225f,
             sweepAngle = 90f,
             useCenter = false,
-            style = Stroke(
-                width = strokeWidth,
-                cap = StrokeCap.Round
-            )
+            style = arcStroke
         )
 
         drawArc(
@@ -987,15 +985,12 @@ fun TinyWifiIcon(
             useCenter = false,
             topLeft = Offset(size.width * 0.2f, size.height * 0.2f),
             size = Size(size.width * 0.6f, size.height * 0.6f),
-            style = Stroke(
-                width = strokeWidth,
-                cap = StrokeCap.Round
-            )
+            style = arcStroke
         )
 
         drawCircle(
             color = color,
-            radius = strokeWidth * 0.8f,
+            radius = arcStroke.width * 0.8f,
             center = Offset(size.width / 2f, size.height * 0.78f)
         )
     }

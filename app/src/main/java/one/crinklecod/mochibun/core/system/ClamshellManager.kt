@@ -9,9 +9,15 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,6 +79,8 @@ object ClamshellManager {
     // Covers delivering a hall event from the reader thread through to the LED write while the SoC
     // would otherwise drop back into suspend
     private const val HALL_EVENT_WAKE_LOCK_MS = 3_000L
+    private const val HINGE_CLOSED_MAX_DEGREES = 15f
+    private const val HINGE_OPEN_MIN_DEGREES = 30f
 
     private val _state = MutableStateFlow(ClamshellState.OPEN_AWAKE)
     val state: StateFlow<ClamshellState> = _state.asStateFlow()
@@ -81,6 +89,35 @@ object ClamshellManager {
     private val _isLidClosed = MutableStateFlow(false)
     val isLidClosed: StateFlow<Boolean> = _isLidClosed.asStateFlow()
 
+    /** Process-wide close counter so MainActivity never misses a close that happened before it existed. */
+    private val _lidCloseSequence = MutableStateFlow(0)
+    val lidCloseSequence: StateFlow<Int> = _lidCloseSequence.asStateFlow()
+
+    /** Process-wide wake-while-open counter for D-pad focus recovery. */
+    private val _openAwakeSequence = MutableStateFlow(0)
+    val openAwakeSequence: StateFlow<Int> = _openAwakeSequence.asStateFlow()
+
+    /**
+     * Incremented when the phone wakes after a close:
+     * - Hardware lid close -> OPEN_AWAKE (rooted M120 hall switch or Sensor.TYPE_HINGE_ANGLE)
+     * - Non-root / generic fallback: ACTION_SCREEN_OFF -> ACTION_SCREEN_ON when no hardware lid source is active.
+     */
+    private val _pendingOpenActionSequence = MutableStateFlow(0)
+    val pendingOpenActionSequence: StateFlow<Int> = _pendingOpenActionSequence.asStateFlow()
+
+    @Volatile
+    var lastPendingOpenActionUptimeMs: Long = 0L
+        private set
+
+    @VisibleForTesting
+    internal var uptimeMillisProvider: () -> Long = {
+        try {
+            SystemClock.uptimeMillis()
+        } catch (_: Throwable) {
+            0L
+        }
+    }
+
     private val listeners = CopyOnWriteArrayList<ClamshellListener>()
     private var isReceiverRegistered = false
     private var appContext: Context? = null
@@ -88,10 +125,28 @@ object ClamshellManager {
 
     private var hallReader: HallSwitchReader? = null
     private var hallWakeLock: PowerManager.WakeLock? = null
+    private var hingeSensorActive = false
+    private var hingeSensorListener: SensorEventListener? = null
 
     // Inputs to the state machine. Written on the main thread only.
     private var hallClosed = false
     private var displayAwake = true
+    private var closedSinceOpen = false
+    private var fallbackScreenOffSinceOpen = false
+
+    @VisibleForTesting
+    internal var hardwareLidSourceOverride: Boolean? = null
+
+    /** True when a real physical lid sensor/stream is driving transitions (not just screen power). */
+    fun hasHardwareLidSource(): Boolean = hardwareLidSourceOverride
+        ?: (hallReader?.isStreaming == true || hingeSensorActive || RootShell.isGranted() == true)
+
+    @VisibleForTesting
+    internal fun hingeAngleToClosed(angleDegrees: Float): Boolean? = when {
+        angleDegrees <= HINGE_CLOSED_MAX_DEGREES -> true
+        angleDegrees >= HINGE_OPEN_MIN_DEGREES -> false
+        else -> null
+    }
 
     private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -100,7 +155,7 @@ object ClamshellManager {
                 Intent.ACTION_SCREEN_ON -> true
                 else -> return
             }
-            onDisplayPowerChanged(awake)
+            onDisplayPowerChanged(awake, allowScreenOffFallback = !hasHardwareLidSource())
 
             // Without a live event stream, re-read the switch as root. A screen-off may be the lid
             // closing, so wait briefly for the vendor property to catch up before trusting "open".
@@ -118,11 +173,14 @@ object ClamshellManager {
     }
 
     /**
-     * Registers the screen receiver and starts the root hall reader.
+     * Registers the screen receiver and starts the root hall reader (or hinge sensor fallback).
      * Safe to call multiple times; idempotently registers once per process.
      */
     fun init(context: Context) {
-        if (isReceiverRegistered) return
+        if (isReceiverRegistered) {
+            ensureHallReaderRunning()
+            return
+        }
         val app = context.applicationContext
         appContext = app
         val filter = IntentFilter().apply {
@@ -140,10 +198,47 @@ object ClamshellManager {
             Log.e(TAG, "Failed to register screen state receiver: ${e.message}")
         }
 
+        startHallReader()
+        initHingeSensorFallback(app)
+    }
+
+    /** Retries starting [HallSwitchReader] if root became available after early boot. */
+    fun ensureHallReaderRunning() {
+        if (!isReceiverRegistered) return
+        val reader = hallReader
+        if (reader?.isStreaming == true || reader?.isRunning == true) return
+        if (!RootShell.isSuBinaryPresent()) return
+        if (RootShell.isGranted() == false) return
+        startHallReader()
+    }
+
+    private fun startHallReader() {
         hallReader = HallSwitchReader { closed ->
             acquireHallWakeLock()
             mainHandler.post { onHallChanged(closed) }
         }.also { it.start() }
+    }
+
+    private fun initHingeSensorFallback(app: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        if (hingeSensorListener != null) return
+        val sm = app.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return
+        val hingeSensor = sm.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE) ?: return
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent?) {
+                if (hallReader?.isStreaming == true) return
+                val angle = event?.values?.firstOrNull() ?: return
+                hingeAngleToClosed(angle)?.let { closed ->
+                    onHallChanged(closed)
+                }
+            }
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        if (sm.registerListener(listener, hingeSensor, SensorManager.SENSOR_DELAY_NORMAL, mainHandler)) {
+            hingeSensorListener = listener
+            hingeSensorActive = true
+            Log.d(TAG, "Hinge angle sensor fallback registered")
+        }
     }
 
     /** True when the flip is shut or the display is off. Use for "nobody is looking" decisions. */
@@ -170,9 +265,18 @@ object ClamshellManager {
     }
 
     @VisibleForTesting
-    internal fun onDisplayPowerChanged(awake: Boolean) {
+    internal fun onDisplayPowerChanged(awake: Boolean, allowScreenOffFallback: Boolean = false) {
         displayAwake = awake
         applyState()
+        if (allowScreenOffFallback) {
+            if (!awake) {
+                fallbackScreenOffSinceOpen = true
+            } else if (fallbackScreenOffSinceOpen) {
+                fallbackScreenOffSinceOpen = false
+                lastPendingOpenActionUptimeMs = uptimeMillisProvider()
+                _pendingOpenActionSequence.value++
+            }
+        }
     }
 
     private fun applyState() {
@@ -182,6 +286,21 @@ object ClamshellManager {
         if (previous == current) return
         _state.value = current
         Log.d(TAG, "Clamshell transition: $previous -> $current")
+
+        if (current.isClosed && !previous.isClosed) {
+            closedSinceOpen = true
+            fallbackScreenOffSinceOpen = false
+            _lidCloseSequence.value++
+        }
+        if (current == ClamshellState.OPEN_AWAKE) {
+            _openAwakeSequence.value++
+            if (closedSinceOpen) {
+                closedSinceOpen = false
+                fallbackScreenOffSinceOpen = false
+                lastPendingOpenActionUptimeMs = uptimeMillisProvider()
+                _pendingOpenActionSequence.value++
+            }
+        }
 
         val lidChanged = previous.isClosed != current.isClosed
         val displayChanged = previous.isAwake != current.isAwake
@@ -215,6 +334,14 @@ object ClamshellManager {
     internal fun resetForTest() {
         hallClosed = false
         displayAwake = true
+        closedSinceOpen = false
+        fallbackScreenOffSinceOpen = false
+        hardwareLidSourceOverride = null
+        hingeSensorActive = false
+        lastPendingOpenActionUptimeMs = 0L
+        _lidCloseSequence.value = 0
+        _openAwakeSequence.value = 0
+        _pendingOpenActionSequence.value = 0
         _state.value = ClamshellState.OPEN_AWAKE
         _isLidClosed.value = false
     }

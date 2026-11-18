@@ -17,6 +17,7 @@ import android.os.SystemClock
 import android.util.Log
 import one.crinklecod.mochibun.core.system.ClamshellListener
 import one.crinklecod.mochibun.core.system.ClamshellManager
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.service.MochibunNotificationListenerService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -244,8 +245,9 @@ object MediaSessionTracker {
             ?: "Unknown Artist"
         val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
 
-        val embeddedArtwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+        val rawEmbeddedArtwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+        val embeddedArtwork = rawEmbeddedArtwork?.let(::downscaleArtworkIfNeeded)
 
         val artUri = if (embeddedArtwork == null) {
             metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
@@ -294,6 +296,14 @@ object MediaSessionTracker {
         }
     }
 
+    private fun downscaleArtworkIfNeeded(src: Bitmap): Bitmap {
+        val longest = maxOf(src.width, src.height)
+        if (longest <= ARTWORK_TARGET_PX || src.width <= 0 || src.height <= 0) return src
+        val targetW = (src.width * ARTWORK_TARGET_PX / longest).coerceAtLeast(1)
+        val targetH = (src.height * ARTWORK_TARGET_PX / longest).coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(src, targetW, targetH, false)
+    }
+
     /**
      * Two-pass decode: reads bounds first, then decodes with a power-of-two inSampleSize so the
      * longest edge lands near [ARTWORK_TARGET_PX]. A 3000px cover becomes ~187px (~140 KB)
@@ -311,7 +321,10 @@ object MediaSessionTracker {
             sampleSize *= 2
         }
 
-        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
         return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
     }
 
@@ -349,11 +362,13 @@ object MediaSessionTracker {
         try {
             if (state.sessionActivity != null) {
                 state.sessionActivity.send()
+                PreferencesManager.setLastLaunchedPackage(context, state.packageName)
             } else if (state.packageName != null) {
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(state.packageName)
                 if (launchIntent != null) {
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(launchIntent)
+                    PreferencesManager.setLastLaunchedPackage(context, state.packageName)
                 }
             }
         } catch (e: Exception) {
@@ -376,6 +391,7 @@ object MediaSessionTracker {
         }
         activeSessionsListener = null
         sessionManager = null
+        _mediaState.value = MochibunMediaState()
     }
 
     fun onNotificationListenerServiceConnected(service: MochibunNotificationListenerService) {

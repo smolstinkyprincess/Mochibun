@@ -6,13 +6,17 @@ import one.crinklecod.mochibun.ui.components.MUSIC_LINES
 import one.crinklecod.mochibun.ui.components.PET_FED_LINES
 import one.crinklecod.mochibun.ui.components.MascotAnimSlot
 import one.crinklecod.mochibun.ui.components.MascotReactionKind
+import one.crinklecod.mochibun.ui.components.PET_ALREADY_FULL_LINES
 import one.crinklecod.mochibun.ui.components.PET_NO_TREATS_LINES
 import one.crinklecod.mochibun.ui.components.PET_PETTED_LINES
+import one.crinklecod.mochibun.ui.components.STEP_NO_TREATS_HINT
+import one.crinklecod.mochibun.ui.components.noTreatsLines
 import one.crinklecod.mochibun.ui.components.selectReactionLine
 import one.crinklecod.mochibun.ui.components.pickLineAvoiding
 import one.crinklecod.mochibun.ui.components.petMoodLines
 import one.crinklecod.mochibun.ui.components.selectSpeechBubbleDialogue
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,8 +24,12 @@ import org.junit.Test
 class PetSpeechLinesTest {
 
     private val allPools: Map<String, List<String>> =
-        PetMood.entries.associate { it.name to petMoodLines(it) } +
-            mapOf("FED" to PET_FED_LINES, "NO_TREATS" to PET_NO_TREATS_LINES, "PETTED" to PET_PETTED_LINES)
+        PetMood.entries.associate { it.name to petMoodLines(it) } + mapOf(
+            "FED" to PET_FED_LINES,
+            "ALREADY_FULL" to PET_ALREADY_FULL_LINES,
+            "NO_TREATS" to PET_NO_TREATS_LINES,
+            "PETTED" to PET_PETTED_LINES,
+        )
 
     @Test
     fun everyPoolHasFourOrMoreShortSingleLines() {
@@ -111,10 +119,13 @@ class PetSpeechLinesTest {
         val chat = "chat line"
         repeat(20) {
             assertTrue(selectReactionLine(MascotReactionKind.FED, null) { chat } in PET_FED_LINES)
+            assertTrue(selectReactionLine(MascotReactionKind.ALREADY_FULL, null) { chat } in PET_ALREADY_FULL_LINES)
             assertTrue(selectReactionLine(MascotReactionKind.NO_TREATS, null) { chat } in PET_NO_TREATS_LINES)
             assertTrue(selectReactionLine(MascotReactionKind.PETTED, null) { chat } in PET_PETTED_LINES)
         }
         assertEquals(chat, selectReactionLine(MascotReactionKind.CHAT, null) { chat })
+        assertEquals("+1 🍡 treat earned! ♡", selectReactionLine(MascotReactionKind.TREATS_EARNED, null, earnedCount = 1) { chat })
+        assertEquals("+2 🍡 treats earned! ♡", selectReactionLine(MascotReactionKind.TREATS_EARNED, null, earnedCount = 2) { chat })
 
         val previous = PET_FED_LINES[0]
         repeat(20) { assertNotEquals(previous, selectReactionLine(MascotReactionKind.FED, previous) { chat }) }
@@ -122,8 +133,24 @@ class PetSpeechLinesTest {
         assertEquals(MascotAnimSlot.EAT, MascotReactionKind.FED.slot)
         assertEquals(MascotAnimSlot.PET, MascotReactionKind.PETTED.slot)
         assertEquals(MascotAnimSlot.TALK, MascotReactionKind.CHAT.slot)
+        assertEquals(MascotAnimSlot.TALK, MascotReactionKind.ALREADY_FULL.slot)
         assertEquals(MascotAnimSlot.TALK, MascotReactionKind.NO_TREATS.slot)
+        assertEquals(MascotAnimSlot.HAPPY, MascotReactionKind.TREATS_EARNED.slot)
         // Built-in atlas row order
         assertEquals((0..7).toList(), MascotAnimSlot.entries.map { it.defaultRow })
+    }
+
+    @Test
+    fun noTreatsLines_excludesWalkHintWhenStepSensorMissing() {
+        assertTrue(STEP_NO_TREATS_HINT in noTreatsLines(hasStepSensor = true))
+        val noSteps = noTreatsLines(hasStepSensor = false)
+        assertFalse(STEP_NO_TREATS_HINT in noSteps)
+        assertTrue(noSteps.size >= 4)
+        repeat(25) {
+            assertNotEquals(
+                STEP_NO_TREATS_HINT,
+                selectReactionLine(MascotReactionKind.NO_TREATS, null, hasStepSensor = false) { "" }
+            )
+        }
     }
 }

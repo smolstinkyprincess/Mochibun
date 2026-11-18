@@ -3,6 +3,7 @@ package one.crinklecod.mochibun.data.model
 import android.app.PendingIntent
 import android.graphics.drawable.Drawable
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.graphics.ImageBitmap
 
 @Immutable
 data class MochibunNotificationItem(
@@ -15,5 +16,6 @@ data class MochibunNotificationItem(
     val contentIntent: PendingIntent?,
     val appIcon: Drawable?,
     /** A ringing call (CATEGORY_CALL that is incoming), which outranks everything on the lid LEDs. */
-    val isIncomingCall: Boolean = false
+    val isIncomingCall: Boolean = false,
+    val appIconBitmap: ImageBitmap? = null
 )

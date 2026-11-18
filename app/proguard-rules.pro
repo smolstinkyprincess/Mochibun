@@ -51,6 +51,9 @@
     synthetic <init>(...);
 }
 -keep class one.crinklecod.mochibun.data.model.MochibunBundleManifest { *; }
+-keep class one.crinklecod.mochibun.data.model.BundleMascotConfig { *; }
+-keep class one.crinklecod.mochibun.data.model.BundleMascotSlot { *; }
+-keep class one.crinklecod.mochibun.data.model.BundleMascotDialogue { *; }
 -keep class one.crinklecod.mochibun.data.model.BundleGreetingConfig { *; }
 -keep class one.crinklecod.mochibun.data.model.BundlePaletteConfig { *; }
 -keep class one.crinklecod.mochibun.data.model.BundleCursorConfig { *; }

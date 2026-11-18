@@ -18,6 +18,8 @@ object MascotAtlasValidator {
     const val MAX_FRAMES = 16
     const val MAX_ATLAS_PX = 2048
     const val MAX_ATLAS_BYTES = 1_536L * 1024L // 1.5 MB
+    const val MAX_DIALOGUE_LINE_CHARS = 48
+    const val MAX_DIALOGUE_POOL_SIZE = 20
 
     sealed interface Result {
         data class Valid(val layout: MascotAtlasLayout) : Result
@@ -86,15 +88,76 @@ object MascotAtlasValidator {
     }
 
     /** The bundle form of [layout], for exporting and for remembering the active custom atlas. */
-    fun toConfig(layout: MascotAtlasLayout, name: String = "Mochibunny"): BundleMascotConfig =
+    fun toConfig(
+        layout: MascotAtlasLayout,
+        name: String = "Mochibunny",
+        dialogue: BundleMascotDialogue? = null
+    ): BundleMascotConfig =
         BundleMascotConfig(
             name = name,
             frameWidth = layout.frameWidth,
             frameHeight = layout.frameHeight,
             slots = layout.slots.entries.associate { (slot, s) ->
                 slot.name.lowercase() to BundleMascotSlot(s.row, s.frames)
-            }
+            },
+            dialogue = sanitizeMascotDialogue(dialogue)
         )
+
+    /**
+     * Cleans bundled custom dialogue lines:
+     * - Strips control characters and collapses newlines/tabs into single spaces, then trims.
+     * - Drops blank lines and truncates lines longer than [MAX_DIALOGUE_LINE_CHARS] (48 chars).
+     * - Caps each mood/action pool at [MAX_DIALOGUE_POOL_SIZE] (20 lines).
+     * - Returns `null` when all 7 pools are empty.
+     */
+    fun sanitizeMascotDialogue(raw: BundleMascotDialogue?): BundleMascotDialogue? {
+        if (raw == null) return null
+        val sanitized = BundleMascotDialogue(
+            happy = sanitizePool(raw.happy),
+            content = sanitizePool(raw.content),
+            hungry = sanitizePool(raw.hungry),
+            sulky = sanitizePool(raw.sulky),
+            sleepy = sanitizePool(raw.sleepy),
+            fed = sanitizePool(raw.fed),
+            noTreats = sanitizePool(raw.noTreats)
+        )
+        return sanitized.takeIf { it.hasAnyLines() }
+    }
+
+    private fun sanitizePool(lines: List<String>): List<String> =
+        lines.asSequence()
+            .mapNotNull(::sanitizeDialogueLine)
+            .take(MAX_DIALOGUE_POOL_SIZE)
+            .toList()
+
+    private fun sanitizeDialogueLine(line: String): String? {
+        if (line.isBlank()) return null
+        val sb = StringBuilder(line.length)
+        var lastWasSpace = false
+        for (ch in line) {
+            when {
+                ch == '\r' || ch == '\n' || ch == '\t' || ch == ' ' -> {
+                    if (sb.isNotEmpty() && !lastWasSpace) {
+                        sb.append(' ')
+                        lastWasSpace = true
+                    }
+                }
+                ch.isISOControl() -> Unit
+                else -> {
+                    sb.append(ch)
+                    lastWasSpace = false
+                }
+            }
+        }
+        val cleaned = sb.toString().trim()
+        if (cleaned.isEmpty()) return null
+        val clamped = if (cleaned.length > MAX_DIALOGUE_LINE_CHARS) {
+            cleaned.take(MAX_DIALOGUE_LINE_CHARS).trimEnd()
+        } else {
+            cleaned
+        }
+        return clamped.ifEmpty { null }
+    }
 
     private val PNG_SIGNATURE = byteArrayOf(
         0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
@@ -151,3 +214,6 @@ object MascotAtlasValidator {
         }
     }
 }
+
+fun sanitizeMascotDialogue(raw: BundleMascotDialogue?): BundleMascotDialogue? =
+    MascotAtlasValidator.sanitizeMascotDialogue(raw)

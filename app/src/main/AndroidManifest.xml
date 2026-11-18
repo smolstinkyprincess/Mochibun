@@ -60,7 +60,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.M120Launcher" >
+        android:theme="@style/Theme.Mochibun" >
 
         <!-- Xposed / LSPosed Module Configuration -->
         <meta-data
@@ -81,7 +81,7 @@
             android:launchMode="singleTask"
             android:excludeFromRecents="true"
             android:exported="true"
-            android:theme="@style/Theme.M120Launcher"
+            android:theme="@style/Theme.Mochibun"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density"
             android:windowSoftInputMode="adjustResize" >
             <intent-filter>
@@ -97,6 +97,7 @@
                 <data android:scheme="content" />
                 <data android:host="*" />
                 <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.mochibundle" />
                 <data android:pathPattern=".*\\.mochibun" />
             </intent-filter>
             <intent-filter>
@@ -111,6 +112,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="file" />
                 <data android:host="*" />
+                <data android:pathPattern=".*\\.mochibundle" />
                 <data android:pathPattern=".*\\.mochibun" />
             </intent-filter>
             <!-- Lid LED step animations (.mochibunled only, so Mochibun doesn't claim every YAML file), routed in MainLauncher -->

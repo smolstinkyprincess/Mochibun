@@ -31,7 +31,11 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import one.crinklecod.mochibun.core.system.RootShell
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import java.io.File
 import java.lang.reflect.Method
 
@@ -65,6 +69,7 @@ class RecentTasksManager(context: Context) {
     private val appContext = context.applicationContext
     private val activityManager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     private val packageManager = appContext.packageManager
+    val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * Fetches up to maxNum recent tasks using ActivityManager, with root fallback for Android 12
@@ -245,7 +250,7 @@ class RecentTasksManager(context: Context) {
                             currentTaskId = idStr.toIntOrNull() ?: -1
                         }
                     }
-                    val typeMatch = Regex("type=(\\w+)").find(trimmed)
+                    val typeMatch = TYPE_REGEX.find(trimmed)
                     if (typeMatch != null) {
                         currentType = typeMatch.groupValues[1]
                         if (currentType == "home") {
@@ -269,12 +274,12 @@ class RecentTasksManager(context: Context) {
                             isCurrentHome = true
                         }
                         if (currentPkg.isEmpty()) {
-                            val cmpMatch = Regex("cmp=([a-zA-Z0-9._]+)/([a-zA-Z0-9._$]+)").find(trimmed)
+                            val cmpMatch = CMP_REGEX.find(trimmed)
                             if (cmpMatch != null) {
                                 currentPkg = cmpMatch.groupValues[1]
                                 currentCmp = "${cmpMatch.groupValues[1]}/${cmpMatch.groupValues[2]}"
                             } else {
-                                val pkgMatch = Regex("pkg=([a-zA-Z0-9._]+)").find(trimmed)
+                                val pkgMatch = PKG_REGEX.find(trimmed)
                                 if (pkgMatch != null) {
                                     currentPkg = pkgMatch.groupValues[1]
                                 }
@@ -469,6 +474,7 @@ class RecentTasksManager(context: Context) {
             try {
                 val opts = ActivityOptions.makeCustomAnimation(appContext, 0, 0)
                 method.invoke(activityManager, task.taskId, opts.toBundle())
+                PreferencesManager.setLastLaunchedPackage(appContext, task.packageName)
                 return true
             } catch (e: Exception) {
                 Log.w(TAG, "startActivityFromRecents reflection failed for task ${task.taskId}", e)
@@ -478,6 +484,7 @@ class RecentTasksManager(context: Context) {
         // 2. Try moveTaskToFront via ActivityManager (needs REORDER_TASKS)
         try {
             activityManager.moveTaskToFront(task.taskId, ActivityManager.MOVE_TASK_WITH_HOME)
+            PreferencesManager.setLastLaunchedPackage(appContext, task.packageName)
             return true
         } catch (e: Exception) {
             Log.w(TAG, "moveTaskToFront failed for task ${task.taskId}", e)
@@ -498,7 +505,10 @@ class RecentTasksManager(context: Context) {
                 val failed = !result.isSuccess ||
                         result.stdout.any { it.startsWith("Error") } ||
                         result.stderr.any { it.startsWith("Error") }
-                if (!failed) return true
+                if (!failed) {
+                    PreferencesManager.setLastLaunchedPackage(appContext, task.packageName)
+                    return true
+                }
                 Log.w(TAG, "Root am start failed for $component: ${result.stdout + result.stderr}")
             } catch (e: Exception) {
                 Log.w(TAG, "Root am start failed for $component", e)
@@ -512,6 +522,7 @@ class RecentTasksManager(context: Context) {
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                 appContext.startActivity(intent)
+                PreferencesManager.setLastLaunchedPackage(appContext, task.packageName)
                 return true
             }
         } catch (e: Exception) {
@@ -608,6 +619,9 @@ class RecentTasksManager(context: Context) {
 
     companion object {
         private const val TAG = "RecentTasksManager"
+        private val TYPE_REGEX = Regex("type=(\\w+)")
+        private val CMP_REGEX = Regex("cmp=([a-zA-Z0-9._]+)/([a-zA-Z0-9._$]+)")
+        private val PKG_REGEX = Regex("pkg=([a-zA-Z0-9._]+)")
 
         private val appMetaCache = LruCache<String, CachedAppTaskMeta>(32)
 

@@ -1,7 +1,9 @@
 package one.crinklecod.mochibun.ui
 
 import one.crinklecod.mochibun.service.VirtualCursorService
+import one.crinklecod.mochibun.core.system.ClamshellManager
 import one.crinklecod.mochibun.data.prefs.LidOpenAction
+import android.app.KeyguardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
@@ -70,6 +72,7 @@ import one.crinklecod.mochibun.service.InputArbiter
 import one.crinklecod.mochibun.ui.components.WidgetPage
 import one.crinklecod.mochibun.ui.components.MascotReaction
 import one.crinklecod.mochibun.ui.components.MascotReactionKind
+import one.crinklecod.mochibun.pet.FeedResult
 import one.crinklecod.mochibun.pet.PetManager
 import one.crinklecod.mochibun.ui.dialogs.AppActionDialog
 import one.crinklecod.mochibun.ui.dialogs.CreateFavoriteFolderDialog
@@ -80,7 +83,7 @@ import one.crinklecod.mochibun.ui.dialogs.HiddenAppsDialog
 import one.crinklecod.mochibun.ui.dialogs.IconPackSelectionDialog
 import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelDialog
 import one.crinklecod.mochibun.ui.dialogs.QuickMemoDialog
-import one.crinklecod.mochibun.ui.dialogs.KawaiiIconPicker
+import one.crinklecod.mochibun.ui.dialogs.IconPickerDialog
 import one.crinklecod.mochibun.ui.dialogs.PresetPreviewDialog
 import one.crinklecod.mochibun.ui.dialogs.awaitFocusSafely
 import one.crinklecod.mochibun.ui.dialogs.dialogWidth
@@ -135,7 +138,21 @@ sealed interface ActiveModal {
     data object PetPill : ActiveModal
 }
 
-// main launcher composable managing focus, gestures, state, and page navigation
+internal const val LID_OPEN_ACTION_FRESHNESS_MS = 4_000L
+
+internal fun isPendingOpenActionFresh(
+    nowUptimeMs: Long,
+    pendingActionUptimeMs: Long,
+    lastUnlockUptimeMs: Long,
+    lastUserHomePressUptimeMs: Long,
+    maxAgeMs: Long = LID_OPEN_ACTION_FRESHNESS_MS
+): Boolean {
+    val referenceTime = maxOf(pendingActionUptimeMs, lastUnlockUptimeMs)
+    if (lastUserHomePressUptimeMs > referenceTime) return false
+    val ageMs = (nowUptimeMs - referenceTime).coerceAtLeast(0L)
+    return ageMs <= maxAgeMs
+}
+
 @Composable
 fun MainLauncher(
     modifier: Modifier = Modifier,
@@ -147,6 +164,10 @@ fun MainLauncher(
     lidClosedCount: Int = 0,
     screenOffResetCount: Int = 0,
     unlockCount: Int = 0,
+    isActivityResumed: Boolean = true,
+    isKeyguardLocked: Boolean = false,
+    lastUnlockUptimeMs: Long = 0L,
+    lastUserHomePressUptimeMs: Long = 0L,
     settingsRequestCount: Int = 0,
     quickMemoRequestCount: Int = 0,
     requestedPage: Int? = null,
@@ -238,7 +259,6 @@ fun MainLauncher(
     val cardTextColor = theme.cardTextColor
     val appActionColor = theme.appActionColor
 
-    // wallpaper selection and persistence state
     val wallpaperBitmap = launcherVm.wallpaperBitmap
     val wallpaperImageBitmap = remember(wallpaperBitmap) {
         wallpaperBitmap?.asImageBitmap()
@@ -307,6 +327,7 @@ fun MainLauncher(
     // Mochibunny pet pill: selected option, auto-close timer key, and the latest reaction for her
     var petPillSelection by remember { mutableIntStateOf(PET_PILL_FEED) }
     var petPillInteractionTick by remember { mutableIntStateOf(0) }
+    var showPetStats by remember { mutableStateOf(false) }
     var mascotReaction by remember { mutableStateOf(MascotReaction()) }
     // Set when the pill closes back to Home, so the focus reset below keeps Mochibunny focused
     var restoreMascotFocus by remember { mutableStateOf(false) }
@@ -369,6 +390,7 @@ fun MainLauncher(
         PetManager.refresh()
         homeFocusArea = HOME_FOCUS_MASCOT
         petPillSelection = PET_PILL_FEED
+        showPetStats = false
         petPillInteractionTick++
         activeModal = ActiveModal.PetPill
     }
@@ -378,6 +400,7 @@ fun MainLauncher(
     fun closePetPillModal() {
         if (activeModal !is ActiveModal.PetPill) return
         activeModal = null
+        showPetStats = false
         homeFocusArea = HOME_FOCUS_MASCOT
         restoreMascotFocus = true
     }
@@ -387,20 +410,43 @@ fun MainLauncher(
         petPillSelection = index
         petPillInteractionTick++
         val kind = when (index) {
-            PET_PILL_FEED -> if (PetManager.feed()) MascotReactionKind.FED else MascotReactionKind.NO_TREATS
+            PET_PILL_FEED -> when (PetManager.tryFeed()) {
+                FeedResult.FED -> MascotReactionKind.FED
+                FeedResult.ALREADY_FULL -> MascotReactionKind.ALREADY_FULL
+                FeedResult.NO_TREATS -> MascotReactionKind.NO_TREATS
+            }
             PET_PILL_PET -> {
                 PetManager.pet()
                 MascotReactionKind.PETTED
             }
-            else -> MascotReactionKind.CHAT
+            else -> {
+                showPetStats = true
+                MascotReactionKind.CHAT
+            }
         }
         mascotReaction = MascotReaction(id = mascotReaction.id + 1, kind = kind)
     }
 
-    // Catch her up on decay whenever Home comes back on screen (in memory only, no disk write),
-    // so her mood and sprite row are current after time away
-    LaunchedEffect(isHomeVisible) {
-        if (isHomeVisible) PetManager.refresh()
+    // Clear showPetStats whenever the pill closes through another reset path (lid close, Home, screen off)
+    LaunchedEffect(isPetPillOpen) {
+        if (!isPetPillOpen) showPetStats = false
+    }
+
+    // Catch her up on decay, grant today's check-in treat, and show +N 🍡 if treats were earned
+    val pendingEarnedTreats by PetManager.pendingEarnedTreats.collectAsState()
+    LaunchedEffect(isHomeVisible, pendingEarnedTreats) {
+        if (isHomeVisible) {
+            PetManager.refresh()
+            PetManager.claimDailyCheckIn()
+            val earned = PetManager.consumePendingEarnedTreats()
+            if (earned > 0) {
+                mascotReaction = MascotReaction(
+                    id = mascotReaction.id + 1,
+                    kind = MascotReactionKind.TREATS_EARNED,
+                    earnedCount = earned
+                )
+            }
+        }
     }
 
     // Auto-close after PET_PILL_AUTO_CLOSE_MS without a key or tap (every interaction bumps the tick)
@@ -411,14 +457,22 @@ fun MainLauncher(
         }
     }
 
-    // Flip physically closed (never a display timeout): dismiss transient modals, collapse folder/drawer, reset T9 state, and position on Home
-    // Set on a real close so the open action runs on a flip open, not on a display wake with the flip already open
-    var lidClosedSinceOpen by remember { mutableStateOf(false) }
+    // Process-wide clamshell sequences from ClamshellManager so MainActivity never misses a close
+    // or open that occurred before MainActivity was created or while Keyguard was locked.
+    val lidCloseSeq by ClamshellManager.lidCloseSequence.collectAsState()
+    val openAwakeSeq by ClamshellManager.openAwakeSequence.collectAsState()
+    val pendingOpenActionSeq by ClamshellManager.pendingOpenActionSequence.collectAsState()
+    val initialCloseSeq = remember { lidCloseSeq }
+    var handledCloseSeq by remember { mutableIntStateOf(0) }
+    var handledWakeSeq by remember { mutableIntStateOf(openAwakeSeq) }
+    var handledOpenActionSeq by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(lidClosedCount) {
-        if (lidClosedCount > 0) {
-            lidClosedSinceOpen = true
-            SoundEffectManager.playSnap(context)
+    // Flip physically closed (never a display timeout): dismiss transient modals, collapse folder/drawer, reset T9 state, and position on Home
+    LaunchedEffect(lidCloseSeq, lidClosedCount) {
+        if (lidCloseSeq > handledCloseSeq || lidClosedCount > 0) {
+            val playSnap = lidCloseSeq > initialCloseSeq || lidClosedCount > 0
+            handledCloseSeq = lidCloseSeq
+            if (playSnap) SoundEffectManager.playSnap(context)
             VirtualCursorService.hideCursor()
             activeModal = null
             drawerOpen = false
@@ -432,8 +486,7 @@ fun MainLauncher(
         }
     }
 
-    // Non-root Screen-Off Flip Reset: same clean slate as a detected flip close, minus the snap
-    // sound and the Lid Open Action (a screen-off may just be a display timeout)
+    // Non-root Screen-Off Flip Reset: same clean slate as a detected flip close, minus the snap sound
     LaunchedEffect(screenOffResetCount) {
         if (screenOffResetCount > 0) {
             VirtualCursorService.hideCursor()
@@ -458,42 +511,80 @@ fun MainLauncher(
         }
     }
 
-    // Entered OPEN_AWAKE (flip opened, or display woke with the flip open): wake focus recovery for
-    // physical D-pad contracts. A modal kept open across a display timeout keeps its own focus.
-    LaunchedEffect(lidOpenCount) {
-        if (lidOpenCount > 0 && !anyModalOpen) {
-            val flipOpened = lidClosedSinceOpen
-            lidClosedSinceOpen = false
-            val action = if (flipOpened) PreferencesManager.getLidOpenAction(context) else null
-            val lastPkg = launcherVm.lastLaunchedPackage
-            val resumeIntent = if (action == LidOpenAction.RESUME_LAST_APP && !lastPkg.isNullOrEmpty() && lastPkg != context.packageName) {
-                context.packageManager.getLaunchIntentForPackage(lastPkg)
-            } else null
-            val resumed = resumeIntent != null && try {
-                context.startActivity(resumeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                true
-            } catch (e: Exception) {
-                false
+    // Entered OPEN_AWAKE: wake focus recovery for physical D-pad contracts.
+    LaunchedEffect(openAwakeSeq, lidOpenCount) {
+        if ((openAwakeSeq > handledWakeSeq || lidOpenCount > 0) && !anyModalOpen) {
+            handledWakeSeq = openAwakeSeq
+            homeTracker.wasActive = true
+            homeTracker.settledTimestamp = SystemClock.uptimeMillis()
+            focusRequester.requestFocus()
+        } else if (openAwakeSeq > handledWakeSeq) {
+            handledWakeSeq = openAwakeSeq
+        }
+    }
+
+    // Flip open / non-root wake action: waits until MainActivity is resumed and Keyguard is unlocked
+    // so Android 12 never silently blocks startActivity() behind the lockscreen or background state,
+    // and waits for any pending close-reset to clear activeModal first.
+    LaunchedEffect(
+        pendingOpenActionSeq,
+        handledCloseSeq,
+        lidCloseSeq,
+        isActivityResumed,
+        isKeyguardLocked,
+        unlockCount,
+        activeModal
+    ) {
+        if (pendingOpenActionSeq <= handledOpenActionSeq) return@LaunchedEffect
+        if (handledCloseSeq < lidCloseSeq) return@LaunchedEffect
+        val keyguardManager = context.getSystemService(KeyguardManager::class.java)
+        val currentlyLocked = isKeyguardLocked || (keyguardManager?.isKeyguardLocked == true)
+        if (!isActivityResumed || currentlyLocked) return@LaunchedEffect
+
+        handledOpenActionSeq = pendingOpenActionSeq
+        val fresh = isPendingOpenActionFresh(
+            nowUptimeMs = SystemClock.uptimeMillis(),
+            pendingActionUptimeMs = ClamshellManager.lastPendingOpenActionUptimeMs,
+            lastUnlockUptimeMs = lastUnlockUptimeMs,
+            lastUserHomePressUptimeMs = lastUserHomePressUptimeMs
+        )
+        if (!fresh || activeModal != null) return@LaunchedEffect
+
+        val action = PreferencesManager.getLidOpenAction(context)
+        val lastPkg = launcherVm.lastLaunchedPackage ?: PreferencesManager.getLastLaunchedPackage(context)
+        val resumeIntent = if (
+            action == LidOpenAction.RESUME_LAST_APP &&
+            !lastPkg.isNullOrEmpty() &&
+            lastPkg != context.packageName
+        ) {
+            context.packageManager.getLaunchIntentForPackage(lastPkg)
+        } else null
+        val resumed = resumeIntent != null && try {
+            context.startActivity(resumeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (_: Exception) {
+            false
+        }
+        if (!resumed) {
+            if (action == LidOpenAction.NOTIFICATIONS || action == LidOpenAction.QUICK_MEMO) {
+                drawerOpen = false
+                drawerRailFocused = false
             }
-            if (!resumed) {
-                val targetPage = when (action) {
-                    LidOpenAction.NOTIFICATIONS -> 2
-                    null -> null
-                    else -> 1
-                }
-                if (targetPage != null) {
-                    pendingTargetPage = targetPage
-                    pagerState.scrollToPage(targetPage)
-                }
-                if (action == LidOpenAction.QUICK_MEMO) {
-                    activeModal = ActiveModal.QuickMemo
-                }
-                homeTracker.wasActive = true
-                homeTracker.settledTimestamp = SystemClock.uptimeMillis()
-                focusRequester.requestFocus()
+            val targetPage = when (action) {
+                LidOpenAction.NOTIFICATIONS -> 2
+                LidOpenAction.QUICK_MEMO, LidOpenAction.RESUME_LAST_APP -> 1
+                LidOpenAction.HOME -> null
             }
-        } else if (lidOpenCount > 0) {
-            lidClosedSinceOpen = false
+            if (targetPage != null) {
+                pendingTargetPage = targetPage
+                pagerState.scrollToPage(targetPage)
+            }
+            if (action == LidOpenAction.QUICK_MEMO) {
+                activeModal = ActiveModal.QuickMemo
+            }
+            homeTracker.wasActive = true
+            homeTracker.settledTimestamp = SystemClock.uptimeMillis()
+            focusRequester.requestFocus()
         }
     }
 
@@ -541,7 +632,6 @@ fun MainLauncher(
             selectedDrawerIndex.coerceIn(0, (visibleApps.size - 1).coerceAtLeast(0))
     }
 
-    // auto scroll to highlighted item in app drawer
     LaunchedEffect(selectedDrawerIndex, drawerOpen, visibleApps.size) {
         if (drawerOpen && visibleApps.isNotEmpty() && selectedDrawerIndex in visibleApps.indices) {
             val selectedItem = listState.layoutInfo.visibleItemsInfo.firstOrNull {
@@ -1113,6 +1203,7 @@ fun MainLauncher(
                                 isHomeVisible = isHomeVisible,
                                 isPetPillOpen = isPetPillOpen,
                                 petPillSelection = petPillSelection,
+                                showPetStats = showPetStats,
                                 mascotReaction = mascotReaction,
                                 onMascotClick = {
                                     if (activeModal is ActiveModal.PetPill) closePetPillModal() else openPetPillModal()
@@ -1174,7 +1265,6 @@ fun MainLauncher(
                 }
             }
 
-            // Modal dialog dispatcher rendering
             when (val modal = activeModal) {
                 is ActiveModal.SettingsHub, is ActiveModal.KeyboardSettings -> {
                     SettingsHubDialog(
@@ -1433,7 +1523,7 @@ fun MainLauncher(
                         }
                     }
 
-                    KawaiiIconPicker(
+                    IconPickerDialog(
                         context = context,
                         iconNames = kawaiiIconNames,
                         onIconSelected = onIconSelected,
@@ -1598,7 +1688,6 @@ fun MainLauncher(
                 }
             }
 
-            // app drawer view overlay
             if (drawerOpen) {
                 AppDrawerScreen(
                     visibleApps = visibleApps,

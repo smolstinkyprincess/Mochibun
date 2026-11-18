@@ -299,6 +299,12 @@ fun KaomojiWheelCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Compact Radial Petal Wheel
+            val bodyStroke = remember(density) { Stroke(width = strokeWidth.value * density) }
+            val glowStrokes = remember(density) {
+                Array(4) { g ->
+                    Stroke(width = (strokeWidth.value + GLOW_EXPANSIONS_DP[g] * 2f) * density)
+                }
+            }
             Box(
                 modifier = Modifier
                     .size(wheelDiameter)
@@ -315,7 +321,6 @@ fun KaomojiWheelCard(
                     val rInnerPx = rInner.toPx()
                     val rOuterPx = rOuter.toPx()
                     val rMidPx = rMid.toPx()
-                    val strokePx = strokeWidth.toPx()
 
                     val gapAngle = 6f
                     val sweepAngle = (360f / categories.size) - gapAngle
@@ -336,7 +341,7 @@ fun KaomojiWheelCard(
                                     useCenter = false,
                                     topLeft = Offset(centerPx.x - rMidPx - expansion, centerPx.y - rMidPx - expansion),
                                     size = Size((rMidPx + expansion) * 2f, (rMidPx + expansion) * 2f),
-                                    style = Stroke(width = strokePx + expansion * 2f)
+                                    style = glowStrokes[g]
                                 )
                             }
 
@@ -348,7 +353,7 @@ fun KaomojiWheelCard(
                                 useCenter = false,
                                 topLeft = Offset(centerPx.x - rMidPx, centerPx.y - rMidPx),
                                 size = Size(rMidPx * 2f, rMidPx * 2f),
-                                style = Stroke(width = strokePx)
+                                style = bodyStroke
                             )
 
                             // Soft outline
@@ -379,7 +384,7 @@ fun KaomojiWheelCard(
                                 useCenter = false,
                                 topLeft = Offset(centerPx.x - rMidPx, centerPx.y - rMidPx),
                                 size = Size(rMidPx * 2f, rMidPx * 2f),
-                                style = Stroke(width = strokePx)
+                                style = bodyStroke
                             )
 
                             // Unselected subtle border

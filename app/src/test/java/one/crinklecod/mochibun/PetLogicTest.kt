@@ -1,6 +1,7 @@
 package one.crinklecod.mochibun
 
 import one.crinklecod.mochibun.pet.DailyGrants
+import one.crinklecod.mochibun.pet.FeedResult
 import one.crinklecod.mochibun.pet.PetLogic
 import one.crinklecod.mochibun.pet.PetMood
 import one.crinklecod.mochibun.pet.PetState
@@ -110,7 +111,13 @@ class PetLogicTest {
             lastPetMs = t0 + 1,
             stepBaseline = -7,
             lastBootEpochMs = -50L,
-            dailyGrants = DailyGrants(epochDay = day, stepTreats = 40, notifClearTreats = -1, chargeTreats = 9),
+            dailyGrants = DailyGrants(
+                epochDay = day,
+                stepTreats = 40,
+                notifClearTreats = -1,
+                chargeTreats = 9,
+                dailyCheckInTreats = 5,
+            ),
         )
         val s = PetLogic.sanitize(bad, t0)
         assertEquals(1f, s.fullness, 0f)
@@ -123,6 +130,7 @@ class PetLogicTest {
         assertEquals(PetTuning.DAILY_CAP_STEPS, s.dailyGrants.stepTreats)
         assertEquals(0, s.dailyGrants.notifClearTreats)
         assertEquals(PetTuning.DAILY_CAP_CHARGER, s.dailyGrants.chargeTreats)
+        assertEquals(PetTuning.DAILY_CAP_DAILY_CHECKIN, s.dailyGrants.dailyCheckInTreats)
     }
 
     @Test
@@ -167,6 +175,28 @@ class PetLogicTest {
         assertTrue(fedAgain)
         assertEquals(1f, full.fullness, 0f)
         assertEquals(0, full.treats)
+    }
+
+    @Test
+    fun tryFeed_whenAlreadyFull_refusesWithoutSpendingATreat() {
+        val (s, result) = PetLogic.tryFeed(base(fullness = 1f, treats = 3), t0, day)
+        assertEquals(FeedResult.ALREADY_FULL, result)
+        assertEquals(3, s.treats)
+        assertEquals(1f, s.fullness, 0f)
+
+        val (almostFull, almostResult) = PetLogic.tryFeed(base(fullness = PetTuning.FULL_THRESHOLD, treats = 2), t0, day)
+        assertEquals(FeedResult.ALREADY_FULL, almostResult)
+        assertEquals(2, almostFull.treats)
+    }
+
+    @Test
+    fun statHearts_formatsFourMonochromeHearts() {
+        assertEquals("♥♥♥♥", PetLogic.statHearts(1f))
+        assertEquals("♥♥♥♡", PetLogic.statHearts(0.8f))
+        assertEquals("♥♥♡♡", PetLogic.statHearts(0.5f))
+        assertEquals("♥♡♡♡", PetLogic.statHearts(PetTuning.STAT_FLOOR))
+        assertEquals("♡♡♡♡", PetLogic.statHearts(0f))
+        assertEquals("♡♡♡♡", PetLogic.statHearts(Float.NaN))
     }
 
     @Test
@@ -292,9 +322,12 @@ class PetLogicTest {
         s = PetLogic.grantTreats(s, 5, TreatSource.CHARGER, t0, day)
         assertEquals(5, s.treats)
         assertEquals(PetTuning.DAILY_CAP_CHARGER, s.dailyGrants.chargeTreats)
+        s = PetLogic.grantTreats(s, 2, TreatSource.DAILY_CHECKIN, t0, day)
+        assertEquals(6, s.treats)
+        assertEquals(PetTuning.DAILY_CAP_DAILY_CHECKIN, s.dailyGrants.dailyCheckInTreats)
         s = PetLogic.grantTreats(s, 9, TreatSource.STEPS, t0, day)
-        assertEquals(PetTuning.MAX_TREATS, s.treats) // 4 steps treats: bag room wins over cap 5
-        assertEquals(4, s.dailyGrants.stepTreats)
+        assertEquals(PetTuning.MAX_TREATS, s.treats) // 3 steps treats: bag room wins over cap 5
+        assertEquals(3, s.dailyGrants.stepTreats)
     }
 
     @Test

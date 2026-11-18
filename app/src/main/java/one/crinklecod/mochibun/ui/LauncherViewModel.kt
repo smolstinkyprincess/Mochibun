@@ -203,11 +203,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         return nextMode
     }
 
-    var lastLaunchedPackage: String? by mutableStateOf(null)
+    var lastLaunchedPackage: String? by mutableStateOf(PreferencesManager.getLastLaunchedPackage(context))
         private set
 
     fun recordAppLaunch(packageName: String) {
-        lastLaunchedPackage = packageName
+        if (packageName.isNotBlank() && packageName != context.packageName) {
+            lastLaunchedPackage = packageName
+            PreferencesManager.setLastLaunchedPackage(context, packageName)
+        }
         val currentCount = launchCounts[packageName] ?: 0
         val newMap = launchCounts.toMutableMap()
         newMap[packageName] = currentCount + 1
@@ -216,7 +219,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         prefs.edit().putInt("$PREF_PREFIX_APP_LAUNCH_COUNT$packageName", currentCount + 1).apply()
     }
 
-    private fun loadLaunchCounts() {
+    private fun loadLaunchCounts(): Map<String, Int> {
         val prefs = PreferencesManager.getPrefs(context)
         val map = mutableMapOf<String, Int>()
         for ((key, value) in prefs.all) {
@@ -226,13 +229,15 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 if (pkg.isNotEmpty()) map[pkg] = value
             }
         }
-        launchCounts = map
+        return map
     }
 
     fun loadApps() {
-        loadLaunchCounts()
         appDrawerSortMode = PreferencesManager.getAppDrawerSortMode(context)
         viewModelScope.launch {
+            launchCounts = withContext(Dispatchers.IO) {
+                loadLaunchCounts()
+            }
             val prefs = PreferencesManager.getPrefs(context)
 
             // Fast favorites loader for instant home screen render
@@ -481,6 +486,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun reloadAllFromPreferences() {
         hiddenPackages = PreferencesManager.getHiddenPackages(context)
+        lastLaunchedPackage = PreferencesManager.getLastLaunchedPackage(context)
         favoriteFolders = PreferencesManager.loadFavoriteFolders(context)
         val loadedKeys = PreferencesManager.getFavoriteItemKeys(context)
         favoriteItemKeys = loadedKeys

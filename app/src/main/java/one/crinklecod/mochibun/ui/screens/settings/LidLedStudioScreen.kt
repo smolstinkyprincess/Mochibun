@@ -114,7 +114,7 @@ private fun toast(context: Context, text: String) =
  * bar), Center activates. Back closes the editor first, then returns to Layout & Features.
  */
 @Composable
-internal fun LidLedStudioSubScreen(
+internal fun LidLedStudioScreen(
     onBack: () -> Unit,
     onNestedBackHandlerChanged: ((() -> Unit)?) -> Unit,
     modifier: Modifier = Modifier

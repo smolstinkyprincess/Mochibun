@@ -58,7 +58,7 @@ import one.crinklecod.mochibun.ui.theme.softSurfaceColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KawaiiIconPicker(
+fun IconPickerDialog(
     context: Context,
     iconNames: List<String>,
     onIconSelected: (String) -> Unit,

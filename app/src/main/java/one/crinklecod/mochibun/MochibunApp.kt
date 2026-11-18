@@ -30,7 +30,6 @@ import com.topjohnwu.superuser.Shell
 class MochibunApp : Application(), ImageLoaderFactory {
 
     init {
-        // Set flags to enable verbose logging in debug builds
         Shell.enableVerboseLogging = BuildConfig.DEBUG
 
         // Establish default builder configuration

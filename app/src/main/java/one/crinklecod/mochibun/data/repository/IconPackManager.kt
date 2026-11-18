@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import one.crinklecod.mochibun.data.model.LauncherApp
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.core.util.compactIfOpaque
 import one.crinklecod.mochibun.core.util.drawableToBitmap
 import kotlinx.coroutines.Dispatchers
@@ -81,7 +82,7 @@ object IconPackManager {
     }
 
     fun getSelectedIconPack(context: Context): String {
-        val prefs = context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
+        val prefs = PreferencesManager.getPrefs(context)
         if (prefs.contains(PREF_SELECTED_ICON_PACK)) {
             return prefs.getString(PREF_SELECTED_ICON_PACK, "") ?: ""
         }
@@ -96,7 +97,7 @@ object IconPackManager {
     }
 
     fun setSelectedIconPack(context: Context, packageName: String) {
-        val prefs = context.getSharedPreferences("launcher_preferences", Context.MODE_PRIVATE)
+        val prefs = PreferencesManager.getPrefs(context)
         prefs.edit().putString(PREF_SELECTED_ICON_PACK, packageName).apply()
         clearCache()
     }
