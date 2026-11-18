@@ -479,6 +479,125 @@
       box-shadow: var(--shadow-plush);
     }
 
+    /* Card Border & 9-Slice Frame Section */
+    .border-workshop-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (max-width: 780px) {
+      .border-workshop-grid { grid-template-columns: 1fr; }
+    }
+    .border-controls-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+    .border-select-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .border-select {
+      font-family: var(--font-body);
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: var(--cocoa);
+      background: #FFFDF9;
+      border: 2px solid #F0D6E0;
+      border-radius: 12px;
+      padding: 0.42rem 0.7rem;
+      outline: none;
+      cursor: pointer;
+    }
+    .border-select:focus {
+      border-color: var(--strawberry-deep);
+    }
+    .slice-control-box {
+      background: #FFFDF9;
+      border: 1.5px solid #F0D6E0;
+      border-radius: 14px;
+      padding: 0.65rem 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .slice-control-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+    .slice-inputs-row {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+    .slice-inputs-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--strawberry-deep);
+      cursor: pointer;
+    }
+    .slice-inputs-row input[type="number"] {
+      width: 64px;
+      font-family: monospace;
+      font-weight: 800;
+      font-size: 0.86rem;
+      color: var(--cocoa);
+      background: #FFFFFF;
+      border: 1.5px solid #E5CCD6;
+      border-radius: 9px;
+      padding: 0.28rem 0.45rem;
+      text-align: center;
+    }
+    .border-preview-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.55rem;
+      border-radius: var(--radius-md);
+      border: 2.5px solid #F3D1DC;
+      background: #FFF5F8;
+      padding: 1rem;
+    }
+    #card-border-preview-canvas {
+      width: 240px;
+      height: 120px;
+      max-width: 100%;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border-radius: 8px;
+      background: repeating-conic-gradient(rgba(255,255,255,0.5) 0% 25%, rgba(246,179,200,0.14) 0% 50%) 50% / 12px 12px;
+    }
+    .border-preview-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: 0.5rem;
+      font-size: 0.78rem;
+      color: var(--cocoa-soft);
+    }
+    .guide-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-weight: 800;
+      color: var(--cocoa);
+      cursor: pointer;
+      user-select: none;
+    }
+    .guide-toggle input {
+      accent-color: var(--strawberry-deep);
+      cursor: pointer;
+    }
+
     .site-footer {
       position: relative;
       background: linear-gradient(180deg, #DCD3F5 0%, #C9C4EE 100%);
@@ -500,7 +619,7 @@
     <div class="wrap">
       <span class="welcome-ribbon">౨ৎ mochibun bundle &amp; mascot workshop ౨ৎ</span>
       <h1>Mascot &amp; Bundle Packer <span class="jp">もちぶん ワークショップ ♡</span></h1>
-      <p class="tagline">Build a fresh <code>.mochibundle</code> from an 8 × 4 <code>mascot_atlas.png</code> and 7 custom speech-bubble mood pools, or load an existing <code>.mochibundle</code> to edit its mascot &amp; dialogue without losing its wallpaper, cursor, or palette ♡</p>
+      <p class="tagline">Build a fresh <code>.mochibundle</code> from an 8 × 4 <code>mascot_atlas.png</code>, custom card borders &amp; 9-slice <code>card_border.png</code> frames, and 7 custom speech-bubble mood pools — or load an existing <code>.mochibundle</code> to edit without losing its wallpaper, cursor, or palette ♡</p>
 
       <ul class="candy-pills">
         <li><a class="candy candy--blue" href="./">← back to community gallery</a></li>
@@ -617,6 +736,76 @@
         </section>
       </div>
 
+      <!-- Full-Width Panel: Card Border & 9-Slice Frame -->
+      <section class="panel panel--full" aria-labelledby="border-panel-title">
+        <div class="panel-title">
+          <span id="border-panel-title">🎀 card border &amp; 9-slice frame</span>
+          <button class="candy candy--butter candy--sm" type="button" id="clear-card-border-btn" style="display:none;">✕ Clear custom border PNG</button>
+        </div>
+        <p class="panel-sub">
+          Choose one of the 5 procedural <code>palette.borderStyle</code> trims, or upload an optional 9-slice <code>card_border.png</code> frame (<code>16×16</code> to <code>256×256 px</code>, <code>≤ 512 KB</code>). When a custom PNG is loaded, its 8 outer patches frame every card while keeping your procedural preset as a fallback ♡
+        </p>
+
+        <div class="border-workshop-grid">
+          <div class="border-controls-stack">
+            <div class="field">
+              <label for="border-style-select">
+                <span>Procedural Border Style (<code>palette.borderStyle</code>)</span>
+                <span id="border-style-subtitle" style="font-weight:600; color:var(--cocoa-soft); font-size:0.78rem;">Solid (default 1.5 dp rounded border)</span>
+              </label>
+              <div class="border-select-row">
+                <select id="border-style-select" class="border-select" aria-label="Procedural card border style">
+                  <option value="solid">solid — Solid (default 1.5 dp rounded border)</option>
+                  <option value="double">double — Double (concentric double-line trim)</option>
+                  <option value="lace">lace — Lace (scalloped keitai lace trim)</option>
+                  <option value="stitch">stitch — Stitch (cozy dashed stitch inset)</option>
+                  <option value="pixel">pixel — Pixel (stepped 1:1 retro pixel corners)</option>
+                </select>
+                <div class="slot-tabs" id="border-style-pills" style="margin-top:0;" role="group" aria-label="Procedural border style quick pills"></div>
+              </div>
+            </div>
+
+            <div class="drop-row" style="margin-bottom:0;">
+              <label class="dropzone" id="card-border-dropzone">
+                <input type="file" id="card-border-input" accept="image/png" aria-label="Pick card_border.png 9-slice file">
+                <span class="dropzone-icon">🖼️</span>
+                <span class="dropzone-title" style="display:block;">Pick card_border.png</span>
+                <span class="dropzone-hint" style="display:block;">16×16 to 256×256 px · PNG ≤ 512 KB</span>
+              </label>
+
+              <div class="slice-control-box">
+                <div class="slice-control-header">
+                  <label for="card-border-slice-range">Corner Slice Inset (<code>cardBorderSlicePx</code>)</label>
+                  <span id="card-border-slice-hint" style="color:var(--cocoa-soft); font-size:0.74rem;">4–64 px</span>
+                </div>
+                <div class="slice-inputs-row">
+                  <input type="range" id="card-border-slice-range" min="4" max="64" value="16" aria-label="Corner slice inset slider">
+                  <input type="number" id="card-border-slice-number" min="4" max="64" value="16" aria-label="Corner slice inset pixels">
+                </div>
+                <span style="font-size:0.74rem; color:var(--cocoa-soft);">
+                  Clamped to <code>4..64 px</code> and <code>slicePx * 2 &lt; min(width, height)</code> so center &amp; edge patches stay ≥ 1 px.
+                </span>
+              </div>
+            </div>
+
+            <div class="asset-badges" id="card-border-badges" style="margin-top:0.15rem;">
+              <span class="badge">🎀 Procedural border: Solid (default 1.5 dp rounded border)</span>
+            </div>
+          </div>
+
+          <div class="border-preview-stage" id="card-border-preview-stage">
+            <canvas id="card-border-preview-canvas" width="240" height="120"></canvas>
+            <div class="border-preview-toolbar">
+              <span id="card-border-preview-caption">Previewing procedural <b>solid</b> trim (240 × 120 px)</span>
+              <label class="guide-toggle">
+                <input type="checkbox" id="toggle-slice-guides" checked>
+                <span>Show 9-slice guides</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Full-Width Panel: 7 Mood Dialogue Boxes -->
       <section class="panel panel--full" aria-labelledby="dialogue-panel-title">
         <div class="panel-title">
@@ -638,7 +827,7 @@
         <div>
           <h3 style="font-family: var(--font-display); font-size: 1.18rem;">Ready to pack your <code>.mochibundle</code>? 🍡</h3>
           <p style="font-size: 0.9rem; color: var(--cocoa-soft);" id="export-summary">
-            Packs <code>manifest.json</code> + any loaded <code>mascot_atlas.png</code>, wallpaper, and cursor into one shareable file.
+            Packs <code>manifest.json</code> + any loaded <code>mascot_atlas.png</code>, <code>card_border.png</code>, wallpaper, and cursor into one shareable file.
           </p>
         </div>
         <button class="candy candy--pink" type="button" id="export-bundle-btn" style="font-size: 1rem; padding: 0.75rem 1.5rem;">
@@ -691,9 +880,23 @@
       { id: 'midnight_mochi',name: '🌙 Midnight', bg: '#1E162B', card: '#2D2240', greeting: '#FFB7D5', action: '#F48FB1' }
     ];
 
+    const BORDER_STYLES = [
+      { id: 'solid',  label: 'Solid',  desc: 'Solid (default 1.5 dp rounded border)' },
+      { id: 'double', label: 'Double', desc: 'Double (concentric double-line trim)' },
+      { id: 'lace',   label: 'Lace',   desc: 'Lace (scalloped keitai lace trim)' },
+      { id: 'stitch', label: 'Stitch', desc: 'Stitch (cozy dashed stitch inset)' },
+      { id: 'pixel',  label: 'Pixel',  desc: 'Pixel (stepped 1:1 retro pixel corners)' }
+    ];
+
     const MAX_LINE_CHARS = 48;
     const MAX_POOL_LINES = 20;
     const MAX_ATLAS_BYTES = 1536 * 1024; // 1.5 MB
+    const MAX_CARD_BORDER_BYTES = 512 * 1024; // 512 KB
+    const MIN_CARD_BORDER_DIM = 16;
+    const MAX_CARD_BORDER_DIM = 256;
+    const MIN_CARD_BORDER_SLICE = 4;
+    const MAX_CARD_BORDER_SLICE = 64;
+    const DEFAULT_CARD_BORDER_SLICE = 16;
 
     // Preserved state from an imported .mochibundle
     let importedManifest = null;
@@ -708,6 +911,14 @@
     let activeSlotIndex = 0;
     let animTick = 0;
 
+    // Active card border & 9-slice state
+    let activeBorderStyleId = 'solid';
+    let cardBorderBytes = null;
+    let cardBorderImage = null;
+    let cardBorderWidth = 0;
+    let cardBorderHeight = 0;
+    let cardBorderSlicePx = DEFAULT_CARD_BORDER_SLICE;
+
     // Build slot tabs
     const slotTabsEl = document.getElementById('slot-tabs');
     SLOTS.forEach((slot, idx) => {
@@ -717,10 +928,84 @@
       btn.textContent = slot.label;
       btn.addEventListener('click', () => {
         activeSlotIndex = idx;
-        document.querySelectorAll('.slot-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+        slotTabsEl.querySelectorAll('.slot-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
         updatePreviewBubble();
       });
       slotTabsEl.appendChild(btn);
+    });
+
+    // Build procedural border style pills & sync with select
+    const borderStyleSelect = document.getElementById('border-style-select');
+    const borderStylePillsEl = document.getElementById('border-style-pills');
+    BORDER_STYLES.forEach((bs) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'slot-btn' + (bs.id === activeBorderStyleId ? ' active' : '');
+      btn.dataset.borderStyle = bs.id;
+      btn.textContent = bs.label;
+      btn.addEventListener('click', () => setBorderStyleId(bs.id));
+      borderStylePillsEl.appendChild(btn);
+    });
+    borderStyleSelect.addEventListener('change', () => {
+      setBorderStyleId(borderStyleSelect.value);
+    });
+
+    function normalizeBorderStyleId(raw) {
+      const cleaned = String(raw || '').trim().toLowerCase();
+      const found = BORDER_STYLES.find((b) => b.id === cleaned);
+      return found ? found.id : 'solid';
+    }
+
+    function setBorderStyleId(rawId) {
+      activeBorderStyleId = normalizeBorderStyleId(rawId);
+      borderStyleSelect.value = activeBorderStyleId;
+      borderStylePillsEl.querySelectorAll('.slot-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.borderStyle === activeBorderStyleId);
+      });
+      const def = BORDER_STYLES.find((b) => b.id === activeBorderStyleId) || BORDER_STYLES[0];
+      document.getElementById('border-style-subtitle').textContent = def.desc;
+      renderCardBorderBadges();
+      renderStatusBadges();
+      drawCardBorderPreview();
+    }
+
+    function clampCardBorderSlicePx(requested, imgW, imgH) {
+      const parsed = Number.isFinite(Number(requested)) ? Math.round(Number(requested)) : DEFAULT_CARD_BORDER_SLICE;
+      let maxAllowed = MAX_CARD_BORDER_SLICE;
+      if (imgW > 0 && imgH > 0) {
+        const maxFromDim = Math.max(MIN_CARD_BORDER_SLICE, Math.floor((Math.min(imgW, imgH) - 1) / 2));
+        maxAllowed = Math.min(MAX_CARD_BORDER_SLICE, maxFromDim);
+      }
+      return Math.max(MIN_CARD_BORDER_SLICE, Math.min(maxAllowed, parsed));
+    }
+
+    function syncSliceControls(requested) {
+      cardBorderSlicePx = clampCardBorderSlicePx(requested, cardBorderWidth, cardBorderHeight);
+      const rangeInput = document.getElementById('card-border-slice-range');
+      const numInput = document.getElementById('card-border-slice-number');
+      const hintEl = document.getElementById('card-border-slice-hint');
+      const maxAllowed = (cardBorderWidth > 0 && cardBorderHeight > 0)
+        ? Math.min(MAX_CARD_BORDER_SLICE, Math.max(MIN_CARD_BORDER_SLICE, Math.floor((Math.min(cardBorderWidth, cardBorderHeight) - 1) / 2)))
+        : MAX_CARD_BORDER_SLICE;
+      rangeInput.max = String(maxAllowed);
+      numInput.max = String(maxAllowed);
+      rangeInput.value = String(cardBorderSlicePx);
+      numInput.value = String(cardBorderSlicePx);
+      hintEl.textContent = (cardBorderWidth > 0 && cardBorderHeight > 0)
+        ? `${cardBorderSlicePx} px (max ${maxAllowed} px for ${cardBorderWidth}×${cardBorderHeight})`
+        : `${cardBorderSlicePx} px (4–64 px)`;
+      renderCardBorderBadges();
+      drawCardBorderPreview();
+    }
+
+    document.getElementById('card-border-slice-range').addEventListener('input', (e) => {
+      syncSliceControls(e.target.value);
+    });
+    document.getElementById('card-border-slice-number').addEventListener('input', (e) => {
+      syncSliceControls(e.target.value);
+    });
+    document.getElementById('toggle-slice-guides').addEventListener('change', () => {
+      drawCardBorderPreview();
     });
 
     // Build preset buttons
@@ -767,7 +1052,7 @@
         const matchingSlotIdx = SLOTS.findIndex((s) => s.pool === pool.key);
         if (matchingSlotIdx >= 0) {
           activeSlotIndex = matchingSlotIdx;
-          document.querySelectorAll('.slot-btn').forEach((b, i) => b.classList.toggle('active', i === matchingSlotIdx));
+          slotTabsEl.querySelectorAll('.slot-btn').forEach((b, i) => b.classList.toggle('active', i === matchingSlotIdx));
         }
         updatePreviewBubble();
       });
@@ -803,6 +1088,7 @@
     function updateStageColors() {
       const stage = document.getElementById('preview-stage');
       const bubble = document.getElementById('preview-bubble');
+      const borderStage = document.getElementById('card-border-preview-stage');
       const bg = document.getElementById('color-bg-hex').value;
       const card = document.getElementById('color-card-hex').value;
       const greeting = document.getElementById('color-greeting-hex').value;
@@ -811,6 +1097,11 @@
       stage.style.borderColor = action;
       bubble.style.borderColor = action;
       bubble.style.color = greeting;
+      if (borderStage) {
+        borderStage.style.background = `linear-gradient(180deg, ${bg}, ${card})`;
+        borderStage.style.borderColor = action;
+      }
+      drawCardBorderPreview();
     }
 
     // Exact match to MascotAtlasValidator.sanitizeDialogueLine
@@ -975,6 +1266,11 @@
       } else {
         badges.push(`<span class="badge">🐰 No custom atlas loaded (will export theme/settings)</span>`);
       }
+      if (cardBorderBytes && cardBorderImage) {
+        badges.push(`<span class="badge badge--ok">🎀 card_border.png: ${cardBorderWidth}×${cardBorderHeight}px · slice ${cardBorderSlicePx}px (${(cardBorderBytes.byteLength / 1024).toFixed(1)} KB)</span>`);
+      } else {
+        badges.push(`<span class="badge">🎀 Border style: ${escapeHtml(activeBorderStyleId)}</span>`);
+      }
       if (preservedWallpaperBytes) {
         badges.push(`<span class="badge badge--ok">🖼️ wallpaper.png preserved (${(preservedWallpaperBytes.byteLength / 1024).toFixed(0)} KB)</span>`);
       }
@@ -985,6 +1281,28 @@
       document.getElementById('clear-atlas-btn').style.display = atlasBytes ? 'inline-flex' : 'none';
     }
 
+    function renderCardBorderBadges(extraError) {
+      const wrap = document.getElementById('card-border-badges');
+      if (!wrap) return;
+      const badges = [];
+      if (extraError) {
+        badges.push(`<span class="badge badge--warn">⚠️ ${escapeHtml(extraError)}</span>`);
+      }
+      const styleDef = BORDER_STYLES.find((b) => b.id === activeBorderStyleId) || BORDER_STYLES[0];
+      if (cardBorderBytes && cardBorderImage) {
+        badges.push(`<span class="badge badge--ok">🖼️ 9-slice active: ${cardBorderWidth}×${cardBorderHeight} px · ${cardBorderSlicePx} px corner inset (${(cardBorderBytes.byteLength / 1024).toFixed(1)} KB)</span>`);
+        badges.push(`<span class="badge">🎀 Fallback procedural style: ${escapeHtml(styleDef.label)}</span>`);
+      } else {
+        badges.push(`<span class="badge badge--ok">🎀 Procedural border: ${escapeHtml(styleDef.desc)}</span>`);
+        badges.push(`<span class="badge">🖼️ Optional: drop a 16×16–256×256 px card_border.png for 9-slice framing</span>`);
+      }
+      wrap.innerHTML = badges.join('');
+      const clearBtn = document.getElementById('clear-card-border-btn');
+      if (clearBtn) {
+        clearBtn.style.display = (cardBorderBytes && cardBorderImage) ? 'inline-flex' : 'none';
+      }
+    }
+
     function escapeHtml(str) {
       return String(str ?? '')
         .replace(/&/g, '&amp;')
@@ -992,6 +1310,98 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
     }
+
+    function hasPngSignature(uint8Array) {
+      const sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+      if (!uint8Array || uint8Array.byteLength < sig.length) return false;
+      for (let i = 0; i < sig.length; i++) {
+        if (uint8Array[i] !== sig[i]) return false;
+      }
+      return true;
+    }
+
+    function validateCardBorderDimensions(width, height, requestedSlicePx) {
+      if (width < MIN_CARD_BORDER_DIM || height < MIN_CARD_BORDER_DIM) {
+        return { valid: false, reason: `Border PNG must be at least ${MIN_CARD_BORDER_DIM}×${MIN_CARD_BORDER_DIM} px (found ${width}×${height})` };
+      }
+      if (width > MAX_CARD_BORDER_DIM || height > MAX_CARD_BORDER_DIM) {
+        return { valid: false, reason: `Border PNG must be at most ${MAX_CARD_BORDER_DIM}×${MAX_CARD_BORDER_DIM} px (found ${width}×${height})` };
+      }
+      const clampedSlice = clampCardBorderSlicePx(requestedSlicePx, width, height);
+      const minDim = Math.min(width, height);
+      if (clampedSlice * 2 >= minDim) {
+        return { valid: false, reason: `9-slice corner inset (${clampedSlice}px) is too large for ${width}×${height}px image` };
+      }
+      return { valid: true, width, height, slicePx: clampedSlice };
+    }
+
+    async function loadCardBorderFromBytes(uint8Array, requestedSlicePx) {
+      if (uint8Array.byteLength > MAX_CARD_BORDER_BYTES) {
+        renderCardBorderBadges('card_border.png exceeds 512 KB limit');
+        return false;
+      }
+      if (!hasPngSignature(uint8Array)) {
+        renderCardBorderBadges('card_border.png must be a valid PNG file');
+        return false;
+      }
+      const blob = new Blob([uint8Array], { type: 'image/png' });
+      const url = URL.createObjectURL(blob);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('Could not decode card_border.png'));
+          i.src = url;
+        });
+        const check = validateCardBorderDimensions(
+          img.naturalWidth,
+          img.naturalHeight,
+          requestedSlicePx !== undefined && requestedSlicePx !== null ? requestedSlicePx : cardBorderSlicePx
+        );
+        if (!check.valid) {
+          renderCardBorderBadges(check.reason);
+          return false;
+        }
+        cardBorderBytes = uint8Array;
+        cardBorderImage = img;
+        cardBorderWidth = check.width;
+        cardBorderHeight = check.height;
+        syncSliceControls(check.slicePx);
+        renderCardBorderBadges();
+        renderStatusBadges();
+        drawCardBorderPreview();
+        return true;
+      } catch (err) {
+        renderCardBorderBadges(err.message || 'Invalid card_border.png file');
+        return false;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    function clearCustomCardBorder() {
+      cardBorderBytes = null;
+      cardBorderImage = null;
+      cardBorderWidth = 0;
+      cardBorderHeight = 0;
+      const input = document.getElementById('card-border-input');
+      if (input) input.value = '';
+      syncSliceControls(cardBorderSlicePx);
+      renderCardBorderBadges();
+      renderStatusBadges();
+      drawCardBorderPreview();
+    }
+
+    document.getElementById('card-border-input').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const buf = await file.arrayBuffer();
+      await loadCardBorderFromBytes(new Uint8Array(buf), cardBorderSlicePx);
+    });
+
+    document.getElementById('clear-card-border-btn').addEventListener('click', () => {
+      clearCustomCardBorder();
+    });
 
     async function loadAtlasFromBytes(uint8Array, configFromManifest) {
       if (uint8Array.byteLength > MAX_ATLAS_BYTES) {
@@ -1069,7 +1479,15 @@
           setColorField('card', manifest.palette.cardColorHex || '#FCE4EC');
           setColorField('greeting', manifest.palette.greetingColorHex || '#A04064');
           setColorField('action', manifest.palette.actionColorHex || '#A04064');
+          setBorderStyleId(manifest.palette.borderStyle || 'solid');
+          const manifestSlicePx = typeof manifest.palette.cardBorderSlicePx === 'number'
+            ? manifest.palette.cardBorderSlicePx
+            : DEFAULT_CARD_BORDER_SLICE;
+          syncSliceControls(manifestSlicePx);
           updateStageColors();
+        } else {
+          setBorderStyleId('solid');
+          syncSliceControls(DEFAULT_CARD_BORDER_SLICE);
         }
 
         // Populate 7 dialogue pools
@@ -1097,12 +1515,30 @@
           preservedCursorBytes = null;
         }
 
+        // Load card_border.png if present (respecting manifest.palette.hasCustomCardBorder !== false)
+        const cardBorderEntry = zip.file('card_border.png');
+        const allowBundleCardBorder = !(manifest.palette && manifest.palette.hasCustomCardBorder === false);
+        const requestedSlice = (manifest.palette && typeof manifest.palette.cardBorderSlicePx === 'number')
+          ? manifest.palette.cardBorderSlicePx
+          : DEFAULT_CARD_BORDER_SLICE;
+        if (cardBorderEntry && allowBundleCardBorder) {
+          const cbBytes = await cardBorderEntry.async('uint8array');
+          await loadCardBorderFromBytes(cbBytes, requestedSlice);
+        } else {
+          clearCustomCardBorder();
+          syncSliceControls(requestedSlice);
+        }
+
         // Load mascot_atlas.png if present
         const mascotEntry = zip.file('mascot_atlas.png');
         if (mascotEntry) {
           const bytes = await mascotEntry.async('uint8array');
           await loadAtlasFromBytes(bytes, manifest.mascot || null);
         } else {
+          atlasBytes = null;
+          atlasImage = null;
+          atlasLayout = null;
+          drawCurrentFrame();
           renderStatusBadges();
         }
         updatePreviewBubble();
@@ -1110,6 +1546,285 @@
         renderStatusBadges('Could not read bundle: ' + (err.message || 'invalid zip'));
       }
     });
+
+    // Live Mini Card Border Preview (240 x 120 px)
+    const borderPreviewCanvas = document.getElementById('card-border-preview-canvas');
+    const borderPreviewCtx = borderPreviewCanvas.getContext('2d');
+    borderPreviewCtx.imageSmoothingEnabled = false;
+
+    function traceRoundedRect(c, x, y, w, h, r) {
+      const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+      c.beginPath();
+      c.moveTo(x + radius, y);
+      c.lineTo(x + w - radius, y);
+      c.quadraticCurveTo(x + w, y, x + w, y + radius);
+      c.lineTo(x + w, y + h - radius);
+      c.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+      c.lineTo(x + radius, y + h);
+      c.quadraticCurveTo(x, y + h, x, y + h - radius);
+      c.lineTo(x, y + radius);
+      c.quadraticCurveTo(x, y, x + radius, y);
+      c.closePath();
+    }
+
+    function tracePixelChamferRect(c, left, top, right, bottom, stepPx) {
+      const w = Math.max(0, right - left);
+      const h = Math.max(0, bottom - top);
+      const s = Math.max(1, Math.min(stepPx, Math.floor(Math.min(w, h) / 6)));
+      const s2 = s * 2;
+      c.beginPath();
+      c.moveTo(left + s2, top);
+      c.lineTo(right - s2, top);
+      c.lineTo(right - s2, top + s);
+      c.lineTo(right - s, top + s);
+      c.lineTo(right - s, top + s2);
+      c.lineTo(right, top + s2);
+      c.lineTo(right, bottom - s2);
+      c.lineTo(right - s, bottom - s2);
+      c.lineTo(right - s, bottom - s);
+      c.lineTo(right - s2, bottom - s);
+      c.lineTo(right - s2, bottom);
+      c.lineTo(left + s2, bottom);
+      c.lineTo(left + s2, bottom - s);
+      c.lineTo(left + s, bottom - s);
+      c.lineTo(left + s, bottom - s2);
+      c.lineTo(left, bottom - s2);
+      c.lineTo(left, top + s2);
+      c.lineTo(left + s, top + s2);
+      c.lineTo(left + s, top + s);
+      c.lineTo(left + s2, top + s);
+      c.closePath();
+    }
+
+    function sampleRoundRectPerimeter(x, y, w, h, r, dist) {
+      const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+      const straightW = Math.max(0, w - 2 * radius);
+      const straightH = Math.max(0, h - 2 * radius);
+      const arcLen = 0.5 * Math.PI * radius;
+      const segs = [
+        straightW, arcLen,
+        straightH, arcLen,
+        straightW, arcLen,
+        straightH, arcLen
+      ];
+      const total = segs.reduce((a, b) => a + b, 0) || 1;
+      let d = ((dist % total) + total) % total;
+      for (let i = 0; i < 8; i++) {
+        const len = segs[i];
+        if (d <= len || i === 7) {
+          const t = len > 0 ? d / len : 0;
+          switch (i) {
+            case 0: return { x: x + radius + t * straightW, y: y, nx: 0, ny: -1 };
+            case 1: {
+              const a = -Math.PI / 2 + t * (Math.PI / 2);
+              return { x: x + w - radius + Math.cos(a) * radius, y: y + radius + Math.sin(a) * radius, nx: Math.cos(a), ny: Math.sin(a) };
+            }
+            case 2: return { x: x + w, y: y + radius + t * straightH, nx: 1, ny: 0 };
+            case 3: {
+              const a = t * (Math.PI / 2);
+              return { x: x + w - radius + Math.cos(a) * radius, y: y + h - radius + Math.sin(a) * radius, nx: Math.cos(a), ny: Math.sin(a) };
+            }
+            case 4: return { x: x + w - radius - t * straightW, y: y + h, nx: 0, ny: 1 };
+            case 5: {
+              const a = Math.PI / 2 + t * (Math.PI / 2);
+              return { x: x + radius + Math.cos(a) * radius, y: y + h - radius + Math.sin(a) * radius, nx: Math.cos(a), ny: Math.sin(a) };
+            }
+            case 6: return { x: x, y: y + h - radius - t * straightH, nx: -1, ny: 0 };
+            case 7: {
+              const a = Math.PI + t * (Math.PI / 2);
+              return { x: x + radius + Math.cos(a) * radius, y: y + radius + Math.sin(a) * radius, nx: Math.cos(a), ny: Math.sin(a) };
+            }
+          }
+        }
+        d -= len;
+      }
+      return { x: x + radius, y: y, nx: 0, ny: -1 };
+    }
+
+    function drawCardBorderPreview() {
+      if (!borderPreviewCanvas || !borderPreviewCtx) return;
+      const W = borderPreviewCanvas.width;
+      const H = borderPreviewCanvas.height;
+      borderPreviewCtx.clearRect(0, 0, W, H);
+      borderPreviewCtx.imageSmoothingEnabled = false;
+
+      const cardColor = document.getElementById('color-card-hex').value || '#FCE4EC';
+      const greetingColor = document.getElementById('color-greeting-hex').value || '#A04064';
+      const actionColor = document.getElementById('color-action-hex').value || '#A04064';
+
+      const pad = 8;
+      const cardX = pad;
+      const cardY = pad;
+      const cardW = W - pad * 2;
+      const cardH = H - pad * 2;
+      const cornerRadius = 18;
+
+      // Fill interior card surface
+      borderPreviewCtx.save();
+      if (activeBorderStyleId === 'pixel' && !(cardBorderBytes && cardBorderImage)) {
+        tracePixelChamferRect(borderPreviewCtx, cardX, cardY, cardX + cardW, cardY + cardH, 3);
+      } else {
+        traceRoundedRect(borderPreviewCtx, cardX, cardY, cardW, cardH, cornerRadius);
+      }
+      borderPreviewCtx.fillStyle = cardColor;
+      borderPreviewCtx.fill();
+      borderPreviewCtx.restore();
+
+      // Sample interior card text
+      borderPreviewCtx.save();
+      borderPreviewCtx.fillStyle = greetingColor;
+      borderPreviewCtx.font = '800 13px Nunito, sans-serif';
+      borderPreviewCtx.textAlign = 'center';
+      borderPreviewCtx.textBaseline = 'middle';
+      borderPreviewCtx.fillText('✦ Mochibun Card ♡', W / 2, H / 2 - 9);
+      borderPreviewCtx.font = '700 10px Nunito, sans-serif';
+      borderPreviewCtx.globalAlpha = 0.78;
+      const captionEl = document.getElementById('card-border-preview-caption');
+
+      if (cardBorderBytes && cardBorderImage) {
+        const imgW = cardBorderWidth;
+        const imgH = cardBorderHeight;
+        const s = Math.max(1, Math.min(cardBorderSlicePx, Math.floor(Math.min(imgW, imgH) / 2) - 1));
+        const edgeSrcW = Math.max(1, imgW - s * 2);
+        const edgeSrcH = Math.max(1, imgH - s * 2);
+        const rightSrcX = imgW - s;
+        const bottomSrcY = imgH - s;
+
+        const dstSlice = Math.max(1, Math.min(s, Math.floor(Math.min(cardW, cardH) / 2)));
+        const midDstW = Math.max(0, cardW - dstSlice * 2);
+        const midDstH = Math.max(0, cardH - dstSlice * 2);
+        const rightDstX = cardX + cardW - dstSlice;
+        const bottomDstY = cardY + cardH - dstSlice;
+
+        borderPreviewCtx.fillText(`9-slice (${imgW}×${imgH}px · ${s}px inset)`, W / 2, H / 2 + 10);
+        borderPreviewCtx.restore();
+
+        borderPreviewCtx.save();
+        borderPreviewCtx.imageSmoothingEnabled = false;
+        // 4 corners (1:1)
+        borderPreviewCtx.drawImage(cardBorderImage, 0, 0, s, s, cardX, cardY, dstSlice, dstSlice);
+        borderPreviewCtx.drawImage(cardBorderImage, rightSrcX, 0, s, s, rightDstX, cardY, dstSlice, dstSlice);
+        borderPreviewCtx.drawImage(cardBorderImage, 0, bottomSrcY, s, s, cardX, bottomDstY, dstSlice, dstSlice);
+        borderPreviewCtx.drawImage(cardBorderImage, rightSrcX, bottomSrcY, s, s, rightDstX, bottomDstY, dstSlice, dstSlice);
+
+        // Top & bottom stretched edges
+        if (midDstW > 0) {
+          borderPreviewCtx.drawImage(cardBorderImage, s, 0, edgeSrcW, s, cardX + dstSlice, cardY, midDstW, dstSlice);
+          borderPreviewCtx.drawImage(cardBorderImage, s, bottomSrcY, edgeSrcW, s, cardX + dstSlice, bottomDstY, midDstW, dstSlice);
+        }
+        // Left & right stretched edges (center patch skipped)
+        if (midDstH > 0) {
+          borderPreviewCtx.drawImage(cardBorderImage, 0, s, s, edgeSrcH, cardX, cardY + dstSlice, dstSlice, midDstH);
+          borderPreviewCtx.drawImage(cardBorderImage, rightSrcX, s, s, edgeSrcH, rightDstX, cardY + dstSlice, dstSlice, midDstH);
+        }
+
+        // Optional 9-slice guide lines
+        const showGuides = document.getElementById('toggle-slice-guides') && document.getElementById('toggle-slice-guides').checked;
+        if (showGuides) {
+          borderPreviewCtx.strokeStyle = 'rgba(229, 57, 130, 0.75)';
+          borderPreviewCtx.lineWidth = 1;
+          borderPreviewCtx.setLineDash([3, 3]);
+          borderPreviewCtx.beginPath();
+          borderPreviewCtx.moveTo(cardX + dstSlice + 0.5, cardY);
+          borderPreviewCtx.lineTo(cardX + dstSlice + 0.5, cardY + cardH);
+          borderPreviewCtx.moveTo(rightDstX + 0.5, cardY);
+          borderPreviewCtx.lineTo(rightDstX + 0.5, cardY + cardH);
+          borderPreviewCtx.moveTo(cardX, cardY + dstSlice + 0.5);
+          borderPreviewCtx.lineTo(cardX + cardW, cardY + dstSlice + 0.5);
+          borderPreviewCtx.moveTo(cardX, bottomDstY + 0.5);
+          borderPreviewCtx.lineTo(cardX + cardW, bottomDstY + 0.5);
+          borderPreviewCtx.stroke();
+        }
+        borderPreviewCtx.restore();
+
+        if (captionEl) {
+          captionEl.innerHTML = `Previewing <b>card_border.png</b> 9-slice (${imgW}×${imgH} px, slice=${s} px)`;
+        }
+      } else {
+        borderPreviewCtx.fillText(`procedural · ${activeBorderStyleId}`, W / 2, H / 2 + 10);
+        borderPreviewCtx.restore();
+
+        borderPreviewCtx.save();
+        borderPreviewCtx.strokeStyle = actionColor;
+
+        if (activeBorderStyleId === 'solid') {
+          borderPreviewCtx.lineWidth = 2;
+          traceRoundedRect(borderPreviewCtx, cardX + 1, cardY + 1, cardW - 2, cardH - 2, cornerRadius - 1);
+          borderPreviewCtx.stroke();
+        } else if (activeBorderStyleId === 'double') {
+          borderPreviewCtx.lineWidth = 2;
+          traceRoundedRect(borderPreviewCtx, cardX + 1, cardY + 1, cardW - 2, cardH - 2, cornerRadius - 1);
+          borderPreviewCtx.stroke();
+
+          borderPreviewCtx.globalAlpha = 0.72;
+          borderPreviewCtx.lineWidth = 1.25;
+          traceRoundedRect(borderPreviewCtx, cardX + 5, cardY + 5, cardW - 10, cardH - 10, cornerRadius - 5);
+          borderPreviewCtx.stroke();
+        } else if (activeBorderStyleId === 'lace') {
+          const rx = cardX + 2;
+          const ry = cardY + 2;
+          const rw = cardW - 4;
+          const rh = cardH - 4;
+          const rr = cornerRadius - 2;
+          const straightW = Math.max(0, rw - 2 * rr);
+          const straightH = Math.max(0, rh - 2 * rr);
+          const perim = 2 * (straightW + straightH) + 2 * Math.PI * rr;
+          const lobes = Math.max(12, Math.round(perim / 8));
+          const lobeLen = perim / lobes;
+          const bulge = 3.5;
+
+          borderPreviewCtx.save();
+          borderPreviewCtx.globalAlpha = 0.85;
+          borderPreviewCtx.lineWidth = 1.4;
+          borderPreviewCtx.lineCap = 'round';
+          borderPreviewCtx.lineJoin = 'round';
+          borderPreviewCtx.beginPath();
+          const p0 = sampleRoundRectPerimeter(rx, ry, rw, rh, rr, 0);
+          borderPreviewCtx.moveTo(p0.x, p0.y);
+          for (let k = 0; k < lobes; k++) {
+            const mid = sampleRoundRectPerimeter(rx, ry, rw, rh, rr, (k + 0.5) * lobeLen);
+            const end = sampleRoundRectPerimeter(rx, ry, rw, rh, rr, (k + 1) * lobeLen);
+            borderPreviewCtx.quadraticCurveTo(
+              mid.x + mid.nx * bulge * 1.85,
+              mid.y + mid.ny * bulge * 1.85,
+              end.x,
+              end.y
+            );
+          }
+          borderPreviewCtx.closePath();
+          borderPreviewCtx.stroke();
+          borderPreviewCtx.restore();
+
+          borderPreviewCtx.lineWidth = 1.5;
+          traceRoundedRect(borderPreviewCtx, rx, ry, rw, rh, rr);
+          borderPreviewCtx.stroke();
+        } else if (activeBorderStyleId === 'stitch') {
+          borderPreviewCtx.save();
+          borderPreviewCtx.globalAlpha = 0.55;
+          borderPreviewCtx.lineWidth = 1.2;
+          traceRoundedRect(borderPreviewCtx, cardX + 1, cardY + 1, cardW - 2, cardH - 2, cornerRadius - 1);
+          borderPreviewCtx.stroke();
+          borderPreviewCtx.restore();
+
+          borderPreviewCtx.lineWidth = 1.6;
+          borderPreviewCtx.lineCap = 'round';
+          borderPreviewCtx.setLineDash([6, 4]);
+          traceRoundedRect(borderPreviewCtx, cardX + 4.5, cardY + 4.5, cardW - 9, cardH - 9, cornerRadius - 4.5);
+          borderPreviewCtx.stroke();
+        } else if (activeBorderStyleId === 'pixel') {
+          borderPreviewCtx.lineWidth = 3;
+          borderPreviewCtx.lineCap = 'butt';
+          borderPreviewCtx.lineJoin = 'miter';
+          tracePixelChamferRect(borderPreviewCtx, cardX + 1.5, cardY + 1.5, cardX + cardW - 1.5, cardY + cardH - 1.5, 3);
+          borderPreviewCtx.stroke();
+        }
+        borderPreviewCtx.restore();
+
+        if (captionEl) {
+          captionEl.innerHTML = `Previewing procedural <b>${escapeHtml(activeBorderStyleId)}</b> trim (240 × 120 px)`;
+        }
+      }
+    }
 
     // 4 Hz animation loop (250ms per step, matching Home's rememberKeitaiStep)
     const canvas = document.getElementById('sprite-canvas');
@@ -1204,6 +1919,8 @@
 
       const base = importedManifest ? JSON.parse(JSON.stringify(importedManifest)) : {};
       const hasMascot = Boolean(atlasBytes && atlasLayout);
+      const hasCustomCardBorder = Boolean(cardBorderBytes && cardBorderImage);
+      const exportedSlicePx = clampCardBorderSlicePx(cardBorderSlicePx, cardBorderWidth, cardBorderHeight);
 
       let mascotConfig = null;
       if (hasMascot) {
@@ -1237,7 +1954,10 @@
           cardColorHex: document.getElementById('color-card-hex').value.trim() || '#FCE4EC',
           greetingColorHex: document.getElementById('color-greeting-hex').value.trim() || '#A04064',
           actionColorHex: document.getElementById('color-action-hex').value.trim() || '#A04064',
-          cardRoundnessDp: (base.palette && typeof base.palette.cardRoundnessDp === 'number') ? base.palette.cardRoundnessDp : 24.0
+          cardRoundnessDp: (base.palette && typeof base.palette.cardRoundnessDp === 'number') ? base.palette.cardRoundnessDp : 24.0,
+          borderStyle: normalizeBorderStyleId(activeBorderStyleId),
+          hasCustomCardBorder: hasCustomCardBorder,
+          cardBorderSlicePx: exportedSlicePx
         },
         cursor: base.cursor || {
           baseVelocity: 5.0,
@@ -1266,6 +1986,9 @@
       if (atlasBytes && atlasLayout) {
         zip.file('mascot_atlas.png', atlasBytes);
       }
+      if (hasCustomCardBorder) {
+        zip.file('card_border.png', cardBorderBytes);
+      }
 
       const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
       const sanitizedFile = bundleName.toLowerCase().replace(/[^a-z0-9_-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'mochibun_theme';
@@ -1277,6 +2000,8 @@
     });
 
     updateStageColors();
+    renderCardBorderBadges();
+    drawCardBorderPreview();
     drawCurrentFrame();
   </script>
 </body>
