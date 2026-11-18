@@ -1,0 +1,85 @@
+name: Build & Deploy F-Droid Repo + Pages
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'fdroid/**'
+      - 'fastlane/**'
+      - '.github/workflows/fdroid-repo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install fdroidserver & dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fdroidserver apksigner default-jdk-headless
+
+      - name: Prepare workspace & Fastlane metadata
+        run: |
+          mkdir -p fdroid/repo fdroid/metadata/one.crinklecod.mochibun
+          cp -r fastlane/metadata/android/en-US fdroid/metadata/one.crinklecod.mochibun/en-US
+          if [ -f fastlane/metadata/android/en-US/images/icon.png ]; then
+            cp fastlane/metadata/android/en-US/images/icon.png fdroid/repo/icon.png
+          fi
+
+      - name: Download release APKs from GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --limit 5 --json tagName -q '.[].tagName' | while read -r tag; do
+            gh release download "$tag" --pattern "*.apk" --dir fdroid/repo --clobber || true
+          done
+
+      - name: Decode repo keystore & generate F-Droid index
+        env:
+          FDROID_KEYSTORE_B64: ${{ secrets.FDROID_KEYSTORE_B64 }}
+          FDROID_KEYSTORE_PASS: ${{ secrets.FDROID_KEYSTORE_PASS }}
+          FDROID_KEY_PASS: ${{ secrets.FDROID_KEY_PASS }}
+        run: |
+          cd fdroid
+          echo "$FDROID_KEYSTORE_B64" | base64 -d > fdroid-repo.jks
+          export FDROID_KEY_STORE_PASS="$FDROID_KEYSTORE_PASS"
+          export FDROID_KEY_PASS="$FDROID_KEY_PASS"
+          fdroid update --create-metadata --use-date-from-apk
+          rm -f fdroid-repo.jks
+
+      - name: Assemble combined GitHub Pages site
+        run: |
+          mkdir -p _site/fdroid
+          cp -r docs/* _site/
+          cp -r fdroid/repo _site/fdroid/repo
+          if [ -d fdroid/archive ]; then
+            cp -r fdroid/archive _site/fdroid/archive
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,11 @@
+repo_url: https://crinklecod.one/Mochibun/fdroid/repo
+repo_name: Mochibun F-Droid Repo
+repo_icon: icon.png
+repo_description: >-
+  Official F-Droid repository for Mochibun — a pastel D-pad and T9 keypad home
+  launcher for Android flip phones.
+
+archive_older: 3
+
+keystore: fdroid-repo.jks
+repo_keyalias: repokey
