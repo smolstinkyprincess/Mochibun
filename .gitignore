@@ -144,3 +144,4 @@ mtksystemui/
 mtksystemui/mtksystemui-decomp/
 mtksystemui/MtkSystemUI.apk
 .aider*
+.idea/
