@@ -53,6 +53,15 @@ jobs:
             gh release download "$tag" --pattern "*.apk" --dir fdroid/repo --clobber || true
           done
 
+      - name: Prepare workspace & Fastlane metadata
+          run: |
+            mkdir -p fdroid/repo/icons fdroid/metadata/one.crinklecod.mochibun
+            cp -r fastlane/metadata/android/en-US fdroid/metadata/one.crinklecod.mochibun/en-US
+            if [ -f fastlane/metadata/android/en-US/images/icon.png ]; then
+              cp fastlane/metadata/android/en-US/images/icon.png fdroid/repo/icon.png
+              cp fastlane/metadata/android/en-US/images/icon.png fdroid/repo/icons/icon.png
+            fi
+
       - name: Decode repo keystore & generate F-Droid index
         env:
           FDROID_KEYSTORE_B64: ${{ secrets.FDROID_KEYSTORE_B64 }}
@@ -61,10 +70,10 @@ jobs:
         run: |
           cd fdroid
           echo "$FDROID_KEYSTORE_B64" | base64 -d > fdroid-repo.jks
-          export FDROID_KEY_STORE_PASS="$FDROID_KEYSTORE_PASS"
-          export FDROID_KEY_PASS="$FDROID_KEY_PASS"
+          printf "\nkeystorepass: '%s'\nkeypass: '%s'\n" "$FDROID_KEYSTORE_PASS" "$FDROID_KEY_PASS" >> config.yml
           fdroid update --create-metadata --use-date-from-apk
           rm -f fdroid-repo.jks
+          git checkout -- config.yml
 
       - name: Assemble combined GitHub Pages site
         run: |
