@@ -1,8 +1,10 @@
 package one.crinklecod.mochibun.ui.components
 
+import android.os.SystemClock
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,55 +43,93 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.data.repository.MochibunMediaState
-import one.crinklecod.mochibun.ui.theme.*
+import one.crinklecod.mochibun.ui.theme.ActiveTheme
+import one.crinklecod.mochibun.ui.theme.LauncherTheme
+import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
+import one.crinklecod.mochibun.ui.theme.cardBorderColor
+import one.crinklecod.mochibun.ui.theme.focusedContainerColor
+import java.util.Locale
+
+internal fun computeDisplayPositionMs(
+    mediaState: MochibunMediaState,
+    elapsedRealtimeMs: Long
+): Long {
+    if (mediaState.durationMs <= 0L) return 0L
+    val raw = if (mediaState.isPlaying && mediaState.lastPositionUpdateTime > 0L) {
+        val elapsed = (elapsedRealtimeMs - mediaState.lastPositionUpdateTime).coerceAtLeast(0L)
+        (mediaState.positionMs + (elapsed * mediaState.playbackSpeed)).toLong()
+    } else {
+        mediaState.positionMs
+    }
+    return raw.coerceIn(0L, mediaState.durationMs)
+}
+
+internal fun formatMediaDuration(ms: Long): String {
+    val totalSeconds = ms.coerceAtLeast(0L) / 1000L
+    val hours = totalSeconds / 3600L
+    val minutes = (totalSeconds % 3600L) / 60L
+    val seconds = totalSeconds % 60L
+    return if (hours > 0L) {
+        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format(Locale.US, "%d:%02d", minutes, seconds)
+    }
+}
 
 /**
- * Slim pastel pink heart-scrubber progress bar with a cute heart thumb knob.
+ * Slim pastel heart-scrubber progress bar with a 4dp pill track and a small heart thumb.
  */
 @Composable
 fun HeartScrubberProgressBar(
     progress: Float,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tickKey: Int = 0,
+    progressProvider: (() -> Float)? = null
 ) {
     val heartPath = remember { Path() }
     val density = LocalDensity.current
-    val scrubberStroke = remember(density) { Stroke(width = with(density) { 1.2.dp.toPx() }) }
-    val trackColor = ActiveTheme.container
+    val scrubberStroke = remember(density) { Stroke(width = with(density) { 1.1.dp.toPx() }) }
+    val trackColor = ActiveTheme.surfaceTint.copy(alpha = 0.28f)
     val accentColor = ActiveTheme.palette.focusedCardBorder
     val heartFillColor = ActiveTheme.primary
+    val heartOutlineColor = ActiveTheme.accentDeep
 
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height(18.dp)
+            .height(14.dp)
     ) {
+        @Suppress("UNUSED_EXPRESSION")
+        tickKey // Invalidates draw only when the 1 Hz playback tick advances
+
         val w = size.width
         val h = size.height
-        val trackHeight = 3.5.dp.toPx()
+        val trackHeight = 4.dp.toPx()
+        val trackRadius = trackHeight / 2f
         val trackY = (h - trackHeight) / 2f
-        val clampedProgress = progress.coerceIn(0f, 1f)
+        val clampedProgress = (progressProvider?.invoke() ?: progress).coerceIn(0f, 1f)
 
-        // 1. Inactive background track
+        // 1. Inactive pastel pill track
         drawRoundRect(
             color = trackColor,
             topLeft = Offset(0f, trackY),
             size = Size(w, trackHeight),
-            cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f)
+            cornerRadius = CornerRadius(trackRadius, trackRadius)
         )
 
-        // 2. Active playback track
+        // 2. Active playback progress fill
         val activeWidth = w * clampedProgress
         if (activeWidth > 0f) {
             drawRoundRect(
                 color = accentColor,
                 topLeft = Offset(0f, trackY),
                 size = Size(activeWidth, trackHeight),
-                cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f)
+                cornerRadius = CornerRadius(trackRadius, trackRadius)
             )
         }
 
-        // 3. Heart scrubber thumb knob
-        val thumbRadius = 6.dp.toPx()
+        // 3. Small heart indicator at the current playback position
+        val thumbRadius = 5.dp.toPx()
         val hx = (w * clampedProgress).coerceIn(thumbRadius, (w - thumbRadius).coerceAtLeast(thumbRadius))
         val hy = h / 2f
         val s = thumbRadius
@@ -101,12 +140,81 @@ fun HeartScrubberProgressBar(
         heartPath.cubicTo(hx + s * 1.15f, hy - s * 0.85f, hx + s * 1.15f, hy + s * 0.1f, hx, hy + s * 0.75f)
         heartPath.close()
         drawPath(heartPath, heartFillColor)
-        drawPath(heartPath, accentColor, style = scrubberStroke)
+        drawPath(heartPath, heartOutlineColor, style = scrubberStroke)
     }
 }
 
 /**
- * Concentric double-border modifier for the Now Playing card matching the mockup.
+ * Themed pastel CD / MiniDisc fallback artwork drawn with cached geometry (zero per-frame allocations).
+ */
+@Composable
+private fun PastelMiniDiscIcon(
+    modifier: Modifier = Modifier
+) {
+    val discFill = ActiveTheme.primary.copy(alpha = 0.45f)
+    val sheenColor = ActiveTheme.surfaceTint.copy(alpha = 0.42f)
+    val hubFill = ActiveTheme.container
+    val holeFill = ActiveTheme.background
+    val lineColor = ActiveTheme.accentDeep.copy(alpha = 0.68f)
+
+    Spacer(
+        modifier = modifier.drawWithCache {
+            val w = size.width
+            val h = size.height
+            val cx = w / 2f
+            val cy = h / 2f
+            val outerR = minOf(w, h) * 0.38f
+            val hubR = outerR * 0.40f
+            val holeR = outerR * 0.15f
+            val outerTopLeft = Offset(cx - outerR, cy - outerR)
+            val outerSize = Size(outerR * 2f, outerR * 2f)
+            val outerStroke = Stroke(width = 1.4.dp.toPx())
+            val innerStroke = Stroke(width = 1.1.dp.toPx())
+            val sparkleCenter = Offset(w * 0.80f, h * 0.22f)
+            val sparkleSize = 3.2.dp.toPx()
+            val sparklePath = Path().apply {
+                moveTo(sparkleCenter.x, sparkleCenter.y - sparkleSize)
+                lineTo(sparkleCenter.x + sparkleSize * 0.28f, sparkleCenter.y - sparkleSize * 0.28f)
+                lineTo(sparkleCenter.x + sparkleSize, sparkleCenter.y)
+                lineTo(sparkleCenter.x + sparkleSize * 0.28f, sparkleCenter.y + sparkleSize * 0.28f)
+                lineTo(sparkleCenter.x, sparkleCenter.y + sparkleSize)
+                lineTo(sparkleCenter.x - sparkleSize * 0.28f, sparkleCenter.y + sparkleSize * 0.28f)
+                lineTo(sparkleCenter.x - sparkleSize, sparkleCenter.y)
+                lineTo(sparkleCenter.x - sparkleSize * 0.28f, sparkleCenter.y - sparkleSize * 0.28f)
+                close()
+            }
+
+            onDrawBehind {
+                drawCircle(color = discFill, radius = outerR, center = Offset(cx, cy))
+                drawArc(
+                    color = sheenColor,
+                    startAngle = -55f,
+                    sweepAngle = 48f,
+                    useCenter = true,
+                    topLeft = outerTopLeft,
+                    size = outerSize
+                )
+                drawArc(
+                    color = sheenColor,
+                    startAngle = 125f,
+                    sweepAngle = 48f,
+                    useCenter = true,
+                    topLeft = outerTopLeft,
+                    size = outerSize
+                )
+                drawCircle(color = lineColor, radius = outerR, center = Offset(cx, cy), style = outerStroke)
+                drawCircle(color = hubFill, radius = hubR, center = Offset(cx, cy))
+                drawCircle(color = lineColor, radius = hubR, center = Offset(cx, cy), style = innerStroke)
+                drawCircle(color = holeFill, radius = holeR, center = Offset(cx, cy))
+                drawCircle(color = lineColor, radius = holeR, center = Offset(cx, cy), style = innerStroke)
+                drawPath(path = sparklePath, color = lineColor)
+            }
+        }
+    )
+}
+
+/**
+ * Concentric double-border modifier preserved for compatibility.
  */
 fun Modifier.nowPlayingCardConcentricBorder(
     cornerRadius: Dp = 22.dp,
@@ -123,7 +231,6 @@ fun Modifier.nowPlayingCardConcentricBorder(
 
     onDrawWithContent {
         drawContent()
-        // Outer border
         drawRoundRect(
             color = outerColor,
             topLeft = Offset(outerHalf, outerHalf),
@@ -131,7 +238,6 @@ fun Modifier.nowPlayingCardConcentricBorder(
             cornerRadius = CornerRadius(r, r),
             style = outerStroke
         )
-        // Inner concentric line inset by 3.5 dp
         if (size.width > inset * 2 && size.height > inset * 2) {
             drawRoundRect(
                 color = innerColor,
@@ -145,8 +251,8 @@ fun Modifier.nowPlayingCardConcentricBorder(
 }
 
 /**
- * Retro bracketed transport button: [ ◄◄ ], [ ▶ ] / [ ❚❚ ], [ ►► ].
- * Shows glowing double-line rose outline when focused via D-pad.
+ * Tactile pastel pill transport button (`◄◄`, `❚❚` / `▶`, `►►`).
+ * Enforces single-line non-wrapping glyphs and unclipped `softGlowFocus` ring.
  */
 @Composable
 fun TransportButton(
@@ -154,30 +260,87 @@ fun TransportButton(
     isFocused: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isPrimary: Boolean = false,
     theme: LauncherTheme = LocalLauncherTheme.current
 ) {
+    val pillShape = remember { RoundedCornerShape(18.dp) }
+    val bgColor = when {
+        isFocused -> theme.focusedContainerColor
+        isPrimary -> ActiveTheme.primary.copy(alpha = 0.22f)
+        else -> ActiveTheme.unfocusedCardBg
+    }
+    val borderColor = when {
+        isFocused -> ActiveTheme.palette.focusedCardBorder
+        isPrimary -> ActiveTheme.primary.copy(alpha = 0.75f)
+        else -> ActiveTheme.cardBorder.copy(alpha = 0.75f)
+    }
+
     Box(
         modifier = modifier
+            .height(36.dp)
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 18.dp)
+            .clip(pillShape)
+            .background(bgColor)
+            .border(1.2.dp, borderColor, pillShape)
             .clickable(onClick = onClick)
-            .background(if (isFocused) theme.focusedContainerColor else Color.Transparent)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            fontSize = 20.sp,
+            fontSize = if (isPrimary) 15.sp else 13.5.sp,
             fontWeight = FontWeight.Bold,
-            color = theme.cardTextColor
+            color = ActiveTheme.accentDeep,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip
         )
     }
 }
 
+@Composable
+private fun PlaybackArtistAndTimeRow(
+    artist: String,
+    mediaState: MochibunMediaState,
+    secondTick: Int
+) {
+    val hasDuration = mediaState.durationMs > 0L
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = artist,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Normal,
+            color = ActiveTheme.textPrimary.copy(alpha = 0.72f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        if (hasDuration) {
+            @Suppress("UNUSED_EXPRESSION")
+            secondTick
+            val posMs = computeDisplayPositionMs(mediaState, SystemClock.elapsedRealtime())
+            val timeText = "${formatMediaDuration(posMs)} / ${formatMediaDuration(mediaState.durationMs)}"
+            Text(
+                text = timeText,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = ActiveTheme.textPrimary.copy(alpha = 0.62f),
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    }
+}
+
 /**
- * Native "Now Playing" card composable matching the mockup styling,
- * component hierarchy, and kawaii aesthetic.
+ * Compact two-band retro-keitai pocket music player card for the Widgets screen (480x800).
+ * Keeps active MediaController state, D-pad transport focus, 9-slice border framing,
+ * and overlapping corner mascot pin badge intact.
  */
 @Composable
 fun NowPlayingCard(
@@ -190,20 +353,29 @@ fun NowPlayingCard(
     modifier: Modifier = Modifier
 ) {
     val theme = LocalLauncherTheme.current
-    val cardShape = RoundedCornerShape(22.dp)
+    val cardShape = remember { RoundedCornerShape(22.dp) }
+    val artShape = remember { RoundedCornerShape(14.dp) }
+    val badgeShape = remember { RoundedCornerShape(10.dp) }
 
     // Bopping along (HAPPY frames + bob) while music plays; otherwise her mood, still frame.
-    // The clock only runs while playing and RESUMED.
     val mascotStep = rememberKeitaiStep(active = mediaState.isPlaying, totalSteps = MascotAtlasMath.TICK_WRAP)
     val mascotTick = remember(mascotStep) { { mascotStep.intValue } }
     val mascotSlot = if (mediaState.isPlaying) MascotAnimSlot.HAPPY else currentMoodSlot()
 
+    // 1 Hz playback progress ticker, paused automatically off-screen or when paused.
+    val playbackTick = rememberKeitaiStep(
+        active = mediaState.isPlaying && mediaState.durationMs > 0L,
+        totalSteps = 36_000,
+        stepDurationMs = 1_000L
+    )
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 18.dp) // space for prominent mascot pin
+            .padding(top = 18.dp) // space for overlapping corner mascot pin
+            .graphicsLayer { clip = false }
     ) {
-        // Main Card Container
+        // Main Card Container (unclipped so child pill softGlowFocus halos are never clipped)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -212,30 +384,31 @@ fun NowPlayingCard(
                     isFocused = focusedControl != -1,
                     cornerRadius = 22.dp
                 )
-                .clip(cardShape)
-                .background(theme.cardBgColor)
+                .background(color = theme.cardBgColor, shape = cardShape)
                 .mochibunCardBorder(
                     cornerRadius = 22.dp,
                     borderColor = theme.cardBorderColor,
                     borderWidth = 1.5.dp
                 )
-                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { clip = false }
             ) {
-                // Top Row: Album Art Squircle + Metadata + Heart Scrubber
+                // Band 1: Album Art / Pixel Disc + Track Info & Heart Progress
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Soft Pastel Mint Squircle with Artwork or Strawberry
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(theme.greetingBgColor)
-                            .clickable { onOpenMediaApp() },
+                            .size(56.dp)
+                            .clip(artShape)
+                            .background(ActiveTheme.surfaceTint.copy(alpha = 0.22f))
+                            .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.7f), artShape)
+                            .clickable(onClick = onOpenMediaApp),
                         contentAlignment = Alignment.Center
                     ) {
                         val artworkBitmap = remember(mediaState.artwork) { mediaState.artwork?.asImageBitmap() }
@@ -248,74 +421,83 @@ fun NowPlayingCard(
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {
-                            MochibunMascot(
-                                slot = mascotSlot,
-                                frameTick = mascotTick,
-                                size = 52.dp,
-                                themeTintColor = theme.mascotTintColor
-                            )
+                            PastelMiniDiscIcon(modifier = Modifier.fillMaxSize())
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(14.dp))
-
-                    // Track Information & Heart Progress
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { onOpenMediaApp() }
+                            .padding(start = 10.dp)
+                            .clickable(onClick = onOpenMediaApp)
                     ) {
-                        val displayTitle = rememberSteppedTickerText(
-                            text = mediaState.title.ifBlank { "No Media Active" },
-                            visibleCharCount = 18,
-                            enabled = mediaState.isPlaying
-                        )
                         Text(
-                            text = displayTitle,
-                            fontSize = 18.sp,
+                            text = mediaState.title.ifBlank { "No Media Active" },
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = theme.cardTextColor,
+                            color = ActiveTheme.accentDeep,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Clip,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .basicMarquee()
                         )
                         Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = mediaState.artist,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = theme.cardTextColor.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        PlaybackArtistAndTimeRow(
+                            artist = mediaState.artist.ifBlank { "Unknown Artist" },
+                            mediaState = mediaState,
+                            secondTick = playbackTick.intValue
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        HeartScrubberProgressBar(progress = mediaState.progressFraction)
+                        Spacer(modifier = Modifier.height(5.dp))
+                        HeartScrubberProgressBar(
+                            progress = 0f,
+                            tickKey = playbackTick.intValue,
+                            progressProvider = {
+                                if (mediaState.durationMs <= 0L) {
+                                    0f
+                                } else {
+                                    val posMs = computeDisplayPositionMs(
+                                        mediaState = mediaState,
+                                        elapsedRealtimeMs = SystemClock.elapsedRealtime()
+                                    )
+                                    (posMs.toFloat() / mediaState.durationMs.toFloat()).coerceIn(0f, 1f)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Bottom Row: Transport Controls Centered
+                // Band 2: Tactile Pastel Pill Transport Controls
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { clip = false },
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TransportButton(
-                        text = "[ ◄◄ ]",
+                        text = "◄◄",
                         isFocused = focusedControl == 0,
-                        onClick = onPrevious
+                        isPrimary = false,
+                        onClick = onPrevious,
+                        modifier = Modifier.weight(1f)
                     )
-                    Spacer(modifier = Modifier.width(14.dp))
                     TransportButton(
-                        text = if (mediaState.isPlaying) "[ ❚❚ ]" else "[ ▶ ]",
+                        text = if (mediaState.isPlaying) "❚❚" else "▶",
                         isFocused = focusedControl == 1,
-                        onClick = onPlayPause
+                        isPrimary = true,
+                        onClick = onPlayPause,
+                        modifier = Modifier.weight(1f)
                     )
-                    Spacer(modifier = Modifier.width(14.dp))
                     TransportButton(
-                        text = "[ ►► ]",
+                        text = "►►",
                         isFocused = focusedControl == 2,
-                        onClick = onNext
+                        isPrimary = false,
+                        onClick = onNext,
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -325,18 +507,17 @@ fun NowPlayingCard(
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .offset(x = 12.dp, y = (-16).dp)
+                .offset(x = 4.dp, y = (-18).dp)
                 .keitaiMascotBob(mascotTick)
-                .clip(RoundedCornerShape(12.dp))
-                .background(theme.cardBgColor)
-                .border(1.5.dp, theme.cardBorderColor, RoundedCornerShape(12.dp))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
+                .background(theme.cardBgColor, badgeShape)
+                .border(1.5.dp, theme.cardBorderColor, badgeShape)
+                .padding(horizontal = 4.dp, vertical = 3.dp),
             contentAlignment = Alignment.Center
         ) {
             MochibunMascot(
                 slot = mascotSlot,
                 frameTick = mascotTick,
-                size = 48.dp,
+                size = 30.dp,
                 themeTintColor = theme.mascotTintColor
             )
         }

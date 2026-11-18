@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
+import android.graphics.Rect
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -103,6 +104,24 @@ class MochibunWidgetHost private constructor(context: Context) : AppWidgetHost(c
 
 /** Host view with a Mochibun-styled error state for providers that crash or fail to inflate. */
 class MochibunWidgetHostView(context: Context) : AppWidgetHostView(context) {
+    init {
+        descendantFocusability = FOCUS_BLOCK_DESCENDANTS
+        isFocusable = false
+        isFocusableInTouchMode = false
+    }
+
+    override fun requestChildFocus(child: View?, focused: View?) {
+        // Prevent embedded widget views (e.g. photo widgets) from stealing focus from Compose
+    }
+
+    override fun onRequestFocusInDescendants(direction: Int, previouslyFocusedRect: Rect?): Boolean = false
+
+    override fun requestChildRectangleOnScreen(
+        child: View,
+        rectangle: Rect?,
+        immediate: Boolean
+    ): Boolean = false
+
     override fun getErrorView(): View = TextView(context).apply {
         text = "♡ This widget is napping ♡\nIts app couldn't draw it right now."
         gravity = Gravity.CENTER

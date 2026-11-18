@@ -58,11 +58,24 @@ class WidgetFrame(context: Context) : FrameLayout(context) {
     val isInteracting: Boolean get() = selectedIndex >= 0
 
     init {
-        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        descendantFocusability = FOCUS_BLOCK_DESCENDANTS
         isFocusable = false
+        isFocusableInTouchMode = false
         clipChildren = true
         setHighlightColor(0xFFE06287.toInt())
     }
+
+    override fun requestChildFocus(child: View?, focused: View?) {
+        // Prevent embedded Android widgets from stealing focus or scrolling parent LazyColumn
+    }
+
+    override fun onRequestFocusInDescendants(direction: Int, previouslyFocusedRect: Rect?): Boolean = false
+
+    override fun requestChildRectangleOnScreen(
+        child: View,
+        rectangle: Rect?,
+        immediate: Boolean
+    ): Boolean = false
 
     fun setHighlightColor(argb: Int) {
         highlightStroke.color = argb
@@ -77,6 +90,11 @@ class WidgetFrame(context: Context) : FrameLayout(context) {
         content = view
         reportedWidthPx = -1
         reportedHeightPx = -1
+        view.isFocusable = false
+        view.isFocusableInTouchMode = false
+        if (view is ViewGroup) {
+            view.descendantFocusability = FOCUS_BLOCK_DESCENDANTS
+        }
         addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 

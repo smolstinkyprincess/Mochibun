@@ -389,7 +389,11 @@ fun WelcomeHomeBanner(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
-    val pillShape = RoundedCornerShape(32.dp)
+    val customBorderSource by CustomCardBorderManager.source.collectAsState()
+    val customBorderFrame = rememberCustomCardBorderFrame()
+    val hasCustomBorder = customBorderFrame != null || customBorderSource is CustomCardBorderSource.Custom
+    val effectiveCornerRadius = if (hasCustomBorder) 16.dp else 32.dp
+    val pillShape = remember(effectiveCornerRadius) { RoundedCornerShape(effectiveCornerRadius) }
 
     val greetingText = if (userName.isBlank()) {
         "♡ Welcome home ♡"
@@ -446,8 +450,8 @@ fun WelcomeHomeBanner(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = if (isTickerEnabled) 8.dp else 14.dp)
-                .softGlowFocus(isSelected = isFocused, cornerRadius = 32.dp),
-            cardCornerRadius = 32.dp,
+                .softGlowFocus(isSelected = isFocused, cornerRadius = effectiveCornerRadius),
+            cardCornerRadius = effectiveCornerRadius,
             scallopDepth = 3.dp,
             beadDiameter = 4.dp,
             contentPadding = 6.dp,

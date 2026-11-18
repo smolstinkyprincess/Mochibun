@@ -36,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -57,7 +56,10 @@ import one.crinklecod.mochibun.core.widget.WidgetFrame
 import one.crinklecod.mochibun.core.util.findActivity
 import one.crinklecod.mochibun.core.util.loadDownsampledPhotoBitmap
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import one.crinklecod.mochibun.data.repository.WidgetRepository
+import one.crinklecod.mochibun.data.repository.rememberCustomCardBorderFrame
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.data.repository.MediaSessionTracker
@@ -190,6 +192,7 @@ fun WidgetPage(
     var quickSettingsIndex by remember { mutableIntStateOf(0) } // 0 Wi-Fi, 1 BT, 2 Torch, 3 Sound
     var quickSettingsRefresh by remember { mutableIntStateOf(0) }
     var focusedWidgetIdx by remember { mutableIntStateOf(0) }
+    var dpadScrollTick by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
     var centerDownAt by remember { mutableLongStateOf(0L) }
     var centerLongPressFired by remember { mutableStateOf(false) }
@@ -214,6 +217,7 @@ fun WidgetPage(
         if (idx >= 0) {
             focusSection = WidgetFocusSection.USER_WIDGETS
             focusedWidgetIdx = idx
+            dpadScrollTick++
         }
     }
 
@@ -476,33 +480,74 @@ fun WidgetPage(
         }
     }
 
-    // Ensure focused item is visible in LazyColumn
-    LaunchedEffect(focusSection, focusedWidgetIdx) {
-        if (focusSection == WidgetFocusSection.USER_WIDGETS && widgetSlots.isNotEmpty()) {
-            val baseOffset = 1 + qsOffset + (if (mediaState.isPlaying) 1 else 0) +
-                (if (isSystemMonitorEnabled) 1 else 0) + (if (isPhotoFrameEnabled) 1 else 0)
-            val targetIdx = baseOffset + focusedWidgetIdx
-            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
-            if (!isVisible) {
-                listState.animateScrollToItem(targetIdx)
+    // Ensure D-pad focused item is visible in LazyColumn (fires only on explicit D-pad movement)
+    LaunchedEffect(dpadScrollTick) {
+        if (dpadScrollTick == 0) return@LaunchedEffect
+        val npOffset = if (mediaState.isPlaying) 1 else 0
+        val smOffset = if (isSystemMonitorEnabled) 1 else 0
+        val pfOffset = if (isPhotoFrameEnabled) 1 else 0
+        val baseOffset = 1 + qsOffset + npOffset + smOffset + pfOffset
+        when (focusSection) {
+            WidgetFocusSection.HEADER,
+            WidgetFocusSection.QUICK_SETTINGS -> {
+                listState.animateScrollToItem(0)
             }
-        } else if (focusSection == WidgetFocusSection.HEADER || focusSection == WidgetFocusSection.QUICK_SETTINGS) {
-            listState.animateScrollToItem(0)
-        } else if (focusSection == WidgetFocusSection.NOW_PLAYING) {
-            listState.animateScrollToItem(qsOffset)
-        } else if (focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
-            val targetIdx = qsOffset + if (mediaState.isPlaying) 1 else 0
-            listState.animateScrollToItem(targetIdx)
-        } else if (focusSection == WidgetFocusSection.PHOTO_FRAME) {
-            // The frame is tall, so scroll only when part of it is off screen
-            val targetIdx = 1 + qsOffset + (if (mediaState.isPlaying) 1 else 0) + (if (isSystemMonitorEnabled) 1 else 0)
-            val layout = listState.layoutInfo
-            val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
-            val fullyVisible = item != null &&
-                item.offset >= layout.viewportStartOffset &&
-                item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
-            if (!fullyVisible) {
-                listState.animateScrollToItem(targetIdx)
+            WidgetFocusSection.NOW_PLAYING -> {
+                val targetIdx = 1 + qsOffset
+                val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
+                if (!isVisible) {
+                    listState.animateScrollToItem(targetIdx)
+                }
+            }
+            WidgetFocusSection.SYSTEM_MONITOR -> {
+                val targetIdx = 1 + qsOffset + npOffset
+                val layout = listState.layoutInfo
+                val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
+                val fullyVisible = item != null &&
+                    item.offset >= layout.viewportStartOffset &&
+                    item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
+                if (!fullyVisible) {
+                    listState.animateScrollToItem(targetIdx)
+                }
+            }
+            WidgetFocusSection.PHOTO_FRAME -> {
+                // The frame is tall, so scroll only when part of it is off screen
+                val targetIdx = 1 + qsOffset + npOffset + smOffset
+                val layout = listState.layoutInfo
+                val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
+                val fullyVisible = item != null &&
+                    item.offset >= layout.viewportStartOffset &&
+                    item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
+                if (!fullyVisible) {
+                    listState.animateScrollToItem(targetIdx)
+                }
+            }
+            WidgetFocusSection.USER_WIDGETS -> {
+                if (widgetSlots.isNotEmpty()) {
+                    val targetIdx = baseOffset + focusedWidgetIdx.coerceIn(0, widgetSlots.lastIndex)
+                    val layout = listState.layoutInfo
+                    val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
+                    val fullyVisible = item != null &&
+                        item.offset >= layout.viewportStartOffset &&
+                        item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
+                    if (!fullyVisible) {
+                        listState.animateScrollToItem(targetIdx)
+                    }
+                }
+            }
+            WidgetFocusSection.ADD_WIDGET -> {
+                val targetIdx = baseOffset + widgetSlots.size
+                val layout = listState.layoutInfo
+                val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
+                val fullyVisible = item != null &&
+                    item.offset >= layout.viewportStartOffset &&
+                    item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
+                if (!fullyVisible) {
+                    listState.animateScrollToItem(targetIdx)
+                }
+            }
+            WidgetFocusSection.HOME_PILL -> {
+                // Fixed bottom overlay; no LazyColumn scroll needed
             }
         }
     }
@@ -551,6 +596,7 @@ fun WidgetPage(
                         } else if (isQuickSettingsExpanded) {
                             isQuickSettingsExpanded = false
                             focusSection = WidgetFocusSection.HEADER
+                            dpadScrollTick++
                         } else {
                             navigateHomeAndReset()
                         }
@@ -647,6 +693,8 @@ fun WidgetPage(
                     }
                 }
 
+                val prevSection = focusSection
+                val prevWidgetIdx = focusedWidgetIdx
                 when (native.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         when (focusSection) {
@@ -733,6 +781,9 @@ fun WidgetPage(
                                 focusSection = WidgetFocusSection.ADD_WIDGET
                             }
                         }
+                        if (focusSection != prevSection || focusedWidgetIdx != prevWidgetIdx) {
+                            dpadScrollTick++
+                        }
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
@@ -809,6 +860,9 @@ fun WidgetPage(
                                 // Already at bottom
                             }
                         }
+                        if (focusSection != prevSection || focusedWidgetIdx != prevWidgetIdx) {
+                            dpadScrollTick++
+                        }
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
@@ -876,25 +930,24 @@ fun WidgetPage(
                         .fillMaxWidth()
                         .padding(top = 8.dp, bottom = 12.dp)
                 ) {
-                    // Gradient pill card: — ♡ Widgets ♡ —
+                    // Pill card: — ♡ Widgets ♡ —
                     val isHeaderFocused = focusSection == WidgetFocusSection.HEADER
-                    val gradientStart = ActiveTheme.palette.squircleSecondary
-                    val gradientEnd = ActiveTheme.primary
-                    val headerBrush = remember(gradientStart, gradientEnd) {
-                        Brush.horizontalGradient(colors = listOf(gradientStart, gradientEnd))
-                    }
-                    // Gradient pill inside the same dainty lace + pearl rim as the Home cards.
+                    val customBorderSource by CustomCardBorderManager.source.collectAsState()
+                    val customBorderFrame = rememberCustomCardBorderFrame()
+                    val hasCustomBorder = customBorderFrame != null || customBorderSource is CustomCardBorderSource.Custom
+                    val effectiveCornerRadius = if (hasCustomBorder) 16.dp else 32.dp
+                    // Frosted pastel pill inside the same dainty lace + pearl rim as the Home cards.
                     // The 6dp frill sits inside the original 56dp height.
                     KeitaiLaceContainer(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
-                            .softGlowFocus(isSelected = isHeaderFocused, cornerRadius = 32.dp),
-                        cardCornerRadius = 32.dp,
+                            .softGlowFocus(isSelected = isHeaderFocused, cornerRadius = effectiveCornerRadius),
+                        cardCornerRadius = effectiveCornerRadius,
                         scallopDepth = 3.dp,
                         beadDiameter = 4.dp,
                         contentPadding = 6.dp,
-                        containerBrush = headerBrush,
+                        containerColor = ActiveTheme.surface,
                         borderColor = ActiveTheme.cardBorder,
                         beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
                         showCornerBows = false
@@ -902,7 +955,7 @@ fun WidgetPage(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(32.dp))
+                            .clip(RoundedCornerShape(effectiveCornerRadius))
                             .clickable(enabled = isQuickSettingsVisible) {
                                 focusSection = WidgetFocusSection.HEADER
                                 isQuickSettingsExpanded = !isQuickSettingsExpanded

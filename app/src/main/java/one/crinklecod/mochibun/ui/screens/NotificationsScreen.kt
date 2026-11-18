@@ -322,19 +322,14 @@ fun NotificationsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header: Gradient pill card
+            // Header: Frosted pastel pill card
             item(key = "header") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp, bottom = 6.dp)
                 ) {
-                    val gradientStart = palette.squircleSecondary
-                    val gradientEnd = palette.squirclePrimary
-                    val headerBrush = remember(gradientStart, gradientEnd) {
-                        Brush.horizontalGradient(colors = listOf(gradientStart, gradientEnd))
-                    }
-                    // Gradient pill inside the same dainty lace + pearl rim as the Home cards.
+                    // Frosted pastel pill inside the same dainty lace + pearl rim as the Home cards.
                     // The 6dp frill sits inside the original 56dp height.
                     KeitaiLaceContainer(
                         modifier = Modifier
@@ -344,7 +339,7 @@ fun NotificationsScreen(
                         scallopDepth = 3.dp,
                         beadDiameter = 4.dp,
                         contentPadding = 6.dp,
-                        containerBrush = headerBrush,
+                        containerColor = palette.container,
                         borderColor = palette.outline,
                         beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
                         showCornerBows = false

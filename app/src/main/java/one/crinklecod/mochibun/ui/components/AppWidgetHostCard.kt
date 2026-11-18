@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
 import android.content.Context
 import android.view.Gravity
+import android.view.ViewGroup
 import android.widget.TextView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -117,8 +118,21 @@ fun AppWidgetHostCard(
                     key(slot.appWidgetId) {
                         AndroidView(
                             factory = { ctx ->
-                                WidgetFrame(ctx).also { frame ->
-                                    frame.setContent(createHostViewOrError(ctx, host, slot.appWidgetId, info, errorTextArgb))
+                                WidgetFrame(ctx).apply {
+                                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                                    isFocusable = false
+                                    isFocusableInTouchMode = false
+                                }.also { frame ->
+                                    val hostView = createHostViewOrError(
+                                        ctx, host, slot.appWidgetId, info, errorTextArgb
+                                    ).apply {
+                                        isFocusable = false
+                                        isFocusableInTouchMode = false
+                                        if (this is ViewGroup) {
+                                            descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                                        }
+                                    }
+                                    frame.setContent(hostView)
                                     onFrameAttached(slot.appWidgetId, frame)
                                 }
                             },

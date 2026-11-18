@@ -7,6 +7,7 @@ import android.os.Process
 import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -33,9 +33,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -294,81 +300,104 @@ fun SystemMonitorCard(
             Spacer(modifier = Modifier.height(10.dp))
 
             // 1. CPU Metric Row
-            val cpuProgress = if (!stats.isSystemCpuRestricted) {
-                stats.systemCpuPercent / 100f
+            val cpuPercent = if (!stats.isSystemCpuRestricted) {
+                stats.systemCpuPercent
             } else {
-                (stats.mochibunCpuPercent / 100f).coerceAtLeast(0.02f)
+                stats.mochibunCpuPercent
             }
-            val cpuOverallReadout = if (!stats.isSystemCpuRestricted) {
-                "${stats.systemCpuPercent.toInt()}%"
-            } else {
-                "App: ${String.format(Locale.US, "%.1f", stats.mochibunCpuPercent)}%"
-            }
-            val cpuPillText = if (!stats.isSystemCpuRestricted) {
-                "Launcher: ${String.format(Locale.US, "%.1f", stats.mochibunCpuPercent)}%"
-            } else {
-                "Threads: ${stats.activeThreadCount}"
-            }
+            val cpuProgress = (cpuPercent / 100f).coerceIn(0f, 1f)
+            val cpuOverallReadout = "${String.format(Locale.US, "%.1f", cpuPercent)}%"
+            val cpuPillText = "${stats.activeThreadCount} threads"
 
             MetricRow(
                 glyph = "✦",
+                markerKind = MetricMarkerKind.SPARKLE,
                 badgeBg = palette.squircleSecondary.copy(alpha = 0.45f),
                 title = "CPU",
                 overallReadout = cpuOverallReadout,
-                mochibunBadgeText = cpuPillText,
+                rightPillText = cpuPillText,
                 progress = cpuProgress,
                 progressColors = listOf(palette.squircleSecondary, palette.primary),
-                trackColor = palette.squirclePrimary.copy(alpha = 0.25f),
+                trackColor = palette.squirclePrimary.copy(alpha = 0.24f),
+                markerFillColor = palette.squircleSecondary,
                 deepColor = palette.deepAccent,
                 textColor = palette.textColor,
                 outlineColor = palette.outline
             )
 
-            Spacer(modifier = Modifier.height(11.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // 2. RAM (Memory) Metric Row
             val ramProgress = (stats.ramPercent / 100f).coerceIn(0f, 1f)
             val ramOverallReadout = if (stats.totalRamMb > 0) {
-                "${stats.usedRamMb}/${stats.totalRamMb} MB (${stats.ramPercent.toInt()}%)"
+                "${stats.usedRamMb} / ${stats.totalRamMb} MB"
             } else {
                 "Sampling..."
             }
-            val ramPillText = "Launcher: ~${stats.mochibunPssMb} MB"
+            val ramPillText = "App ~${stats.mochibunPssMb} MB"
 
             MetricRow(
-                glyph = "♡",
+                glyph = "♥",
+                markerKind = MetricMarkerKind.HEART,
                 badgeBg = palette.squirclePrimary.copy(alpha = 0.45f),
                 title = "RAM",
                 overallReadout = ramOverallReadout,
-                mochibunBadgeText = ramPillText,
+                rightPillText = ramPillText,
                 progress = ramProgress,
                 progressColors = listOf(palette.primary, palette.squirclePrimary),
-                trackColor = palette.squirclePrimary.copy(alpha = 0.25f),
+                trackColor = palette.squirclePrimary.copy(alpha = 0.24f),
+                markerFillColor = palette.primary,
                 deepColor = palette.deepAccent,
                 textColor = palette.textColor,
                 outlineColor = palette.outline
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // 3. Kawaii Status Footer Line reacting to memory load
+            val statusFooter = when {
+                stats.ramPercent > 90f -> "💦 sleepy memory ( ; ω ; )"
+                stats.ramPercent >= 80f -> "✦ cozy & busy ( •̀ᴗ•́ )و ✦"
+                else -> "♡ comfy & breezy ( ˘͈ ᵕ ˘͈ ) ♡"
+            }
+            Text(
+                text = statusFooter,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = palette.deepAccent.copy(alpha = 0.85f),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
     }
 }
 
+private enum class MetricMarkerKind {
+    SPARKLE,
+    HEART
+}
+
 @Composable
 private fun MetricRow(
     glyph: String,
+    markerKind: MetricMarkerKind,
     badgeBg: Color,
     title: String,
     overallReadout: String,
-    mochibunBadgeText: String,
+    rightPillText: String,
     progress: Float,
     progressColors: List<Color>,
     trackColor: Color,
+    markerFillColor: Color,
     deepColor: Color,
     textColor: Color,
     outlineColor: Color
 ) {
     val animatedProgress by animateFloatAsState(
-        targetValue = progress.coerceIn(0.04f, 1f),
+        targetValue = progress.coerceIn(0.02f, 1f),
         animationSpec = tween(durationMillis = 650),
         label = "MetricProgress"
     )
@@ -378,84 +407,199 @@ private fun MetricRow(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Squircle pastel badge (RoundedCornerShape(12.dp))
+            // Compact squircle pastel badge
             Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(26.dp)
+                    .clip(RoundedCornerShape(9.dp))
                     .background(badgeBg)
-                    .border(1.dp, outlineColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
+                    .border(1.dp, outlineColor.copy(alpha = 0.55f), RoundedCornerShape(9.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = glyph,
-                    fontSize = 15.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = deepColor
+                    color = deepColor,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
 
-            Spacer(modifier = Modifier.width(9.dp))
+            Spacer(modifier = Modifier.width(7.dp))
 
-            // Title and readout
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Text(
-                        text = title,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textColor
-                    )
-                    Text(
-                        text = overallReadout,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = textColor.copy(alpha = 0.75f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+            // Title and clean metric readout (no truncation on 480px width)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Text(
+                    text = overallReadout,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor.copy(alpha = 0.82f),
+                    maxLines = 1,
+                    softWrap = false
+                )
             }
 
-            // Dedicated pill badge showing Mochibun's own consumption
+            Spacer(modifier = Modifier.width(6.dp))
+
+            // Compact right-aligned pill badge
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(badgeBg.copy(alpha = 0.65f))
+                    .background(badgeBg.copy(alpha = 0.6f))
                     .border(1.dp, outlineColor.copy(alpha = 0.65f), RoundedCornerShape(50))
-                    .padding(horizontal = 8.dp, vertical = 2.5.dp),
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = mochibunBadgeText,
-                    fontSize = 10.5.sp,
+                    text = rightPillText,
+                    fontSize = 9.5.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = deepColor
+                    color = deepColor,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(7.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // Thick, pill-shaped progress bar (height 9.dp)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(9.dp)
-                .clip(RoundedCornerShape(50))
-                .background(trackColor)
-                .border(0.75.dp, outlineColor.copy(alpha = 0.35f), RoundedCornerShape(50))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(animatedProgress)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(50))
-                    .background(Brush.horizontalGradient(progressColors))
+        KeitaiMetricGauge(
+            progress = animatedProgress,
+            markerKind = markerKind,
+            progressColors = progressColors,
+            trackColor = trackColor,
+            trackBorderColor = outlineColor.copy(alpha = 0.35f),
+            tickColor = outlineColor.copy(alpha = 0.35f),
+            markerFillColor = markerFillColor,
+            markerOutlineColor = deepColor
+        )
+    }
+}
+
+/**
+ * Pastel pocket-monitor gauge with a 6dp rounded track, subtle 25/50/75% segment ticks,
+ * and a `✦` or `♥` marker at the current fill position (zero per-frame allocations).
+ */
+@Composable
+private fun KeitaiMetricGauge(
+    progress: Float,
+    markerKind: MetricMarkerKind,
+    progressColors: List<Color>,
+    trackColor: Color,
+    trackBorderColor: Color,
+    tickColor: Color,
+    markerFillColor: Color,
+    markerOutlineColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val markerPath = remember { Path() }
+    val fillBrush = remember(progressColors) { Brush.horizontalGradient(progressColors) }
+    val density = LocalDensity.current
+    val trackBorderStroke = remember(density) { Stroke(width = with(density) { 0.75.dp.toPx() }) }
+    val markerStroke = remember(density) { Stroke(width = with(density) { 1.1.dp.toPx() }) }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(14.dp)
+    ) {
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+
+        val trackHeight = 6.dp.toPx()
+        val trackRadius = trackHeight / 2f
+        val trackY = (h - trackHeight) / 2f
+        val clamped = progress.coerceIn(0f, 1f)
+
+        // 1. Soft pastel pill track + hairline outline
+        drawRoundRect(
+            color = trackColor,
+            topLeft = Offset(0f, trackY),
+            size = Size(w, trackHeight),
+            cornerRadius = CornerRadius(trackRadius, trackRadius)
+        )
+        drawRoundRect(
+            color = trackBorderColor,
+            topLeft = Offset(0f, trackY),
+            size = Size(w, trackHeight),
+            cornerRadius = CornerRadius(trackRadius, trackRadius),
+            style = trackBorderStroke
+        )
+
+        // 2. Active pastel gradient fill
+        if (clamped > 0f) {
+            val fillWidth = (w * clamped).coerceAtLeast(trackHeight).coerceAtMost(w)
+            drawRoundRect(
+                brush = fillBrush,
+                topLeft = Offset(0f, trackY),
+                size = Size(fillWidth, trackHeight),
+                cornerRadius = CornerRadius(trackRadius, trackRadius)
             )
         }
+
+        // 3. Subtle quarter segment ticks (25%, 50%, 75%)
+        val tickInset = 1.dp.toPx()
+        val tickStrokeW = 1.dp.toPx()
+        val tickTop = trackY + tickInset
+        val tickBottom = trackY + trackHeight - tickInset
+        for (i in 1..3) {
+            val tx = w * (i * 0.25f)
+            drawLine(
+                color = tickColor,
+                start = Offset(tx, tickTop),
+                end = Offset(tx, tickBottom),
+                strokeWidth = tickStrokeW
+            )
+        }
+
+        // 4. Tiny ✦ (CPU) or ♥ (RAM) marker at current fill position
+        val markerSize = if (markerKind == MetricMarkerKind.SPARKLE) 5.2.dp.toPx() else 4.8.dp.toPx()
+        val mx = (w * clamped).coerceIn(markerSize, (w - markerSize).coerceAtLeast(markerSize))
+        val my = h / 2f
+
+        markerPath.reset()
+        when (markerKind) {
+            MetricMarkerKind.SPARKLE -> {
+                markerPath.moveTo(mx, my - markerSize)
+                markerPath.lineTo(mx + markerSize * 0.30f, my - markerSize * 0.30f)
+                markerPath.lineTo(mx + markerSize, my)
+                markerPath.lineTo(mx + markerSize * 0.30f, my + markerSize * 0.30f)
+                markerPath.lineTo(mx, my + markerSize)
+                markerPath.lineTo(mx - markerSize * 0.30f, my + markerSize * 0.30f)
+                markerPath.lineTo(mx - markerSize, my)
+                markerPath.lineTo(mx - markerSize * 0.30f, my - markerSize * 0.30f)
+                markerPath.close()
+            }
+            MetricMarkerKind.HEART -> {
+                markerPath.moveTo(mx, my + markerSize * 0.75f)
+                markerPath.cubicTo(
+                    mx - markerSize * 1.15f, my + markerSize * 0.1f,
+                    mx - markerSize * 1.15f, my - markerSize * 0.85f,
+                    mx, my - markerSize * 0.35f
+                )
+                markerPath.cubicTo(
+                    mx + markerSize * 1.15f, my - markerSize * 0.85f,
+                    mx + markerSize * 1.15f, my + markerSize * 0.1f,
+                    mx, my + markerSize * 0.75f
+                )
+                markerPath.close()
+            }
+        }
+        drawPath(markerPath, markerFillColor)
+        drawPath(markerPath, markerOutlineColor, style = markerStroke)
     }
 }
