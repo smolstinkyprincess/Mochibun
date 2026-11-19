@@ -35,12 +35,14 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ### Make it yours
 - **5 pastel themes**: *Sakura Dream*, *Lavender Mist*, *Minty Matcha*, *Milky Peach*, and *Midnight Mochi* for night owls 🌙. Switch live, or write your own in simple YAML.
-- **7 keypad sound profiles**: Generated on-device, so the app stays tiny. Pick *Kawaii Pop*, *Retro Keitai*, *8-Bit Chiptune*, *Cyber Pager*, *Tactile Thock*, *Water Drop*, or *Muted* for library mode.
-- **Share your setup**: Back up pinned apps, folders, and settings to `.json`, or pack colors, cursor, wallpaper, and your custom Mochibunny into a `.mochibundle` bundle to swap with friends.
+- **7+ keypad sound profiles**: Generated on-device so the app stays tiny—*Kawaii Pop*, *Retro Keitai*, *8-Bit Chiptune*, *Cyber Pager*, *Tactile Thock*, *Water Drop*, or *Muted* for library mode—plus custom `.ogg` sound packs loaded from `.mochibundle` themes!
+- **Sticker-tray folders & 1-bit keitai icons**: Folders open as a cozy sticker tray sitting atop the clouds with a ribbon bow, scattered charms (or a tidy 3×2 grid) with a gentle tilt nudge, and crisp 1-bit Docomo pixel icons throughout the Settings Hub.
+- **All-in-one `.mochibundle` theme packs**: Back up pinned apps, folders, and settings to `.json`, or pack your palette, greeting, custom font (`font.ttf`/`font.otf`), keypad sound pack (`sounds/<cue>.ogg`), wallpaper, custom cursor, 9-slice card border, and 8-row `mascot_atlas.png` + dialogue into a `.mochibundle` file to swap with friends.
 - **Icon pack support**: Works with Nova, Apex, and ADW icon packs.
 
 ### Root / LSPosed extras
-- **Key remapping**: Remap extra physical buttons to launch apps or shortcuts, in every app, with no accessibility service running.
+- **Key remapping**: Remap extra physical buttons right from the visual AT-M120 keypad diagram in the refreshed **Keypad Remapper**—works in every app with no accessibility service running.
+- **System-wide font sync**: Optionally apply a `.mochibundle`'s custom font across the whole phone through a safe Magisk overlay module (*Settings > Appearance*).
 - **QuickSwitch recents**: Make Mochibun's keypad recents switcher your system Recents provider.
 - **In-place toggles**: Wi-Fi and Bluetooth flip right inside the Quick Settings card (without root, they open the Android settings panel instead).
 - **Speedy root clicks**: The cursor taps through a tiny native helper, even on screens that ignore normal taps.
@@ -89,6 +91,8 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 | **Recents (LSK)** | On Home, go to the Stats page | On Home, open Recents |
 
 > 🗝️ Without root, the side key and cursor keys work everywhere through the optional [Accessibility helper](#-standard-non-root-setup). Remapping extra buttons in every app comes from the [LSPosed module](#-lsposed-module-hardware-keys--cursor).
+>
+> 💡 **Interactive Key Guide**: Open **Key Guide** under *Settings > Keyboard* (or **Keypad Remapper** under *Settings > Virtual Cursor*) for a visual AT-M120 flip-phone keypad diagram that lights up as you press real keys across the **Launcher**, **Typing**, and **Remap** tabs!
 
 ---
 
@@ -137,12 +141,12 @@ Never wrestle with tiny touch keyboards just to send a cute face:
 > Browse and download `.mochibundle` and `.mochibunled` packs from the **[Mochibun Community Gallery](https://crinklecod.one/Mochibun/community/)** — tap any downloaded file on your phone to preview and apply in one click ♡
 
 ### 🎀 Shareable Theme Packs (`.mochibundle`)
-Export a `.mochibundle` bundle to pack your colors, typography, greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), 9-slice card border, and custom Mochibunny sprite sheet + dialogue. Opening a `.mochibundle` (or legacy `.mochibun`) on your phone shows a live swatch and asset preview before applying in one tap.
+Export or build an all-in-one `.mochibundle` bundle to pack your colors, typography (`font.ttf` / `font.otf`, ≤ 4 MB), keypad sound pack (`sounds/<cue>.ogg`, ≤ 256 KB per cue), greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), 9-slice card border, and 8-row `mascot_atlas.png` + dialogue. Opening a `.mochibundle` (or legacy `.mochibun`) on your phone shows a live swatch and asset preview before applying in one tap—and rooted users can also sync the pack's font system-wide via Magisk.
 
 ### 🐰 Custom Mascots, YAML Themes & Lid Animations
 - **Custom Mochibunny (`mascot_atlas.png`)**: Swap the pocket pet with an 8-row pixel-art sprite sheet in *Settings > Appearance > Custom Mascot*, plus optional mood dialogue pools inside `.mochibundle` packs.
 - **YAML Themes (`kaml`)**: Drop `.yaml` palettes into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/`.
-- **Lid LED Animations (`.mochibunled`)**: Share and import 5-window light shows into **Lid LED Studio** (or build them visually in the **[Mascot & Bundle Workshop](https://crinklecod.one/Mochibun/community/workshop.html)**).
+- **Lid LED Animations (`.mochibunled`)**: Share and import 5-window light shows into **Lid LED Studio**, or create and edit full `.mochibundle` theme packs—including custom fonts, keypad sound packs, 9-slice borders, and 8-row mascots—right in your browser with the **[Mascot & Bundle Workshop](https://crinklecod.one/Mochibun/community/workshop.html)**.
 
 See **[Theme, Mascot & Lid LED Formats](docs/theming_formats.md)** for full YAML schemas, sprite sheet dimensions, and `.mochibundle` layout details.
 

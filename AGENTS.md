@@ -20,7 +20,7 @@ Every architectural and UI decision in Mochibun is governed by the physical and 
 - **System Memory (RAM):** ~1.8–2.0 GB physical RAM.
 - **Display:** Fixed **480 × 800** portrait viewport (3:5 aspect ratio, ~240 DPI).
 - **OS & Runtime:** Android 12 (API 31). Note that OEM/SELinux policies lock down user-space ART ahead-of-time compilation (`cmd package compile` fails with `kDex2oatExec` / exit code 72), meaning classes execute under runtime JIT—hot-path allocations and reflection overhead must be kept minimal. A bundled Baseline Profile (`app/src/main/baseline-prof.txt` + `androidx.profileinstaller`) pre-compiles critical launcher/IME/compose paths on install when permitted.
-- **Secondary Community Targets:** `minSdk = 27` (Android 8.1+, `compileSdk = 37`, `targetSdk = 31`, currently `versionCode = 20` / `versionName = "2.4.1"`) allows installation on older Japanese Keitai phones (e.g., Kyocera `902KC` / `KYF42`), though they remain community-untested. Always guard API 28+ calls with `Build.VERSION.SDK_INT` (keep `./gradlew lintDebug` at 0 `NewApi` errors) and keep Android 12-only theme attributes isolated in `res/values-v31/`.
+- **Secondary Community Targets:** `minSdk = 27` (Android 8.1+, `compileSdk = 37`, `targetSdk = 31`, currently `versionCode = 22` / `versionName = "2.6.0"`) allows installation on older Japanese Keitai phones (e.g., Kyocera `902KC` / `KYF42`), though they remain community-untested. Always guard API 28+ calls with `Build.VERSION.SDK_INT` (keep `./gradlew lintDebug` at 0 `NewApi` errors) and keep Android 12-only theme attributes isolated in `res/values-v31/`.
 - **Privilege Tiers:**
   - **Unrooted (Base):** Must function cleanly out of the box without root or LSPosed. Optional `MochibunAccessibilityService` (`canRetrieveWindowContent="false"`, zero event types requested) provides non-root virtual cursor gesture taps/scrolls, global actions, and soft-key/cursor key routing when enabled.
   - **Root (`libsu` via Magisk):** Unlocks zero-latency native `evdev` touch/key injection (`evinject`), hardware Hall-switch lid monitoring (`/dev/input/event0`), AW22xxx outer clamshell LED control, in-place Wi-Fi/Bluetooth quick toggles, QuickSwitch recents fallback (`dumpsys` + task snapshots), and root self-healing watchdogs.
@@ -51,6 +51,9 @@ Understanding how Mochibun evolved explains why specific patterns exist today:
 5. **v2.4.1+ (Widget Polish, Baseline Profiles & Privacy/Cache Hardening):**
   - Redesigned `NowPlayingCard` (`HeartScrubberProgressBar`, `PastelMiniDiscIcon`, corner mascot pin) and `SystemMonitorCard`.
   - Added `baseline-prof.txt` + `androidx.profileinstaller` + `tools/capture_baseline_profile.sh`, `PRIVACY.md`, CI release-manifest permission checks, incremental `Channel<Update>` notification tracking, and bounded artwork/mascot caching.
+6. **v2.5.0 – v2.6.0 (Settings Hub Polish, All-in-One Theme Bundles, Sticker-Tray Folders & Interactive Key Guide):**
+  - `v2.5.0`: Polished Settings Hub cards/back pill, scoped recompositions & IME binder calls, and added 5-slot Quick Memo, per-app Lid LED rules, and the `#` wheel's Clips & Snippets mode.
+  - `v2.6.0`: Extended `.mochibundle` packs with optional bundled fonts (`font.ttf`/`font.otf`, `<= 4 MB`) and keypad sound packs (`sounds/<cue>.ogg`, `<= 256 KB` per cue), added optional Magisk system-wide font sync (`SystemFontSyncManager`), redesigned `FavoriteFolderDialog` as a cloud-perched sticker tray (`FolderTrayNavigation`, `FolderTiltNudge`), introduced the interactive AT-M120 `MochibunKeyGuideDialog` (`Launcher`, `Typing`, and `Remap` tabs), and unified Settings Hub and action-dialog glyphs on 1-bit `DocomoPictogram` tiles (`R.drawable.docomo_atlas`).
 
 ---
 
@@ -129,7 +132,7 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
   - Widgets (Page 0) and Notifications (Page 2) float `KawaiiReturnHomePill` bottom-center over the background clouds (`padding(bottom = 12.dp)`), outside scrolling lists.
 - **Wallpaper Pixel Overlays (`WallpaperOverlay.kt`):**
   - Cycles through 4 pre-rendered 480×800 `drawable-nodpi` pixel overlays (bows, sparkles, gingham, hearts) selected deterministically by day of year.
-- **Pixel-Art Rendering:** All pixel stickers (`Stickers.kt`, `PixelSpray.kt`), ribbon bow badges, custom icons, custom 9-slice card borders, and mascot sprites must be drawn with **`FilterQuality.None`** (nearest-neighbor filtering) to preserve crisp 1:1 pixel clusters without bilinear blur.
+- **Pixel-Art Rendering:** All pixel stickers (`Stickers.kt`, `PixelSpray.kt`), 1-bit Docomo pictograms (`DocomoPictogram.kt`, `12×12` tiles sliced from `R.drawable.docomo_atlas` with `clearDocomoAtlasCache()` on trim), ribbon bow badges, custom icons, custom 9-slice card borders, and mascot sprites must be drawn with **`FilterQuality.None`** (nearest-neighbor filtering) to preserve crisp 1:1 pixel clusters without bilinear blur.
 
 ### 480 × 800 Viewport & D-Pad Focus Contracts (Non-Negotiable)
 - **Scroll Containment:** Every dialog, settings screen, and list must fit within `480 × 800` portrait bounds using `LazyColumn` or `Modifier.verticalScroll` with sufficient bottom padding so physical keys/IME pills never obscure controls.
@@ -193,7 +196,8 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
             │   └── repository/    # ExternalThemeManager, ThemeBundleManager, BackupRestoreManager,
             │                      # IconPackManager, CustomMascotManager, CustomCardBorderManager,
             │                      # HardwareRemapManager, LidLedAnimationRepository, KaomojiRepository,
-            │                      # NotificationTracker, MediaSessionTracker, TypographyManager, WidgetRepository
+            │                      # NotificationTracker, MediaSessionTracker, TypographyManager,
+            │                      # SystemFontSyncManager, WidgetRepository
             ├── pet/
             │   ├── PetLogic.kt         # Pure Kotlin rules, mood decay math, daily treat caps
             │   ├── PetManager.kt       # Atomic StateFlow<PetState> & serial IO persistence worker
@@ -215,16 +219,17 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
             │   ├── LauncherKeyHandler.kt  # Contextual D-pad, T9, LSK/RSK, PetPill, Home & shortcut key routing
             │   ├── components/            # KeitaiLaceContainer, KawaiiCardMotifs, KeitaiCandidateStrip,
             │   │                          # KeitaiNavigationPills, SoftKeyPromptPill, KeitaiEffects,
-            │   │                          # MochibunMascot, MascotSprites, MascotReaction, PetActionPill,
-            │   │                          # NowPlayingCard, SystemMonitorCard, QuickSettingsCard, PhotoFrameCard,
-            │   │                          # AppWidgetHostCard, WidgetPage, SubDisplayTickerFeed,
+            │   │                          # DocomoPictogram, MochibunMascot, MascotSprites, MascotReaction,
+            │   │                          # PetActionPill, NowPlayingCard, SystemMonitorCard, QuickSettingsCard,
+            │   │                          # PhotoFrameCard, AppWidgetHostCard, WidgetPage, SubDisplayTickerFeed,
             │   │                          # WallpaperOverlay, JumpNumberBadge, PixelSpray, Stickers
             │   ├── dialogs/               # DialogComponents (KeitaiLaceDialogWithClose), QuickMemoDialog,
             │   │                          # AppActionDialog, FolderActionDialog, FavoriteFolderDialog,
-            │   │                          # CreateFavoriteFolderDialog, KaomojiWheel (IME-only), HardwareButtonsDialog,
+            │   │                          # FolderTrayNavigation, FolderTiltNudge, CreateFavoriteFolderDialog,
+            │   │                          # KaomojiWheel (IME-only), MochibunKeyGuideDialog, HardwareButtonsDialog,
             │   │                          # ThemeBundleDialogs, WidgetDialogs, PhotoFrameActionDialog,
             │   │                          # IconPickerDialog, IconPackSelectionDialog, HiddenAppsDialog,
-            │   │                          # LidLedColorPickerDialog, ResizeWithKeyboard
+            │   │                          # LidLedColorPickerDialog, QuickSnippetsDialog, ResizeWithKeyboard
             │   ├── overlay/               # CursorOverlayView (hardware-translated cursor sprite view)
             │   ├── screens/               # HomeScreen, AppDrawerScreen, NotificationsScreen, ThemeStudioDialog,
             │   │                          # SettingsHubScreen & settings/* (10 files incl. LidLedStudioScreen)
@@ -252,6 +257,12 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
 - **Favorites Carousel (`HomeScreen` / `FavoritesPagingTest`):**
   - Paginated 3-slot card (`FAVORITES_PAGE_SIZE = 3`). Visible page is derived from `selectedFavoriteIndex` so D-pad Left/Right and reordering flip pages automatically.
   - Supports horizontal touch swipe and tappable `♥ •` page dots when > 3 favorites exist. Paging math lives in `favoritePageCount`, `favoritePageForIndex`, and `firstFavoriteIndexOfPage`.
+- **Sticker-Tray Folders (`FavoriteFolderDialog.kt`, `FolderTrayNavigation.kt`, `FolderTiltNudge.kt`):**
+  - Renders open folders as a recessed sticker tray of up to 6 pastel squircle charms per page sitting atop `BottomLavenderClouds` with a `PixelRibbonBow` overhang, supporting scattered sticker placement or a tidy 3×2 grid (`FolderTrayNav`), optional accelerometer tilt nudge while resumed (skipped on ~1 GB devices), live name pill, and `KawaiiClosePill` resting on the clouds.
+- **Interactive Key Guide & Keypad Remapper (`MochibunKeyGuideDialog.kt`, `HardwareButtonsDialog.kt`):**
+  - Renders a visual AT-M120 flip-phone keypad diagram with live physical key highlighting across `Launcher`, `Typing`, and `Remap` tabs (`Settings > Keyboard` opens on `Launcher`/`Typing`; `Settings > Virtual Cursor` launches directly on the refreshed `Remap` tab for per-key app/system action binding).
+- **Settings Hub Icons (`SettingsHubScreen.kt`, `DocomoPictogram.kt`):**
+  - Category navigation rows and action dialogs render crisp 1-bit `12×12` keitai Docomo pixel pictograms sliced from `R.drawable.docomo_atlas` (`FilterQuality.None`, `clearDocomoAtlasCache()` on trim).
 - **Physical Keypad & Contextual Soft-Keys:**
   - **LSK (`KEYCODE_APP_SWITCH` / scan 580 / `KEYCODE_MENU`) & RSK (`KEYCODE_BACK`):** Gated by `pref_soft_key_nav_enabled` (mirrored to `Settings.Global` `mochibun_soft_key_nav_enabled` with a 2 s cache in `MochibunKeyHook`). On Home (Page 1), LSK tap jumps left to Widgets (Page 0), LSK (`KEYCODE_APP_SWITCH`/scan 580) hold (~400 ms) opens `RecentsActivity`, and RSK jumps right to Notifications (Page 2). On side pages, Back returns to Home. In App Drawer, LSK opens `AppActionDialog` for the focused app and RSK cycles sort mode without closing the drawer (when Soft-Key Nav is off, Back closes the drawer normally). In third-party apps, both pass through untouched to the OS.
   - **Physical `HOME` key (scan codes 172 & 102):** Short press returns to Home (or opens App Drawer if already on Home). Holding `HOME` (~400 ms) toggles the Quick Settings shade open/closed. `MochibunKeyHook` tracks `isHomePressedOnMochibun` and swallows `ACTION_UP` so `PhoneWindowManager` never collapses system panels or broadcasts `closeSystemDialogs()` on release.
@@ -303,8 +314,8 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
 
 ### F. Themes, Borders, Fonts, Icons & Backups (`data/repository/`)
 - **Icon Customization:** Automatic `kawaii.icon.pack` detection when installed, manual icon picker with search, custom per-app images, and third-party icon packs (`IconPackManager`).
-- **External Themes & Fonts:** Custom YAML themes parsed via `kaml` from `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/` (`ExternalThemeManager`). Custom `.ttf`/`.otf`/`.ttc` fonts loaded from `/sdcard/Android/data/one.crinklecod.mochibun/files/fonts/` (and `/sdcard/Mochibun/fonts/` if readable) via `TypographyManager`.
-- **Shareable `.mochibundle` / `.mochibun` Archives (`ThemeBundleManager`):** ZIP setup bundles (`ACTION_VIEW` for both `.mochibundle` and legacy `.mochibun`) containing `manifest.json` (palette, `borderStyle`, `cardBorderSlicePx`, `fontFamilyId`, cursor physics, greeting, mascot layout/dialogue), `wallpaper.png`, `cursor.gif`/`cursor.png`, `mascot_atlas.png`, and `card_border.png` (`<= 512 KB`, `16–256 px`, slice `4–64 px`), bounded by an `8 MB` total decompression cap.
+- **External Themes, Fonts & System Font Sync:** Custom YAML themes parsed via `kaml` from `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/` (`ExternalThemeManager`). Custom `.ttf`/`.otf`/`.ttc` fonts loaded from `/sdcard/Android/data/one.crinklecod.mochibun/files/fonts/` (and `/sdcard/Mochibun/fonts/` if readable) via `TypographyManager`. Rooted users can optionally push an imported `.mochibundle` font system-wide via `SystemFontSyncManager` (Magisk overlay at `/data/adb/modules/mochibun_system_font/`, safely prepending `mochibun_custom.ttf` to `<family name="sans-serif">` in `/system/etc/fonts.xml` while leaving `.ttc` collections and `AndroidClock.ttf` untouched).
+- **Shareable `.mochibundle` / `.mochibun` Archives (`ThemeBundleManager`):** ZIP setup bundles (`ACTION_VIEW` for both `.mochibundle` and legacy `.mochibun`) containing `manifest.json` (palette, `borderStyle`, `cardBorderSlicePx`, `fontFamilyId`, `hasFont`/`fontDisplayName`, `hasSoundPack`/`soundPackName`, cursor physics, greeting, mascot layout/dialogue), `wallpaper.png`, `cursor.gif`/`cursor.png`, `mascot_atlas.png`, `card_border.png` (`<= 512 KB`, `16–256 px`, slice `4–64 px`), optional `font.ttf`/`font.otf` (`<= 4 MB`, installed as `TypographyManager.BUNDLE_FONT_ID = "bundle"`), and optional `sounds/<cue>.ogg` (`<= 256 KB` per cue, `OggS` header, installed as `SoundEffectManager.BUNDLE_THEME_ID = "bundle"` with fallback to `kawaii` for unbundled cues), bounded by an `8 MB` total decompression cap.
 - **Backup & Restore (`BackupRestoreManager`):** Full JSON export/restore of launcher preferences, favorites, folders, and optional `"pet"` state (deliberately excluding device-specific `AppWidget` IDs managed by `WidgetRepository`).
 
 ### G. LSPosed System Hooks (`xposed/`) & Non-Root Accessibility Fallback
