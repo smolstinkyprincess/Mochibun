@@ -177,3 +177,27 @@ fun poundHoldAction(state: LauncherKeypadState): PoundHoldAction = when {
     state.isHomeScreenActive && !state.anyModalOpen -> PoundHoldAction.QUICK_MEMO
     else -> PoundHoldAction.NONE
 }
+
+/** What the `#`-hold radial wheel is showing. `*` or `0` flips between the two. */
+enum class WheelMode {
+    KAOMOJI,
+    CLIPBOARD_SNIPPETS;
+
+    fun toggled(): WheelMode = if (this == KAOMOJI) CLIPBOARD_SNIPPETS else KAOMOJI
+}
+
+/** `*` / `0` (keypad or numpad) switch the wheel between Kaomoji and Clips & Snippets. */
+fun isWheelModeToggleKey(keyCode: Int): Boolean = when (keyCode) {
+    android.view.KeyEvent.KEYCODE_STAR,
+    android.view.KeyEvent.KEYCODE_0,
+    android.view.KeyEvent.KEYCODE_NUMPAD_0,
+    android.view.KeyEvent.KEYCODE_NUMPAD_MULTIPLY -> true
+    else -> false
+}
+
+/** Keypad / numpad digit `1`–`8` as a 0-based petal index, else null. */
+fun wheelPetalForDigit(keyCode: Int): Int? = when (keyCode) {
+    in android.view.KeyEvent.KEYCODE_1..android.view.KeyEvent.KEYCODE_8 -> keyCode - android.view.KeyEvent.KEYCODE_1
+    in android.view.KeyEvent.KEYCODE_NUMPAD_1..android.view.KeyEvent.KEYCODE_NUMPAD_8 -> keyCode - android.view.KeyEvent.KEYCODE_NUMPAD_1
+    else -> null
+}

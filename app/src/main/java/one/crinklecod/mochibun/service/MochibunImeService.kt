@@ -57,6 +57,7 @@ import one.crinklecod.mochibun.core.haptic.HapticManager
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.ClipboardRingRepository
 import one.crinklecod.mochibun.data.repository.LocalCardBorderState
 import one.crinklecod.mochibun.data.repository.rememberLiveCardBorderState
 import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelState
@@ -177,6 +178,9 @@ class MochibunImeService : InputMethodService() {
         owner.create()
         refreshTheme()
         PreferencesManager.getPrefs(this).registerOnSharedPreferenceChangeListener(themePrefListener)
+        // As the default keyboard we may read the clipboard in the background (Android 10+),
+        // so this is where copies from other apps reach the Clips & Snippets wheel.
+        ClipboardRingRepository.register(this)
     }
 
     override fun onDestroy() {
@@ -189,6 +193,7 @@ class MochibunImeService : InputMethodService() {
         moveAnimator?.cancel()
         moveAnimator = null
         PreferencesManager.getPrefs(this).unregisterOnSharedPreferenceChangeListener(themePrefListener)
+        ClipboardRingRepository.unregister()
         owner.destroy()
         super.onDestroy()
     }
@@ -300,7 +305,7 @@ class MochibunImeService : InputMethodService() {
                                     state = wheelState,
                                     onConfirm = ::confirmKaomojiWheel,
                                     onDismiss = { kaomojiWheelState = null },
-                                    hintText = "◀▶ Mood  •  ▲▼ Kaomoji  •  Center: Insert"
+                                    confirmVerb = "Insert"
                                 )
                             }
                         } else {
@@ -661,17 +666,18 @@ class MochibunImeService : InputMethodService() {
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER -> confirmKaomojiWheel()
-            else -> handleKaomojiWheelNavKey(state, keyCode, this)
+            else -> handleKaomojiWheelNavKey(state, keyCode, this, onConfirm = ::confirmKaomojiWheel)
         }
     }
 
     private fun confirmKaomojiWheel() {
-        val kaomoji = kaomojiWheelState?.currentKaomoji.orEmpty()
+        // Kaomoji, or the full clip / snippet text in Clips & Snippets mode
+        val text = kaomojiWheelState?.currentText.orEmpty()
         kaomojiWheelState = null
-        if (kaomoji.isNotBlank()) {
+        if (text.isNotBlank()) {
             batchEdit {
                 candidateState.commitActive(commit)
-                commit(kaomoji)
+                commit(text)
                 syncComposing()
             }
             HapticManager.vibrateTick(this)

@@ -28,6 +28,7 @@ import one.crinklecod.mochibun.core.system.RootShell
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.service.MochibunImeStatus
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
+import one.crinklecod.mochibun.ui.dialogs.QuickSnippetsDialog
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 import kotlinx.coroutines.launch
@@ -94,6 +95,8 @@ internal fun KeyboardSettingsScreen(
     var autoCommitMs by remember { mutableIntStateOf(PreferencesManager.getImeIdleCommitMs(context)) }
     var holdVibration by remember { mutableStateOf(PreferencesManager.isImeHoldVibrationEnabled(context)) }
     var showKeyGuide by remember { mutableStateOf(false) }
+    var showSnippets by remember { mutableStateOf(false) }
+    val snippets by PreferencesManager.quickSnippets.collectAsState()
 
     fun toggleSetting(index: Int) {
         when (index) {
@@ -110,6 +113,7 @@ internal fun KeyboardSettingsScreen(
                 PreferencesManager.setImeHoldVibrationEnabled(context, holdVibration)
             }
             6 -> showKeyGuide = true
+            7 -> showSnippets = true
         }
     }
 
@@ -147,11 +151,16 @@ internal fun KeyboardSettingsScreen(
         snapshotFlow { windowInfo.isWindowFocused }.collect { focused -> if (focused) refresh() }
     }
 
-    // 0-1 keyboard setup, 2 hold for digit, 3 auto-commit, 4 auto-commit delay, 5 haptic, 6 key guide
-    val totalItems = 7
+    // 0-1 keyboard setup, 2 hold for digit, 3 auto-commit, 4 auto-commit delay, 5 haptic,
+    // 6 key guide, 7 quick snippets
+    val totalItems = 8
 
     LaunchedEffect(focusedIndex) {
-        val target = if (focusedIndex <= 1) 0 else 1
+        val target = when {
+            focusedIndex <= 1 -> 0
+            focusedIndex <= 6 -> 1
+            else -> 2
+        }
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
         if (visible.isEmpty() || target in visible) return@LaunchedEffect
         listState.animateScrollToItem(target)
@@ -324,7 +333,24 @@ internal fun KeyboardSettingsScreen(
                     )
                 }
             }
+
+            item(contentType = "keyboard_snippets_card") {
+                SettingsCard(categoryTitle = "Clips & Snippets") {
+                    SettingsNavigationRow(
+                        title = "Quick Snippets",
+                        subtitle = "${snippets.size}/${PreferencesManager.QUICK_SNIPPET_MAX_COUNT} pinned • hold #, then ✱ or 0",
+                        icon = "★",
+                        isFocused = focusedIndex == 7,
+                        jumpNumber = 8,
+                        onClick = { showSnippets = true }
+                    )
+                }
+            }
         }
+    }
+
+    if (showSnippets) {
+        QuickSnippetsDialog(onDismiss = { showSnippets = false })
     }
 
     if (showKeyGuide) {
@@ -336,7 +362,8 @@ internal fun KeyboardSettingsScreen(
                     "LSK — Left soft key action\n" +
                         "RSK — Right soft key / Back action\n" +
                         "F4 side key — Toggle the virtual cursor\n" +
-                        "Hold # — Open the Kaomoji Wheel\n\n" +
+                        "Hold # — Open the Kaomoji Wheel\n" +
+                        "Wheel: ✱ / 0 — Clips & Snippets · 1–8 — Insert\n\n" +
                         "Tap 2–9 — Cycle letters\n" +
                         "Tap 1 — Symbols\n" +
                         "Tap 0 / # — Space\n" +

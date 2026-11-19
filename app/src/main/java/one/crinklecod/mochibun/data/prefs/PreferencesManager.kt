@@ -239,6 +239,10 @@ object PreferencesManager {
     const val QUICK_MEMO_SLOT_COUNT = 5
     const val KEY_QUICK_MEMO_PINNED_SLOT = "pref_quick_memo_pinned_slot"
     const val KEY_QUICK_MEMO_LAST_OPENED_SLOT = "pref_quick_memo_last_opened_slot"
+    /** Pinned Quick Snippets for the `#`-hold Clips & Snippets wheel (JSON string array). */
+    const val KEY_QUICK_SNIPPETS = "pref_quick_snippets"
+    const val QUICK_SNIPPET_MAX_COUNT = 6
+    const val QUICK_SNIPPET_MAX_CHARS = 240
     // Daily step counter bookkeeping (see [DailyStepState])
     const val KEY_STEP_DAY = "pref_step_day"
     const val KEY_STEP_BASELINE = "pref_step_baseline"
@@ -355,6 +359,14 @@ object PreferencesManager {
     val lastOpenedQuickMemoSlot: StateFlow<Int>
         get() = QuickMemoPrefs.lastOpenedSlot
 
+    /** Pinned Quick Snippets (Clips & Snippets wheel), at most [QUICK_SNIPPET_MAX_COUNT]. */
+    val quickSnippets: StateFlow<List<String>>
+        get() = QuickSnippetPrefs.snippets
+
+    /** Saves the snippet list (blank / duplicate entries dropped, capped in count and length). */
+    fun setQuickSnippets(context: Context, snippets: List<String>) =
+        QuickSnippetPrefs.setSnippets(context, snippets)
+
     /** Per-app outer lid LED rules keyed by package name. */
     val lidAppLedRules: StateFlow<Map<String, LidAppLedRule>>
         get() = LidLedPrefs.appLedRules
@@ -388,6 +400,7 @@ object PreferencesManager {
         SoundPrefs.reload(prefs)
         LidLedPrefs.reload(prefs)
         QuickMemoPrefs.reload(prefs)
+        QuickSnippetPrefs.reload(prefs)
         SystemAccessPrefs.refreshShowRootOptions(context)
     }
 

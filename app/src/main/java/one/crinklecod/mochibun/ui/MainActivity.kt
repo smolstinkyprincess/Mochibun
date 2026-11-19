@@ -238,6 +238,8 @@ class MainActivity : ComponentActivity() {
         activeInstance = java.lang.ref.WeakReference(this)
         one.crinklecod.mochibun.core.system.CursorServiceWatchdog.checkAsync(this, force = false)
         SystemUiThemeBridge.broadcastSavedTheme(this)
+        // Catches copies made while another keyboard was the default (our IME's listener misses them)
+        one.crinklecod.mochibun.data.repository.ClipboardRingRepository.syncFromClipboard(this)
     }
 
     override fun onPause() {
@@ -283,6 +285,9 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) {
             LauncherKeyHandler.isQuickSettingsExpanded = false
             isKeyguardLocked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
+            // Android 10+ only serves the clipboard to the focused window, which onResume may
+            // precede; the timestamp check makes this a no-op when onResume already read it.
+            one.crinklecod.mochibun.data.repository.ClipboardRingRepository.syncFromClipboard(this)
         }
     }
 

@@ -58,6 +58,7 @@ object BackupRestoreManager {
     const val CURRENT_BACKUP_VERSION = 1
     const val KEY_QUICK_MEMO = "quick_memo"
     const val KEY_LID_LED_APP_RULES = "lid_led_app_rules"
+    const val KEY_QUICK_SNIPPETS = "quick_snippets"
     private const val MAX_FAVORITES = 200
     private const val MAX_FOLDERS = 100
     private const val MAX_APPS_PER_FOLDER = 200
@@ -227,6 +228,9 @@ object BackupRestoreManager {
         memoObj.put("pinned_slot", PreferencesManager.pinnedQuickMemoSlot.value)
         memoObj.put("last_opened_slot", PreferencesManager.lastOpenedQuickMemoSlot.value)
         root.put(KEY_QUICK_MEMO, memoObj)
+
+        // ── 6b. Pinned Quick Snippets (optional on restore). Recent clipboard text is never exported. ──
+        root.put(KEY_QUICK_SNIPPETS, JSONArray(PreferencesManager.quickSnippets.value))
 
         // ── 7. Per-app lid LED rules (optional on restore) ──
         root.put(
@@ -400,6 +404,7 @@ object BackupRestoreManager {
         validateBehavior(root.requiredObject("behavior"))
         validateCursor(root.requiredObject("cursor"))
         root.optJSONObject(KEY_QUICK_MEMO)?.let(::validateQuickMemo)
+        if (root.has(KEY_QUICK_SNIPPETS)) validateQuickSnippets(root.requiredArray(KEY_QUICK_SNIPPETS))
         if (root.has(KEY_LID_LED_APP_RULES)) validateLidAppLedRules(root.requiredArray(KEY_LID_LED_APP_RULES))
 
         val preview = BackupPreviewSummary(
@@ -475,6 +480,16 @@ object BackupRestoreManager {
         }
         if (value.has("pinned_slot")) value.requiredIntInRange("pinned_slot", 1..PreferencesManager.QUICK_MEMO_SLOT_COUNT)
         if (value.has("last_opened_slot")) value.requiredIntInRange("last_opened_slot", 1..PreferencesManager.QUICK_MEMO_SLOT_COUNT)
+    }
+
+    private fun validateQuickSnippets(value: JSONArray) {
+        require(value.length() <= PreferencesManager.QUICK_SNIPPET_MAX_COUNT) { "Backup has too many Quick Snippets." }
+        for (i in 0 until value.length()) {
+            val text = value.get(i)
+            require(text is String && text.length <= 4 * PreferencesManager.QUICK_SNIPPET_MAX_CHARS) {
+                "Quick Snippet ${i + 1} is invalid."
+            }
+        }
     }
 
     private fun validateLidAppLedRules(value: JSONArray) {
@@ -915,6 +930,11 @@ object BackupRestoreManager {
                 if (memoObj.has("last_opened_slot")) {
                     PreferencesManager.setLastOpenedQuickMemoSlot(context, memoObj.optInt("last_opened_slot", 1))
                 }
+            }
+
+            // ── 6b. Restore pinned Quick Snippets ─────────────────────────
+            root.optJSONArray(KEY_QUICK_SNIPPETS)?.let { array ->
+                PreferencesManager.setQuickSnippets(context, List(array.length()) { array.optString(it, "") })
             }
 
             // ── 7. Restore per-app lid LED rules ─────────────────────────
