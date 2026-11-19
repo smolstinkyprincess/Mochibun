@@ -59,6 +59,30 @@ class BackupRestoreManagerTest {
     }
 
     @Test
+    fun folderLayoutKeysAreOptionalAndRestoreScatterToggle() {
+        val context = RuntimeEnvironment.getApplication()
+
+        // The fixture carries the retired "folder_grid_mode" key (old backups): still accepted.
+        assertTrue(validBackupJson().getJSONObject("layout").has("folder_grid_mode"))
+
+        // New backups drop it and carry "folder_scatter_layout" instead.
+        val newStyle = validBackupJson().apply {
+            getJSONObject("layout").remove("folder_grid_mode")
+            getJSONObject("layout").put("folder_scatter_layout", false)
+        }
+        PreferencesManager.setFolderScatterLayout(context, true)
+        BackupRestoreManager.restoreBackupJson(context, newStyle.toString()).getOrThrow()
+        assertFalse(PreferencesManager.isFolderScatterLayout.value)
+
+        // A malformed legacy value is still rejected rather than silently ignored.
+        val badLegacy = validBackupJson().apply {
+            getJSONObject("layout").put("folder_grid_mode", "yes")
+        }
+        assertFalse(BackupRestoreManager.previewBackupJson(badLegacy.toString()).isSuccess)
+        PreferencesManager.setFolderScatterLayout(context, true)
+    }
+
+    @Test
     fun malformedAndIncompleteBackupsFailWithoutChangingFavorites() {
         val context = RuntimeEnvironment.getApplication()
         PreferencesManager.saveFavoriteItemKeys(context, listOf("com.existing.favorite"))

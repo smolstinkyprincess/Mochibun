@@ -141,7 +141,7 @@ object BackupRestoreManager {
         layoutObj.put("custom_folder_icons", folderIconsObj)
 
         layoutObj.put("hidden_apps", JSONArray(PreferencesManager.getHiddenPackages(context)))
-        layoutObj.put("folder_grid_mode", PreferencesManager.isFolderGridMode(context))
+        layoutObj.put("folder_scatter_layout", PreferencesManager.isFolderScatterLayout(context))
 
         val speedDials = PreferencesManager.getAllSpeedDials(context)
         val speedDialsObj = JSONObject()
@@ -355,7 +355,11 @@ object BackupRestoreManager {
         }
         val hiddenApps = layout.getJSONArray("hidden_apps")
         for (index in 0 until hiddenApps.length()) hiddenApps.requiredString(index, "hidden app")
-        layout.requiredBoolean("folder_grid_mode")
+        // Legacy: backups from before the 2×2 Folder Grid row was removed still carry this key.
+        // It is validated (so a malformed file is still rejected) but no longer applied.
+        if (layout.has("folder_grid_mode")) layout.requiredBoolean("folder_grid_mode")
+        // Optional: backups made before the sticker-tray toggle existed don't carry it.
+        if (layout.has("folder_scatter_layout")) layout.requiredBoolean("folder_scatter_layout")
         val speedDials = layout.requiredObject("speed_dials")
         require(speedDials.length() <= 8) { "Backup contains too many speed dials." }
         speedDials.keys().forEach { digit ->
@@ -724,8 +728,11 @@ object BackupRestoreManager {
                     PreferencesManager.setHiddenPackages(context, hiddenSet)
                 }
 
-                if (layoutObj.has("folder_grid_mode")) {
-                    PreferencesManager.setFolderGridMode(context, layoutObj.optBoolean("folder_grid_mode", false))
+                if (layoutObj.has("folder_scatter_layout")) {
+                    PreferencesManager.setFolderScatterLayout(
+                        context,
+                        layoutObj.optBoolean("folder_scatter_layout", PreferencesManager.DEFAULT_FOLDER_SCATTER_LAYOUT)
+                    )
                 }
 
                 // Speed dials

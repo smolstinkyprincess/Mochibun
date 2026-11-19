@@ -13,6 +13,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -29,6 +30,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -59,6 +63,7 @@ import one.crinklecod.mochibun.ui.components.*
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.R
 import one.crinklecod.mochibun.data.model.FavoriteFolder
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.ui.theme.focusedContainerColor
 import one.crinklecod.mochibun.ui.theme.selectedContainerColor
@@ -169,6 +174,7 @@ fun FavoriteFolderDialog(
 ) {
     val theme = LocalLauncherTheme.current
     val focusManager = LocalFocusManager.current
+    val scatterLayout by PreferencesManager.isFolderScatterLayout.collectAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
 
     var editingName by remember(folder.id) { mutableStateOf(initialEditingName) }
@@ -298,6 +304,25 @@ fun FavoriteFolderDialog(
                 if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4) {
                     if (event.type == KeyEventType.KeyUp) {
                         handleBack()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                // Left soft key / Menu (same key set as the App Drawer's LSK): opens the app picker
+                // from the main tray, which is what the empty-folder prompt tells users to press.
+                // Swallowed in every sub-view so the matching KeyUp never leaks to Home.
+                val isLeftSoftKey = native.keyCode == KeyEvent.KEYCODE_MENU ||
+                    native.keyCode == KeyEvent.KEYCODE_APP_SWITCH ||
+                    native.keyCode == KeyEvent.KEYCODE_F1 ||
+                    native.scanCode == 580 ||
+                    native.scanCode == 59
+                if (isLeftSoftKey && !(editingName && isEditingRenameField)) {
+                    val isMainTray = !editingName && !confirmingDelete && !pickingApps
+                    if (isMainTray && event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        managing = false
+                        pickerZone = 0
+                        pickerAppIndex = 0
+                        pickingApps = true
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -526,10 +551,17 @@ fun FavoriteFolderDialog(
 
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
+                // 2D sticker-tray traversal (math in FolderTrayNav). selectedAppIndex is kept while
+                // the header or Close pill is focused, so the shown page and column survive the trip.
                 val totalApps = folderApps.size
+                val trayPage = FolderTrayNav.pageOf(selectedAppIndex, totalApps)
                 when (native.keyCode) {
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
                         when (focusSection) {
+                            1 -> {
+                                selectedAppIndex = FolderTrayNav.left(selectedAppIndex, totalApps)
+                                true
+                            }
                             2 -> {
                                 // Close pill: Left dismisses folder cleanly
                                 onDismiss()
@@ -539,7 +571,12 @@ fun FavoriteFolderDialog(
                         }
                     }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        false
+                        if (focusSection == 1) {
+                            selectedAppIndex = FolderTrayNav.right(selectedAppIndex, totalApps)
+                            true
+                        } else {
+                            false
+                        }
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         when (focusSection) {
@@ -547,16 +584,20 @@ fun FavoriteFolderDialog(
                                 // Topmost
                             }
                             1 -> {
-                                if (selectedAppIndex > 0) {
-                                    selectedAppIndex--
-                                } else {
-                                    focusSection = 0
+                                when (val move = FolderTrayNav.up(selectedAppIndex, totalApps, scatterLayout)) {
+                                    is FolderTrayNav.Move.To -> selectedAppIndex = move.index
+                                    else -> focusSection = 0
                                 }
                             }
                             2 -> {
                                 if (totalApps > 0) {
                                     focusSection = 1
-                                    selectedAppIndex = totalApps - 1
+                                    selectedAppIndex = FolderTrayNav.bottomRowTarget(
+                                        page = trayPage,
+                                        rememberedIndex = selectedAppIndex,
+                                        total = totalApps,
+                                        scatter = scatterLayout
+                                    )
                                 } else {
                                     focusSection = 0
                                 }
@@ -569,16 +610,15 @@ fun FavoriteFolderDialog(
                             0 -> {
                                 if (totalApps > 0) {
                                     focusSection = 1
-                                    selectedAppIndex = 0
+                                    selectedAppIndex = FolderTrayNav.headerDownTarget(trayPage, totalApps)
                                 } else {
                                     focusSection = 2
                                 }
                             }
                             1 -> {
-                                if (selectedAppIndex + 1 < totalApps) {
-                                    selectedAppIndex++
-                                } else {
-                                    focusSection = 2
+                                when (val move = FolderTrayNav.down(selectedAppIndex, totalApps, scatterLayout)) {
+                                    is FolderTrayNav.Move.To -> selectedAppIndex = move.index
+                                    else -> focusSection = 2
                                 }
                             }
                             2 -> {
@@ -593,24 +633,17 @@ fun FavoriteFolderDialog(
     ) {
         ResizeWithKeyboard()
         val pickerListState = rememberLazyListState()
-        val appListState = rememberLazyListState()
-
-        LaunchedEffect(selectedAppIndex, folderApps.size, focusSection) {
-            if (focusSection == 1 && folderApps.isNotEmpty() && selectedAppIndex in folderApps.indices) {
-                // Only scroll when the focused row is not already fully on screen: an unconditional
-                // animateScrollToItem ran a multi-frame scroll-to-top on every D-pad press.
-                val info = appListState.layoutInfo
-                val row = info.visibleItemsInfo.firstOrNull { it.index == selectedAppIndex }
-                val fullyVisible = row != null &&
-                    row.offset >= info.viewportStartOffset &&
-                    row.offset + row.size <= info.viewportEndOffset
-                if (!fullyVisible) appListState.animateScrollToItem(selectedAppIndex)
-            }
-        }
 
         val isMainView = !confirmingDelete && !pickingApps && !editingName
 
-        // Backdrop & Scrim: soft, semi-transparent frosted dimming overlay avoiding GPU blur
+        // Z-order, back to front (main sticker view):
+        //   1. scrim + backdrop sparkles
+        //   2. folder card, anchored low so its bottom rim tucks behind the clouds
+        //   3. raised BottomLavenderClouds shelf (+ solid base strip)
+        //   4. Close pill resting on the clouds
+        // Rename / picker / delete keep the centred card with no shelf, so nothing covers their
+        // buttons or the IME. No top cloud drape: Home already draws its own under the scrim.
+        // Scrim is a flat dim, never blur (PowerVR GE8300).
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -621,23 +654,18 @@ fun FavoriteFolderDialog(
             // Subtle floating pixel sparkle stars and hearts on the dialog backdrop
             FloatingPixelBackdrop()
 
-            // 1. Top Scalloped Lavender Clouds lining top screen boundary
-            TopLavenderClouds(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-            )
-
-            // 2. Bottom Scalloped Lavender Clouds lining bottom screen boundary
-            BottomLavenderClouds(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-            )
-
-            // 3. Centered Content Unit (Folder Card with overlapping Bow Badge & Close Button)
+            // Folder card (taps inside it must not reach the dismissing scrim)
             Box(
                 modifier = Modifier
+                    .then(
+                        if (isMainView) {
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = FOLDER_CARD_BOTTOM_INSET)
+                        } else {
+                            Modifier
+                        }
+                    )
                     .graphicsLayer { clip = false }
                     .pointerInput(Unit) { detectTapGestures { } },
                 contentAlignment = Alignment.Center
@@ -647,6 +675,9 @@ fun FavoriteFolderDialog(
 
                 KeitaiLaceContainer(
                     cardCornerRadius = cardCornerRadius,
+                    // Slightly sheer card so the dimmed wallpaper and backdrop sparkles show
+                    // through. Plain alpha, never blur (PowerVR GE8300).
+                    containerColor = ActiveTheme.surface.copy(alpha = 0.88f),
                     modifier = Modifier
                         .width(308.dp)
                         .curtainUnfurl(visible = true)
@@ -656,8 +687,8 @@ fun FavoriteFolderDialog(
                         .fillMaxWidth()
                         .graphicsLayer { clip = false }
                         .padding(
-                            top = 24.dp,
-                            bottom = if (isMainView) 28.dp else 16.dp,
+                            top = if (isMainView) 6.dp else 24.dp,
+                            bottom = if (isMainView) FOLDER_CARD_INNER_BOTTOM else 16.dp,
                             start = 8.dp,
                             end = 8.dp
                         ),
@@ -900,7 +931,7 @@ fun FavoriteFolderDialog(
                                             renameFocusZone = 0
                                             editingName = true
                                         }
-                                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        .padding(horizontal = 12.dp, vertical = 2.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -923,63 +954,95 @@ fun FavoriteFolderDialog(
                                     )
                                 }
 
-                                Spacer(Modifier.height(10.dp))
+                                Spacer(Modifier.height(6.dp))
 
-                                // Scaled-Down Vertical App List (replaces the 2x2 grid)
+                                // Recessed sticker tray of icon-only charms (up to 6 per page; scattered stickers or a neat 3 × 2 grid)
+                                val trayShape = RoundedCornerShape(18.dp)
+                                val trayModifier = Modifier
+                                    .fillMaxWidth()
+                                    .graphicsLayer { clip = false }
+                                    // background/border only, no clip(): the focus halo of an
+                                    // edge charm has to spill over the tray rim.
+                                    .background(ActiveTheme.background.copy(alpha = 0.65f), trayShape)
+                                    .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.45f), trayShape)
+                                    .padding(horizontal = 12.dp, vertical = 14.dp)
+
                                 if (folderApps.isEmpty()) {
                                     Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(130.dp)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(ActiveTheme.current.unfocusedCardBgColor.copy(alpha = 0.5f))
-                                            .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
+                                        modifier = trayModifier.height(110.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = "Folder is empty ♡\nTap header to manage apps!",
+                                            text = "♡ Empty folder — press Menu to add apps ♡",
                                             color = ActiveTheme.textPrimary,
                                             fontSize = 13.sp,
                                             textAlign = TextAlign.Center
                                         )
                                     }
                                 } else {
-                                    LazyColumn(
-                                        state = appListState,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 196.dp)
-                                            .graphicsLayer { clip = false },
-                                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                                    val totalApps = folderApps.size
+                                    val pageCount = FolderTrayNav.pageCount(totalApps)
+                                    val trayPage = FolderTrayNav.pageOf(selectedAppIndex, totalApps)
+                                    val pageStart = FolderTrayNav.pageStart(trayPage)
+                                    val pageEnd = FolderTrayNav.pageLast(trayPage, totalApps)
+                                    val layout = FolderTrayNav.layoutFor(pageEnd - pageStart + 1, scatterLayout)
+                                    // Paged folders reserve the tallest page's depth so the card
+                                    // doesn't jump in height when a page flips.
+                                    val minDepth = if (pageCount > 1) {
+                                        maxOf(
+                                            FolderTrayNav.layoutFor(FolderTrayNav.PAGE_SIZE, scatterLayout).depth,
+                                            FolderTrayNav.layoutFor(
+                                                FolderTrayNav.countOnPage(pageCount - 1, totalApps),
+                                                scatterLayout
+                                            ).depth
+                                        )
+                                    } else {
+                                        0f
+                                    }
+
+                                    FolderStickerScatter(
+                                        scatter = layout,
+                                        minDepth = minDepth,
+                                        modifier = trayModifier
                                     ) {
-                                        itemsIndexed(
-                                            folderApps,
-                                            key = { _, app -> app.packageName },
-                                            contentType = { _, _ -> "folder_app_row" }
-                                        ) { index, app ->
-                                            FolderAppRow(
-                                                app = app,
-                                                tint = SQUIRCLE_TINTS[index % SQUIRCLE_TINTS.size],
-                                                isFocused = focusSection == 1 && selectedAppIndex == index,
-                                                managing = managing,
-                                                onClick = {
-                                                    focusSection = 1
-                                                    selectedAppIndex = index
-                                                    if (managing) {
-                                                        onRemoveApp(app.packageName)
-                                                    } else {
-                                                        onLaunchApp(app)
-                                                        onDismiss()
+                                        for (index in pageStart..pageEnd) {
+                                            val app = folderApps[index]
+                                            key(app.packageName) {
+                                                FolderTrayCharm(
+                                                    app = app,
+                                                    tint = SQUIRCLE_TINTS[index % SQUIRCLE_TINTS.size],
+                                                    isFocused = focusSection == 1 && selectedAppIndex == index,
+                                                    managing = managing,
+                                                    onClick = {
+                                                        focusSection = 1
+                                                        selectedAppIndex = index
+                                                        if (managing) {
+                                                            onRemoveApp(app.packageName)
+                                                        } else {
+                                                            onLaunchApp(app)
+                                                            onDismiss()
+                                                        }
+                                                    },
+                                                    onLongClick = {
+                                                        focusSection = 1
+                                                        selectedAppIndex = index
+                                                        managing = !managing
                                                     }
-                                                },
-                                                onLongClick = {
-                                                    focusSection = 1
-                                                    selectedAppIndex = index
-                                                    managing = !managing
-                                                }
-                                            )
+                                                )
+                                            }
                                         }
+                                    }
+
+                                    Spacer(Modifier.height(10.dp))
+
+                                    // Live name banner for the charm in focus (or the remembered
+                                    // one while the header / Close pill holds focus).
+                                    val bannerApp = folderApps.getOrNull(selectedAppIndex)
+                                    FolderNameBanner(label = bannerApp?.name.orEmpty())
+
+                                    if (pageCount > 1) {
+                                        Spacer(Modifier.height(4.dp))
+                                        FolderPageDots(page = trayPage, pageCount = pageCount)
                                     }
                                 }
                             }
@@ -988,16 +1051,138 @@ fun FavoriteFolderDialog(
                 }
                 }
 
-                // Bottom Dismiss Action: Centered pill button anchored at or slightly overlapping the bottom rim
+                // Pixel ribbon bow straddling the top lace rim (same PixelRibbonBow as Home's
+                // greeting card). The wrapper Box above is unclipped, so the overhang survives.
+                // Shown with custom 9-slice borders too: those only decorate the corners, and the
+                // greeting banner keeps its centred bow alongside them.
                 if (isMainView) {
-                    KawaiiClosePill(
-                        isFocused = focusSection == 2,
-                        onClick = onDismiss,
+                    PixelRibbonBow(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .offset(y = 2.dp)
-                            .width(154.dp)
+                            .align(Alignment.TopCenter)
+                            .offset(y = (-12).dp)
+                            .graphicsLayer { clip = false },
+                        width = 34.dp,
+                        height = 28.dp
                     )
+                }
+            }
+
+            if (isMainView) {
+                // Cloud shelf over the card's lower rim. The cloud paths are anchored to their
+                // box bottom, so the shelf is lifted with an offset rather than made taller.
+                BottomLavenderClouds(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .offset(y = -CLOUD_SHELF_LIFT)
+                )
+                // Solid base under the lifted shelf: fills the gap to the screen edge and hides
+                // the cloud path's closing outline along its (now visible) bottom edge.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(CLOUD_SHELF_LIFT + 1.dp)
+                        .background(ActiveTheme.palette.cloudFront)
+                )
+
+                // Topmost: Close pill resting on the clouds; nothing above it can clip its glow.
+                KawaiiClosePill(
+                    isFocused = focusSection == 2,
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = CLOSE_PILL_BOTTOM_INSET)
+                        .graphicsLayer { clip = false }
+                        .width(154.dp)
+                )
+            }
+        }
+    }
+}
+
+// "Rising out of the clouds" geometry (dp above the screen's bottom edge), tuned for 480 × 800:
+// BottomLavenderClouds is 72dp tall; lifted by CLOUD_SHELF_LIFT its front puffs peak ~54-56dp
+// (troughs ~36-42dp) and its back puffs ~67-69dp (troughs ~50-54dp, ~38-40dp at the screen
+// edges). The card bottom at FOLDER_CARD_BOTTOM_INSET stays under the back layer across the
+// card's width; its content ends FOLDER_CARD_INNER_BOTTOM + the lace padding (20dp) higher, at
+// ~80dp, so the name pill and page dots stay clear of the clouds.
+private val CLOUD_SHELF_LIFT = 10.dp
+private val FOLDER_CARD_BOTTOM_INSET = 35.dp
+private val FOLDER_CARD_INNER_BOTTOM = 22.dp
+/** Close pill (36dp tall) spans 16..52dp: sitting on the front puffs. */
+private val CLOSE_PILL_BOTTOM_INSET = 16.dp
+
+private val CHARM_SIZE = 54.dp
+private val CHARM_ICON_SIZE = 34.dp
+private val CHARM_CORNER = 15.dp
+/** One D-pad row step in [FolderTrayNav.Slot.y] units. */
+private val TRAY_ROW_PITCH = 66.dp
+
+/**
+ * Places the page's charms at their [FolderTrayNav.Layout] slots (emitted in slot order) with
+ * each sticker's tilt, and draws the layout's tiny sparkles into the empty space behind them.
+ * A plain `Layout`, not a `BoxWithConstraints`, so a D-pad step costs no subcomposition.
+ */
+@Composable
+private fun FolderStickerScatter(
+    scatter: FolderTrayNav.Layout,
+    minDepth: Float,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val sparkleA = ActiveTheme.accentDeep.copy(alpha = 0.32f)
+    val sparkleB = ActiveTheme.primary.copy(alpha = 0.55f)
+    val depth = maxOf(scatter.depth, minDepth)
+    // Vertical slack when a short page sits in a tray sized for a deeper one: centre it.
+    val slackRows = (depth - scatter.depth) / 2f
+
+    val motifModifier = remember(scatter, slackRows, sparkleA, sparkleB) {
+        Modifier.drawWithCache {
+            val charm = CHARM_SIZE.toPx()
+            val pitch = TRAY_ROW_PITCH.toPx()
+            val room = size.width - charm
+            // Built once per layout/size; the draw lambda below only replays them.
+            val paths = scatter.motifs.map { motif ->
+                val cx = charm / 2f + motif.x * room
+                val cy = (motif.y + slackRows) * pitch + charm / 2f
+                val r = motif.sizeDp.dp.toPx() / 2f
+                Path().apply {
+                    moveTo(cx, cy - r)
+                    quadraticTo(cx, cy, cx + r, cy)
+                    quadraticTo(cx, cy, cx, cy + r)
+                    quadraticTo(cx, cy, cx - r, cy)
+                    quadraticTo(cx, cy, cx, cy - r)
+                    close()
+                }
+            }
+            onDrawBehind {
+                paths.forEachIndexed { i, path ->
+                    drawPath(path, if (i % 2 == 0) sparkleA else sparkleB)
+                }
+            }
+        }
+    }
+
+    Layout(
+        content = content,
+        modifier = modifier.then(motifModifier)
+    ) { measurables, constraints ->
+        val charm = CHARM_SIZE.roundToPx()
+        val pitch = TRAY_ROW_PITCH.toPx()
+        val width = constraints.maxWidth
+        val height = (depth * pitch).toInt() + charm
+        val charmConstraints = Constraints.fixed(charm, charm)
+        val placeables = measurables.map { it.measure(charmConstraints) }
+        layout(width, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+            placeables.forEachIndexed { i, placeable ->
+                val slot = scatter.slots.getOrNull(i) ?: return@forEachIndexed
+                val x = (slot.x * (width - charm)).toInt()
+                val y = ((slot.y + slackRows) * pitch).toInt()
+                // Untilted charms (neat grid, 0° stickers) skip the extra layer.
+                if (slot.tilt == 0f) {
+                    placeable.place(x, y)
+                } else {
+                    placeable.placeWithLayer(x, y) { rotationZ = slot.tilt }
                 }
             }
         }
@@ -1005,11 +1190,12 @@ fun FavoriteFolderDialog(
 }
 
 /**
- * One row of the folder's app list. A separate skippable composable so a D-pad step only
- * recomposes the two rows whose [isFocused] flips, not every visible row.
+ * One icon-only pastel squircle charm in the folder tray. The label lives in [FolderNameBanner]
+ * instead. A separate skippable composable so a D-pad step only recomposes the two charms whose
+ * [isFocused] flips.
  */
 @Composable
-private fun FolderAppRow(
+private fun FolderTrayCharm(
     app: LauncherApp,
     tint: FolderSquircleTint,
     isFocused: Boolean,
@@ -1017,92 +1203,42 @@ private fun FolderAppRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val rowShape = RoundedCornerShape(16.dp)
-    val squircleShape = RoundedCornerShape(12.dp)
-    // Steady 1.02x while focused, on top of softGlowFocus's own pop. Applied directly in the layer
-    // (no per-row animateFloatAsState) so idle rows carry no Animatable.
-    val scale = if (isFocused) 1.02f else 1.0f
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                clip = false
-            }
-            .softGlowFocus(
-                isSelected = isFocused,
-                cornerRadius = 16.dp,
-                glowColor = ActiveTheme.selectionGlow,
-                borderColor = ActiveTheme.primary,
-                containerTint = ActiveTheme.surfaceTint
-            )
-            .clip(rowShape)
-            .background(
-                if (isFocused) {
-                    ActiveTheme.current.focusedContainerColor
-                } else {
-                    ActiveTheme.current.unfocusedCardBgColor.copy(alpha = 0.85f)
-                }
-            )
-            .then(
-                if (!isFocused) {
-                    Modifier.border(
-                        1.dp,
-                        ActiveTheme.cardBorder.copy(alpha = 0.45f),
-                        rowShape
-                    )
-                } else {
-                    Modifier
-                }
-            )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Left-aligned squircle icon container with alternating pastel tint
+    val shape = RoundedCornerShape(CHARM_CORNER)
+    Box(modifier = Modifier.size(CHARM_SIZE)) {
         Box(
             modifier = Modifier
-                .size(32.dp)
-                .clip(squircleShape)
-                .background(tint.container, squircleShape)
-                .border(
-                    width = 1.dp,
-                    color = tint.border,
-                    shape = squircleShape
-                ),
+                .fillMaxSize()
+                .softGlowFocus(
+                    isSelected = isFocused,
+                    cornerRadius = CHARM_CORNER,
+                    glowColor = ActiveTheme.selectionGlow,
+                    borderColor = ActiveTheme.primary,
+                    containerTint = ActiveTheme.surfaceTint,
+                    // Fixed-size tray, nothing to scroll; skip the bring-into-view request.
+                    bringIntoView = false
+                )
+                .background(tint.container, shape)
+                .border(1.dp, tint.border, shape)
+                .clip(shape)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 bitmap = app.imageBitmap,
                 contentDescription = app.name,
                 filterQuality = FilterQuality.None,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(CHARM_ICON_SIZE)
             )
         }
 
-        Spacer(Modifier.width(10.dp))
-
-        // Medium-bold deep violet/plum app label (no numbers)
-        Text(
-            text = app.name,
-            fontSize = 13.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = ActiveTheme.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-
         if (managing) {
-            Spacer(Modifier.width(6.dp))
+            // Remove badge hangs off the corner, outside the charm's clip.
             Box(
                 modifier = Modifier
-                    .size(20.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(destructiveColor),
+                    .align(Alignment.TopEnd)
+                    .offset(x = 5.dp, y = (-5).dp)
+                    .size(18.dp)
+                    .background(destructiveColor, RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -1112,6 +1248,47 @@ private fun FolderAppRow(
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+    }
+}
+
+/**
+ * Centered pill showing the focused charm's name. `basicMarquee` only scrolls when the text is
+ * wider than the pill, and stops after a few loops so an idle open folder doesn't keep
+ * rendering at full frame rate on the MT6761.
+ */
+@Composable
+private fun FolderNameBanner(label: String) {
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier = Modifier
+            .widthIn(min = 120.dp, max = 240.dp)
+            .background(ActiveTheme.surfaceTint, shape)
+            .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.5f), shape)
+            .padding(horizontal = 14.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "✦ $label ✦",
+            color = ActiveTheme.accentDeep,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            maxLines = 1,
+            modifier = Modifier.basicMarquee(iterations = 3, initialDelayMillis = 800)
+        )
+    }
+}
+
+@Composable
+private fun FolderPageDots(page: Int, pageCount: Int) {
+    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        for (p in 0 until pageCount) {
+            val active = p == page
+            Text(
+                text = if (active) "♥" else "•",
+                color = if (active) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.45f),
+                fontSize = 11.sp
+            )
         }
     }
 }

@@ -48,7 +48,7 @@ class SettingsHubStressContractTest {
             "subDisplayTickerDark" to PreferencesManager.isSubDisplayTickerDark,
             "homeMascotSize" to PreferencesManager.homeMascotSize,
             "fontFamily" to PreferencesManager.themeFontFamily,
-            "folderGrid" to PreferencesManager.isFolderGridMode,
+            "folderScatter" to PreferencesManager.isFolderScatterLayout,
             "lidOpenAction" to PreferencesManager.lidOpenAction,
             "lidLed" to PreferencesManager.isLidLedEnabled,
             "lidLedCharging" to PreferencesManager.isLidLedChargingEnabled,
@@ -90,8 +90,8 @@ class SettingsHubStressContractTest {
                     context, !PreferencesManager.isSubDisplayTickerEnabled.value
                 )
             },
-            "folderGrid" to {
-                PreferencesManager.setFolderGridMode(context, !PreferencesManager.isFolderGridMode.value)
+            "folderScatter" to {
+                PreferencesManager.setFolderScatterLayout(context, !PreferencesManager.isFolderScatterLayout.value)
             },
             "dpadWrap" to {
                 PreferencesManager.setDpadWrapAround(context, !PreferencesManager.isDpadWrapAround.value)
@@ -124,7 +124,7 @@ class SettingsHubStressContractTest {
 
     @Test
     fun evenToggleFlipsRestoreEverySetting() {
-        val toggles = setOf("photoFrame", "wallpaperOverlay", "subDisplayTicker", "folderGrid", "dpadWrap")
+        val toggles = setOf("photoFrame", "wallpaperOverlay", "subDisplayTicker", "folderScatter", "dpadWrap")
         val original = snapshot()
         repeat(10) { // like the harness: "Hold for digit" gets 10 flips
             flips.filter { it.first in toggles }.forEach { it.second() }

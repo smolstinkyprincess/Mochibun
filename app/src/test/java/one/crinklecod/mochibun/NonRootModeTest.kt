@@ -133,20 +133,23 @@ class NonRootModeTest {
     fun behaviorRowsHideLedRowsAndStayContiguous() {
         val nonRoot = behaviorRowIds(hasCreateFolder = true, showRootOptions = false, showScreenOffReset = true)
         assertEquals(
-            listOf("create_folder", "folder_grid", "hidden_apps", "lid_open", "screen_off_reset"),
+            listOf("create_folder", "folder_scatter", "hidden_apps", "lid_open", "screen_off_reset"),
             nonRoot
         )
         assertContiguous(nonRoot)
 
         val rooted = behaviorRowIds(hasCreateFolder = false, showRootOptions = true, showScreenOffReset = false)
         assertEquals(
-            listOf("folder_grid", "hidden_apps", "lid_open", "lid_led", "led_color", "led_studio", "led_charging"),
+            listOf(
+                "folder_scatter", "hidden_apps", "lid_open",
+                "lid_led", "led_color", "led_studio", "led_charging"
+            ),
             rooted
         )
         assertContiguous(rooted)
 
         val both = behaviorRowIds(hasCreateFolder = true, showRootOptions = true, showScreenOffReset = true)
-        assertEquals(9, both.size)
+        assertEquals(9, both.size) // every row keeps a 1..9 keypad jump
         assertContiguous(both)
 
         // Rooted phone without the AW22xxx lid LED (e.g. Kyocera keitai): no LED rows at all
@@ -156,7 +159,7 @@ class NonRootModeTest {
             showScreenOffReset = false,
             showLidLedRows = false
         )
-        assertEquals(listOf("folder_grid", "hidden_apps", "lid_open"), noLedChip)
+        assertEquals(listOf("folder_scatter", "hidden_apps", "lid_open"), noLedChip)
         assertContiguous(noLedChip)
     }
 

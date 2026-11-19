@@ -6,7 +6,7 @@ import one.crinklecod.mochibun.data.model.AppDrawerSortMode
 import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_APP_DRAWER_SORT_MODE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_CUSTOM_USER_NAME
-import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_FOLDER_GRID_MODE
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_FOLDER_SCATTER_LAYOUT
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_HOME_MASCOT_SIZE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_PHOTO_FRAME_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_PHOTO_FRAME_LABEL
@@ -21,7 +21,7 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_THEME_PRESE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_WALLPAPER_OVERLAY_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_APP_DRAWER_SORT_MODE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_CUSTOM_USER_NAME
-import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_FOLDER_GRID_MODE
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_FOLDER_SCATTER_LAYOUT
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_HOME_MASCOT_SIZE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_PHOTO_FRAME_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_PHOTO_FRAME_LABEL
@@ -56,8 +56,8 @@ internal object AppearancePrefs {
     private val _isSystemMonitorEnabled = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_ENABLED)
     val isSystemMonitorEnabled: StateFlow<Boolean> = _isSystemMonitorEnabled.asStateFlow()
 
-    private val _isFolderGridMode = MutableStateFlow(DEFAULT_FOLDER_GRID_MODE)
-    val isFolderGridMode: StateFlow<Boolean> = _isFolderGridMode.asStateFlow()
+    private val _isFolderScatterLayout = MutableStateFlow(DEFAULT_FOLDER_SCATTER_LAYOUT)
+    val isFolderScatterLayout: StateFlow<Boolean> = _isFolderScatterLayout.asStateFlow()
 
     private val _appDrawerSortMode = MutableStateFlow(AppDrawerSortMode.ALPHABETICAL)
     val appDrawerSortMode: StateFlow<AppDrawerSortMode> = _appDrawerSortMode.asStateFlow()
@@ -110,9 +110,9 @@ internal object AppearancePrefs {
             KEY_SYSTEM_MONITOR_ENABLED,
             DEFAULT_SYSTEM_MONITOR_ENABLED
         )
-        _isFolderGridMode.value = prefs.getBoolean(
-            KEY_FOLDER_GRID_MODE,
-            DEFAULT_FOLDER_GRID_MODE
+        _isFolderScatterLayout.value = prefs.getBoolean(
+            KEY_FOLDER_SCATTER_LAYOUT,
+            DEFAULT_FOLDER_SCATTER_LAYOUT
         )
         _systemMonitorInterval.value = prefs.getInt(
             KEY_SYSTEM_MONITOR_INTERVAL,
@@ -250,16 +250,16 @@ internal object AppearancePrefs {
         _homeMascotSize.value = size
     }
 
-    fun isFolderGridMode(context: Context): Boolean {
+    fun isFolderScatterLayout(context: Context): Boolean {
         return getPrefs(context).getBoolean(
-            KEY_FOLDER_GRID_MODE,
-            DEFAULT_FOLDER_GRID_MODE
+            KEY_FOLDER_SCATTER_LAYOUT,
+            DEFAULT_FOLDER_SCATTER_LAYOUT
         )
     }
 
-    fun setFolderGridMode(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_FOLDER_GRID_MODE, enabled).apply()
-        _isFolderGridMode.value = enabled
+    fun setFolderScatterLayout(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_FOLDER_SCATTER_LAYOUT, enabled).apply()
+        _isFolderScatterLayout.value = enabled
     }
 
     fun getSystemMonitorInterval(context: Context): Int {

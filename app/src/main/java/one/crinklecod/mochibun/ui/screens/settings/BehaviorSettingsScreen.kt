@@ -46,7 +46,7 @@ internal fun behaviorRowIds(
     showLidLedRows: Boolean = showRootOptions
 ): List<String> = buildList {
     if (hasCreateFolder) add("create_folder")
-    addAll(listOf("folder_grid", "hidden_apps", "lid_open"))
+    addAll(listOf("folder_scatter", "hidden_apps", "lid_open"))
     if (showScreenOffReset) add("screen_off_reset")
     // Outer LED rows write vendor sysfs nodes, which needs root and the AT-M120 LED chip
     if (showRootOptions && showLidLedRows) addAll(listOf("lid_led", "led_color", "led_studio", "led_charging"))
@@ -74,7 +74,7 @@ internal fun BehaviorSettingsScreen(
     var sawCenterDown by remember { mutableStateOf(false) }
     var showLidLedColorPicker by remember { mutableStateOf(false) }
 
-    val folderGrid by PreferencesManager.isFolderGridMode.collectAsState()
+    val folderScatter by PreferencesManager.isFolderScatterLayout.collectAsState()
     val lidAction by PreferencesManager.lidOpenAction.collectAsState()
     val lidLed by PreferencesManager.isLidLedEnabled.collectAsState()
     val lidLedCharging by PreferencesManager.isLidLedChargingEnabled.collectAsState()
@@ -136,7 +136,7 @@ internal fun BehaviorSettingsScreen(
     fun activate(index: Int) {
         when (items.getOrNull(index)) {
             "create_folder" -> onCreateFolderClick?.invoke()
-            "folder_grid" -> PreferencesManager.setFolderGridMode(context, !folderGrid)
+            "folder_scatter" -> PreferencesManager.setFolderScatterLayout(context, !folderScatter)
             "hidden_apps" -> onOpenHiddenApps?.invoke()
             "lid_open" -> stepLidAction(1)
             "screen_off_reset" -> toggleScreenOffReset()
@@ -166,7 +166,7 @@ internal fun BehaviorSettingsScreen(
 
     ScrollToFocusedItem(listState) {
         when (items.getOrNull(focusedIndex)) {
-            "create_folder", "folder_grid" -> 0
+            "create_folder", "folder_scatter" -> 0
             "hidden_apps" -> 1
             else -> 2
         }
@@ -249,12 +249,12 @@ internal fun BehaviorSettingsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                     }
                     SettingsToggleRow(
-                        title = "2×2 Folder Grid",
-                        subtitle = "Use a snug two-by-two folder layout",
-                        checked = folderGrid,
-                        isFocused = items.getOrNull(focusedIndex) == "folder_grid",
-                        jumpNumber = jumpNumber("folder_grid"),
-                        onCheckedChange = { PreferencesManager.setFolderGridMode(context, it) }
+                        title = "Scattered Folder Stickers",
+                        subtitle = "Playful tilted sticker layout (off = neat grid)",
+                        checked = folderScatter,
+                        isFocused = items.getOrNull(focusedIndex) == "folder_scatter",
+                        jumpNumber = jumpNumber("folder_scatter"),
+                        onCheckedChange = { PreferencesManager.setFolderScatterLayout(context, it) }
                     )
                 }
             }

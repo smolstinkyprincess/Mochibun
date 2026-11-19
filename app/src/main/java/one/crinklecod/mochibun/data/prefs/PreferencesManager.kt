@@ -88,8 +88,9 @@ object PreferencesManager {
     const val DEFAULT_SYSTEM_MONITOR_ENABLED = true
     const val KEY_FAVORITE_FOLDERS = "favorite_folders_v1"
 
-    const val KEY_FOLDER_GRID_MODE = "pref_folder_grid_mode"
-    const val DEFAULT_FOLDER_GRID_MODE = false // Compact List by default
+    /** Folder tray: tilted sticker constellations (true) or a straight 3 × 2 grid (false). */
+    const val KEY_FOLDER_SCATTER_LAYOUT = "pref_folder_scatter_layout"
+    const val DEFAULT_FOLDER_SCATTER_LAYOUT = true
 
     const val KEY_SYSTEM_MONITOR_INTERVAL = "pref_system_monitor_interval_sec"
     const val DEFAULT_SYSTEM_MONITOR_INTERVAL = 2
@@ -259,8 +260,8 @@ object PreferencesManager {
     val isSystemMonitorEnabled: StateFlow<Boolean>
         get() = AppearancePrefs.isSystemMonitorEnabled
 
-    val isFolderGridMode: StateFlow<Boolean>
-        get() = AppearancePrefs.isFolderGridMode
+    val isFolderScatterLayout: StateFlow<Boolean>
+        get() = AppearancePrefs.isFolderScatterLayout
 
     val isDpadWrapAround: StateFlow<Boolean>
         get() = HardwareInputPrefs.isDpadWrapAround
@@ -494,11 +495,11 @@ object PreferencesManager {
     fun setDailyStepState(context: Context, state: DailyStepState) =
         HomeContentPrefs.setDailyStepState(context, state)
 
-    fun isFolderGridMode(context: Context): Boolean =
-        AppearancePrefs.isFolderGridMode(context)
+    fun isFolderScatterLayout(context: Context): Boolean =
+        AppearancePrefs.isFolderScatterLayout(context)
 
-    fun setFolderGridMode(context: Context, enabled: Boolean) =
-        AppearancePrefs.setFolderGridMode(context, enabled)
+    fun setFolderScatterLayout(context: Context, enabled: Boolean) =
+        AppearancePrefs.setFolderScatterLayout(context, enabled)
 
     fun getSystemMonitorInterval(context: Context): Int =
         AppearancePrefs.getSystemMonitorInterval(context)
