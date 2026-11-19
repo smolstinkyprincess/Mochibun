@@ -67,6 +67,7 @@ import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.core.system.LidLedManager
 import one.crinklecod.mochibun.core.system.RootShell
+import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.model.LID_MAX_STEPS
 import one.crinklecod.mochibun.data.model.LID_OFF_HEX
 import one.crinklecod.mochibun.data.model.LID_WINDOW_COUNT
@@ -92,6 +93,13 @@ private enum class LibraryAction(val label: String) {
 /** Action chips per card row: the two "Set" slots on top, the rest underneath. */
 private const val SET_ACTION_COUNT = 2
 
+// Library rows before the animation cards
+private const val ROW_ACTIONS = 0
+private const val ROW_PACKS = 1
+private const val ROW_APP_RULES = 2
+private const val ROW_CLASSIC = 3
+private const val FIRST_ANIM_ROW = 4
+
 private enum class EditorRow { NAME, STEP_BAR, STEP_EDIT, WINDOWS, SWATCHES, BOTTOM }
 
 private enum class EditorAction(val label: String) { PREVIEW("▶ Preview"), TEST("Test Lid ♡"), SAVE("Save") }
@@ -111,13 +119,16 @@ private fun toast(context: Context, text: String) =
  * Lid LED Studio: animation library (Screen 1) and the 5-window step maker (Screen 2).
  *
  * D-pad: Up/Down move between rows, Left/Right move within a row (or switch frames on the step
- * bar), Center activates. Back closes the editor first, then returns to Layout & Features.
+ * bar), Center activates. Back closes the editor / Per-App LED Rules first, then returns to
+ * Layout & Features.
  */
 @Composable
 internal fun LidLedStudioScreen(
     onBack: () -> Unit,
     onNestedBackHandlerChanged: ((() -> Unit)?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Launchable apps for Per-App LED Rules (read when that screen opens). */
+    installedApps: () -> List<LauncherApp> = { emptyList() }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -128,6 +139,7 @@ internal fun LidLedStudioScreen(
     var chargingId by remember { mutableStateOf(CLASSIC_ID) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var draft by remember { mutableStateOf<LidLedAnimation?>(null) }
+    var rulesOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(refreshKey) {
         withContext(Dispatchers.IO) {
@@ -143,17 +155,32 @@ internal fun LidLedStudioScreen(
         }
     }
 
-    // The hub owns Back; while the editor is open, Back returns to the library
+    // The hub owns Back; while the editor or the rules list is open, Back returns to the library
     val editorOpen = draft != null
-    DisposableEffect(editorOpen) {
-        onNestedBackHandlerChanged(if (editorOpen) ({ draft = null }) else null)
+    DisposableEffect(editorOpen, rulesOpen) {
+        onNestedBackHandlerChanged(
+            when {
+                editorOpen -> ({ draft = null })
+                rulesOpen -> ({ rulesOpen = false })
+                else -> null
+            }
+        )
         onDispose { onNestedBackHandlerChanged(null) }
     }
 
-    requestFocusSafely(focusRequester, key = editorOpen)
+    requestFocusSafely(focusRequester, key = editorOpen to rulesOpen)
 
     val currentDraft = draft
-    if (currentDraft == null) {
+    if (rulesOpen) {
+        val apps = remember { installedApps() }
+        LidAppLedRulesScreen(
+            apps = apps,
+            animations = animations,
+            onBack = { rulesOpen = false },
+            focusRequester = focusRequester,
+            modifier = modifier
+        )
+    } else if (currentDraft == null) {
         LidLedLibrary(
             animations = animations,
             notifId = notifId,
@@ -185,6 +212,7 @@ internal fun LidLedStudioScreen(
                 }
             },
             onImported = { refreshKey++ },
+            onOpenAppRules = { rulesOpen = true },
             focusRequester = focusRequester,
             modifier = modifier
         )
@@ -217,12 +245,14 @@ private fun LidLedLibrary(
     onCreate: () -> Unit,
     onDelete: (LidLedAnimation) -> Unit,
     onImported: () -> Unit,
+    onOpenAppRules: () -> Unit,
     focusRequester: FocusRequester,
     modifier: Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // Row 0 = Create / Import, row 1 = Community packs link, row 2 = classic shimmer, rows 3.. = animations
+    // Row 0 = Create / Import, row 1 = Community packs link, row 2 = Per-App LED Rules,
+    // row 3 = classic shimmer, rows 4.. = animations
     var focusedRow by remember { mutableIntStateOf(0) }
     var focusedCol by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
@@ -230,10 +260,10 @@ private fun LidLedLibrary(
     var pendingExport by remember { mutableStateOf<LidLedAnimation?>(null) }
     // Each animation card has two D-pad rows matching its two chip lines:
     // part 0 = Set Notif / Set Charging, part 1 = Edit / Export / Delete
-    val rowCount = 3 + animations.size * 2
+    val rowCount = FIRST_ANIM_ROW + animations.size * 2
 
-    fun animIndexOf(row: Int): Int = if (row < 3) -1 else (row - 3) / 2
-    fun partOf(row: Int): Int = if (row < 3) 0 else (row - 3) % 2
+    fun animIndexOf(row: Int): Int = if (row < FIRST_ANIM_ROW) -1 else (row - FIRST_ANIM_ROW) / 2
+    fun partOf(row: Int): Int = if (row < FIRST_ANIM_ROW) 0 else (row - FIRST_ANIM_ROW) % 2
 
     LaunchedEffect(rowCount) { focusedRow = focusedRow.coerceIn(0, rowCount - 1) }
 
@@ -269,24 +299,28 @@ private fun LidLedLibrary(
         }
 
     fun colCount(row: Int): Int = when (row) {
-        0 -> 2
-        1 -> 1
-        2 -> SET_ACTION_COUNT
+        ROW_ACTIONS -> 2
+        ROW_PACKS, ROW_APP_RULES -> 1
+        ROW_CLASSIC -> SET_ACTION_COUNT
         else -> animations.getOrNull(animIndexOf(row))?.let { anim ->
             if (partOf(row) == 0) SET_ACTION_COUNT else actionsFor(anim).size - SET_ACTION_COUNT
         } ?: 1
     }
 
     fun activate(row: Int, col: Int) {
-        if (row == 0) {
+        if (row == ROW_ACTIONS) {
             if (col == 0) onCreate() else importLauncher.launch(arrayOf("*/*"))
             return
         }
-        if (row == 1) {
+        if (row == ROW_PACKS) {
             openCommunityGallery(context)
             return
         }
-        if (row == 2) {
+        if (row == ROW_APP_RULES) {
+            onOpenAppRules()
+            return
+        }
+        if (row == ROW_CLASSIC) {
             onApply(if (col == 0) LidAnimationSlot.NOTIFICATION else LidAnimationSlot.CHARGING, CLASSIC_ID)
             return
         }
@@ -394,13 +428,25 @@ private fun LidLedLibrary(
             item(contentType = "led_studio_packs_chip") {
                 StudioChip(
                     label = "Get more .mochibunled packs ♡",
-                    isFocused = focusedRow == 1,
+                    isFocused = focusedRow == ROW_PACKS,
                     compact = true,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
-                        focusedRow = 1
+                        focusedRow = ROW_PACKS
                         focusedCol = 0
-                        activate(1, 0)
+                        activate(ROW_PACKS, 0)
+                    }
+                )
+            }
+            item(contentType = "led_studio_app_rules_chip") {
+                StudioChip(
+                    label = "Per-App LED Rules ♡",
+                    isFocused = focusedRow == ROW_APP_RULES,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        focusedRow = ROW_APP_RULES
+                        focusedCol = 0
+                        activate(ROW_APP_RULES, 0)
                     }
                 )
             }
@@ -411,14 +457,14 @@ private fun LidLedLibrary(
                     previewColors = null,
                     isNotif = notifId == CLASSIC_ID,
                     isCharging = chargingId == CLASSIC_ID,
-                    isFocused = focusedRow == 2,
+                    isFocused = focusedRow == ROW_CLASSIC,
                     actions = listOf(LibraryAction.SET_NOTIF.label, LibraryAction.SET_CHARGING.label),
-                    focusedAction = if (focusedRow == 2) focusedCol else -1,
+                    focusedAction = if (focusedRow == ROW_CLASSIC) focusedCol else -1,
                     armedDelete = false,
                     onAction = { col ->
-                        focusedRow = 2
+                        focusedRow = ROW_CLASSIC
                         focusedCol = col
-                        activate(2, col)
+                        activate(ROW_CLASSIC, col)
                     }
                 )
             }
@@ -428,7 +474,7 @@ private fun LidLedLibrary(
                 // Same AnimationCard as the "Classic" item above, so their slots can be reused.
                 contentType = { _, _ -> "led_animation_card" }
             ) { index, anim ->
-                val firstRow = 3 + index * 2
+                val firstRow = FIRST_ANIM_ROW + index * 2
                 val cardFocused = animIndexOf(focusedRow) == index
                 val builtIn = LidLedAnimationRepository.isBuiltIn(anim.id)
                 AnimationCard(

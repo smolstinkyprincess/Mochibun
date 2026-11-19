@@ -174,7 +174,7 @@ class LidLedManagerTest {
         assertTrue(
             LidLedManager.shouldSkipShimmer(
                 mode = LidLedMode.NOTIFICATION,
-                hex = colorHex,
+                signature = colorHex,
                 newestPostTime = postTime,
                 now = startTime + 200L
             )
@@ -196,7 +196,7 @@ class LidLedManagerTest {
         assertTrue(
             LidLedManager.shouldSkipShimmer(
                 mode = LidLedMode.NOTIFICATION,
-                hex = colorHex,
+                signature = colorHex,
                 newestPostTime = bumpedPostTime,
                 now = startTime + 200L
             )
@@ -218,7 +218,7 @@ class LidLedManagerTest {
         assertFalse(
             LidLedManager.shouldSkipShimmer(
                 mode = LidLedMode.NOTIFICATION,
-                hex = colorHex,
+                signature = colorHex,
                 newestPostTime = newPostTime,
                 now = startTime + 2500L
             )

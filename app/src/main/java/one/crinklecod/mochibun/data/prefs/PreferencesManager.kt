@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import one.crinklecod.mochibun.data.model.AppDrawerSortMode
 import one.crinklecod.mochibun.data.model.CardBorderStyle
+import one.crinklecod.mochibun.data.model.AppLedRuleMode
 import one.crinklecod.mochibun.data.model.FavoriteFolder
+import one.crinklecod.mochibun.data.model.LidAppLedRule
 import kotlinx.coroutines.flow.StateFlow
 
 enum class LidOpenAction(val id: String, val label: String) {
@@ -160,6 +162,8 @@ object PreferencesManager {
     /** Lid step animation per slot; blank = classic behavior (notification shimmer / solid charging). */
     const val KEY_LID_LED_NOTIFICATION_ANIMATION_ID = "pref_lid_led_animation_id" // pre-slot key, kept
     const val KEY_LID_LED_CHARGING_ANIMATION_ID = "pref_lid_led_charging_animation_id"
+    /** JSON array of [LidAppLedRule] (per-app notification LED overrides). */
+    const val KEY_LID_LED_APP_RULES = "pref_lid_led_app_rules"
 
     const val KEY_MEDIA_VOLUME_LOCK_ENABLED = "pref_media_volume_lock_enabled"
     const val DEFAULT_MEDIA_VOLUME_LOCK_ENABLED = false
@@ -231,6 +235,10 @@ object PreferencesManager {
     const val KEY_QUICK_MEMO_TEXT = "pref_quick_memo_text"
     /** Quick Memo length cap (a keitai-sized sticky note). */
     const val QUICK_MEMO_MAX_CHARS = 140
+    /** Number of Quick Memo slots (1..5). Slot 1 keeps [KEY_QUICK_MEMO_TEXT]. */
+    const val QUICK_MEMO_SLOT_COUNT = 5
+    const val KEY_QUICK_MEMO_PINNED_SLOT = "pref_quick_memo_pinned_slot"
+    const val KEY_QUICK_MEMO_LAST_OPENED_SLOT = "pref_quick_memo_last_opened_slot"
     // Daily step counter bookkeeping (see [DailyStepState])
     const val KEY_STEP_DAY = "pref_step_day"
     const val KEY_STEP_BASELINE = "pref_step_baseline"
@@ -335,6 +343,22 @@ object PreferencesManager {
     val quickMemoText: StateFlow<String>
         get() = QuickMemoPrefs.quickMemoText
 
+    /** All Quick Memo slots (index 0 = slot 1). */
+    val quickMemoSlots: StateFlow<List<String>>
+        get() = QuickMemoPrefs.slots
+
+    /** Slot (1-based) pinned to the Home sub-display ticker. */
+    val pinnedQuickMemoSlot: StateFlow<Int>
+        get() = QuickMemoPrefs.pinnedSlot
+
+    /** Slot (1-based) the Quick Memo dialog reopens on. */
+    val lastOpenedQuickMemoSlot: StateFlow<Int>
+        get() = QuickMemoPrefs.lastOpenedSlot
+
+    /** Per-app outer lid LED rules keyed by package name. */
+    val lidAppLedRules: StateFlow<Map<String, LidAppLedRule>>
+        get() = LidLedPrefs.appLedRules
+
     /** Whether root / LSPosed rows are shown in settings. Loaded in [init]. */
     val showRootOptions: StateFlow<Boolean>
         get() = SystemAccessPrefs.showRootOptions
@@ -433,6 +457,23 @@ object PreferencesManager {
     /** Clear button: empties the memo (which also removes it from the ticker). */
     fun clearQuickMemo(context: Context) =
         QuickMemoPrefs.clearQuickMemo(context)
+
+    fun getQuickMemoSlotText(slot: Int): String =
+        QuickMemoPrefs.slots.value.getOrElse(QuickMemoPrefs.clampSlot(slot) - 1) { "" }
+
+    /** Saves one memo slot (1..[QUICK_MEMO_SLOT_COUNT]), trimmed and capped like the single memo. */
+    fun setQuickMemoSlotText(context: Context, slot: Int, text: String) =
+        QuickMemoPrefs.setSlotText(context, slot, text)
+
+    fun setPinnedQuickMemoSlot(context: Context, slot: Int) =
+        QuickMemoPrefs.setPinnedSlot(context, slot)
+
+    fun setLastOpenedQuickMemoSlot(context: Context, slot: Int) =
+        QuickMemoPrefs.setLastOpenedSlot(context, slot)
+
+    /** Memo shown in the ticker: pinned slot, else first non-blank slot, else null. */
+    fun tickerQuickMemo(slots: List<String>, pinnedSlot: Int): String? =
+        QuickMemoPrefs.tickerMemo(slots, pinnedSlot)
 
     fun getDailyStepState(context: Context): DailyStepState? =
         HomeContentPrefs.getDailyStepState(context)
@@ -547,6 +588,16 @@ object PreferencesManager {
 
     fun setLidLedChargingAnimationId(context: Context, id: String) =
         LidLedPrefs.setLidLedChargingAnimationId(context, id)
+
+    fun getLidAppLedRules(): Map<String, LidAppLedRule> = LidLedPrefs.appLedRules.value
+
+    /** Saves [rule]; a [AppLedRuleMode.DEFAULT] rule removes the package's entry. */
+    fun setLidAppLedRule(context: Context, rule: LidAppLedRule) =
+        LidLedPrefs.setAppLedRule(context, rule)
+
+    /** Replaces every per-app rule (backup restore). */
+    fun setLidAppLedRules(context: Context, rules: Collection<LidAppLedRule>) =
+        LidLedPrefs.setAppLedRules(context, rules)
 
     fun isMediaVolumeLockEnabled(context: Context): Boolean =
         SoundPrefs.isMediaVolumeLockEnabled(context)

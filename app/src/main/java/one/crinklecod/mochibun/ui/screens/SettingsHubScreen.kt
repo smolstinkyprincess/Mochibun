@@ -1,5 +1,6 @@
 package one.crinklecod.mochibun.ui.screens
 
+import one.crinklecod.mochibun.data.model.LauncherApp
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusable
@@ -62,7 +63,9 @@ fun SettingsHubScreen(
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false,
     onSettingsRestored: (() -> Unit)? = null,
-    initialDestination: SettingsDestination = SettingsDestination.Hub
+    initialDestination: SettingsDestination = SettingsDestination.Hub,
+    /** Launchable apps for Lid LED Studio → Per-App LED Rules. */
+    installedApps: () -> List<LauncherApp> = { emptyList() }
 ) {
     var currentDestination by remember { mutableStateOf(initialDestination) }
     var rootFocusedIndex by remember { mutableIntStateOf(0) }
@@ -166,7 +169,8 @@ fun SettingsHubScreen(
             LidLedStudioScreen(
                 onBack = { currentDestination = SettingsDestination.Behavior },
                 onNestedBackHandlerChanged = { lidStudioBackHandler = it },
-                modifier = settingsModifier
+                modifier = settingsModifier,
+                installedApps = installedApps
             )
         }
         SettingsDestination.PermissionsRoot -> {
@@ -422,7 +426,9 @@ fun SettingsHubDialog(
     onResetWallpaperClick: (() -> Unit)? = null,
     hasCustomWallpaper: Boolean = false,
     onSettingsRestored: (() -> Unit)? = null,
-    initialDestination: SettingsDestination = SettingsDestination.Hub
+    initialDestination: SettingsDestination = SettingsDestination.Hub,
+    /** Launchable apps for Lid LED Studio → Per-App LED Rules. */
+    installedApps: () -> List<LauncherApp> = { emptyList() }
 ) {
     BasicAlertDialog(
         onDismissRequest = onDismiss,
@@ -447,7 +453,8 @@ fun SettingsHubDialog(
             onResetWallpaperClick = onResetWallpaperClick,
             hasCustomWallpaper = hasCustomWallpaper,
             onSettingsRestored = onSettingsRestored,
-            initialDestination = initialDestination
+            initialDestination = initialDestination,
+            installedApps = installedApps
         )
     }
 }

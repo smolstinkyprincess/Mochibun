@@ -229,7 +229,8 @@ internal fun LauncherModalHost(
                 onPickWallpaperClick = onPickWallpaperClick,
                 onResetWallpaperClick = onResetWallpaperClick,
                 hasCustomWallpaper = launcherVm.wallpaperUri != null,
-                onSettingsRestored = onSettingsRestored
+                onSettingsRestored = onSettingsRestored,
+                installedApps = { launcherVm.apps }
             )
         }
 

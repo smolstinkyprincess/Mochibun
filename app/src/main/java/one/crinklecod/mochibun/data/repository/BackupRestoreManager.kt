@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import one.crinklecod.mochibun.BuildConfig
 import one.crinklecod.mochibun.data.model.ActionType
+import one.crinklecod.mochibun.data.model.AppLedRuleMode
+import one.crinklecod.mochibun.data.model.LidAppLedRule
+import one.crinklecod.mochibun.data.model.LidAppLedRuleCodec
 import one.crinklecod.mochibun.data.model.CONTROLLED_STATIC_KEYCODES
 import one.crinklecod.mochibun.data.model.FavoriteFolder
 import one.crinklecod.mochibun.data.model.PhysicalKey
@@ -53,6 +56,8 @@ data class BackupPreviewSummary(
 object BackupRestoreManager {
 
     const val CURRENT_BACKUP_VERSION = 1
+    const val KEY_QUICK_MEMO = "quick_memo"
+    const val KEY_LID_LED_APP_RULES = "lid_led_app_rules"
     private const val MAX_FAVORITES = 200
     private const val MAX_FOLDERS = 100
     private const val MAX_APPS_PER_FOLDER = 200
@@ -214,7 +219,22 @@ object BackupRestoreManager {
         cursorObj.put("gif_playback_speed", CursorPreferences.getGifPlaybackSpeed(context).toDouble())
         root.put("cursor", cursorObj)
 
-        // ── 6. Mochibunny pet (optional on restore: older backups have no "pet") ──
+        // ── 6. Quick Memo slots (optional on restore: older backups have none) ──
+        val memoObj = JSONObject()
+        val slotsArray = JSONArray()
+        PreferencesManager.quickMemoSlots.value.forEach { slotsArray.put(it) }
+        memoObj.put("slots", slotsArray)
+        memoObj.put("pinned_slot", PreferencesManager.pinnedQuickMemoSlot.value)
+        memoObj.put("last_opened_slot", PreferencesManager.lastOpenedQuickMemoSlot.value)
+        root.put(KEY_QUICK_MEMO, memoObj)
+
+        // ── 7. Per-app lid LED rules (optional on restore) ──
+        root.put(
+            KEY_LID_LED_APP_RULES,
+            JSONArray(LidAppLedRuleCodec.encode(PreferencesManager.getLidAppLedRules().values))
+        )
+
+        // ── 8. Mochibunny pet (optional on restore: older backups have no "pet") ──
         root.put(PetBackupCodec.KEY, PetBackupCodec.toJson(PetManager.stateForBackup(context)))
 
         return root.toString(2)
@@ -379,6 +399,8 @@ object BackupRestoreManager {
 
         validateBehavior(root.requiredObject("behavior"))
         validateCursor(root.requiredObject("cursor"))
+        root.optJSONObject(KEY_QUICK_MEMO)?.let(::validateQuickMemo)
+        if (root.has(KEY_LID_LED_APP_RULES)) validateLidAppLedRules(root.requiredArray(KEY_LID_LED_APP_RULES))
 
         val preview = BackupPreviewSummary(
             timestamp = timestamp,
@@ -437,6 +459,31 @@ object BackupRestoreManager {
             "show_root_options", "non_root_screen_off_reset"
         ).forEach {
             if (value.has(it)) value.requiredBoolean(it)
+        }
+    }
+
+    private fun validateQuickMemo(value: JSONObject) {
+        if (value.has("slots")) {
+            val slots = value.requiredArray("slots")
+            require(slots.length() <= PreferencesManager.QUICK_MEMO_SLOT_COUNT) { "Backup has too many Quick Memo slots." }
+            for (i in 0 until slots.length()) {
+                val text = slots.get(i)
+                require(text is String && text.length <= 4 * PreferencesManager.QUICK_MEMO_MAX_CHARS) {
+                    "Quick Memo slot ${i + 1} is invalid."
+                }
+            }
+        }
+        if (value.has("pinned_slot")) value.requiredIntInRange("pinned_slot", 1..PreferencesManager.QUICK_MEMO_SLOT_COUNT)
+        if (value.has("last_opened_slot")) value.requiredIntInRange("last_opened_slot", 1..PreferencesManager.QUICK_MEMO_SLOT_COUNT)
+    }
+
+    private fun validateLidAppLedRules(value: JSONArray) {
+        require(value.length() <= LidAppLedRule.MAX_RULES) { "Backup has too many per-app LED rules." }
+        for (i in 0 until value.length()) {
+            val rule = value.optJSONObject(i) ?: throw IllegalArgumentException("Per-app LED rule $i is invalid.")
+            rule.requiredString("packageName", maxLength = LidAppLedRule.MAX_PACKAGE_LENGTH)
+            val mode = rule.requiredString("mode", maxLength = 32)
+            require(AppLedRuleMode.entries.any { it.name == mode }) { "Per-app LED rule mode '$mode' is not supported." }
         }
     }
 
@@ -855,7 +902,30 @@ object BackupRestoreManager {
                 }
             }
 
-            // ── 6. Restore Mochibunny pet ────────────────────────────────
+            // ── 6. Restore Quick Memo slots ──────────────────────────────
+            root.optJSONObject(KEY_QUICK_MEMO)?.let { memoObj ->
+                memoObj.optJSONArray("slots")?.let { slots ->
+                    for (slot in 1..PreferencesManager.QUICK_MEMO_SLOT_COUNT) {
+                        PreferencesManager.setQuickMemoSlotText(context, slot, slots.optString(slot - 1, ""))
+                    }
+                }
+                if (memoObj.has("pinned_slot")) {
+                    PreferencesManager.setPinnedQuickMemoSlot(context, memoObj.optInt("pinned_slot", 1))
+                }
+                if (memoObj.has("last_opened_slot")) {
+                    PreferencesManager.setLastOpenedQuickMemoSlot(context, memoObj.optInt("last_opened_slot", 1))
+                }
+            }
+
+            // ── 7. Restore per-app lid LED rules ─────────────────────────
+            root.optJSONArray(KEY_LID_LED_APP_RULES)?.let { rulesArray ->
+                PreferencesManager.setLidAppLedRules(
+                    context,
+                    LidAppLedRuleCodec.decode(rulesArray.toString()).values
+                )
+            }
+
+            // ── 8. Restore Mochibunny pet ────────────────────────────────
             // Optional: backups made before the pet existed simply keep her current state.
             // Missing fields fall back to defaults; PetManager.restore sanitizes everything.
             root.optJSONObject(PetBackupCodec.KEY)?.let { petObj ->

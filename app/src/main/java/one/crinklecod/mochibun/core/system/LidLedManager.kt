@@ -10,7 +10,9 @@ import android.os.PowerManager
 import android.system.Os
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import one.crinklecod.mochibun.data.model.AppLedRuleMode
 import one.crinklecod.mochibun.data.model.LID_OFF_HEX
+import one.crinklecod.mochibun.data.model.LidAppLedRule
 import one.crinklecod.mochibun.data.model.LidLedAnimation
 import one.crinklecod.mochibun.data.model.LidLedStep
 import one.crinklecod.mochibun.data.model.MochibunNotificationItem
@@ -152,9 +154,11 @@ object LidLedManager : ClamshellListener {
     private var shimmerWakeLock: PowerManager.WakeLock? = null
     private var helperBinaryPath: String? = null
 
-    // Last program written by the ladder; manual writes (picker preview, tests) clear it
+    // Last program written by the ladder; manual writes (picker preview, tests) clear it.
+    // The signature is the resolved look ([NotificationLook.signature]), so two apps with
+    // different rules re-trigger even when the global color is the same.
     private var appliedMode = LidLedMode.OFF
-    private var appliedColorHex: String? = null
+    private var appliedSignature: String? = null
     private var lastShimmeredPostTime = 0L
 
 
@@ -515,8 +519,9 @@ object LidLedManager : ClamshellListener {
             combine(
                 PreferencesManager.isLidLedEnabled,
                 PreferencesManager.isLidLedChargingEnabled,
-                PreferencesManager.lidLedColor
-            ) { enabled, charging, color -> Triple(enabled, charging, color) }
+                PreferencesManager.lidLedColor,
+                PreferencesManager.lidAppLedRules
+            ) { enabled, charging, color, rules -> listOf(enabled, charging, color, rules) }
                 .collectLatest { updateLedState() }
         }
 
@@ -546,12 +551,12 @@ object LidLedManager : ClamshellListener {
     @VisibleForTesting
     internal fun shouldSkipShimmer(
         mode: LidLedMode,
-        hex: String,
+        signature: String,
         newestPostTime: Long,
         now: Long = System.currentTimeMillis()
     ): Boolean {
         if (mode != LidLedMode.NOTIFICATION) return false
-        if (mode != appliedMode || hex != appliedColorHex) return false
+        if (mode != appliedMode || signature != appliedSignature) return false
         val isShimmerActive = now < shimmerActiveUntilMs &&
             (newestPostTime <= shimmerPostTime || (now - shimmerStartTime < SHIMMER_DEBOUNCE_MS))
         val isNewPost = newestPostTime > lastShimmeredPostTime
@@ -568,29 +573,91 @@ object LidLedManager : ClamshellListener {
         val context = appContext ?: return
         if (testPreviewActive) return // re-evaluated when the preview ends
         val items = NotificationTracker.notifications.value
+        val rules = PreferencesManager.getLidAppLedRules()
+        // Muted apps never light the lid; ringing calls are never filtered
+        val eligible = eligibleNotifications(items, rules)
         val mode = resolveMode(
             lidClosed = ClamshellManager.isLidClosed.value,
             enabled = PreferencesManager.isLidLedEnabled(context),
             hasIncomingCall = items.any(MochibunNotificationItem::isIncomingCall),
-            hasNotifications = items.isNotEmpty(),
+            hasNotifications = eligible.isNotEmpty(),
             chargingLight = isChargingState && PreferencesManager.isLidLedChargingEnabled(context),
             batteryPct = batteryPct
         )
         val hex = getHexColor(PreferencesManager.getLidLedColor(context))
-        val newestPostTime = items.maxOfOrNull { it.postTime } ?: 0L
+        val newest = eligible.maxByOrNull { it.postTime }
+        val newestPostTime = newest?.postTime ?: 0L
+        val look = if (mode == LidLedMode.NOTIFICATION) {
+            resolveNotificationLook(rules[newest?.packageName], hex) { id ->
+                runCatching { LidLedAnimationRepository.findById(context, id) }.getOrNull()
+            }
+        } else {
+            NotificationLook.global(hex)
+        }
 
-        if (shouldSkipShimmer(mode, hex, newestPostTime)) return
+        if (shouldSkipShimmer(mode, look.signature, newestPostTime)) return
 
         val isNewPost = mode == LidLedMode.NOTIFICATION && newestPostTime > lastShimmeredPostTime
-        if (mode == appliedMode && hex == appliedColorHex && !isNewPost) return
+        if (mode == appliedMode && look.signature == appliedSignature && !isNewPost) return
 
-        applyMode(mode, hex, newestPostTime)
+        applyMode(mode, look, newestPostTime)
         if (mode == LidLedMode.NOTIFICATION) lastShimmeredPostTime = newestPostTime
     }
 
-    private fun applyMode(mode: LidLedMode, hex: String, postTime: Long = 0L) {
+    /** Notifications that may light the lid: everything except muted apps (calls always count). */
+    @VisibleForTesting
+    internal fun eligibleNotifications(
+        items: List<MochibunNotificationItem>,
+        rules: Map<String, LidAppLedRule>
+    ): List<MochibunNotificationItem> {
+        if (rules.isEmpty()) return items
+        return items.filter { it.isIncomingCall || rules[it.packageName]?.mode != AppLedRuleMode.MUTED }
+    }
+
+    /**
+     * What a notification program shows. [kind] is [AppLedRuleMode.DEFAULT] for the global
+     * notification slot (step animation or shimmer in [hex]), [AppLedRuleMode.CUSTOM_COLOR] for a
+     * shimmer in the rule's [hex], or [AppLedRuleMode.CUSTOM_ANIMATION] with its [animation].
+     */
+    internal data class NotificationLook(
+        val kind: AppLedRuleMode,
+        val hex: String,
+        val animation: LidLedAnimation? = null
+    ) {
+        /** mode + color + animation id; a change re-triggers the program. */
+        val signature: String = "${kind.name}|$hex|${animation?.id.orEmpty()}"
+
+        companion object {
+            fun global(hex: String) = NotificationLook(AppLedRuleMode.DEFAULT, hex)
+        }
+    }
+
+    /**
+     * Resolves the newest eligible notification's app rule. A custom animation whose id was
+     * deleted (or has no steps) falls back to the global notification behavior.
+     */
+    @VisibleForTesting
+    internal fun resolveNotificationLook(
+        rule: LidAppLedRule?,
+        globalHex: String,
+        findAnimation: (String) -> LidLedAnimation?
+    ): NotificationLook = when (rule?.mode) {
+        AppLedRuleMode.CUSTOM_COLOR -> rule.colorHex?.takeUnless(::isLidHexOff)
+            ?.let { NotificationLook(AppLedRuleMode.CUSTOM_COLOR, getHexColor(it)) }
+            ?: NotificationLook.global(globalHex)
+        AppLedRuleMode.CUSTOM_ANIMATION -> rule.animationId?.takeIf { it.isNotBlank() }
+            ?.let(findAnimation)
+            ?.takeIf { it.steps.isNotEmpty() }
+            ?.let { NotificationLook(AppLedRuleMode.CUSTOM_ANIMATION, globalHex, it) }
+            ?: NotificationLook.global(globalHex)
+        // MUTED never gets here (filtered out); DEFAULT / no rule = global slot
+        else -> NotificationLook.global(globalHex)
+    }
+
+    private fun applyMode(mode: LidLedMode, look: NotificationLook, postTime: Long = 0L) {
+        val hex = look.hex
         appliedMode = mode
-        appliedColorHex = hex
+        appliedSignature = look.signature
         notificationLedActive = mode == LidLedMode.CALL || mode == LidLedMode.NOTIFICATION
         chargingLedActive = mode == LidLedMode.CHARGING
         when (mode) {
@@ -618,11 +685,16 @@ object LidLedManager : ClamshellListener {
                 }
             }
             LidLedMode.NOTIFICATION -> {
-                // A selected step animation replaces the shimmer; none selected = classic behavior
-                val custom = appContext?.let { ctx ->
-                    runCatching {
-                        LidLedAnimationRepository.getActiveAnimation(ctx, LidAnimationSlot.NOTIFICATION)
-                    }.getOrNull()
+                // Per-app rule first; otherwise the global slot's step animation replaces the
+                // shimmer, and none selected = classic behavior
+                val custom = when (look.kind) {
+                    AppLedRuleMode.CUSTOM_ANIMATION -> look.animation
+                    AppLedRuleMode.CUSTOM_COLOR -> null
+                    else -> appContext?.let { ctx ->
+                        runCatching {
+                            LidLedAnimationRepository.getActiveAnimation(ctx, LidAnimationSlot.NOTIFICATION)
+                        }.getOrNull()
+                    }
                 }
                 if (custom != null && custom.steps.isNotEmpty()) {
                     startNotificationStepAnimation(custom, postTime)
@@ -644,7 +716,7 @@ object LidLedManager : ClamshellListener {
                 postTime = postTime
             )
         }
-        Log.d(TAG, "Lid LED mode -> $mode ($hex)")
+        Log.d(TAG, "Lid LED mode -> $mode (${look.signature})")
     }
 
     private fun startShimmer(
@@ -808,7 +880,7 @@ object LidLedManager : ClamshellListener {
 
     private fun invalidateApplied() {
         appliedMode = LidLedMode.OFF
-        appliedColorHex = null
+        appliedSignature = null
         shimmerStartTime = 0L
         shimmerActiveUntilMs = 0L
         shimmerPostTime = 0L
@@ -822,9 +894,9 @@ object LidLedManager : ClamshellListener {
     }
 
     @VisibleForTesting
-    internal fun setMockAppliedState(mode: LidLedMode, hex: String?, lastPostTime: Long) {
+    internal fun setMockAppliedState(mode: LidLedMode, signature: String?, lastPostTime: Long) {
         appliedMode = mode
-        appliedColorHex = hex
+        appliedSignature = signature
         lastShimmeredPostTime = lastPostTime
     }
 

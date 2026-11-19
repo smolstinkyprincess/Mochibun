@@ -1,7 +1,11 @@
 package one.crinklecod.mochibun.ui.dialogs
 
 import android.view.KeyEvent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +22,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,8 +32,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -36,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,12 +56,14 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
 import one.crinklecod.mochibun.ui.components.MochibunSectionHeader
 import one.crinklecod.mochibun.ui.components.limitTextLength
+import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherFontFamily
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.softSurfaceColor
 
-// Focus zones: 0 = memo text field, 1 = bottom row (Clear / Done)
+// Focus zones: slot bar on top, memo text field, bottom row (Clear / Done)
+private const val ZONE_SLOTS = -1
 private const val ZONE_TEXT = 0
 private const val ZONE_BUTTONS = 1
 private const val BUTTON_CLEAR = 0
@@ -61,8 +71,12 @@ private const val BUTTON_DONE = 1
 
 /**
  * Quick Memo: a tiny keitai sticky note (`#` hold on Home, the Launcher Menu, a key remap or the
- * Lid Open Action). The text is saved whenever the dialog goes away (Done, Back, a flip close,
- * Home...), so a draft is never lost. A non-empty memo scrolls in the Home sub-display ticker.
+ * Lid Open Action) with 5 slots. The text is saved whenever the dialog goes away (Done, Back, a
+ * flip close, Home...) and on every slot switch, so a draft is never lost. The pinned slot (★)
+ * scrolls in the Home sub-display ticker.
+ *
+ * Slot bar (D-pad Up from the text): Left/Right or digits 1-5 switch slots, Center or `*` pins.
+ * Digits only switch slots while the bar has focus; in the text field they stay multi-tap input.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,8 +90,14 @@ fun QuickMemoDialog(
     val keyboardController = LocalSoftwareKeyboardController.current
     val maxChars = PreferencesManager.QUICK_MEMO_MAX_CHARS
 
+    val slotCount = PreferencesManager.QUICK_MEMO_SLOT_COUNT
+    val savedSlots by PreferencesManager.quickMemoSlots.collectAsState()
+    val pinnedSlot by PreferencesManager.pinnedQuickMemoSlot.collectAsState()
+    var slot by remember {
+        mutableIntStateOf(PreferencesManager.lastOpenedQuickMemoSlot.value.coerceIn(1, slotCount))
+    }
     var memoValue by remember {
-        val saved = PreferencesManager.quickMemoText.value
+        val saved = PreferencesManager.getQuickMemoSlotText(slot)
         mutableStateOf(TextFieldValue(saved, TextRange(saved.length)))
     }
     var focusZone by remember { mutableIntStateOf(ZONE_TEXT) }
@@ -97,8 +117,33 @@ fun QuickMemoDialog(
 
     // Auto-save on every exit path (the modal can also be closed from outside, e.g. a flip close).
     val latestText by rememberUpdatedState(memoValue.text)
+    val latestSlot by rememberUpdatedState(slot)
     DisposableEffect(Unit) {
-        onDispose { PreferencesManager.setQuickMemoText(context, latestText) }
+        onDispose {
+            PreferencesManager.setQuickMemoSlotText(context, latestSlot, latestText)
+            PreferencesManager.setLastOpenedQuickMemoSlot(context, latestSlot)
+        }
+    }
+
+    /** Saves the current draft, then loads [target] into the editor. */
+    fun switchSlot(target: Int) {
+        if (target !in 1..slotCount) {
+            HapticManager.performBoundaryHaptic(context)
+            return
+        }
+        if (target == slot) return
+        PreferencesManager.setQuickMemoSlotText(context, slot, memoValue.text)
+        slot = target
+        PreferencesManager.setLastOpenedQuickMemoSlot(context, target)
+        val text = PreferencesManager.getQuickMemoSlotText(target)
+        memoValue = TextFieldValue(text, TextRange(text.length))
+        SoundEffectManager.play(context, SoundEffect.NAV)
+    }
+
+    fun pinSlot() {
+        PreferencesManager.setQuickMemoSlotText(context, slot, memoValue.text)
+        PreferencesManager.setPinnedQuickMemoSlot(context, slot)
+        SoundEffectManager.play(context, SoundEffect.SELECT)
     }
 
     LaunchedEffect(focusZone, awaitingPoundRelease) {
@@ -112,19 +157,22 @@ fun QuickMemoDialog(
 
     val saveAndDismiss: () -> Unit = {
         keyboardController?.hide()
-        PreferencesManager.setQuickMemoText(context, memoValue.text)
+        PreferencesManager.setQuickMemoSlotText(context, slot, memoValue.text)
         onDismiss()
     }
     val clearMemo: () -> Unit = {
-        PreferencesManager.clearQuickMemo(context)
+        PreferencesManager.setQuickMemoSlotText(context, slot, "")
         memoValue = TextFieldValue("")
         focusZone = ZONE_TEXT
     }
 
     fun activateFocused() {
-        SoundEffectManager.play(context, SoundEffect.SELECT)
         when (focusZone) {
-            ZONE_BUTTONS -> if (buttonCol == BUTTON_CLEAR) clearMemo() else saveAndDismiss()
+            ZONE_SLOTS -> pinSlot()
+            ZONE_BUTTONS -> {
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                if (buttonCol == BUTTON_CLEAR) clearMemo() else saveAndDismiss()
+            }
         }
     }
 
@@ -161,6 +209,11 @@ fun QuickMemoDialog(
                 if (focusZone == ZONE_TEXT) {
                     if (event.type == KeyEventType.KeyDown) {
                         when (native.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_UP -> {
+                                SoundEffectManager.play(context, SoundEffect.NAV)
+                                focusZone = ZONE_SLOTS
+                                return@onPreviewKeyEvent true
+                            }
                             KeyEvent.KEYCODE_DPAD_DOWN,
                             KeyEvent.KEYCODE_ENTER,
                             KeyEvent.KEYCODE_NUMPAD_ENTER -> {
@@ -172,6 +225,43 @@ fun QuickMemoDialog(
                         }
                     }
                     return@onPreviewKeyEvent false
+                }
+
+                // Slot bar: digits 1-5 jump to a slot, '*' pins (the text field isn't focused here,
+                // so these never reach the IME's multi-tap).
+                if (focusZone == ZONE_SLOTS) {
+                    val digitSlot = native.keyCode - KeyEvent.KEYCODE_0
+                    when {
+                        digitSlot in 1..slotCount -> {
+                            if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) switchSlot(digitSlot)
+                            return@onPreviewKeyEvent true
+                        }
+                        native.keyCode == KeyEvent.KEYCODE_STAR -> {
+                            if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) pinSlot()
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (native.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                switchSlot(slot - 1)
+                                return@onPreviewKeyEvent true
+                            }
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                switchSlot(slot + 1)
+                                return@onPreviewKeyEvent true
+                            }
+                            KeyEvent.KEYCODE_DPAD_UP -> {
+                                HapticManager.performBoundaryHaptic(context)
+                                return@onPreviewKeyEvent true
+                            }
+                            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                SoundEffectManager.play(context, SoundEffect.NAV)
+                                focusZone = ZONE_TEXT
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                    }
                 }
 
                 if (isCenterActivateKey(native.keyCode)) {
@@ -235,6 +325,21 @@ fun QuickMemoDialog(
                         .padding(top = 2.dp, bottom = 4.dp)
                 )
 
+                Spacer(Modifier.height(6.dp))
+
+                QuickMemoSlotBar(
+                    slotCount = slotCount,
+                    activeSlot = slot,
+                    pinnedSlot = pinnedSlot,
+                    // The open slot's dot follows the live draft, the others their saved text
+                    isFilled = { n -> if (n == slot) memoValue.text.isNotBlank() else savedSlots.getOrElse(n - 1) { "" }.isNotBlank() },
+                    barFocused = focusZone == ZONE_SLOTS,
+                    onSlotClick = { n ->
+                        // Touch: tap a slot to open it, tap the open slot again to pin it
+                        if (n == slot) pinSlot() else switchSlot(n)
+                    }
+                )
+
                 Spacer(Modifier.height(8.dp))
 
                 OutlinedTextField(
@@ -258,14 +363,25 @@ fun QuickMemoDialog(
                         .focusRequester(textFocusRequester)
                 )
 
-                Text(
-                    text = "${memoValue.text.length}/$maxChars",
-                    color = theme.cardTextColor,
-                    fontSize = 11.sp,
+                Row(
                     modifier = Modifier
-                        .align(Alignment.End)
-                        .padding(top = 2.dp, end = 4.dp)
-                )
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, start = 4.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (focusZone == ZONE_SLOTS) "1-5 / ◀▶ slot • ● or * pin ★" else "↑ slots",
+                        color = theme.cardTextColor.copy(alpha = 0.75f),
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "${memoValue.text.length}/$maxChars",
+                        color = theme.cardTextColor,
+                        fontSize = 11.sp
+                    )
+                }
 
                 Spacer(Modifier.height(6.dp))
 
@@ -287,6 +403,67 @@ fun QuickMemoDialog(
                         onClick = saveAndDismiss
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Compact `[1★] [2•] [3 ] [4 ] [5 ]` strip: ★ = pinned to the Home ticker, • = slot has text.
+ * The open slot is filled; the D-pad glow shows only while the bar has focus.
+ */
+@Composable
+private fun QuickMemoSlotBar(
+    slotCount: Int,
+    activeSlot: Int,
+    pinnedSlot: Int,
+    isFilled: (Int) -> Boolean,
+    barFocused: Boolean,
+    onSlotClick: (Int) -> Unit
+) {
+    val theme = LocalLauncherTheme.current
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        // Unclipped so the focused slot's halo isn't cut at the row edges
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { clip = false }
+    ) {
+        for (n in 1..slotCount) {
+            val active = n == activeSlot
+            val mark = when {
+                n == pinnedSlot -> "★"
+                isFilled(n) -> "•"
+                else -> " "
+            }
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(28.dp)
+                    .softGlowFocus(isSelected = barFocused && active, cornerRadius = 10.dp, bringIntoView = false)
+                    .clip(shape)
+                    .background(
+                        if (active) theme.appActionColor.copy(alpha = 0.35f) else softSurfaceColor.copy(alpha = 0.7f),
+                        shape
+                    )
+                    .border(
+                        if (active) 1.5.dp else 1.dp,
+                        if (active) theme.appActionColor else theme.greetingOutlineColor,
+                        shape
+                    )
+                    .clickable { onSlotClick(n) }
+            ) {
+                Text(
+                    text = "$n$mark",
+                    color = theme.fgTextColor,
+                    fontSize = 12.sp,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                    fontFamily = LocalLauncherFontFamily.current,
+                    maxLines = 1
+                )
             }
         }
     }

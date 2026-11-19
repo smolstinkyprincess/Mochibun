@@ -2,9 +2,12 @@ package one.crinklecod.mochibun.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
+import one.crinklecod.mochibun.data.model.LidAppLedRule
+import one.crinklecod.mochibun.data.model.LidAppLedRuleCodec
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_LID_LED_CHARGING
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_LID_LED_COLOR
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_LID_LED_ENABLED
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_LID_LED_APP_RULES
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_LID_LED_CHARGING
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_LID_LED_CHARGING_ANIMATION_ID
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_LID_LED_COLOR
@@ -31,7 +34,12 @@ internal object LidLedPrefs {
     private val _lidLedColor = MutableStateFlow(DEFAULT_LID_LED_COLOR)
     val lidLedColor: StateFlow<String> = _lidLedColor.asStateFlow()
 
+    private val _appLedRules = MutableStateFlow<Map<String, LidAppLedRule>>(emptyMap())
+    /** Per-app notification LED rules keyed by package (decoded once, not per notification). */
+    val appLedRules: StateFlow<Map<String, LidAppLedRule>> = _appLedRules.asStateFlow()
+
     fun reload(prefs: SharedPreferences) {
+        _appLedRules.value = LidAppLedRuleCodec.decode(prefs.getString(KEY_LID_LED_APP_RULES, null))
         _isLidLedEnabled.value = prefs.getBoolean(
             KEY_LID_LED_ENABLED,
             DEFAULT_LID_LED_ENABLED
@@ -94,5 +102,27 @@ internal object LidLedPrefs {
 
     fun setLidLedChargingAnimationId(context: Context, id: String) {
         getPrefs(context).edit().putString(KEY_LID_LED_CHARGING_ANIMATION_ID, id).apply()
+    }
+
+    fun setAppLedRule(context: Context, rule: LidAppLedRule) {
+        val updated = _appLedRules.value.toMutableMap()
+        updated.remove(rule.packageName)
+        val next = LidAppLedRuleCodec.toRuleMap(updated.values + rule)
+        writeAppLedRules(context, next)
+    }
+
+    fun setAppLedRules(context: Context, rules: Collection<LidAppLedRule>) {
+        writeAppLedRules(context, LidAppLedRuleCodec.toRuleMap(rules))
+    }
+
+    private fun writeAppLedRules(context: Context, rules: Map<String, LidAppLedRule>) {
+        val editor = getPrefs(context).edit()
+        if (rules.isEmpty()) {
+            editor.remove(KEY_LID_LED_APP_RULES)
+        } else {
+            editor.putString(KEY_LID_LED_APP_RULES, LidAppLedRuleCodec.encode(rules.values))
+        }
+        editor.apply()
+        _appLedRules.value = rules
     }
 }

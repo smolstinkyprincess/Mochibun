@@ -514,14 +514,16 @@ private fun rememberDayStamp(): DayStamp {
 @Composable
 fun rememberSubDisplayFeed(unreadCount: Int, greeting: String): String {
     val media by MediaSessionTracker.mediaState.collectAsState()
-    val memoText by PreferencesManager.quickMemoText.collectAsState()
+    val memoSlots by PreferencesManager.quickMemoSlots.collectAsState()
+    val pinnedSlot by PreferencesManager.pinnedQuickMemoSlot.collectAsState()
     val battery = rememberBatterySnapshot()
     val nextAlarm = rememberNextAlarmLabel()
     val stepsToday = rememberStepsToday()
     val day = rememberDayStamp()
 
     val fortune = remember(day.year, day.dayOfYear) { dailyFortuneLabel(day.year, day.dayOfYear) }
-    val memo = memoText.takeIf { it.isNotBlank() }
+    // Pinned slot first, else the first non-blank slot; all blank = no memo segment
+    val memo = remember(memoSlots, pinnedSlot) { PreferencesManager.tickerQuickMemo(memoSlots, pinnedSlot) }
     return remember(
         greeting, media.isPlaying, media.artist, media.title, unreadCount, battery, fortune,
         memo, nextAlarm, stepsToday
