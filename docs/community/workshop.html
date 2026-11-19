@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mochibun Bundle &amp; Mascot Workshop (もちぶん) ♡</title>
-  <meta name="description" content="Client-side .mochibundle packer &amp; custom mascot dialogue editor for Mochibun. Preview 8×4 mascot_atlas.png sprite sheets at 4 Hz, write mood dialogue pools, or edit existing .mochibundle packs.">
+  <meta name="description" content="Client-side .mochibundle packer &amp; custom mascot dialogue editor for Mochibun. Preview 8-row mascot_atlas.png sprite sheets (up to 16 frames per row) at 4 Hz, write mood dialogue pools, or edit existing .mochibundle packs.">
   <meta name="theme-color" content="#FFEBF2">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐰</text></svg>">
 
@@ -1915,11 +1915,13 @@
     ];
 
     const THEME_PRESETS = [
-      { id: 'sakura_dream',  name: '🌸 Sakura',   bg: '#FFF5F8', card: '#FCE4EC', greeting: '#A04064', action: '#A04064' },
-      { id: 'lavender_mist', name: '💜 Lavender', bg: '#F8F5FF', card: '#EDE7F6', greeting: '#5E35B1', action: '#6A4C93' },
-      { id: 'minty_matcha',  name: '🍵 Matcha',   bg: '#F4FBF7', card: '#E0F2E9', greeting: '#2E6F4E', action: '#3B7A57' },
-      { id: 'milky_peach',   name: '🍑 Peach',    bg: '#FFF9F5', card: '#FFE8D6', greeting: '#B5543C', action: '#C86446' },
-      { id: 'midnight_mochi',name: '🌙 Midnight', bg: '#1E162B', card: '#2D2240', greeting: '#FFB7D5', action: '#F48FB1' }
+      // Mirrors LauncherTheme.kt palettes: bg = background, card = container,
+      // greeting/action = deepAccent, outline = outline, text = textColor.
+      { id: 'sakura_dream',  name: '🌸 Sakura',   bg: '#FFF5F8', card: '#FCE4EC', greeting: '#A04064', action: '#A04064', outline: '#F3CADC', text: '#703350' },
+      { id: 'lavender_mist', name: '💜 Lavender', bg: '#F8F6FD', card: '#EDE7F6', greeting: '#5E35B1', action: '#5E35B1', outline: '#D1C4E9', text: '#3E2248' },
+      { id: 'minty_matcha',  name: '🍵 Matcha',   bg: '#F4FBF4', card: '#E8F5E9', greeting: '#2E7D32', action: '#2E7D32', outline: '#A5D6A7', text: '#1B5E20' },
+      { id: 'milky_peach',   name: '🍑 Peach',    bg: '#FFFBF5', card: '#FFF3E0', greeting: '#8D4E28', action: '#8D4E28', outline: '#FFCC80', text: '#6D2C12' },
+      { id: 'midnight_mochi',name: '🌙 Midnight', bg: '#1A1226', card: '#281D38', greeting: '#F3D9FF', action: '#F3D9FF', outline: '#5A437A', text: '#F9F2FF' }
     ];
 
     const BORDER_STYLES = [
@@ -1965,6 +1967,9 @@
     // Active card border & 9-slice state
     let activeBorderStyleId = 'solid';
     let activePresetId = 'sakura_dream';
+    // Palette tokens with no editor field; null = omit (app falls back to card / greeting color)
+    let paletteOutlineHex = '#F3CADC';
+    let paletteTextHex = '#703350';
     let cardRoundnessDp = 24;
     let cardBorderBytes = null;
     let cardBorderImage = null;
@@ -2074,6 +2079,8 @@
         setColorField('card', preset.card);
         setColorField('greeting', preset.greeting);
         setColorField('action', preset.action);
+        paletteOutlineHex = preset.outline;
+        paletteTextHex = preset.text;
         if (importedManifest && importedManifest.palette) {
           importedManifest.palette.activePresetId = preset.id;
         }
@@ -2657,6 +2664,8 @@
           setColorField('card', manifest.palette.cardColorHex || '#FCE4EC');
           setColorField('greeting', manifest.palette.greetingColorHex || '#A04064');
           setColorField('action', manifest.palette.actionColorHex || '#A04064');
+          paletteOutlineHex = typeof manifest.palette.outlineColorHex === 'string' ? manifest.palette.outlineColorHex : null;
+          paletteTextHex = typeof manifest.palette.textColorHex === 'string' ? manifest.palette.textColorHex : null;
           syncRoundnessControl(typeof manifest.palette.cardRoundnessDp === 'number' ? manifest.palette.cardRoundnessDp : 24);
           setBorderStyleId(manifest.palette.borderStyle || 'solid');
           const manifestSlicePx = typeof manifest.palette.cardBorderSlicePx === 'number'
@@ -2666,6 +2675,8 @@
           updateStageColors();
         } else {
           activePresetId = 'sakura_dream';
+          paletteOutlineHex = null;
+          paletteTextHex = null;
           syncRoundnessControl(24);
           setBorderStyleId('solid');
           syncSliceControls(DEFAULT_CARD_BORDER_SLICE);
@@ -3623,7 +3634,9 @@
           userName: greetingUser,
           showSparkles: base.greeting && typeof base.greeting.showSparkles === 'boolean' ? base.greeting.showSparkles : true
         },
-        palette: {
+        // Start from the imported palette so fields the workshop doesn't edit
+        // (fontFamilyId, future keys) survive a round-trip.
+        palette: Object.assign({}, (base.palette && typeof base.palette === 'object') ? base.palette : {}, {
           activePresetId: activePresetId || (base.palette && base.palette.activePresetId) || 'sakura_dream',
           isCustom: true,
           bgColorHex: document.getElementById('color-bg-hex').value.trim() || '#FFF5F8',
@@ -3634,7 +3647,8 @@
           borderStyle: normalizeBorderStyleId(activeBorderStyleId),
           hasCustomCardBorder: hasCustomCardBorder,
           cardBorderSlicePx: exportedSlicePx
-        },
+        }, paletteOutlineHex ? { outlineColorHex: paletteOutlineHex } : {},
+           paletteTextHex ? { textColorHex: paletteTextHex } : {}),
         cursor: cursorConfig,
         hasWallpaper: Boolean(preservedWallpaperBytes),
         hasCustomCursor: Boolean(preservedCursorBytes && preservedCursorEntryName),
@@ -3810,10 +3824,10 @@
     const LID_SWATCHES = [
       { label: 'Off', hex: '#000000' },
       { label: 'Sakura Pink', hex: '#FF1493' },
-      { label: 'Violet', hex: '#9D00FF' },
-      { label: 'Sky Blue', hex: '#00BFFF' },
+      { label: 'Violet Purple', hex: '#9D00FF' },
+      { label: 'Electric Blue', hex: '#00BFFF' },
       { label: 'Emerald Mint', hex: '#00FF7F' },
-      { label: 'Tangerine', hex: '#FF5E00' },
+      { label: 'Tangerine Coral', hex: '#FF5E00' },
       { label: 'Lemon Gold', hex: '#FFD000' }
     ];
 

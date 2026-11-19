@@ -13,7 +13,7 @@
   {
     "id":              "sakura_chase",
     "name":            "Sakura Chase ♡",
-    "author":          "emii",
+    "author":          "crinklecod.one",
     "type":            "led",
     "file":            "packs/sakura-chase.mochibunled",
     "colors":          ["#FF1493"]
@@ -21,7 +21,7 @@
   {
     "id":              "keitai_rainbow",
     "name":            "Keitai Rainbow",
-    "author":          "emii",
+    "author":          "crinklecod.one",
     "type":            "led",
     "file":            "packs/keitai-rainbow.mochibunled",
     "colors":          ["#FF1493", "#9D00FF", "#00BFFF", "#00FF7F", "#FFD000"]
@@ -29,7 +29,7 @@
   {
     "id":              "mint_heartbeat",
     "name":            "Mint Heartbeat",
-    "author":          "emii",
+    "author":          "crinklecod.one",
     "type":            "led",
     "file":            "packs/mint-heartbeat.mochibunled",
     "colors":          ["#00FF7F", "#00BFFF"]
