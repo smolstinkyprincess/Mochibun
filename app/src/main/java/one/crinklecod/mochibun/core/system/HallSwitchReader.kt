@@ -13,11 +13,13 @@ import androidx.annotation.VisibleForTesting
  * Magisk prompt or toast) and writes into an anonymous pipe this process created. SELinux blocks
  * app-created FIFOs here (priv_app has no fifo_file create on its data dir), so root opens the
  * pipe's write end through /proc/<pid>/fd. One thread blocks on the read end and only wakes for
- * keypad events. Closing the flip while the display has already timed out still arrives here,
+ * lid events. Closing the flip while the display has already timed out still arrives here,
  * even though no screen broadcast fires for it.
  *
- * If the app dies, getevent gets SIGPIPE on its next write and exits. Each launch also kills any
- * leftover reader of event0 first.
+ * getevent's output is filtered through `grep` in the root shell so ordinary keypad presses (same
+ * device node) never reach this process. If the app dies, grep gets SIGPIPE on its next lid line
+ * and exits, then getevent on its next write. Each launch also kills any leftover getevent reading
+ * event0 first, which ends its grep via EOF.
  */
 internal class HallSwitchReader(
     private val onHallChanged: (closed: Boolean) -> Unit
@@ -93,7 +95,11 @@ internal class HallSwitchReader(
             val result = RootShell.executeBlocking(
                 "for p in \$(pidof getevent); do " +
                     "grep -q '$INPUT_DEVICE' /proc/\$p/cmdline 2>/dev/null && kill \$p; done",
-                "getevent -ql $INPUT_DEVICE < /dev/null > $target 2>/dev/null &",
+                // event0 is shared with mtk-kpd, so unfiltered getevent would wake this
+                // process on every keypress system-wide. Filter in the root shell so only lid
+                // lines cross the pipe. $! is grep's pid (last stage of the background pipeline).
+                "getevent -ql $INPUT_DEVICE < /dev/null 2>/dev/null | " +
+                    "grep --line-buffered -E '$HALL_KEY_PATTERN' > $target 2>/dev/null &",
                 "g=\$!; want=\$(readlink $target); i=0",
                 "while [ \$i -lt 50 ] && [ \"\$(readlink /proc/\$g/fd/1 2>/dev/null)\" != \"\$want\" ]; " +
                     "do sleep 0.02; i=\$((i+1)); done",
@@ -113,6 +119,7 @@ internal class HallSwitchReader(
     companion object {
         private const val TAG = "HallSwitchReader"
         private const val INPUT_DEVICE = "/dev/input/event0" // mtk-kpd
+        private const val HALL_KEY_PATTERN = "KEY_SLEEP|KEY_WAKEUP"
         private const val MAX_RESTARTS = 3
         private const val RESTART_DELAY_MS = 2_000L
 

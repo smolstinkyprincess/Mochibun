@@ -3,7 +3,8 @@
 #
 # 1. Always: APK size + classes*.dex sizes for every APK under app/build/outputs/apk/.
 # 2. When an adb device is connected and Mochibun is installed:
-#      - median `am start -W` launch time over $RUNS runs (force-stop between runs)
+#      - median launch time over $RUNS runs: force-stop, then the system's HOME relaunch timed
+#        from logcat "ActivityTaskManager: Displayed .../.ui.MainActivity: +NNNms"
 #      - Home idle frame stats (gfxinfo reset -> 5 s idle -> dump)
 #      - App Drawer fling frame stats (swipe up to open, fling the list, dump)
 #      - memory footprint (dumpsys meminfo TOTAL PSS / TOTAL RSS)
@@ -34,8 +35,9 @@
 #
 # Notes:
 #   - Mochibun is the HOME app and usually the bound IME, so after `am force-stop` the system
-#     rebinds the IME/home and `am start -W` typically reports LaunchState WARM. That matches the
-#     methodology behind the numbers in AGENTS.md; the LaunchState of every run is shown.
+#     relaunches it at once and `am start -W` would hit that instance (TotalTime 0). Launch time
+#     is read from the relaunch's logcat Displayed line instead; if nothing relaunches it within
+#     ~6 s (not the default HOME), the script starts it with `am start`.
 #   - The drawer is closed with KEYCODE_HOME (not BACK): with Soft-Key Nav on, BACK in the drawer
 #     cycles sort mode instead of closing it.
 #   - Run on a quiet device (screen on, unlocked, lid open, charger state as you want to measure).
@@ -66,6 +68,20 @@ fmt_mib() { awk -v b="$1" 'BEGIN { printf "%.2f MiB", b / 1048576 }'; }
 fmt_bytes() { printf "%'d B" "$1" 2>/dev/null || printf "%d B" "$1"; }
 adb_sh() { { adb shell "$@" 2>/dev/null || true; } | tr -d '\r'; }
 hr() { printf '%s\n' "------------------------------------------------------------------------"; }
+
+# Reads logcat on stdin; prints the first "Displayed $ACTIVITY: +1s234ms" time in ms.
+displayed_ms() {
+    awk -v act="Displayed $ACTIVITY: +" '
+        !found && index($0, act) {
+            v = substr($0, index($0, act) + length(act))
+            sub(/ .*/, "", v)          # drop " (total ...)" if present
+            sub(/ms$/, "", v)
+            ms = v
+            if (index(v, "s")) { split(v, p, "s"); ms = p[1] * 1000 + p[2] }
+            print ms + 0
+            found = 1
+        }'
+}
 
 median() {
     # Prints the median of the numbers given as arguments (mean of the middle two when even).
@@ -355,22 +371,27 @@ if device_ready; then
         run_settings_stress
     else
         # --- Launch time ---------------------------------------------------------------------
-        echo "Measuring launch time ($RUNS runs)..." >&2
+        # Mochibun is HOME, so the system relaunches it right after `am force-stop`; `am start -W`
+        # then lands on that already-running instance and reports TotalTime 0. Instead, time the
+        # system's own relaunch from its "Displayed" line (same clock `am start -W` uses).
+        echo "Measuring launch time ($RUNS runs, logcat Displayed)..." >&2
         totals=()
-        states=()
         for i in $(seq 1 "$RUNS"); do
+            adb logcat -c 2>/dev/null || true
             adb_sh am force-stop "$PKG" >/dev/null
-            sleep 2
-            out=$(adb_sh am start -W -n "$ACTIVITY")
-            t=$(awk -F': *' '/^TotalTime:/ { print $2 }' <<< "$out")
-            s=$(awk -F': *' '/^LaunchState:/ { print $2 }' <<< "$out")
-            [ -n "$t" ] || t=$(awk -F': *' '/^WaitTime:/ { print $2 }' <<< "$out")
+            t=""
+            for poll in $(seq 1 60); do
+                # Not the default HOME on this device: nothing relaunches it, so start it ourselves
+                [ "$poll" -eq 12 ] && adb_sh am start -n "$ACTIVITY" >/dev/null
+                t=$(adb_sh logcat -d -s ActivityTaskManager:I | displayed_ms)
+                [ -n "$t" ] && break
+                sleep 0.5
+            done
             if [ -n "$t" ]; then
                 totals+=("$t")
-                states+=("${s:-?}")
-                echo "  run $i: ${t} ms (${s:-?})" >&2
+                echo "  run $i: ${t} ms" >&2
             else
-                echo "  run $i: no timing reported" >&2
+                echo "  run $i: no Displayed line within 30 s" >&2
             fi
             sleep 3
         done
@@ -378,11 +399,10 @@ if device_ready; then
             launch_median=$(median "${totals[@]}")
             launch_min=$(printf '%s\n' "${totals[@]}" | sort -n | head -1)
             launch_max=$(printf '%s\n' "${totals[@]}" | sort -n | tail -1)
-            launch_states=$(printf '%s\n' "${states[@]}" | sort | uniq -c | awk '{ printf "%s%s x%s", sep, $2, $1; sep = ", " }')
-            DEVICE_REPORT+="  Launch (am start -W, ${#totals[@]} runs): median ${launch_median} ms (min ${launch_min}, max ${launch_max}) [${launch_states}]"$'\n'
+            DEVICE_REPORT+="  Launch (force-stop -> logcat Displayed, ${#totals[@]} runs): median ${launch_median} ms (min ${launch_min}, max ${launch_max})"$'\n'
             DEVICE_REPORT+="    samples: ${totals[*]}"$'\n'
         else
-            DEVICE_REPORT+="  Launch: no TotalTime/WaitTime reported by am start -W"$'\n'
+            DEVICE_REPORT+="  Launch: no ActivityTaskManager Displayed line seen"$'\n'
         fi
 
         # --- Home idle frames ----------------------------------------------------------------

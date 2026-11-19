@@ -33,6 +33,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -306,8 +310,19 @@ fun IconPickerDialog(
                             key = { _, name -> name }
                         ) { index, iconName ->
                             val isSelected = focusZone == 1 && index == selectedIconIndex
-                            val iconBitmap = remember(iconName, context) {
-                                IconPackManager.getCachedImageBitmap(context, iconName, 96)
+                            // Cache misses decode on IO, never during grid composition
+                            val iconBitmap by produceState<ImageBitmap?>(
+                                initialValue = remember(iconName, context) {
+                                    IconPackManager.peekCachedImageBitmap(context, iconName, 96)
+                                },
+                                iconName,
+                                context
+                            ) {
+                                if (value == null) {
+                                    value = withContext(Dispatchers.IO) {
+                                        IconPackManager.getCachedImageBitmap(context, iconName, 96)
+                                    }
+                                }
                             }
                             val cellShape = RoundedCornerShape(12.dp)
 
@@ -331,9 +346,10 @@ fun IconPickerDialog(
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (iconBitmap != null) {
+                                val bitmap = iconBitmap
+                                if (bitmap != null) {
                                     Image(
-                                        bitmap = iconBitmap,
+                                        bitmap = bitmap,
                                         contentDescription = iconName,
                                         filterQuality = FilterQuality.None,
                                         modifier = Modifier.size(40.dp)

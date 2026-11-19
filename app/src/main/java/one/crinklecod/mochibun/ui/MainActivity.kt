@@ -236,7 +236,7 @@ class MainActivity : ComponentActivity() {
         isKeyguardLocked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
         activeInstance = java.lang.ref.WeakReference(this)
         one.crinklecod.mochibun.core.system.CursorServiceWatchdog.checkAsync(this, force = false)
-        SystemUiThemeBridge.broadcastSavedTheme(this)
+        SystemUiThemeBridge.broadcastSavedTheme(this, onlyIfChanged = true)
         // Catches copies made while another keyboard was the default (our IME's listener misses them)
         one.crinklecod.mochibun.data.repository.ClipboardRingRepository.syncFromClipboard(this)
     }

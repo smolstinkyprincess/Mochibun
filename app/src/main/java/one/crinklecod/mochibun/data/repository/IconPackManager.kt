@@ -64,6 +64,17 @@ object IconPackManager {
     @Volatile
     private var lastLoadedPackageName: String? = null
 
+    // kawaii.icon.pack lookups (install check + package Context) are Binder calls into
+    // PackageManager; the picker hit them once per icon. Cached until a package change or
+    // memory release clears them.
+    @Volatile
+    private var kawaiiInstalled: Boolean? = null
+
+    // A package Context made from the application context, not an Activity: nothing to leak
+    @android.annotation.SuppressLint("StaticFieldLeak")
+    @Volatile
+    private var kawaiiContext: Context? = null
+
     // Byte-weighted caches. The Chinoe AT-M120 operates in a strict ~1.8 GB total RAM envelope;
     // weighing entries by pixel bytes (rather than counting them) keeps the bound honest when icon
     // sizes differ. The app cache holds ~220 drawer icons at 96 px ARGB, so a normal install (~85
@@ -99,7 +110,7 @@ object IconPackManager {
 
         // Backwards compatibility for existing Mochibun installations:
         // If kawaii.icon.pack is installed, default to it; otherwise use system default
-        return if (isPackageInstalled(context, KAWAII_ICON_PACK)) {
+        return if (isKawaiiPackInstalled(context)) {
             KAWAII_ICON_PACK
         } else {
             ""
@@ -116,6 +127,8 @@ object IconPackManager {
         synchronized(lock) {
             activeParsedPack = null
             lastLoadedPackageName = null
+            kawaiiInstalled = null
+            kawaiiContext = null
             imageBitmapCache.evictAll()
             drawableResIdCache.clear()
             activeAppCacheKeys.clear()
@@ -158,6 +171,24 @@ object IconPackManager {
             drawableResIdCache.clear()
             activeParsedPack = null
             lastLoadedPackageName = null
+            kawaiiContext = null
+        }
+    }
+
+    private fun isKawaiiPackInstalled(context: Context): Boolean =
+        kawaiiInstalled ?: isPackageInstalled(context, KAWAII_ICON_PACK).also { kawaiiInstalled = it }
+
+    /** Package Context for the kawaii fallback pack, or null when it isn't installed. */
+    private fun kawaiiPackContext(context: Context): Context? {
+        kawaiiContext?.let { return it }
+        if (!isKawaiiPackInstalled(context)) return null
+        return try {
+            context.applicationContext
+                .createPackageContext(KAWAII_ICON_PACK, Context.CONTEXT_IGNORE_SECURITY)
+                .also { kawaiiContext = it }
+        } catch (_: PackageManager.NameNotFoundException) {
+            kawaiiInstalled = false
+            null
         }
     }
 
@@ -586,9 +617,9 @@ object IconPackManager {
         }
 
         // Backwards compatibility fallback: check kawaii.icon.pack if active pack didn't have it
-        if (parsedPack?.packageName != KAWAII_ICON_PACK && isPackageInstalled(context, KAWAII_ICON_PACK)) {
+        if (parsedPack?.packageName != KAWAII_ICON_PACK) {
+            val kawaiiContext = kawaiiPackContext(context) ?: return null
             try {
-                val kawaiiContext = context.createPackageContext(KAWAII_ICON_PACK, Context.CONTEXT_IGNORE_SECURITY)
                 val resId = getDrawableResId(kawaiiContext, KAWAII_ICON_PACK, drawableName)
                 if (resId != 0) {
                     val d = kawaiiContext.resources.getDrawable(resId, null)
@@ -598,6 +629,22 @@ object IconPackManager {
         }
 
         return null
+    }
+
+    /**
+     * Memory-cache-only lookup for [getCachedImageBitmap]: never decodes, so it is safe on the UI
+     * thread (lets a recycled picker cell show a cached icon on its first frame).
+     */
+    fun peekCachedImageBitmap(
+        context: Context,
+        drawableName: String?,
+        targetSizePx: Int = 96
+    ): ImageBitmap? {
+        if (drawableName.isNullOrEmpty()) return null
+        val cacheKey = "${getSelectedIconPack(context)}#$drawableName@$targetSizePx"
+        synchronized(imageBitmapCache) {
+            return imageBitmapCache.get(cacheKey)
+        }
     }
 
     fun getCachedImageBitmap(
@@ -634,7 +681,7 @@ object IconPackManager {
         }
 
         // Fallback to kawaii.icon.pack if installed
-        if (isPackageInstalled(context, KAWAII_ICON_PACK)) {
+        if (isKawaiiPackInstalled(context)) {
             val kawaiiParsed = loadAndParseIconPack(context, KAWAII_ICON_PACK)
             if (kawaiiParsed != null && kawaiiParsed.allIconNames.isNotEmpty()) {
                 return@withContext kawaiiParsed.allIconNames

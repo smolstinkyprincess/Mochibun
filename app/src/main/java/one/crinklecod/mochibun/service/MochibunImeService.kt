@@ -124,9 +124,20 @@ class MochibunImeService : InputMethodService() {
     private var composingShown = false
     private var manualSelection = false
 
+    // getCursorCapsMode is a blocking Binder call. Sentence/word caps only depend on what sits
+    // right before the caret, and a letter or digit there never starts a sentence or word, so
+    // re-tapping a letter key (a -> b -> c) can't change the answer. Set when caps were read with
+    // such a candidate composing; cleared by any commit or shift change.
+    private var autoCapFreshForComposing = false
+
+    // True once the editor has told us the selection is collapsed, so DEL can skip the blocking
+    // getSelectedText(0) round-trip. False means "unknown or non-empty": query as before.
+    private var selectionKnownEmpty = false
+
     private val commit: (String) -> Unit = { text ->
         currentInputConnection?.commitText(text, 1)
         composingShown = false
+        autoCapFreshForComposing = false
         if (text.any { it.isLetter() }) {
             if (shiftMode == ShiftMode.ONCE) shiftMode = ShiftMode.LOWER
             autoCapSuppressed = false
@@ -218,6 +229,9 @@ class MochibunImeService : InputMethodService() {
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
         manualSelection = false
+        autoCapFreshForComposing = false
+        selectionKnownEmpty = attribute != null && attribute.initialSelStart >= 0 &&
+            attribute.initialSelStart == attribute.initialSelEnd
         if (!restarting) nullEditorEngaged = false
     }
 
@@ -417,6 +431,7 @@ class MochibunImeService : InputMethodService() {
         candidatesStart: Int, candidatesEnd: Int
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        selectionKnownEmpty = newSelStart >= 0 && newSelStart == newSelEnd
         if (candidateState.isActive) {
             // The caret left our composing text (touch, app-driven move): keep the letter as typed
             if (candidatesEnd != -1 && (newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) {
@@ -764,6 +779,7 @@ class MochibunImeService : InputMethodService() {
 
     /** '*' tap: abc -> Abc -> ABC -> abc, starting from what the label currently shows. */
     private fun cycleShift() {
+        autoCapFreshForComposing = false
         shiftMode = when {
             shiftMode == ShiftMode.CAPS -> ShiftMode.LOWER
             shiftMode == ShiftMode.ONCE || isAutoCapActive() -> ShiftMode.CAPS
@@ -814,7 +830,11 @@ class MochibunImeService : InputMethodService() {
             (type and CAP_FLAGS) != 0
         autoCapNext = wantsCaps && shiftMode == ShiftMode.LOWER &&
             (currentInputConnection?.getCursorCapsMode(type) ?: 0) != 0
+        autoCapFreshForComposing = composingIsLetterOrDigit()
     }
+
+    private fun composingIsLetterOrDigit(): Boolean =
+        candidateState.isActive && candidateState.candidates[candidateState.selectedIndex].all { it.isLetterOrDigit() }
 
     /** Mirrors the pending candidate into the editor as composing (underlined) text. */
     private fun syncComposing() {
@@ -830,7 +850,8 @@ class MochibunImeService : InputMethodService() {
             ic.finishComposingText()
             composingShown = false
         }
-        refreshAutoCap()
+        // Cycling a letter key keeps the same caps answer; skip the Binder round-trip
+        if (!(autoCapFreshForComposing && composingIsLetterOrDigit())) refreshAutoCap()
     }
 
     private inline fun <T> batchEdit(block: () -> T): T {
@@ -845,7 +866,7 @@ class MochibunImeService : InputMethodService() {
 
     private fun deleteBeforeCursor() {
         val ic = currentInputConnection ?: return
-        if (!ic.getSelectedText(0).isNullOrEmpty()) {
+        if (!selectionKnownEmpty && !ic.getSelectedText(0).isNullOrEmpty()) {
             ic.commitText("", 1)
         } else {
             ic.deleteSurroundingText(1, 0)

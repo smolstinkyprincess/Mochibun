@@ -2,8 +2,10 @@ package one.crinklecod.mochibun.ui.theme
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import androidx.compose.ui.graphics.toArgb
+import one.crinklecod.mochibun.BuildConfig
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 
 /**
@@ -20,6 +22,18 @@ object SystemUiThemeBridge {
     const val EXTRA_ACCENT_DEEP = "EXTRA_ACCENT_DEEP"
     const val EXTRA_TRACK = "EXTRA_TRACK"
     const val EXTRA_SCRIM = "EXTRA_SCRIM"
+
+    /**
+     * The hook has no way to pull the theme, so a SystemUI restart is only healed by our next
+     * broadcast. Unchanged colors are still re-sent once this old, keeping that recovery path.
+     */
+    private const val UNCHANGED_RESEND_MS = 5 * 60_000L
+
+    @Volatile
+    private var lastSentColors: SystemUiColors? = null
+
+    @Volatile
+    private var lastSentAtMs = 0L
 
     /** ARGB colors sent to the SystemUI hook for one palette. */
     data class SystemUiColors(
@@ -50,8 +64,13 @@ object SystemUiThemeBridge {
         )
     }
 
-    fun broadcastTheme(context: Context, palette: MochibunThemePalette) {
+    fun broadcastTheme(context: Context, palette: MochibunThemePalette, onlyIfChanged: Boolean = false) {
         val colors = systemUiColors(palette)
+        if (onlyIfChanged && colors == lastSentColors &&
+            SystemClock.elapsedRealtime() - lastSentAtMs < UNCHANGED_RESEND_MS
+        ) {
+            return
+        }
         broadcastColors(
             context = context,
             primary = colors.primary,
@@ -71,12 +90,14 @@ object SystemUiThemeBridge {
 
     /**
      * Loads the active theme from SharedPreferences and broadcasts it to SystemUI immediately.
+     * With [onlyIfChanged] (Home resumes), skips the FLAG_INCLUDE_STOPPED_PACKAGES broadcast when
+     * the colors match the last one sent recently.
      */
-    fun broadcastSavedTheme(context: Context) {
+    fun broadcastSavedTheme(context: Context, onlyIfChanged: Boolean = false) {
         try {
             val prefs = PreferencesManager.getPrefs(context)
             val theme = loadSavedTheme(prefs)
-            broadcastTheme(context, theme)
+            broadcastTheme(context, theme.palette, onlyIfChanged)
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to load and broadcast saved theme", t)
         }
@@ -104,13 +125,16 @@ object SystemUiThemeBridge {
                 putExtra(EXTRA_SCRIM, scrim)
             }
             context.sendBroadcast(intent)
-            Log.d(TAG, "Broadcast sent with primary=${Integer.toHexString(primary)}")
-            Log.d(
-                TAG,
-                "Broadcasted theme colors: primary=#%08X container=#%08X accentDeep=#%08X track=#%08X scrim=#%08X".format(
-                    primary, container, accentDeep, track, scrim
+            lastSentColors = SystemUiColors(primary, container, accentDeep, track, scrim)
+            lastSentAtMs = SystemClock.elapsedRealtime()
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    TAG,
+                    "Broadcasted theme colors: primary=#%08X container=#%08X accentDeep=#%08X track=#%08X scrim=#%08X".format(
+                        primary, container, accentDeep, track, scrim
+                    )
                 )
-            )
+            }
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to send $ACTION_THEME_CHANGED broadcast", t)
         }
