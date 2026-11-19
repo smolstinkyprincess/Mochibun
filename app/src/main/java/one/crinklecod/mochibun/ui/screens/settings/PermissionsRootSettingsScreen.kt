@@ -61,7 +61,11 @@ import one.crinklecod.mochibun.service.VirtualCursorService
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.annotation.WorkerThread
+import one.crinklecod.mochibun.core.system.KeyHookStatus
 
 /** Rows of the essential (non-root) setup checklist, always visible. */
 internal val ESSENTIAL_PERMISSION_ROWS = listOf("home", "ime", "overlay", "a11y", "notifications", "cursor")
@@ -81,6 +85,59 @@ internal fun permissionsRowIds(showRootOptions: Boolean): List<String> = buildLi
     add("show_root")
 }
 
+/**
+ * Status rows of the Setup & Diagnostics screen that need binder / settings-provider IPC:
+ * PackageManager.resolveActivity, Settings.Secure / Settings.Global reads, AppOps
+ * (canDrawOverlays) and InputMethodManager. Together that is ~8 synchronous IPCs, which used to
+ * run on the UI thread during the screen's first frame (the ON_RESUME observer fires
+ * synchronously while the effect registers it) and stalled the open on the MT6761.
+ */
+internal data class PermissionsSystemStatus(
+    val isDefaultHome: Boolean,
+    val imeState: MochibunImeStatus.State,
+    val overlayGranted: Boolean,
+    val notificationAccessGranted: Boolean,
+    val accessibilityEnabled: Boolean,
+    val keyHookGlobalEnabled: Boolean,
+    val systemUiHookGlobalEnabled: Boolean,
+    /** Hook globally enabled and its heartbeat is from this boot ([KeyHookStatus.readActive]). */
+    val keyHookActive: Boolean
+)
+
+/** Last status read (process lifetime): seeds the next open's first frame so rows don't flicker. */
+@Volatile
+private var lastPermissionsSystemStatus: PermissionsSystemStatus? = null
+
+private fun readGlobalHookEnabled(context: Context, setting: String): Boolean = try {
+    Settings.Global.getInt(context.contentResolver, setting, 1) == 1
+} catch (_: Exception) {
+    true
+}
+
+@WorkerThread
+private fun readPermissionsSystemStatus(context: Context): PermissionsSystemStatus {
+    val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+    val isDefaultHome = try {
+        context.packageManager.resolveActivity(
+            homeIntent,
+            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+        )?.activityInfo?.packageName == context.packageName
+    } catch (_: Exception) {
+        false
+    }
+    return PermissionsSystemStatus(
+        isDefaultHome = isDefaultHome,
+        imeState = MochibunImeStatus.state(context),
+        overlayGranted = Settings.canDrawOverlays(context),
+        notificationAccessGranted =
+            NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName),
+        accessibilityEnabled = MochibunAccessibilityService.isEnabled(context),
+        keyHookGlobalEnabled = readGlobalHookEnabled(context, PreferencesManager.GLOBAL_HOOK_KEY_ENABLED),
+        systemUiHookGlobalEnabled = readGlobalHookEnabled(context, PreferencesManager.GLOBAL_HOOK_SYSUI_ENABLED),
+        keyHookActive = KeyHookStatus.readActive(context)
+    ).also { lastPermissionsSystemStatus = it }
+}
+
 /** Keypad jump for a row: keys 1–9, then 0 for the tenth row (as before). */
 internal fun settingsJumpNumber(rows: List<String>, id: String): Int? =
     (rows.indexOf(id) + 1).takeIf { it in 1..10 }
@@ -96,18 +153,24 @@ internal fun PermissionsRootSettingsScreen(
     val focusRequester = remember { FocusRequester() }
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
-    var isDefaultHome by remember { mutableStateOf(false) }
-    var imeState by remember { mutableStateOf(MochibunImeStatus.State.NOT_ENABLED) }
-    var overlayGranted by remember { mutableStateOf(false) }
-    var notificationAccessGranted by remember { mutableStateOf(false) }
-    var accessibilityEnabled by remember { mutableStateOf(false) }
+    // IPC-backed rows start from the last-known status and refresh on Dispatchers.IO (refreshState)
+    val seed = remember { lastPermissionsSystemStatus }
+    var isDefaultHome by remember { mutableStateOf(seed?.isDefaultHome ?: false) }
+    var imeState by remember {
+        mutableStateOf(seed?.imeState ?: MochibunImeStatus.lastKnownState ?: MochibunImeStatus.State.NOT_ENABLED)
+    }
+    var overlayGranted by remember { mutableStateOf(seed?.overlayGranted ?: false) }
+    var notificationAccessGranted by remember { mutableStateOf(seed?.notificationAccessGranted ?: false) }
+    var accessibilityEnabled by remember { mutableStateOf(seed?.accessibilityEnabled ?: false) }
     val showRootOptions by PreferencesManager.showRootOptions.collectAsState()
+    // A few stat() calls, no IPC; it decides whether the banner item exists, so it stays synchronous
+    // (an async value would shift the LazyColumn items after the first frame). Probed once.
     val suPresent = remember { RootShell.isSuBinaryPresent() }
     var cursorVisible by remember { mutableStateOf(VirtualCursorService.isCursorVisible) }
     var rootStatus by remember {
         mutableStateOf(
             when {
-                !RootShell.isRootAvailable() -> RootStatus.NotAvailable
+                !suPresent -> RootStatus.NotAvailable
                 RootShell.isGranted() == true -> RootStatus.Granted("Root access already granted")
                 else -> RootStatus.Unknown
             }
@@ -120,8 +183,8 @@ internal fun PermissionsRootSettingsScreen(
     var systemUiHookEnabled by remember {
         mutableStateOf(PreferencesManager.isSystemUiHookEnabled(context))
     }
-    var keyHookGlobalEnabled by remember { mutableStateOf(true) }
-    var systemUiHookGlobalEnabled by remember { mutableStateOf(true) }
+    var keyHookGlobalEnabled by remember { mutableStateOf(seed?.keyHookGlobalEnabled ?: true) }
+    var systemUiHookGlobalEnabled by remember { mutableStateOf(seed?.systemUiHookGlobalEnabled ?: true) }
     var rootRecentsEnabled by remember {
         mutableStateOf(HardwareRemapManager.isRootRecentsFallbackEnabled(context))
     }
@@ -141,66 +204,34 @@ internal fun PermissionsRootSettingsScreen(
         focusedIndex = focusedIndex.coerceIn(0, (totalItems - 1).coerceAtLeast(0))
     }
 
-    val readGlobalHookEnabled: (String) -> Boolean = { setting ->
-        try {
-            Settings.Global.getInt(context.contentResolver, setting, 1) == 1
-        } catch (_: Exception) {
-            true
-        }
-    }
-
-    fun refreshState() {
-        val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        isDefaultHome = context.packageManager.resolveActivity(
-            homeIntent,
-            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
-        )?.activityInfo?.packageName == context.packageName
-        imeState = MochibunImeStatus.state(context)
-        overlayGranted = Settings.canDrawOverlays(context)
-        notificationAccessGranted =
-            NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
-        accessibilityEnabled = MochibunAccessibilityService.isEnabled(context)
+    /**
+     * Re-reads every status row. In-process reads (prefs, static flags, su stat) stay synchronous;
+     * the IPC-backed ones land a frame or two later from [readPermissionsSystemStatus] on IO.
+     * [applyHeartbeat] = false keeps keyHookActive untouched: on resume it is reset and re-requested
+     * from the hook, whose reply must not be overwritten by a late heartbeat read.
+     */
+    fun refreshState(applyHeartbeat: Boolean = true) {
         cursorVisible = VirtualCursorService.isCursorVisible
         rootRecentsEnabled = HardwareRemapManager.isRootRecentsFallbackEnabled(context)
         rootQuickSettingsEnabled = PreferencesManager.isRootQuickSettingsEnabled(context)
         keyHookEnabled = PreferencesManager.isKeyHookEnabled(context)
         systemUiHookEnabled = PreferencesManager.isSystemUiHookEnabled(context)
-        keyHookGlobalEnabled = readGlobalHookEnabled(PreferencesManager.GLOBAL_HOOK_KEY_ENABLED)
-        systemUiHookGlobalEnabled =
-            readGlobalHookEnabled(PreferencesManager.GLOBAL_HOOK_SYSUI_ENABLED)
-        val heartbeat = try {
-            Settings.Global.getLong(
-                context.contentResolver,
-                PreferencesManager.GLOBAL_KEY_HOOK_ALIVE_ELAPSED,
-                0L
-            )
-        } catch (_: Exception) {
-            0L
-        }
-        val heartbeatBootCount = try {
-            Settings.Global.getInt(
-                context.contentResolver,
-                PreferencesManager.GLOBAL_KEY_HOOK_ALIVE_BOOT_COUNT,
-                -1
-            )
-        } catch (_: Exception) {
-            -1
-        }
-        val currentBootCount = try {
-            Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1)
-        } catch (_: Exception) {
-            -1
-        }
-        keyHookActive = keyHookGlobalEnabled &&
-            heartbeat > 0L &&
-            heartbeat <= SystemClock.elapsedRealtime() &&
-            currentBootCount >= 0 &&
-            heartbeatBootCount == currentBootCount
         rootStatus = when {
             !RootShell.isRootAvailable() -> RootStatus.NotAvailable
             RootShell.isGranted() == true -> RootStatus.Granted("Root access already granted")
             rootStatus is RootStatus.Granted -> rootStatus
             else -> RootStatus.Unknown
+        }
+        scope.launch {
+            val status = withContext(Dispatchers.IO) { readPermissionsSystemStatus(context) }
+            isDefaultHome = status.isDefaultHome
+            imeState = status.imeState
+            overlayGranted = status.overlayGranted
+            notificationAccessGranted = status.notificationAccessGranted
+            accessibilityEnabled = status.accessibilityEnabled
+            keyHookGlobalEnabled = status.keyHookGlobalEnabled
+            systemUiHookGlobalEnabled = status.systemUiHookGlobalEnabled
+            if (applyHeartbeat) keyHookActive = status.keyHookActive
         }
     }
 
@@ -210,40 +241,13 @@ internal fun PermissionsRootSettingsScreen(
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == MochibunSystemActions.ACTION_KEY_HOOK_STATUS) {
                     val appContext = context ?: return
-                    val alive = try {
-                        Settings.Global.getLong(
-                            appContext.contentResolver,
-                            PreferencesManager.GLOBAL_KEY_HOOK_ALIVE_ELAPSED,
-                            0L
-                        )
-                    } catch (_: Exception) {
-                        0L
+                    val reportedActive =
+                        intent.getBooleanExtra(MochibunSystemActions.EXTRA_KEY_HOOK_ACTIVE, false)
+                    // Heartbeat + global switch are Settings.Global reads: keep them off the UI thread
+                    scope.launch {
+                        val alive = withContext(Dispatchers.IO) { KeyHookStatus.readActive(appContext) }
+                        keyHookActive = reportedActive && alive
                     }
-                    val aliveBootCount = try {
-                        Settings.Global.getInt(
-                            appContext.contentResolver,
-                            PreferencesManager.GLOBAL_KEY_HOOK_ALIVE_BOOT_COUNT,
-                            -1
-                        )
-                    } catch (_: Exception) {
-                        -1
-                    }
-                    val currentBootCount = try {
-                        Settings.Global.getInt(
-                            appContext.contentResolver,
-                            Settings.Global.BOOT_COUNT,
-                            -1
-                        )
-                    } catch (_: Exception) {
-                        -1
-                    }
-                    keyHookActive =
-                        intent.getBooleanExtra(MochibunSystemActions.EXTRA_KEY_HOOK_ACTIVE, false) &&
-                            keyHookGlobalEnabled &&
-                            alive > 0L &&
-                            alive <= SystemClock.elapsedRealtime() &&
-                            currentBootCount >= 0 &&
-                            aliveBootCount == currentBootCount
                 }
             }
         }
@@ -257,7 +261,7 @@ internal fun PermissionsRootSettingsScreen(
         )
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                refreshState()
+                refreshState(applyHeartbeat = false)
                 keyHookActive = false
                 context.sendBroadcast(Intent(MochibunSystemActions.ACTION_REQUEST_KEY_HOOK_STATUS))
             }
@@ -527,16 +531,21 @@ internal fun PermissionsRootSettingsScreen(
 
     // LazyColumn items: [non-root banner], essential card, [root card], advanced card
     val showBanner = !showRootOptions && !suPresent
-    LaunchedEffect(focusedIndex, rowIds, showBanner) {
-        val id = rowIds.getOrNull(focusedIndex) ?: return@LaunchedEffect
+    // As before: re-aligns the focused row's card on every focus / row-set change.
+    ScrollToFocusedItem(
+        listState,
+        onlyIfHidden = false,
+        retriggerKey = { Triple(focusedIndex, rowIds, showBanner) }
+    ) {
+        val id = rowIds.getOrNull(focusedIndex)
         val bannerOffset = if (showBanner) 1 else 0
-        val targetItem = when (id) {
+        when (id) {
+            null -> null
             in ESSENTIAL_PERMISSION_ROWS ->
                 if (ESSENTIAL_PERMISSION_ROWS.indexOf(id) < 4) 0 else bannerOffset
             in ROOT_PERMISSION_ROWS -> bannerOffset + 1
             else -> bannerOffset + if (showRootOptions) 2 else 1
         }
-        listState.animateScrollToItem(targetItem)
     }
 
     requestFocusSafely(focusRequester)

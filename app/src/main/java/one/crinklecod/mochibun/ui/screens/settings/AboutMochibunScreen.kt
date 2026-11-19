@@ -12,7 +12,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +42,10 @@ import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 
+/** Last "Memory" row text, so reopening About paints a value on its first frame. */
+@Volatile
+private var lastAboutMemoryText: String? = null
+
 /**
  * Tier 4: About & System Sub-Screen
  */
@@ -49,14 +59,19 @@ internal fun AboutMochibunScreen(
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
 
-    val memoryInfo = remember(context) {
-        ActivityManager.MemoryInfo().also { info ->
+    // ActivityManager.getMemoryInfo is a binder call into system_server: read it on IO instead of
+    // during the first composition. Until it lands the row shows this process's last reading.
+    var memoryText by remember { mutableStateOf(lastAboutMemoryText ?: "…") }
+    LaunchedEffect(context) {
+        memoryText = withContext(Dispatchers.IO) {
+            val info = ActivityManager.MemoryInfo()
             (context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as ActivityManager)
                 .getMemoryInfo(info)
-        }
+            val totalRamMb = info.totalMem / (1024 * 1024)
+            val usedRamMb = (info.totalMem - info.availMem) / (1024 * 1024)
+            "$usedRamMb MB used / $totalRamMb MB total"
+        }.also { lastAboutMemoryText = it }
     }
-    val totalRamMb = memoryInfo.totalMem / (1024 * 1024)
-    val usedRamMb = (memoryInfo.totalMem - memoryInfo.availMem) / (1024 * 1024)
 
     val dm = context.resources.displayMetrics
     val displayResolution = remember(configuration, dm.widthPixels, dm.heightPixels) {
@@ -157,7 +172,7 @@ internal fun AboutMochibunScreen(
                     SettingsInfoRow(label = "OS Version", value = osVersion)
                     SettingsInfoRow(label = "Architecture", value = primaryAbi)
                     SettingsInfoRow(label = "Display", value = displayResolution)
-                    SettingsInfoRow(label = "Memory", value = "$usedRamMb MB used / $totalRamMb MB total")
+                    SettingsInfoRow(label = "Memory", value = memoryText)
                 }
             }
 

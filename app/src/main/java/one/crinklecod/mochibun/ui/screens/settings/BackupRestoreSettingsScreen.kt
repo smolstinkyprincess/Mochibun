@@ -171,20 +171,16 @@ internal fun BackupRestoreSettingsScreen(
     val items = listOf("export_bundle", "import_bundle", "export", "restore", "reset")
     val totalItems = items.size
 
-    val targetCardIndex = remember(focusedIndex, items) {
+    // Card that holds the focused row; read lazily by ScrollToFocusedItem (not in composition).
+    fun targetCardIndex(): Int =
         when (items.getOrNull(focusedIndex)) {
             "export_bundle", "import_bundle" -> 0
             "export", "restore" -> 1
             "reset" -> 2
             else -> 0
         }
-    }
 
-    LaunchedEffect(targetCardIndex) {
-        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
-        if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
-        listState.animateScrollToItem(targetCardIndex)
-    }
+    ScrollToFocusedItem(listState) { targetCardIndex() }
 
     fun activateBackupItem(index: Int) {
         when (items.getOrNull(index)) {

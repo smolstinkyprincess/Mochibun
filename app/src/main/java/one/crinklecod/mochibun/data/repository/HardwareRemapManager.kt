@@ -86,8 +86,7 @@ object HardwareRemapManager {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (context == null || intent == null) return
             if (intent.action == MochibunSystemActions.ACTION_HARDWARE_KEY_TRIGGER) {
-                @Suppress("DEPRECATION")
-                val rawEvent = intent.getParcelableExtra<KeyEvent>(MochibunSystemActions.EXTRA_KEY_EVENT)
+                val rawEvent = MochibunSystemActions.hookKeyEvent(intent)
                 val event = rawEvent ?: run {
                     val keyCode = intent.getIntExtra(MochibunSystemActions.EXTRA_KEY_CODE, KeyEvent.KEYCODE_UNKNOWN)
                     val action = intent.getIntExtra(MochibunSystemActions.EXTRA_ACTION, KeyEvent.ACTION_DOWN)

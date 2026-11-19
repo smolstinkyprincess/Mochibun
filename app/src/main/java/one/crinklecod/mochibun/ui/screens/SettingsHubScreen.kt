@@ -45,6 +45,30 @@ sealed class SettingsDestination {
     object LidLedStudio : SettingsDestination()
 }
 
+/** Hub card order: index i is opened by jump key i + 1. */
+internal val SETTINGS_HUB_DESTINATIONS: List<SettingsDestination> = listOf(
+    SettingsDestination.Appearance,
+    SettingsDestination.Keyboard,
+    SettingsDestination.CursorHardware,
+    SettingsDestination.SoundFeedback,
+    SettingsDestination.Behavior,
+    SettingsDestination.PermissionsRoot,
+    SettingsDestination.BackupRestore,
+    SettingsDestination.About
+)
+
+/**
+ * Where Back goes from [destination] once no nested editor / preview dialog claims it.
+ * null = close the Settings Hub. Exactly one step per press (see MochibunSystemActions.hookKeyEvent
+ * for the hook bug that once made one press step twice).
+ */
+internal fun settingsBackTarget(destination: SettingsDestination): SettingsDestination? =
+    when (destination) {
+        SettingsDestination.Hub -> null
+        SettingsDestination.LidLedStudio -> SettingsDestination.Behavior
+        else -> SettingsDestination.Hub
+    }
+
 /**
  * Unified Mochibun Settings Screen.
  * Implements a clean, two-tier settings architecture optimized for D-pad spatial navigation
@@ -82,12 +106,9 @@ fun SettingsHubScreen(
             dismissBackupPreview()
         } else if (closeLidStudioEditor != null) {
             closeLidStudioEditor()
-        } else if (currentDestination == SettingsDestination.LidLedStudio) {
-            currentDestination = SettingsDestination.Behavior
-        } else if (currentDestination == SettingsDestination.Hub) {
-            onClose()
         } else {
-            currentDestination = SettingsDestination.Hub
+            val target = settingsBackTarget(currentDestination)
+            if (target == null) onClose() else currentDestination = target
         }
     }
 
@@ -126,7 +147,9 @@ fun SettingsHubScreen(
             SettingsHubRootScreen(
                 onNavigate = { currentDestination = it },
                 onClose = onClose,
-                focusedIndex = rootFocusedIndex,
+                // Deferred read: passing the Int would recompose SettingsHubScreen (and rebuild the
+                // whole root screen) on every D-pad step; the lambda defers the read to the rows.
+                focusedIndex = { rootFocusedIndex },
                 onFocusedIndexChange = { rootFocusedIndex = it },
                 listState = rootListState,
                 modifier = settingsModifier
@@ -209,7 +232,7 @@ fun SettingsHubScreen(
 private fun SettingsHubRootScreen(
     onNavigate: (SettingsDestination) -> Unit,
     onClose: () -> Unit,
-    focusedIndex: Int,
+    focusedIndex: () -> Int,
     onFocusedIndexChange: (Int) -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier
@@ -219,26 +242,13 @@ private fun SettingsHubRootScreen(
     var sawCenterDown by remember { mutableStateOf(false) }
 
     // Eight settings categories
-    val totalItems = 8
+    val totalItems = SETTINGS_HUB_DESTINATIONS.size
 
     fun openDestination(index: Int) {
-        when (index) {
-            0 -> onNavigate(SettingsDestination.Appearance)
-            1 -> onNavigate(SettingsDestination.Keyboard)
-            2 -> onNavigate(SettingsDestination.CursorHardware)
-            3 -> onNavigate(SettingsDestination.SoundFeedback)
-            4 -> onNavigate(SettingsDestination.Behavior)
-            5 -> onNavigate(SettingsDestination.PermissionsRoot)
-            6 -> onNavigate(SettingsDestination.BackupRestore)
-            7 -> onNavigate(SettingsDestination.About)
-        }
+        SETTINGS_HUB_DESTINATIONS.getOrNull(index)?.let(onNavigate)
     }
 
-    LaunchedEffect(focusedIndex) {
-        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
-        if (visible.isEmpty() || focusedIndex in visible) return@LaunchedEffect
-        listState.animateScrollToItem(focusedIndex)
-    }
+    ScrollToFocusedItem(listState) { focusedIndex() }
 
     requestFocusSafely(focusRequester)
 
@@ -265,7 +275,7 @@ private fun SettingsHubRootScreen(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        openDestination(focusedIndex)
+                        openDestination(focusedIndex())
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -285,10 +295,11 @@ private fun SettingsHubRootScreen(
                     native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
                 ) {
                     if (event.type == KeyEventType.KeyDown) {
+                        val current = focusedIndex()
                         onFocusedIndexChange(if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                            if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
+                            if (current > 0) current - 1 else totalItems - 1
                         } else {
-                            if (focusedIndex < totalItems - 1) focusedIndex + 1 else 0
+                            if (current < totalItems - 1) current + 1 else 0
                         })
                         SoundEffectManager.play(context, SoundEffect.NAV)
                     }
@@ -309,7 +320,7 @@ private fun SettingsHubRootScreen(
                         title = "Appearance",
                         subtitle = "Themes, greeting name, icon packs, wallpapers & FX",
                         icon = "🎨",
-                        isFocused = focusedIndex == 0,
+                        isFocused = focusedIndex() == 0,
                         jumpNumber = 1,
                         onClick = { onNavigate(SettingsDestination.Appearance) }
                     )
@@ -322,7 +333,7 @@ private fun SettingsHubRootScreen(
                         title = "Keyboard",
                         subtitle = "Keitai multi-tap keyboard, hold-for-digit & key guide",
                         icon = "⌨",
-                        isFocused = focusedIndex == 1,
+                        isFocused = focusedIndex() == 1,
                         jumpNumber = 2,
                         onClick = { onNavigate(SettingsDestination.Keyboard) }
                     )
@@ -335,7 +346,7 @@ private fun SettingsHubRootScreen(
                         title = "Virtual Cursor",
                         subtitle = "Virtual mouse speed, acceleration, scroll step & sprite",
                         icon = "🖱️",
-                        isFocused = focusedIndex == 2,
+                        isFocused = focusedIndex() == 2,
                         jumpNumber = 3,
                         onClick = { onNavigate(SettingsDestination.CursorHardware) }
                     )
@@ -348,7 +359,7 @@ private fun SettingsHubRootScreen(
                         title = "Sound & Feedback",
                         subtitle = "Audio routing, keypad volume & sound profiles",
                         icon = "♫",
-                        isFocused = focusedIndex == 3,
+                        isFocused = focusedIndex() == 3,
                         jumpNumber = 4,
                         onClick = { onNavigate(SettingsDestination.SoundFeedback) }
                     )
@@ -361,7 +372,7 @@ private fun SettingsHubRootScreen(
                         title = "Behavior",
                         subtitle = "Folders, app drawer & clamshell options",
                         icon = "📁",
-                        isFocused = focusedIndex == 4,
+                        isFocused = focusedIndex() == 4,
                         jumpNumber = 5,
                         onClick = { onNavigate(SettingsDestination.Behavior) }
                     )
@@ -374,7 +385,7 @@ private fun SettingsHubRootScreen(
                         title = "Permissions & Root",
                         subtitle = "Overlay permission, Magisk root status & LSPosed features",
                         icon = "🛡️",
-                        isFocused = focusedIndex == 5,
+                        isFocused = focusedIndex() == 5,
                         jumpNumber = 6,
                         onClick = { onNavigate(SettingsDestination.PermissionsRoot) }
                     )
@@ -387,7 +398,7 @@ private fun SettingsHubRootScreen(
                         title = "Backup & Restore",
                         subtitle = "Export or restore layout, themes, folders & key remaps",
                         icon = "💾",
-                        isFocused = focusedIndex == 6,
+                        isFocused = focusedIndex() == 6,
                         jumpNumber = 7,
                         onClick = { onNavigate(SettingsDestination.BackupRestore) }
                     )
@@ -400,7 +411,7 @@ private fun SettingsHubRootScreen(
                         title = "About Mochibun",
                         subtitle = "Version, hardware specs & credits",
                         icon = "♡",
-                        isFocused = focusedIndex == 7,
+                        isFocused = focusedIndex() == 7,
                         jumpNumber = 8,
                         onClick = { onNavigate(SettingsDestination.About) }
                     )

@@ -179,7 +179,8 @@ internal fun AppearanceSettingsScreen(
 
     val totalItems = items.size
 
-    val targetCardIndex = remember(focusedIndex, items) {
+    // Card that holds the focused row; read lazily by ScrollToFocusedItem (not in composition).
+    fun targetCardIndex(): Int =
         when (items.getOrNull(focusedIndex)) {
             "theme", "typography", "community_gallery", "border_style", "pick_border", "reset_border" -> 0
             "name", "sub_display_ticker", "sub_display_style" -> 1
@@ -188,17 +189,12 @@ internal fun AppearanceSettingsScreen(
             "system_monitor", "monitor_interval", "photo_frame" -> 3
             else -> 0
         }
-    }
 
     LaunchedEffect(Unit) {
         TypographyManager.scanFontsAsync(context)
     }
 
-    LaunchedEffect(targetCardIndex) {
-        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
-        if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
-        listState.animateScrollToItem(targetCardIndex)
-    }
+    ScrollToFocusedItem(listState) { targetCardIndex() }
 
     fun activateAppearanceItem(index: Int) {
         when (items.getOrNull(index)) {

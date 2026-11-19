@@ -112,12 +112,7 @@ internal fun SoundFeedbackSettingsScreen(
         }
     }
 
-    LaunchedEffect(focusedIndex) {
-        val cardIndex = if (focusedIndex <= 2) 0 else 1
-        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
-        if (visible.isEmpty() || cardIndex in visible) return@LaunchedEffect
-        listState.animateScrollToItem(cardIndex)
-    }
+    ScrollToFocusedItem(listState) { if (focusedIndex <= 2) 0 else 1 }
 
     requestFocusSafely(focusRequester)
     SettingsScaffold(

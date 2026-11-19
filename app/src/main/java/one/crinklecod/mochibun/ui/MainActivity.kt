@@ -175,8 +175,7 @@ class MainActivity : ComponentActivity() {
                 action == MochibunSystemActions.ACTION_BACK_TRIGGER ||
                 action == MochibunSystemActions.ACTION_HOME_TRIGGER
             ) {
-                @Suppress("DEPRECATION")
-                val rawEvent = intent.getParcelableExtra<KeyEvent>(MochibunSystemActions.EXTRA_KEY_EVENT)
+                val rawEvent = MochibunSystemActions.hookKeyEvent(intent)
                 val targetKeyCode = when (action) {
                     MochibunSystemActions.ACTION_LSK_TRIGGER -> KeyEvent.KEYCODE_APP_SWITCH
                     MochibunSystemActions.ACTION_BACK_TRIGGER -> KeyEvent.KEYCODE_BACK

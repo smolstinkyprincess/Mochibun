@@ -87,7 +87,8 @@ internal fun CursorHardwareSettingsScreen(
     // Keep every row's focus index stable even when the default cursor sprite is active.
     val totalItems = 12
 
-    val targetCardIndex = remember(focusedIndex) {
+    // Card that holds the focused row; read lazily by ScrollToFocusedItem (not in composition).
+    fun targetCardIndex(): Int =
         when (focusedIndex) {
             in 0..4 -> 0
             5, 6 -> 1
@@ -95,7 +96,6 @@ internal fun CursorHardwareSettingsScreen(
             10, 11 -> 3
             else -> 0
         }
-    }
 
     fun stepToggleKey(direction: Int) {
         toggleKeyCode = CursorPreferences.stepToggleKeyCode(toggleKeyCode, direction)
@@ -166,11 +166,7 @@ internal fun CursorHardwareSettingsScreen(
         SoundEffectManager.play(context, SoundEffect.NAV)
     }
 
-    LaunchedEffect(targetCardIndex) {
-        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
-        if (visible.isEmpty() || targetCardIndex in visible) return@LaunchedEffect
-        listState.animateScrollToItem(targetCardIndex)
-    }
+    ScrollToFocusedItem(listState) { targetCardIndex() }
 
     requestFocusSafely(focusRequester)
 

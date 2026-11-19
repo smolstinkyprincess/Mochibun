@@ -16,7 +16,18 @@ object MochibunImeStatus {
     fun imeId(context: Context): String =
         ComponentName(context, MochibunImeService::class.java).flattenToShortString()
 
-    fun state(context: Context): State {
+    /**
+     * Result of the most recent [state] call (null until the first one). [state] costs a
+     * Settings.Secure read plus, when we are not the default, an InputMethodManager binder call;
+     * the Settings screens seed their first frame from this and refresh off the main thread.
+     */
+    @Volatile
+    var lastKnownState: State? = null
+        private set
+
+    fun state(context: Context): State = readState(context).also { lastKnownState = it }
+
+    private fun readState(context: Context): State {
         val id = imeId(context)
         val current = try {
             Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)

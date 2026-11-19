@@ -164,15 +164,12 @@ internal fun BehaviorSettingsScreen(
         return true
     }
 
-    LaunchedEffect(focusedIndex, items) {
-        val target = when (items.getOrNull(focusedIndex)) {
+    ScrollToFocusedItem(listState) {
+        when (items.getOrNull(focusedIndex)) {
             "create_folder", "folder_grid" -> 0
             "hidden_apps" -> 1
             else -> 2
         }
-        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
-        if (visible.isEmpty() || target in visible) return@LaunchedEffect
-        listState.animateScrollToItem(target)
     }
 
     requestFocusSafely(focusRequester)

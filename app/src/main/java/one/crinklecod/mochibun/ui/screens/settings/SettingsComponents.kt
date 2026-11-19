@@ -1,7 +1,6 @@
 package one.crinklecod.mochibun.ui.screens.settings
 
 import one.crinklecod.mochibun.ui.components.KawaiiClosePill
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
@@ -23,7 +22,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +46,7 @@ import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * Standardized Settings Screen Scaffold for the Chinoe AT-M120 (480x800).
@@ -117,6 +122,44 @@ fun SettingsScaffold(
 }
 
 /**
+ * Scrolls [listState] to the LazyColumn item [targetItem] returns (null = leave it) whenever
+ * that target changes.
+ *
+ * Why not `LaunchedEffect(focusedIndex) { ... }`: keying an effect on the focus index reads it in
+ * the screen body, so every D-pad step re-ran the whole settings screen (key handler, row-id
+ * lists, LazyColumn content) before reaching the two rows whose `isFocused` actually flipped.
+ * Reading it inside [snapshotFlow] keeps that read out of composition, so a step only recomposes
+ * the card scopes that read the index: no full-screen recomposition per key press on the JIT-only
+ * MT6761.
+ *
+ * With [onlyIfHidden] (default) it only scrolls when the target item is not on screen at all,
+ * matching the original per-screen effects. `collectLatest` cancels an in-flight scroll when focus
+ * moves again, like a re-keyed LaunchedEffect did. By default it re-runs only when the target
+ * changes; [retriggerKey] (read lazily too) makes it re-run whenever that key changes as well,
+ * for screens whose old effect was keyed on the focus index itself.
+ */
+@Composable
+internal fun ScrollToFocusedItem(
+    listState: LazyListState,
+    onlyIfHidden: Boolean = true,
+    retriggerKey: (() -> Any?)? = null,
+    targetItem: () -> Int?
+) {
+    val currentTargetItem by rememberUpdatedState(targetItem)
+    val currentRetriggerKey by rememberUpdatedState(retriggerKey)
+    LaunchedEffect(listState, onlyIfHidden) {
+        snapshotFlow { currentTargetItem() to currentRetriggerKey?.invoke() }.collectLatest { (target, _) ->
+            if (target == null) return@collectLatest
+            if (onlyIfHidden) {
+                val visible = listState.layoutInfo.visibleItemsInfo
+                if (visible.isEmpty() || visible.any { it.index == target }) return@collectLatest
+            }
+            listState.animateScrollToItem(target)
+        }
+    }
+}
+
+/**
  * Themed settings card container with rounded corners (22.dp) and category pill.
  */
 @Composable
@@ -185,7 +228,6 @@ fun SettingsNavigationRow(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
-    val borderStroke = BorderStroke(0.dp, Color.Transparent)
 
     Row(
         modifier = modifier
@@ -194,7 +236,6 @@ fun SettingsNavigationRow(
             .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
-            .border(borderStroke, shape)
             .clickable { onClick() }
             .padding(horizontal = 8.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -276,7 +317,6 @@ fun SettingsToggleRow(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
-    val borderStroke = BorderStroke(0.dp, Color.Transparent)
 
     Row(
         modifier = modifier
@@ -285,7 +325,6 @@ fun SettingsToggleRow(
             .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
-            .border(borderStroke, shape)
             .clickable { onCheckedChange(!checked) }
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -364,7 +403,6 @@ fun SettingsStepperRow(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
-    val borderStroke = BorderStroke(0.dp, Color.Transparent)
 
     Row(
         modifier = modifier
@@ -373,7 +411,6 @@ fun SettingsStepperRow(
             .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
-            .border(borderStroke, shape)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -494,7 +531,6 @@ fun SettingsTextInputRow(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
-    val borderStroke = BorderStroke(0.dp, Color.Transparent)
 
     Row(
         modifier = modifier
@@ -503,7 +539,6 @@ fun SettingsTextInputRow(
             .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
-            .border(borderStroke, shape)
             .clickable { onClick() }
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically

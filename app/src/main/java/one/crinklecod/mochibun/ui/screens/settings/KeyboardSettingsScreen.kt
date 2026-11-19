@@ -31,7 +31,9 @@ import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.dialogs.QuickSnippetsDialog
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Status label shared with the Permissions & Root row. */
 internal fun keyboardStatusSubtitle(state: MochibunImeStatus.State): String = when (state) {
@@ -89,7 +91,11 @@ internal fun KeyboardSettingsScreen(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    var imeState by remember { mutableStateOf(MochibunImeStatus.state(context)) }
+    // Seeded from the last-known state; only the very first open in a process reads it inline
+    // (Settings.Secure + an InputMethodManager binder call when we are not the default).
+    var imeState by remember {
+        mutableStateOf(MochibunImeStatus.lastKnownState ?: MochibunImeStatus.state(context))
+    }
     var holdForDigit by remember { mutableStateOf(PreferencesManager.isImeHoldForDigitEnabled(context)) }
     var autoCommit by remember { mutableStateOf(PreferencesManager.isImeAutoCommitEnabled(context)) }
     var autoCommitMs by remember { mutableIntStateOf(PreferencesManager.getImeIdleCommitMs(context)) }
@@ -131,8 +137,11 @@ internal fun KeyboardSettingsScreen(
         return true
     }
 
+    // Runs on every resume / window-focus regain (incl. twice on open): keep the IPC off the UI thread.
     fun refresh() {
-        imeState = MochibunImeStatus.state(context)
+        scope.launch {
+            imeState = withContext(Dispatchers.IO) { MochibunImeStatus.state(context) }
+        }
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -155,15 +164,12 @@ internal fun KeyboardSettingsScreen(
     // 6 key guide, 7 quick snippets
     val totalItems = 8
 
-    LaunchedEffect(focusedIndex) {
-        val target = when {
+    ScrollToFocusedItem(listState) {
+        when {
             focusedIndex <= 1 -> 0
             focusedIndex <= 6 -> 1
             else -> 2
         }
-        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
-        if (visible.isEmpty() || target in visible) return@LaunchedEffect
-        listState.animateScrollToItem(target)
     }
 
     fun activate(index: Int) {

@@ -1,5 +1,6 @@
 package one.crinklecod.mochibun.core.util
 
+import android.content.Intent
 import android.media.AudioManager
 import android.view.KeyEvent
 
@@ -38,6 +39,30 @@ object MochibunSystemActions {
     const val EXTRA_KEY_HOOK_ACTIVE = "isKeyHookActive"
     const val EXTRA_MEDIA_VOLUME_LOCK_ENABLED = "isMediaVolumeLockEnabled"
     const val EXTRA_INPUT_ACTIVE = "isInputActive"
+
+    /**
+     * The KeyEvent a MochibunKeyHook broadcast describes, with action and repeat count taken from
+     * the int extras.
+     *
+     * Older hook builds put the live system_server KeyEvent into [EXTRA_KEY_EVENT] (and the hook
+     * only reloads on reboot, so a fixed APK can still be talking to one). The input
+     * pipeline recycles that object right after interceptKeyBeforeQueueing and reuses it for the
+     * next event, while the broadcast is only parceled later, on delivery. Under load a BACK DOWN
+     * broadcast could therefore arrive carrying the following UP, so one press ran Back twice and
+     * closed the whole Settings Hub from a sub-screen. The int extras are captured at send time,
+     * so they win over the parceled event.
+     */
+    fun hookKeyEvent(intent: Intent): KeyEvent? {
+        @Suppress("DEPRECATION")
+        val raw = intent.getParcelableExtra<KeyEvent>(EXTRA_KEY_EVENT) ?: return null
+        val action = intent.getIntExtra(EXTRA_ACTION, raw.action)
+        val repeatCount = intent.getIntExtra(EXTRA_REPEAT_COUNT, raw.repeatCount)
+        if (action == raw.action && repeatCount == raw.repeatCount) return raw
+        return KeyEvent(
+            raw.downTime, raw.eventTime, action, raw.keyCode, repeatCount,
+            raw.metaState, raw.deviceId, raw.scanCode, raw.flags, raw.source
+        )
+    }
 
     /** AT-M120 side key scan code (reported as KEYCODE_F4, or UNKNOWN on some keylayouts). */
     const val SIDE_KEY_SCAN_CODE = 62

@@ -596,7 +596,9 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         val intent = Intent(ACTION_CURSOR_KEY).apply {
             setPackage(PACKAGE_MOCHIBUN)
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            putExtra(EXTRA_KEY_EVENT, event)
+            // Copy: system_server recycles `event` after interceptKeyBeforeQueueing returns and
+            // reuses it for the next key, but the broadcast is parceled later (on delivery).
+            putExtra(EXTRA_KEY_EVENT, KeyEvent(event))
             putExtra(EXTRA_KEY_CODE, cursorKeyCode)
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
@@ -609,7 +611,9 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         val keyCode = if (event.keyCode != KeyEvent.KEYCODE_UNKNOWN) event.keyCode else KeyEvent.KEYCODE_APP_SWITCH
         val intent = Intent(ACTION_LSK_TRIGGER).apply {
             setPackage(PACKAGE_MOCHIBUN)
-            putExtra(EXTRA_KEY_EVENT, event)
+            // Copy: system_server recycles `event` after interceptKeyBeforeQueueing returns and
+            // reuses it for the next key, but the broadcast is parceled later (on delivery).
+            putExtra(EXTRA_KEY_EVENT, KeyEvent(event))
             putExtra(EXTRA_KEY_CODE, keyCode)
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
@@ -622,7 +626,9 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         val keyCode = if (event.keyCode != KeyEvent.KEYCODE_UNKNOWN) event.keyCode else KeyEvent.KEYCODE_BACK
         val intent = Intent(ACTION_BACK_TRIGGER).apply {
             setPackage(PACKAGE_MOCHIBUN)
-            putExtra(EXTRA_KEY_EVENT, event)
+            // Copy: system_server recycles `event` after interceptKeyBeforeQueueing returns and
+            // reuses it for the next key, but the broadcast is parceled later (on delivery).
+            putExtra(EXTRA_KEY_EVENT, KeyEvent(event))
             putExtra(EXTRA_KEY_CODE, keyCode)
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
@@ -635,7 +641,9 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         val keyCode = if (event.keyCode != KeyEvent.KEYCODE_UNKNOWN) event.keyCode else KeyEvent.KEYCODE_HOME
         val intent = Intent(ACTION_HOME_TRIGGER).apply {
             setPackage(PACKAGE_MOCHIBUN)
-            putExtra(EXTRA_KEY_EVENT, event)
+            // Copy: system_server recycles `event` after interceptKeyBeforeQueueing returns and
+            // reuses it for the next key, but the broadcast is parceled later (on delivery).
+            putExtra(EXTRA_KEY_EVENT, KeyEvent(event))
             putExtra(EXTRA_KEY_CODE, keyCode)
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
@@ -647,7 +655,9 @@ class MochibunKeyHook : IXposedHookLoadPackage {
         if (context == null) return
         val intent = Intent(ACTION_HARDWARE_KEY_TRIGGER).apply {
             setPackage(PACKAGE_MOCHIBUN)
-            putExtra(EXTRA_KEY_EVENT, event)
+            // Copy: system_server recycles `event` after interceptKeyBeforeQueueing returns and
+            // reuses it for the next key, but the broadcast is parceled later (on delivery).
+            putExtra(EXTRA_KEY_EVENT, KeyEvent(event))
             putExtra(EXTRA_KEY_CODE, event.keyCode)
             putExtra(EXTRA_ACTION, event.action)
             putExtra(EXTRA_REPEAT_COUNT, event.repeatCount)
