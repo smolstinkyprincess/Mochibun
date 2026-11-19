@@ -177,10 +177,10 @@ internal fun SoundFeedbackSettingsScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "sound_routing_card") {
-                SettingsCard(categoryTitle = "Master Routing & Volume") {
+                SettingsCard(categoryTitle = "Routing & Volume") {
                     SettingsStepperRow(
-                        title = "Audio Routing Stream",
-                        subtitle = "Choose where keypad sounds are played",
+                        title = "Audio Routing",
+                        subtitle = "Choose which audio stream plays keypad clicks",
                         valueDisplay = if (audioStream == PreferencesManager.AUDIO_STREAM_MEDIA) "Media" else "Notification",
                         isFocused = focusedIndex == 0,
                         jumpNumber = 1,
@@ -190,7 +190,7 @@ internal fun SoundFeedbackSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
                         title = "Keypad Volume",
-                        subtitle = "Master level for keypad and launcher sounds",
+                        subtitle = "Volume level for keypad & launcher sounds",
                         valueDisplay = "$soundVolume%",
                         isFocused = focusedIndex == 1,
                         jumpNumber = 2,
@@ -199,8 +199,8 @@ internal fun SoundFeedbackSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Lock Volume Keys to Media",
-                        subtitle = "Keep hardware volume keys on the media stream",
+                        title = "Media Volume Lock",
+                        subtitle = "Keep volume buttons on media even in Silent mode",
                         checked = mediaVolumeLock,
                         isFocused = focusedIndex == 2,
                         jumpNumber = 3,
@@ -211,8 +211,8 @@ internal fun SoundFeedbackSettingsScreen(
             item(contentType = "sound_effects_card") {
                 SettingsCard(categoryTitle = "Sound Effects") {
                     SettingsStepperRow(
-                        title = "Keypad Sound Profile",
-                        subtitle = "Pick a keypad sound theme (plays a preview)",
+                        title = "Sound Profile",
+                        subtitle = "Pick a cute keypad sound theme (plays a preview ♪)",
                         valueDisplay = SoundEffectManager.themeName(keypadSoundMode),
                         isFocused = focusedIndex == 3,
                         jumpNumber = 4,
@@ -221,8 +221,8 @@ internal fun SoundFeedbackSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Lid Close Snap Sound",
-                        subtitle = "Play the mechanical snap when closing the clamshell",
+                        title = "Lid Snap Sound",
+                        subtitle = "Play a crisp mechanical snap when closing the lid",
                         checked = lidSnapSound,
                         isFocused = focusedIndex == 4,
                         jumpNumber = 5,

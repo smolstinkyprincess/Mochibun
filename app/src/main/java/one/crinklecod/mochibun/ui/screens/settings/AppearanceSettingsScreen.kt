@@ -426,8 +426,8 @@ internal fun AppearanceSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Community Gallery & Workshop",
-                        subtitle = "crinklecod.one/Mochibun ♡",
+                        title = "Community Gallery",
+                        subtitle = "Browse community themes & LEDs • crinklecod.one/Mochibun ♡",
                         icon = "✨",
                         isFocused = items.getOrNull(focusedIndex) == "community_gallery",
                         jumpNumber = (items.indexOf("community_gallery") + 1).takeIf { it <= 9 },
@@ -464,7 +464,7 @@ internal fun AppearanceSettingsScreen(
                         "Active: ${it.spec.width}×${it.spec.height}px (${it.spec.slicePx}px slice)"
                     } ?: "9-slice PNG frame (16–256px, max 512 KB)"
                     SettingsNavigationRow(
-                        title = "Custom Border Frame (.png)",
+                        title = "Custom Border Frame",
                         subtitle = customBorderSubtitle,
                         icon = "🎀",
                         isFocused = items.getOrNull(focusedIndex) == "pick_border",
@@ -474,7 +474,7 @@ internal fun AppearanceSettingsScreen(
                     if (hasCustomBorder) {
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsActionRow(
-                            title = "Reset Custom Border",
+                            title = "Reset Card Border",
                             isFocused = items.getOrNull(focusedIndex) == "reset_border",
                             isDestructive = true,
                             jumpNumber = (items.indexOf("reset_border") + 1).takeIf { it <= 9 },
@@ -485,9 +485,9 @@ internal fun AppearanceSettingsScreen(
             }
 
             item(contentType = "appearance_greeting_card") {
-                SettingsCard(categoryTitle = "Greeting & Standby") {
+                SettingsCard(categoryTitle = "Greeting & Ticker") {
                     SettingsTextInputRow(
-                        title = "Display Name (Greeting)",
+                        title = "Greeting Name",
                         subtitle = if (customName.isNotBlank()) "♡ Welcome home, $customName ♡" else "Tap or Enter to set greeting name",
                         value = customName.ifBlank { "Not set" },
                         isFocused = items.getOrNull(focusedIndex) == "name",
@@ -499,8 +499,8 @@ internal fun AppearanceSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Outer Sub-Display Ticker",
-                        subtitle = "Retro keitai status marquee on Home",
+                        title = "Sub-Display Ticker",
+                        subtitle = "Cozy retro keitai status marquee on Home ♡",
                         checked = isSubDisplayTickerEnabled,
                         isFocused = items.getOrNull(focusedIndex) == "sub_display_ticker",
                         jumpNumber = (items.indexOf("sub_display_ticker") + 1).takeIf { it <= 9 },
@@ -509,8 +509,8 @@ internal fun AppearanceSettingsScreen(
                     if (isSubDisplayTickerEnabled) {
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsStepperRow(
-                            title = "Sub-Display Style",
-                            subtitle = "Lid-screen look of the ticker",
+                            title = "Ticker Style",
+                            subtitle = "Pick the lid-screen look of your status ticker",
                             valueDisplay = if (isSubDisplayTickerDark) "Dark Sub-OLED" else "Pastel Theme",
                             isFocused = items.getOrNull(focusedIndex) == "sub_display_style",
                             jumpNumber = (items.indexOf("sub_display_style") + 1).takeIf { it <= 9 },
@@ -524,8 +524,8 @@ internal fun AppearanceSettingsScreen(
             item(contentType = "appearance_wallpaper_card") {
                 SettingsCard(categoryTitle = "Wallpaper & Deco") {
                     SettingsNavigationRow(
-                        title = "Pick from Gallery",
-                        subtitle = "Select custom wallpaper image",
+                        title = "Pick Wallpaper",
+                        subtitle = "Choose a cute background from your gallery",
                         icon = "🖼",
                         isFocused = items.getOrNull(focusedIndex) == "pick_wallpaper",
                         jumpNumber = (items.indexOf("pick_wallpaper") + 1).takeIf { it <= 9 },
@@ -534,7 +534,7 @@ internal fun AppearanceSettingsScreen(
                     if (hasCustomWallpaper) {
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsActionRow(
-                            title = "Reset to Default Wallpaper",
+                            title = "Reset Wallpaper",
                             isFocused = items.getOrNull(focusedIndex) == "reset_wallpaper",
                             isDestructive = true,
                             jumpNumber = (items.indexOf("reset_wallpaper") + 1).takeIf { it <= 9 },
@@ -544,7 +544,7 @@ internal fun AppearanceSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Custom Mascot",
-                        subtitle = "8-row PNG atlas, max 1.5 MB",
+                        subtitle = "Upload an 8-row PNG sprite sheet (max 1.5 MB)",
                         icon = "🐰",
                         isFocused = items.getOrNull(focusedIndex) == "pick_mascot",
                         jumpNumber = (items.indexOf("pick_mascot") + 1).takeIf { it <= 9 },
@@ -553,7 +553,7 @@ internal fun AppearanceSettingsScreen(
                     if (hasCustomMascot) {
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsActionRow(
-                            title = "Reset to Default Mochibunny",
+                            title = "Reset Mascot",
                             isFocused = items.getOrNull(focusedIndex) == "reset_mascot",
                             isDestructive = true,
                             jumpNumber = (items.indexOf("reset_mascot") + 1).takeIf { it <= 9 },
@@ -562,8 +562,8 @@ internal fun AppearanceSettingsScreen(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
-                        title = "Home Mascot Size",
-                        subtitle = "Size of Mochibunny on the home screen",
+                        title = "Mascot Size",
+                        subtitle = "How big Mochibunny appears on Home",
                         valueDisplay = homeMascotSize.label,
                         isFocused = items.getOrNull(focusedIndex) == "mascot_size",
                         jumpNumber = (items.indexOf("mascot_size") + 1).takeIf { it <= 9 },
@@ -578,8 +578,8 @@ internal fun AppearanceSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Installed Icon Packs",
-                        subtitle = "Apply compatible icon packs",
+                        title = "Icon Packs",
+                        subtitle = "Dress up your apps with installed icon packs",
                         icon = "🌸",
                         isFocused = items.getOrNull(focusedIndex) == "icon_pack",
                         jumpNumber = (items.indexOf("icon_pack") + 1).takeIf { it <= 9 },
@@ -587,8 +587,8 @@ internal fun AppearanceSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Wallpaper Stickers (PixelSpray)",
-                        subtitle = "Show rotating pastel pixel overlays above wallpaper",
+                        title = "Wallpaper Stickers",
+                        subtitle = "Sprinkle floating pastel pixel stickers over wallpaper ✦",
                         checked = isWallpaperOverlayEnabled,
                         isFocused = items.getOrNull(focusedIndex) == "wallpaper_stickers",
                         jumpNumber = (items.indexOf("wallpaper_stickers") + 1).takeIf { it <= 9 },
@@ -600,8 +600,8 @@ internal fun AppearanceSettingsScreen(
             item(contentType = "appearance_widget_deck_card") {
                 SettingsCard(categoryTitle = "Widget Deck") {
                     SettingsToggleRow(
-                        title = "System Monitor Card",
-                        subtitle = "Display live CPU, RAM, and storage gauges",
+                        title = "System Monitor",
+                        subtitle = "Show live CPU, RAM & storage gauges on Widgets page",
                         checked = isSystemMonitorEnabled,
                         isFocused = items.getOrNull(focusedIndex) == "system_monitor",
                         jumpNumber = (items.indexOf("system_monitor") + 1).takeIf { it <= 9 },
@@ -611,7 +611,7 @@ internal fun AppearanceSettingsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsStepperRow(
                             title = "Refresh Interval",
-                            subtitle = "System monitor update frequency",
+                            subtitle = "How often the system monitor updates",
                             valueDisplay = "$systemMonitorInterval sec",
                             isFocused = items.getOrNull(focusedIndex) == "monitor_interval",
                             jumpNumber = (items.indexOf("monitor_interval") + 1).takeIf { it <= 9 },
@@ -638,7 +638,7 @@ internal fun AppearanceSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "Photo Frame Card",
-                        subtitle = "Show your framed photo on the Widgets page",
+                        subtitle = "Pin a framed photo onto your Widgets page ♡",
                         checked = isPhotoFrameEnabled,
                         isFocused = items.getOrNull(focusedIndex) == "photo_frame",
                         jumpNumber = (items.indexOf("photo_frame") + 1).takeIf { it <= 9 },

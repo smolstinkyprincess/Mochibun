@@ -56,7 +56,7 @@ body:
         - label: "Mochibun Keitai IME (multi-tap keyboard & floating pill)"
         - label: "Kaomoji Wheel (# long-press)"
         - label: "Virtual Cursor overlay & clicking"
-        - label: "Screen-Off Flip Reset (closing the flip resets to Home)"
+        - label: "Flip Reset on Sleep (closing the flip resets to Home)"
         - label: "Mochibunny pocket pet & animations"
 
   - type: textarea

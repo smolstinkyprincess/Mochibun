@@ -316,10 +316,10 @@ private fun SettingsHubRootScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Look & Aesthetic") {
+                SettingsCard(categoryTitle = "Look & Vibes") {
                     SettingsNavigationRow(
                         title = "Appearance",
-                        subtitle = "Themes, greeting name, icon packs, wallpapers & FX",
+                        subtitle = "Pastel themes, greeting banner, icons & deco ♡",
                         icon = "🎨",
                         isFocused = focusedIndex() == 0,
                         jumpNumber = 1,
@@ -332,7 +332,7 @@ private fun SettingsHubRootScreen(
                 SettingsCard(categoryTitle = "Typing") {
                     SettingsNavigationRow(
                         title = "Keyboard",
-                        subtitle = "Keitai multi-tap keyboard, hold-for-digit & key guide",
+                        subtitle = "Keitai multi-tap typing, digit hold & key guide",
                         icon = "⌨",
                         isFocused = focusedIndex() == 1,
                         jumpNumber = 2,
@@ -342,10 +342,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Pointer & Controls") {
+                SettingsCard(categoryTitle = "Cursor & Hardware") {
                     SettingsNavigationRow(
                         title = "Virtual Cursor",
-                        subtitle = "Virtual mouse speed, acceleration, scroll step & sprite",
+                        subtitle = "Pointer speed, scroll step, sprite & key remaps",
                         icon = "🖱️",
                         isFocused = focusedIndex() == 2,
                         jumpNumber = 3,
@@ -355,10 +355,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Sound & Feedback") {
+                SettingsCard(categoryTitle = "Sound & Clicks") {
                     SettingsNavigationRow(
                         title = "Sound & Feedback",
-                        subtitle = "Audio routing, keypad volume & sound profiles",
+                        subtitle = "Audio routing, keypad volume & cute click themes",
                         icon = "♫",
                         isFocused = focusedIndex() == 3,
                         jumpNumber = 4,
@@ -368,10 +368,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Layout & Features") {
+                SettingsCard(categoryTitle = "Home & Clamshell") {
                     SettingsNavigationRow(
                         title = "Behavior",
-                        subtitle = "Folders, app drawer & clamshell options",
+                        subtitle = "Folders, hidden apps, lid actions & outer LEDs",
                         icon = "📁",
                         isFocused = focusedIndex() == 4,
                         jumpNumber = 5,
@@ -381,10 +381,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Permissions & Superuser") {
+                SettingsCard(categoryTitle = "Setup & Root") {
                     SettingsNavigationRow(
                         title = "Permissions & Root",
-                        subtitle = "Overlay permission, Magisk root status & LSPosed features",
+                        subtitle = "Core permissions, Magisk root & LSPosed hooks",
                         icon = "🛡️",
                         isFocused = focusedIndex() == 5,
                         jumpNumber = 6,
@@ -394,10 +394,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Data & Storage") {
+                SettingsCard(categoryTitle = "Saves & Bundles") {
                     SettingsNavigationRow(
                         title = "Backup & Restore",
-                        subtitle = "Export or restore layout, themes, folders & key remaps",
+                        subtitle = "Share theme packs or save a full backup",
                         icon = "💾",
                         isFocused = focusedIndex() == 6,
                         jumpNumber = 7,
@@ -407,10 +407,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "System & Specs") {
+                SettingsCard(categoryTitle = "System & Info") {
                     SettingsNavigationRow(
                         title = "About Mochibun",
-                        subtitle = "Version, hardware specs & credits",
+                        subtitle = "App version, flip-phone specs & credits ♡",
                         icon = "♡",
                         isFocused = focusedIndex() == 7,
                         jumpNumber = 8,

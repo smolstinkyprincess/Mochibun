@@ -550,7 +550,7 @@ internal fun PermissionsRootSettingsScreen(
 
     requestFocusSafely(focusRequester)
     SettingsScaffold(
-        title = "Setup & Diagnostics",
+        title = "Permissions & Root",
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
@@ -623,9 +623,9 @@ internal fun PermissionsRootSettingsScreen(
                 }
             }
             item(contentType = "permissions_essential_card") {
-                SettingsCard(categoryTitle = "Essential Setup • Core Launcher & Keypad") {
+                SettingsCard(categoryTitle = "Essential Setup") {
                     SettingsNavigationRow(
-                        title = "Default Home Launcher",
+                        title = "Default Launcher",
                         subtitle = if (isDefaultHome) "✓ Active" else "! Tap to Enable • choose Mochibun Home",
                         icon = if (isDefaultHome) "✓" else "!",
                         isFocused = isFocused("home"),
@@ -634,7 +634,7 @@ internal fun PermissionsRootSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Mochibun T9 Keyboard (IME)",
+                        title = "Mochibun IME",
                         subtitle = when (imeState) {
                             MochibunImeStatus.State.DEFAULT -> "✓ Active • default keyboard"
                             MochibunImeStatus.State.ENABLED -> "✓ Enabled • tap to select"
@@ -647,7 +647,7 @@ internal fun PermissionsRootSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Display Over Other Apps",
+                        title = "Overlay Permission",
                         subtitle = if (overlayGranted) "✓ Active" else "! Tap to Enable",
                         icon = if (overlayGranted) "✓" else "!",
                         isFocused = isFocused("overlay"),
@@ -656,7 +656,7 @@ internal fun PermissionsRootSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Non-Root Cursor & Key Service (Optional)",
+                        title = "Non-Root Cursor",
                         subtitle = when {
                             accessibilityEnabled -> "✓ Active • cursor taps, scroll & F4 toggle"
                             keyHookActive || rootStatus is RootStatus.Granted ->
@@ -670,7 +670,7 @@ internal fun PermissionsRootSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Notification Access (Now Playing Widget)",
+                        title = "Notification Access",
                         subtitle = if (notificationAccessGranted) "✓ Active" else "! Tap to Enable",
                         icon = if (notificationAccessGranted) "✓" else "!",
                         isFocused = isFocused("notifications"),
@@ -679,7 +679,7 @@ internal fun PermissionsRootSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
-                        title = "Virtual Cursor Service",
+                        title = "Cursor Service",
                         subtitle = when {
                             !overlayGranted -> "! Overlay permission needed • tap to grant"
                             cursorVisible -> "✓ Cursor on • tap or F4 to hide"
@@ -703,7 +703,7 @@ internal fun PermissionsRootSettingsScreen(
                             else -> "Root available • tap to verify access"
                         }
                         SettingsNavigationRow(
-                            title = "Magisk Root Access",
+                            title = "Magisk Root",
                             subtitle = rootLabel,
                             icon = if (rootStatus is RootStatus.Granted) "✓" else "⚡",
                             isFocused = isFocused("root"),
@@ -712,7 +712,7 @@ internal fun PermissionsRootSettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsNavigationRow(
-                            title = "LSPosed / Vector Key Hook",
+                            title = "LSPosed Key Hook",
                             subtitle = if (keyHookActive) {
                                 "✓ Loaded this boot • system_server hook responded"
                             } else {
@@ -725,7 +725,7 @@ internal fun PermissionsRootSettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsToggleRow(
-                            title = "Enable system_server Key Hook",
+                            title = "System Key Hook",
                             subtitle = when {
                                 !keyHookEnabled && keyHookGlobalEnabled ->
                                     "Root sync pending • hook may still intercept hardware keys"
@@ -740,7 +740,7 @@ internal fun PermissionsRootSettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsToggleRow(
-                            title = "Enable SystemUI Hook",
+                            title = "SystemUI Hook",
                             subtitle = when {
                                 !systemUiHookEnabled && systemUiHookGlobalEnabled ->
                                     "Root sync pending • current hooks remain until SystemUI restarts"
@@ -755,8 +755,8 @@ internal fun PermissionsRootSettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsToggleRow(
-                            title = "Root-Shell Recents Fallback",
-                            subtitle = "Use root shell if standard Recents activation fails",
+                            title = "Root Recents",
+                            subtitle = "Use root shell fallback if standard Recents fails",
                             checked = rootRecentsEnabled,
                             isFocused = isFocused("recents"),
                             jumpNumber = jump("recents"),
@@ -764,8 +764,8 @@ internal fun PermissionsRootSettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsToggleRow(
-                            title = "Root Quick Settings Toggles",
-                            subtitle = "Toggle Wi-Fi and Bluetooth through root shell",
+                            title = "Root Quick Toggles",
+                            subtitle = "Toggle Wi-Fi & Bluetooth via root shell",
                             checked = rootQuickSettingsEnabled,
                             isFocused = isFocused("quick_settings"),
                             jumpNumber = jump("quick_settings"),
@@ -773,7 +773,7 @@ internal fun PermissionsRootSettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsNavigationRow(
-                            title = "Self-Heal & Restart Services",
+                            title = "Self-Heal Services",
                             subtitle = if (healing) {
                                 "Granting overlay access and restarting cursor service…"
                             } else {
@@ -790,7 +790,7 @@ internal fun PermissionsRootSettingsScreen(
             item(contentType = "permissions_advanced_card") {
                 SettingsCard(categoryTitle = "Advanced") {
                     SettingsToggleRow(
-                        title = "Show Root & LSPosed Options",
+                        title = "Show Root Options",
                         subtitle = if (showRootOptions) {
                             "Magisk, LSPosed hooks and outer LED settings are shown"
                         } else {

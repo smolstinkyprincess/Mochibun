@@ -338,6 +338,13 @@ internal fun LauncherBackHandlers(
     val drawerOpen by nav.drawerOpenState
     val pagerState = nav.pagerState
 
+    // Lets MainActivity route hook-delivered BACK (which skips the dialog window) to these handlers
+    val modalOpen = activeModal != null
+    DisposableEffect(modalOpen) {
+        MainActivity.isLauncherModalOpen = modalOpen
+        onDispose { MainActivity.isLauncherModalOpen = false }
+    }
+
     // Unified modal back handler
     BackHandler(enabled = activeModal != null) {
         when (val modal = activeModal) {

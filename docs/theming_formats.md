@@ -31,7 +31,7 @@ Mochibunny lives on one PNG sprite sheet arranged as **8 rows × 4 columns** (de
 7. `eat`
 8. `pet`
 
-Pick yours in *Settings > Appearance > Custom Mascot* (and **Reset to Default Mochibunny** brings her back).
+Pick yours in *Settings > Appearance > Custom Mascot* (and **Reset Mascot** brings her back).
 
 - Frames can be **16–256 px** square, up to **16 frames per row** (configured per row via `mascot.slots` in `manifest.json`), with the full sheet up to **2048 × 2048** and **1.5 MB**.
 - Sprites are sampled with nearest-neighbor filtering (`FilterQuality.None`), so crisp pixel art stays sharp.

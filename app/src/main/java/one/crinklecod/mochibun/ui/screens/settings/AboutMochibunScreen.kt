@@ -133,7 +133,7 @@ internal fun AboutMochibunScreen(
                         themeTintColor = theme.mascotTintColor
                     )
                 }
-                SettingsCard(categoryTitle = "Application Info") {
+                SettingsCard(categoryTitle = "App Info") {
                     SettingsInfoRow(label = "Application", value = "Mochibun")
                     SettingsInfoRow(label = "Version", value = BuildConfig.VERSION_NAME)
                     SettingsInfoRow(label = "Package Name", value = context.packageName)
@@ -141,7 +141,7 @@ internal fun AboutMochibunScreen(
             }
 
             item(contentType = "about_hardware_card") {
-                SettingsCard(categoryTitle = "Hardware Specifications") {
+                SettingsCard(categoryTitle = "Hardware Specs") {
                     SettingsInfoRow(label = "Model / Device", value = deviceDisplay)
                     if (isTargetDevice) {
                         Box(
@@ -178,7 +178,7 @@ internal fun AboutMochibunScreen(
             }
 
             item(contentType = "about_credits_card") {
-                SettingsCard(categoryTitle = "Open Source, License & Credits") {
+                SettingsCard(categoryTitle = "Open Source & Credits") {
                     SettingsInfoRow(label = "License", value = "Apache 2.0 License")
                     SettingsInfoRow(label = "Root Bridge", value = "libsu:core daemon")
                     SettingsInfoRow(label = "Image Loader", value = "Coil (GIF & Bitmap)")

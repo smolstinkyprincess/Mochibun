@@ -237,8 +237,8 @@ burst() { local k=$1 n=$2 args=(); for _ in $(seq 1 "$n"); do args+=("$k"); done
 STRESS_DESTS=(1 2 3 4 5 6 7 8)
 dest_title() {
     case $1 in
-        1) echo "Appearance" ;; 2) echo "Typing" ;; 3) echo "Virtual Cursor" ;;
-        4) echo "Sound & Feedback" ;; 5) echo "Layout & Features" ;; 6) echo "Setup & Diagnostics" ;;
+        1) echo "Appearance" ;; 2) echo "Keyboard" ;; 3) echo "Virtual Cursor" ;;
+        4) echo "Sound & Feedback" ;; 5) echo "Behavior" ;; 6) echo "Permissions & Root" ;;
         7) echo "Backup & Restore" ;; 8) echo "About Mochibun" ;;
     esac
 }
@@ -281,13 +281,13 @@ stress_phase_bursts() {
                 keys KEYCODE_DPAD_CENTER || return 1
                 sleep 0.3
                 keys KEYCODE_DPAD_CENTER || return 1 ;;
-            2)  # Typing: `3` jumps to + flips "Hold for digit"; RIGHT x8 flips it 8 more times;
+            2)  # Keyboard: `3` jumps to + flips "Hold for digit"; RIGHT x8 flips it 8 more times;
                 # `3` again -> 10 flips total.
-                expect_screen "Typing" || return 1
+                expect_screen "Keyboard" || return 1
                 keys KEYCODE_3 || return 1
                 burst KEYCODE_DPAD_RIGHT 8 || return 1
                 keys KEYCODE_3 || return 1 ;;
-            4)  # Sound & Feedback: `4` jumps to row 3 = Keypad Sound Profile stepper (cyclic) and
+            4)  # Sound & Feedback: `4` jumps to row 3 = Sound Profile stepper (cyclic) and
                 # steps it +1; RIGHT/LEFT pairs, then one LEFT -> net zero. (A jump key, not DOWN x3:
                 # the DOWN burst can park focus on the floating Back pill, which swallows LEFT/RIGHT.)
                 expect_screen "Sound & Feedback" || return 1

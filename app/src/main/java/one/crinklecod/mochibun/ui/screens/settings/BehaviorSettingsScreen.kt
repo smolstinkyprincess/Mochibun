@@ -174,7 +174,7 @@ internal fun BehaviorSettingsScreen(
 
     requestFocusSafely(focusRequester)
     SettingsScaffold(
-        title = "Layout & Features",
+        title = "Behavior",
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
@@ -239,8 +239,8 @@ internal fun BehaviorSettingsScreen(
                 SettingsCard(categoryTitle = "Folder Options") {
                     if (onCreateFolderClick != null) {
                         SettingsNavigationRow(
-                            title = "Create New Folder",
-                            subtitle = "Group favorite apps into a folder",
+                            title = "Create Folder",
+                            subtitle = "Bundle favorite apps into a cozy folder ♡",
                             icon = "📁",
                             isFocused = items.getOrNull(focusedIndex) == "create_folder",
                             jumpNumber = jumpNumber("create_folder"),
@@ -250,7 +250,7 @@ internal fun BehaviorSettingsScreen(
                     }
                     SettingsToggleRow(
                         title = "2×2 Folder Grid",
-                        subtitle = "Use a compact two-by-two folder layout",
+                        subtitle = "Use a snug two-by-two folder layout",
                         checked = folderGrid,
                         isFocused = items.getOrNull(focusedIndex) == "folder_grid",
                         jumpNumber = jumpNumber("folder_grid"),
@@ -262,7 +262,7 @@ internal fun BehaviorSettingsScreen(
                 SettingsCard(categoryTitle = "App Drawer") {
                     SettingsNavigationRow(
                         title = "Hidden Apps",
-                        subtitle = "Manage hidden launcher applications",
+                        subtitle = "Tuck away apps you don't want in your drawer",
                         icon = "🙈",
                         isFocused = items.getOrNull(focusedIndex) == "hidden_apps",
                         jumpNumber = jumpNumber("hidden_apps"),
@@ -271,7 +271,7 @@ internal fun BehaviorSettingsScreen(
                 }
             }
             item(contentType = "behavior_clamshell_card") {
-                SettingsCard(categoryTitle = "Clamshell & Outer LEDs") {
+                SettingsCard(categoryTitle = "Clamshell & Lid LEDs") {
                     SettingsStepperRow(
                         title = "Lid Open Action",
                         subtitle = if (ClamshellManager.hasHardwareLidSource()) {
@@ -288,8 +288,8 @@ internal fun BehaviorSettingsScreen(
                     if ("screen_off_reset" in items) {
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsToggleRow(
-                            title = "Screen-Off Flip Reset",
-                            subtitle = "Return to Home and close menus when the screen turns off",
+                            title = "Flip Reset on Sleep",
+                            subtitle = "Return to Home and close popups when screen sleeps",
                             checked = screenOffReset,
                             isFocused = items.getOrNull(focusedIndex) == "screen_off_reset",
                             jumpNumber = jumpNumber("screen_off_reset"),
@@ -299,8 +299,8 @@ internal fun BehaviorSettingsScreen(
                     if (showLidLedRows) {
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsToggleRow(
-                            title = "Outer Notification LED",
-                            subtitle = "Pulse the exterior LED while the lid is closed",
+                            title = "Outer Lid LED",
+                            subtitle = "Twinkle the exterior LED while the lid is closed ✦",
                             checked = lidLed,
                             isFocused = items.getOrNull(focusedIndex) == "lid_led",
                             jumpNumber = jumpNumber("lid_led"),
@@ -312,7 +312,7 @@ internal fun BehaviorSettingsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsStepperRow(
                             title = "Outer LED Color",
-                            subtitle = "Choose the exterior light accent",
+                            subtitle = "Pick the exterior notification light accent",
                             valueDisplay = LidLedManager.getColorLabel(lidLedColor),
                             isFocused = items.getOrNull(focusedIndex) == "led_color",
                             jumpNumber = jumpNumber("led_color"),
@@ -323,7 +323,7 @@ internal fun BehaviorSettingsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsNavigationRow(
                             title = "Lid LED Studio",
-                            subtitle = "Notification animations, import & step maker",
+                            subtitle = "Custom light shows, .mochibunled import & step maker",
                             icon = "✨",
                             isFocused = items.getOrNull(focusedIndex) == "led_studio",
                             jumpNumber = jumpNumber("led_studio"),
@@ -331,8 +331,8 @@ internal fun BehaviorSettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         SettingsToggleRow(
-                            title = "Outer Charging Indicator",
-                            subtitle = "Light the exterior LED when charging",
+                            title = "Charging LED",
+                            subtitle = "Glow the exterior LED softly while charging",
                             checked = lidLedCharging,
                             isFocused = items.getOrNull(focusedIndex) == "led_charging",
                             jumpNumber = jumpNumber("led_charging"),

@@ -28,7 +28,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Kaomoji wheel**: Long-press `#` in any app to pop up a wheel of text faces and paste one into your chat `( ˶ˆᗜˆ˵ ) ♡`
 - **Widgets & music deck**: A widget page with a Now Playing card that appears when music plays and hides when it stops. Third-party widgets work too.
 - **Virtual mouse pointer**: Press the side key (F4) for a little cursor in touch-only apps. Click with the center key, scroll with `2`/`8` and `4`/`6`, and use your own `.png` or `.gif` sprite. No root? Turn on the optional Accessibility helper and it taps and scrolls anyway.
-- **Clamshell tricks**: Choose what opens when you flip the phone open (Home, Resume Last App, or Notifications), plus an optional snap sound when you close it. **Screen-Off Flip Reset** tidies up (back to Home, menus closed, cursor hidden) whenever the screen goes dark, so unrooted phones get a clean flip-shut too.
+- **Clamshell tricks**: Choose what opens when you flip the phone open (Home, Resume Last App, or Notifications), plus an optional snap sound when you close it. **Flip Reset on Sleep** tidies up (back to Home, menus closed, cursor hidden) whenever the screen goes dark, so unrooted phones get a clean flip-shut too.
 - **Soft-key navigation**: Recents and Back act as little LSK / RSK soft keys on Home and in the drawer, and you can switch that off in *Settings > Virtual Cursor*.
 - **Mochibunny pocket pet 🐰**: The little bunny on Home is yours to look after now! Press Center on her (or tap her) to pop open a tiny **Feed / Pet / Chat** pill, or use `1` / `2` / `3` on the keypad. Treats show up on their own: walk a little (1 per 1,000 steps, if your phone has a step counter), clear your notifications, or plug in your charger. She gets peckish, sulky, and sleepy as the day goes on, and her little speech bubbles change with her mood. No guilt, no game over, just a cozy loaf ♡
 - **Offline & private**: No internet permission, no camera permission, no telemetry (verified on the merged release manifest in CI). See [`PRIVACY.md`](PRIVACY.md) for every declared permission and optional helper.
@@ -109,7 +109,7 @@ Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai
 - The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` badge.
 - **It dodges your text box.** If the box you're typing in is down at the bottom of the screen (hi, Discord), the pill hops to the top so you can see your words, then hops back down when the coast is clear. Some apps don't tell Android where the cursor is, and in those the pill just stays at the bottom.
 - **It fades when you pause.** After a moment with no key presses the pill turns soft and see-through, then comes back to full strength on your next press.
-- A pending letter commits on its own after a short pause (**T9 Auto-Commit Delay**: 0.7 s by default, adjustable from 0.3 to 1.5 s), so you can just keep typing.
+- A pending letter commits on its own after a short pause (**Auto-Commit Delay**: 0.7 s by default, adjustable from 0.3 to 1.5 s), so you can just keep typing.
 - Sentences auto-capitalize.
 - Number, phone, and date fields get plain digits, so dialing works the way you'd expect.
 - Works in terminals like **Termux** too. Delete and Enter go straight to the terminal as plain keys.
@@ -187,7 +187,7 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 
 ### 🌷 Standard (Non-Root) Setup
 
-This is the default, and it's how most flip phones will run Mochibun. Root-only settings are hidden so the Settings Hub stays tidy. Open **Settings > Permissions & Root** (the *Setup & Diagnostics* screen) and walk the little checklist; each row says **✓ Active** or **Tap to Enable** and jumps straight to the right Android page:
+This is the default, and it's how most flip phones will run Mochibun. Root-only settings are hidden so the Settings Hub stays tidy. Open **Settings > Permissions & Root** and walk the little checklist; each row says **✓ Active** or **Tap to Enable** and jumps straight to the right Android page:
 
 1. **Default Home App**: *Settings > Apps > Default Apps > Home app*, then pick Mochibun.
 2. **Display Over Other Apps** (`SYSTEM_ALERT_WINDOW`): lets the virtual mouse pointer float on top of every app.
@@ -196,11 +196,11 @@ This is the default, and it's how most flip phones will run Mochibun. Root-only 
 
 The checklist also has rows for the **Mochibun Keitai IME** (see [Mochibun Keitai Keyboard](#-mochibun-keitai-keyboard)) and the virtual cursor, which shows whether it's ready to go. The cursor only runs (with its little status-bar notification) while it's actually on screen, so your notification shade stays quiet the rest of the time.
 
-> 🌙 **Screen-Off Flip Reset**: Without root, Android can't see the flip's hall sensor, so Mochibun treats "screen off" as "flip shut": it closes menus and the drawer, hides the cursor, and puts focus back on Home. It's on by default for unrooted phones; toggle it in *Settings > Behavior*.
+> 🌙 **Flip Reset on Sleep**: Without root, Android can't see the flip's hall sensor, so Mochibun treats "screen off" as "flip shut": it closes menus and the drawer, hides the cursor, and puts focus back on Home. It's on by default for unrooted phones; toggle it in *Settings > Behavior*.
 
 ### 🔮 Optional Root & LSPosed Perks
 
-Rooted with Magisk and LSPosed? Flip on **Show Root & LSPosed Options** at the bottom of *Settings > Permissions & Root* (Setup & Diagnostics) (it starts on automatically when Mochibun spots `su`). That unlocks system-wide key remapping without Accessibility, QuickSwitch recents, in-place Wi-Fi/Bluetooth toggles, outer lid LED alerts with a charging LED and custom color, the Lid LED Studio, real hall-sensor lid detection, and pastel SystemUI theming. The **[AT-M120 Root, Magisk & Tuning Guide](docs/m120_root_setup.md)** covers bootloader, Magisk, and microG.
+Rooted with Magisk and LSPosed? Flip on **Show Root Options** at the bottom of *Settings > Permissions & Root* (it starts on automatically when Mochibun spots `su`). That unlocks system-wide key remapping without Accessibility, QuickSwitch recents, in-place Wi-Fi/Bluetooth toggles, outer lid LED alerts with a charging LED and custom color, the Lid LED Studio, real hall-sensor lid detection, and pastel SystemUI theming. The **[AT-M120 Root, Magisk & Tuning Guide](docs/m120_root_setup.md)** covers bootloader, Magisk, and microG.
 
 > **Boot animation bonus 🎀**: Got root now? Grab the optional `mochibun-bootanimation.zip` from [Releases](https://github.com/smolstinkyprincess/Mochibun/releases/latest) for a matching pastel boot screen!
 

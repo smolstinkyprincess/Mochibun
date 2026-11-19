@@ -196,7 +196,7 @@ object PreferencesManager {
     const val KEY_IME_AUTO_COMMIT_ENABLED = "pref_ime_auto_commit_enabled"
     const val DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED = true
     const val DEFAULT_IME_AUTO_COMMIT_ENABLED = true
-    // T9 multi-tap auto-commit delay (Keyboard → Input Behavior → T9 Auto-Commit Delay)
+    // T9 multi-tap auto-commit delay (Keyboard → Keypad Feel → Auto-Commit Delay)
     const val KEY_IME_IDLE_COMMIT_MS = "pref_ime_idle_commit_ms"
     const val DEFAULT_IME_IDLE_COMMIT_MS = 700
     const val MIN_IME_IDLE_COMMIT_MS = 300

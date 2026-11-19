@@ -82,7 +82,7 @@ internal fun Boolean.unlessBackPillFocused(): Boolean =
     this && !LocalSettingsBackPillFocused.current.value
 
 /**
- * Row text marquee: only the focused row scrolls (endlessly while focused); every other row is
+ * Subtitle / value marquee (titles stay static with an ellipsis): only the focused row scrolls (endlessly while focused); every other row is
  * static. The node always stays in the chain and only its `iterations` change: adding/removing
  * `basicMarquee` per D-pad step re-measured the text and spiked D-pad p99 on the MT6761.
  */
@@ -384,8 +384,7 @@ fun SettingsNavigationRow(
                 fontSize = 13.sp,
                 fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Clip,
-                modifier = Modifier.settingsMarquee(focused)
+                overflow = TextOverflow.Ellipsis
             )
             if (subtitle != null) {
                 Text(
@@ -456,8 +455,7 @@ fun SettingsToggleRow(
                 fontSize = 13.sp,
                 fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Clip,
-                modifier = Modifier.settingsMarquee(focused)
+                overflow = TextOverflow.Ellipsis
             )
             if (subtitle != null) {
                 Text(
@@ -546,8 +544,7 @@ fun SettingsStepperRow(
                 fontSize = 13.sp,
                 fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Clip,
-                modifier = Modifier.settingsMarquee(focused)
+                overflow = TextOverflow.Ellipsis
             )
             if (subtitle != null) {
                 Text(
@@ -672,8 +669,7 @@ fun SettingsTextInputRow(
                 fontSize = 13.sp,
                 fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Clip,
-                modifier = Modifier.settingsMarquee(focused)
+                overflow = TextOverflow.Ellipsis
             )
             if (subtitle != null) {
                 Text(
@@ -750,8 +746,7 @@ fun SettingsInfoRow(
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
-            overflow = TextOverflow.Clip,
-            modifier = Modifier.settingsMarquee(focused)
+            overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -816,10 +811,9 @@ fun SettingsActionRow(
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
-            overflow = TextOverflow.Clip,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .padding(horizontal = if (jumpNumber != null) 22.dp else 0.dp)
-                .settingsMarquee(focused)
         )
         if (jumpNumber != null) {
             JumpNumberBadge(

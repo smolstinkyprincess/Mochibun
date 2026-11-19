@@ -278,10 +278,10 @@ internal fun BackupRestoreSettingsScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "backup_bundle_card") {
-                SettingsCard(categoryTitle = "Share & Theme Presets") {
+                SettingsCard(categoryTitle = "Shareable Theme Packs") {
                     SettingsNavigationRow(
-                        title = "Export Setup Bundle (.mochibundle)",
-                        subtitle = "Share theme, colors, greeting & cursor in a safe archive",
+                        title = "Export Theme Pack",
+                        subtitle = "Pack up your theme, colors, greeting & cursor (.mochibundle) ♡",
                         icon = "🎀",
                         isFocused = focusedIndex == 0,
                         jumpNumber = 1,
@@ -291,8 +291,8 @@ internal fun BackupRestoreSettingsScreen(
                     )
 
                     SettingsNavigationRow(
-                        title = "Import Setup Bundle (.mochibundle)",
-                        subtitle = "Preview and apply a shared .mochibundle preset",
+                        title = "Import Theme Pack",
+                        subtitle = "Preview and try on a shared .mochibundle preset",
                         icon = "✨",
                         isFocused = focusedIndex == 1,
                         jumpNumber = 2,
@@ -318,7 +318,7 @@ internal fun BackupRestoreSettingsScreen(
 
                     SettingsNavigationRow(
                         title = "Restore Full Backup",
-                        subtitle = "Import a complete Mochibun .json backup file",
+                        subtitle = "Load a complete Mochibun .json backup file",
                         icon = "📥",
                         isFocused = focusedIndex == 3,
                         jumpNumber = 4,
@@ -332,7 +332,7 @@ internal fun BackupRestoreSettingsScreen(
             item(contentType = "backup_factory_reset_card") {
                 SettingsCard(categoryTitle = "Factory Reset") {
                     SettingsNavigationRow(
-                        title = "Reset to Factory Defaults",
+                        title = "Factory Reset",
                         subtitle = "Reset launcher layout, folders, remaps & preferences",
                         icon = "🔄",
                         isFocused = focusedIndex == 4,

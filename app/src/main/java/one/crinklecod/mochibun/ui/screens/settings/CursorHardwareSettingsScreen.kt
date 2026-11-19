@@ -239,10 +239,10 @@ internal fun CursorHardwareSettingsScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "cursor_physics_card") {
-                SettingsCard(categoryTitle = "Movement & Physics") {
+                SettingsCard(categoryTitle = "Pointer Movement") {
                     SettingsStepperRow(
                         title = "Base Speed",
-                        subtitle = "Precision step per tap",
+                        subtitle = "Fine pointer step on each tap",
                         valueDisplay = "$tapStepPx px",
                         isFocused = focusedIndex == 0,
                         jumpNumber = 1,
@@ -252,7 +252,7 @@ internal fun CursorHardwareSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
                         title = "Max Speed",
-                        subtitle = "Top speed while holding",
+                        subtitle = "Top pointer glide speed when holding a direction",
                         valueDisplay = "$maxSpeed px/s",
                         isFocused = focusedIndex == 1,
                         jumpNumber = 2,
@@ -262,7 +262,7 @@ internal fun CursorHardwareSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
                         title = "Acceleration",
-                        subtitle = "Time to max speed (short = snappy)",
+                        subtitle = "Ramp-up time to top speed (shorter = snappier)",
                         valueDisplay = String.format(Locale.US, "%.2f s", accelRampMs / 1000f),
                         isFocused = focusedIndex == 2,
                         jumpNumber = 3,
@@ -272,7 +272,7 @@ internal fun CursorHardwareSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
                         title = "Cursor Size",
-                        subtitle = "On-screen pointer dimensions",
+                        subtitle = "Size of your on-screen pointer sprite",
                         valueDisplay = "$cursorSizeDp dp",
                         isFocused = focusedIndex == 3,
                         jumpNumber = 4,
@@ -282,7 +282,7 @@ internal fun CursorHardwareSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
                         title = "Scroll Step",
-                        subtitle = "Keys 2 (Up) & 8 (Down) swipe distance",
+                        subtitle = "Keys 2 (Up) & 8 (Down) page scroll distance",
                         valueDisplay = "$scrollStepPx px",
                         isFocused = focusedIndex == 4,
                         jumpNumber = 5,
@@ -293,7 +293,7 @@ internal fun CursorHardwareSettingsScreen(
             }
 
             item(contentType = "cursor_sprite_card") {
-                SettingsCard(categoryTitle = "Custom Cursor Sprite") {
+                SettingsCard(categoryTitle = "Cursor Sprite") {
                     SettingsNavigationRow(
                         title = "Cursor Graphic",
                         subtitle = if (customUri != null) "Custom sprite active • choose a .png or .gif" else "Default paw • choose a .png or .gif",
@@ -304,7 +304,7 @@ internal fun CursorHardwareSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     SettingsActionRow(
-                        title = "Reset to Default Sprite",
+                        title = "Reset Cursor Sprite",
                         isFocused = focusedIndex == 6,
                         isDestructive = true,
                         jumpNumber = 7,
@@ -317,7 +317,7 @@ internal fun CursorHardwareSettingsScreen(
                 SettingsCard(categoryTitle = "Physical Keypad") {
                     SettingsNavigationRow(
                         title = "Keypad Remapper",
-                        subtitle = "Assign actions to physical function keys",
+                        subtitle = "Bind custom actions to your physical buttons",
                         icon = "🎮",
                         isFocused = focusedIndex == 7,
                         jumpNumber = 8,
@@ -325,8 +325,8 @@ internal fun CursorHardwareSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Soft-Key Navigation (LSK / RSK)",
-                        subtitle = "Recents & Back act as soft keys on Home and the Drawer",
+                        title = "Soft-Key Navigation",
+                        subtitle = "Use Recents & Back as LSK / RSK on Home and Drawer",
                         checked = softKeyNav,
                         isFocused = focusedIndex == 8,
                         jumpNumber = 9,
@@ -358,7 +358,7 @@ internal fun CursorHardwareSettingsScreen(
                 SettingsCard(categoryTitle = "D-Pad Navigation") {
                     SettingsToggleRow(
                         title = "D-Pad Wrap Around",
-                        subtitle = "Loop focus at navigation boundaries",
+                        subtitle = "Loop selection smoothly around menu edges",
                         checked = dpadWrapAround,
                         isFocused = focusedIndex == 10,
                         jumpNumber = null,
@@ -367,7 +367,7 @@ internal fun CursorHardwareSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "Boundary Haptics",
-                        subtitle = "Subtle feedback when focus reaches an edge",
+                        subtitle = "Tiny tactile tick when focus hits an edge",
                         checked = boundaryHaptics,
                         isFocused = focusedIndex == 11,
                         jumpNumber = null,

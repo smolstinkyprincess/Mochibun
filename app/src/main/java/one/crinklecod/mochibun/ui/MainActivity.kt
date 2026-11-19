@@ -261,6 +261,10 @@ class MainActivity : ComponentActivity() {
         @Volatile
         var settingsBackKeyHandler: ((KeyEvent) -> Boolean)? = null
 
+        /** True while a launcher [ActiveModal] is open; see [routeBackToOpenModal]. */
+        @Volatile
+        var isLauncherModalOpen = false
+
         private const val WAKE_SETTLE_MS = 1000L
 
         @Volatile
@@ -294,6 +298,7 @@ class MainActivity : ComponentActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         HardwareRemapManager.keyDiagnosticListener?.invoke(event)
         if (settingsBackKeyHandler?.invoke(event) == true) return true
+        if (routeBackToOpenModal(event)) return true
         if (HardwareRemapManager.keyCaptureListener?.invoke(event) == true) return true
         val interceptor = keyEventInterceptor
         if (InputArbiter.isNewPress(event)) {
@@ -309,6 +314,23 @@ class MainActivity : ComponentActivity() {
             return true
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * With Soft-Key Nav on, MochibunKeyHook swallows BACK while MainActivity is on top and re-sends
+     * it via ACTION_BACK_TRIGGER, so it lands on this activity window even while a modal's dialog
+     * window has focus (the dialog's own key handling never sees it). Left to Compose, the DOWN is
+     * spent as a focus "exit" on the launcher underneath and the UP arrives untracked, so the modal
+     * only closed on a second press. Hand it to the back dispatcher instead: the topmost enabled
+     * BackHandler wins (e.g. FolderActionDialog's delete confirm before the launcher's modal close).
+     */
+    private fun routeBackToOpenModal(event: KeyEvent): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_BACK) return false
+        if (!isLauncherModalOpen || hasWindowFocus()) return false
+        if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
+            onBackPressedDispatcher.onBackPressed()
+        }
+        return true
     }
 
     override fun onDestroy() {

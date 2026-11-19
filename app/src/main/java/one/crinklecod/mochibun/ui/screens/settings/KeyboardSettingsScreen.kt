@@ -184,7 +184,7 @@ internal fun KeyboardSettingsScreen(
     requestFocusSafely(focusRequester)
 
     SettingsScaffold(
-        title = "Typing",
+        title = "Keyboard",
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
@@ -259,7 +259,7 @@ internal fun KeyboardSettingsScreen(
             item(contentType = "keyboard_ime_card") {
                 SettingsCard(categoryTitle = "Mochibun Keyboard") {
                     SettingsNavigationRow(
-                        title = "Keitai Multi-tap Keyboard",
+                        title = "Keitai Keyboard",
                         subtitle = keyboardStatusSubtitle(imeState),
                         icon = if (imeState == MochibunImeStatus.State.DEFAULT) "✓" else "⌨",
                         isFocused = focusedIndex == 0,
@@ -269,7 +269,7 @@ internal fun KeyboardSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Switch Keyboard",
-                        subtitle = "Choose another installed keyboard",
+                        subtitle = "Pick another installed input method",
                         icon = "⇄",
                         isFocused = focusedIndex == 1,
                         jumpNumber = 2,
@@ -279,10 +279,10 @@ internal fun KeyboardSettingsScreen(
             }
 
             item(contentType = "keyboard_input_card") {
-                SettingsCard(categoryTitle = "Input Behavior") {
+                SettingsCard(categoryTitle = "Keypad Feel") {
                     SettingsToggleRow(
                         title = "Hold for Digit",
-                        subtitle = "Hold a keypad key to type its number",
+                        subtitle = "Long-press a number key to type its digit",
                         checked = holdForDigit,
                         isFocused = focusedIndex == 2,
                         jumpNumber = 3,
@@ -293,8 +293,8 @@ internal fun KeyboardSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Letter Auto-commit",
-                        subtitle = "Commit the selected letter after a short pause",
+                        title = "Auto-Commit Letters",
+                        subtitle = "Lock in multi-tap letters after a tiny pause",
                         checked = autoCommit,
                         isFocused = focusedIndex == 3,
                         jumpNumber = 4,
@@ -305,11 +305,11 @@ internal fun KeyboardSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsStepperRow(
-                        title = "T9 Auto-Commit Delay",
+                        title = "Auto-Commit Delay",
                         subtitle = if (autoCommit) {
                             "Pause before a multi-tap letter is committed"
                         } else {
-                            "Turn on Letter Auto-commit to use"
+                            "Turn on Auto-Commit Letters to use"
                         },
                         valueDisplay = if (autoCommit) "$autoCommitMs ms" else "Off",
                         isFocused = focusedIndex == 4,
@@ -320,7 +320,7 @@ internal fun KeyboardSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "Key Hold Haptic",
-                        subtitle = "Buzz when a hold types a number",
+                        subtitle = "Gentle buzz when holding a key types a number",
                         checked = holdVibration,
                         isFocused = focusedIndex == 5,
                         jumpNumber = 6,
@@ -332,7 +332,7 @@ internal fun KeyboardSettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Key Guide",
-                        subtitle = "View physical keypad and hardware key mappings",
+                        subtitle = "Cheatsheet for physical keypad & button shortcuts",
                         icon = "ⓘ",
                         isFocused = focusedIndex == 6,
                         jumpNumber = 7,
