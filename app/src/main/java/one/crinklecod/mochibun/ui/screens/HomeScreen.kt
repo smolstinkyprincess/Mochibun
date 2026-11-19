@@ -34,20 +34,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalDensity
-import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.IntState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -66,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Path
@@ -78,6 +80,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,10 +94,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import one.crinklecod.mochibun.data.model.FavoriteFolder
 import one.crinklecod.mochibun.data.model.FavoriteSlotItem
 import one.crinklecod.mochibun.data.model.LauncherApp
-import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
-import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import one.crinklecod.mochibun.data.repository.IconPackManager
-import one.crinklecod.mochibun.data.repository.rememberCustomCardBorderFrame
+import one.crinklecod.mochibun.data.repository.currentCardBorderState
 import one.crinklecod.mochibun.ui.components.kawaiiCardMotifs
 import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.*
@@ -104,6 +105,7 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 // dynamic pastel theme colors provided via LocalLauncherTheme and MochibunThemePalette
 private val FavoriteSquircleShape = RoundedCornerShape(16.dp)
@@ -204,6 +206,8 @@ fun HomeScreen(
     val isTickerDark by PreferencesManager.isSubDisplayTickerDark.collectAsState()
     val homeMascotSize by PreferencesManager.homeMascotSize.collectAsState()
     val petPillBounds = remember { PetPillBounds() }
+    // One shared 4 Hz Keitai step clock for both Mochibunny and the bottom menu handle.
+    val homeKeitaiStep = rememberKeitaiStep(active = isHomeVisible, totalSteps = MascotAtlasMath.TICK_WRAP)
     if (!isTickerEnabled) {
         StepCounterResumeSync()
     }
@@ -261,6 +265,7 @@ fun HomeScreen(
                 petPillBounds = petPillBounds,
                 mascotSize = homeMascotSize,
                 mascotReaction = mascotReaction,
+                sharedStep = homeKeitaiStep,
                 onMascotClick = onMascotClick,
                 onPetPillOptionClick = onPetPillOptionClick,
                 folderIconRefreshKey = folderIconRefreshKey,
@@ -295,6 +300,7 @@ fun HomeScreen(
             BottomDrawerHandle(
                 isFocused = isHomeScreenActive && homeFocusArea == 2,
                 isAnimating = isHomeScreenActive,
+                sharedStep = homeKeitaiStep,
                 onClick = onOpenDrawer
             )
 
@@ -309,9 +315,9 @@ fun HomeScreen(
 }
 
 /**
- * Greeting + sub-display feed as one 3 Hz stepped marquee. The visible character count is
- * measured from the font so the text fills the pill without clipping early; the minimum
- * height matches the measured 20sp greeting line so the banner (and everything below it) keeps its size.
+ * Greeting + sub-display feed as one 3 Hz stepped marquee. Measures the feed once and shifts
+ * a pre-measured text node in [Modifier.graphicsLayer] so 3 Hz ticks never recompose or
+ * re-measure Text; the minimum height matches the measured 20sp greeting line so the banner keeps its size.
  */
 @Composable
 private fun GreetingMarquee(
@@ -321,14 +327,16 @@ private fun GreetingMarquee(
     running: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
     val feed = rememberSubDisplayFeed(unreadCount = unreadCount, greeting = greeting)
     val fontFamily = LocalLauncherFontFamily.current
-    val style = TextStyle(
-        fontFamily = fontFamily,
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Medium
-    )
+    val style = remember(fontFamily) {
+        TextStyle(
+            fontFamily = fontFamily,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     // Same height as the static 20sp greeting line, so the banner keeps its full, padded size
@@ -342,31 +350,78 @@ private fun GreetingMarquee(
             ).size.height.toDp()
         }
     }
-    BoxWithConstraints(
+    val feedWidthPx = remember(feed, style) {
+        measurer.measure(feed, style).size.width
+    }
+    val charStepPx = remember(style) {
+        (measurer.measure("MMMMMMMMMM", style).size.width / 10f).coerceAtLeast(4f)
+    }
+
+    // Width tracked via onSizeChanged instead of BoxWithConstraints, so mounting Home avoids a
+    // SubcomposeLayout. fillMaxWidth makes this equal to the old constraints.maxWidth. Until the
+    // first layout reports it, the static line shows; it is clipped/centered so it renders the same
+    // pixels as marquee step 0, and the marquee takes over on the next frame if the feed overflows.
+    val availableWidthPx = remember { mutableIntStateOf(Int.MAX_VALUE) }
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = greetingLineHeight),
+            .heightIn(min = greetingLineHeight)
+            .onSizeChanged { availableWidthPx.intValue = it.width }
+            .clipToBounds(),
         contentAlignment = Alignment.Center
     ) {
-        val charWidthPx = remember(style) {
-            measurer.measure("MMMMMMMMMM", style).size.width / 10f
+        if (feedWidthPx <= availableWidthPx.intValue || !running) {
+            Text(
+                text = feed,
+                style = style,
+                color = color,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
+            )
+        } else {
+            val loopUnit = remember(feed) { "$feed   ★   " }
+            val loopText = remember(loopUnit, feed) { "$loopUnit$feed" }
+            val loopUnitWidthPx = remember(loopUnit, style) {
+                measurer.measure(loopUnit, style).size.width
+            }
+            val stepCount = remember(loopUnitWidthPx, charStepPx) {
+                (loopUnitWidthPx / charStepPx).roundToInt().coerceAtLeast(1)
+            }
+            val pxPerStep = remember(loopUnitWidthPx, stepCount) {
+                loopUnitWidthPx.toFloat() / stepCount
+            }
+            val tick = remember(loopUnit) { mutableIntStateOf(0) }
+
+            LaunchedEffect(loopUnit, stepCount, lifecycleOwner) {
+                lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                    while (true) {
+                        delay(320L) // 3 Hz tick
+                        tick.intValue = (tick.intValue + 1) % stepCount
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text = loopText,
+                    style = style,
+                    color = color,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Visible,
+                    modifier = Modifier
+                        .wrapContentWidth(unbounded = true, align = Alignment.Start)
+                        .graphicsLayer {
+                            translationX = -(tick.intValue * pxPerStep)
+                        }
+                )
+            }
         }
-        val visibleChars = remember(constraints.maxWidth, charWidthPx) {
-            if (charWidthPx <= 0f) 20 else (constraints.maxWidth / charWidthPx).toInt().coerceAtLeast(8)
-        }
-        val shown = rememberSteppedTickerText(
-            text = feed,
-            visibleCharCount = visibleChars,
-            enabled = running && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
-        )
-        Text(
-            text = shown,
-            style = style,
-            color = color,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Clip
-        )
     }
 }
 
@@ -389,9 +444,7 @@ fun WelcomeHomeBanner(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
-    val customBorderSource by CustomCardBorderManager.source.collectAsState()
-    val customBorderFrame = rememberCustomCardBorderFrame()
-    val hasCustomBorder = customBorderFrame != null || customBorderSource is CustomCardBorderSource.Custom
+    val hasCustomBorder = currentCardBorderState().hasCustomBorder
     val effectiveCornerRadius = if (hasCustomBorder) 16.dp else 32.dp
     val pillShape = remember(effectiveCornerRadius) { RoundedCornerShape(effectiveCornerRadius) }
 
@@ -813,6 +866,7 @@ fun FavoritesCard(
     petPillBounds: PetPillBounds? = null,
     mascotSize: HomeMascotSize = HomeMascotSize.SMALL,
     mascotReaction: MascotReaction = MascotReaction(),
+    sharedStep: IntState? = null,
     onMascotClick: () -> Unit = {},
     onPetPillOptionClick: (Int) -> Unit = {},
     folderIconRefreshKey: Int = 0,
@@ -979,9 +1033,7 @@ fun FavoritesCard(
 
     // Mini pixel bow pinned on the top-left corner, balancing Mochibunny on the top-right.
     // Suppressed when a custom 9-slice card_border.png is active so it doesn't collide with custom corner ornaments.
-    val customBorderSource by CustomCardBorderManager.source.collectAsState()
-    val customBorderFrame = rememberCustomCardBorderFrame()
-    val hasCustomBorder = customBorderFrame != null || customBorderSource is CustomCardBorderSource.Custom
+    val hasCustomBorder = currentCardBorderState().hasCustomBorder
     if (!hasCustomBorder) {
         PixelRibbonBow(
             modifier = Modifier
@@ -997,7 +1049,7 @@ fun FavoritesCard(
     // Declared last in this Box so she always draws above the lace rim and the bow.
     // One shared 4 Hz stepped clock for her bob and sprite frames. It runs only while Home is
     // visible and the activity is RESUMED (rememberKeitaiStep), and is read only in layout/draw.
-    val mascotStep = rememberKeitaiStep(active = isHomeScreenActive, totalSteps = MascotAtlasMath.TICK_WRAP)
+    val mascotStep = sharedStep ?: rememberKeitaiStep(active = isHomeScreenActive, totalSteps = MascotAtlasMath.TICK_WRAP)
     val mascotTick = remember(mascotStep) { { mascotStep.intValue } }
     // Her resting row follows her pet mood: re-checked when her state changes and about once a
     // minute (the clock's minute changes), so hunger and bedtime show up without extra timers.
@@ -1105,7 +1157,13 @@ private fun FavoriteAppSlot(
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .softGlowFocus(isSelected = isSelected, cornerRadius = 20.dp)
+                .then(
+                    if (isSelected) {
+                        Modifier.softGlowFocus(isSelected = true, cornerRadius = 20.dp)
+                    } else {
+                        Modifier
+                    }
+                )
                 .padding(3.dp)
                 .background(squircleBg, FavoriteSquircleShape)
                 // Crisp 1dp inner highlight (border draws inside the bounds)
@@ -1190,7 +1248,13 @@ private fun FavoriteFolderSlot(
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .softGlowFocus(isSelected = isSelected, cornerRadius = 20.dp)
+                .then(
+                    if (isSelected) {
+                        Modifier.softGlowFocus(isSelected = true, cornerRadius = 20.dp)
+                    } else {
+                        Modifier
+                    }
+                )
                 .padding(3.dp)
                 .background(squircleBg, FavoriteSquircleShape)
                 // Crisp 1dp inner highlight (border draws inside the bounds)
@@ -1244,6 +1308,7 @@ fun BottomDrawerHandle(
     modifier: Modifier = Modifier,
     isFocused: Boolean = false,
     isAnimating: Boolean = false,
+    sharedStep: IntState? = null,
     onClick: () -> Unit = {}
 ) {
     val theme = LocalLauncherTheme.current
@@ -1265,7 +1330,7 @@ fun BottomDrawerHandle(
             .clickable { onClick() },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AnimatedMenuIndicator(isAnimating = isAnimating, color = theme.appActionColor)
+        AnimatedMenuIndicator(isAnimating = isAnimating, color = theme.appActionColor, sharedStep = sharedStep)
     }
 }
 
@@ -1276,13 +1341,19 @@ fun BottomDrawerHandle(
  * and the activity is RESUMED; the bob offset is read in the layout phase.
  */
 @Composable
-private fun AnimatedMenuIndicator(isAnimating: Boolean, color: Color) {
-    val step = rememberKeitaiStep(isAnimating)
-    val heart by remember { derivedStateOf { if (step.intValue >= 4) "♥" else "♡" } }
+private fun AnimatedMenuIndicator(
+    isAnimating: Boolean,
+    color: Color,
+    sharedStep: IntState? = null
+) {
+    val step = sharedStep ?: rememberKeitaiStep(isAnimating)
+    val heart by remember(step, isAnimating) {
+        derivedStateOf { if (isAnimating && (step.intValue % 8) >= 4) "♥" else "♡" }
+    }
 
     // Integer dp bob: 0,1,2,1 repeating each second
     val bobModifier = Modifier.offset {
-        val bobDp = when (step.intValue % 4) { 1, 3 -> 1; 2 -> 2; else -> 0 }
+        val bobDp = if (!isAnimating) 0 else when (step.intValue % 4) { 1, 3 -> 1; 2 -> 2; else -> 0 }
         IntOffset(0, bobDp.dp.roundToPx())
     }
 

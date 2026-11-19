@@ -49,6 +49,10 @@ internal fun SoundFeedbackSettingsScreen(
     val lidSnapSound by PreferencesManager.isLidCloseSnapSoundEnabled.collectAsState()
     val totalItems = 5
 
+    LaunchedEffect(Unit) {
+        SoundEffectManager.preloadAllThemes(context)
+    }
+
     fun stepIndex(direction: Int) {
         focusedIndex = (focusedIndex + direction + totalItems) % totalItems
         SoundEffectManager.play(context, SoundEffect.NAV)
@@ -176,7 +180,7 @@ internal fun SoundFeedbackSettingsScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
+            item(contentType = "sound_routing_card") {
                 SettingsCard(categoryTitle = "Master Routing & Volume") {
                     SettingsStepperRow(
                         title = "Audio Routing Stream",
@@ -208,7 +212,7 @@ internal fun SoundFeedbackSettingsScreen(
                     )
                 }
             }
-            item {
+            item(contentType = "sound_effects_card") {
                 SettingsCard(categoryTitle = "Sound Effects") {
                     SettingsStepperRow(
                         title = "Keypad Sound Profile",

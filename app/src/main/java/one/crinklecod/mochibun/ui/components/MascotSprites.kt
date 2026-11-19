@@ -192,6 +192,11 @@ object MascotSpriteStore {
     fun cachedAtlas(source: MascotSpriteSource): MascotAtlas? =
         cached?.takeIf { it.first == source }?.second
 
+    /** Drops the cached atlas bitmap under critical memory pressure; reloads on next draw. */
+    fun clearCache() {
+        cached = null
+    }
+
     /**
      * ~1 GB phones show the first frame only, matching how they skip animated GIFs elsewhere
      * (see MochibunApp's image loader).

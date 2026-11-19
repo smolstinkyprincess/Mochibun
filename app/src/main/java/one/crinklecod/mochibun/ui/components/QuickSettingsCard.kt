@@ -1,8 +1,11 @@
 package one.crinklecod.mochibun.ui.components
 
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioManager
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -21,15 +24,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import one.crinklecod.mochibun.core.haptic.HapticManager
 import one.crinklecod.mochibun.core.system.RootShell
 import one.crinklecod.mochibun.core.system.TorchManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.palette
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
-
-private const val QUICK_SETTINGS_POLL_MS = 2_500L
 
 /** Bumped after an in-place root toggle so the card re-samples quickly. */
 private val rootToggleCount = mutableIntStateOf(0)
@@ -72,7 +78,6 @@ object QuickSettingsNav {
 private data class QuickSettingsState(
     val wifiOn: Boolean,
     val bluetoothOn: Boolean,
-    val torchOn: Boolean,
     val ringerMode: Int
 )
 
@@ -87,7 +92,7 @@ private fun sampleQuickSettings(context: Context): QuickSettingsState {
         (context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.ringerMode
             ?: AudioManager.RINGER_MODE_NORMAL
     } catch (_: Exception) { AudioManager.RINGER_MODE_NORMAL }
-    return QuickSettingsState(wifiOn, bluetoothOn, TorchManager.isTorchOn, ringer)
+    return QuickSettingsState(wifiOn, bluetoothOn, ringer)
 }
 
 private fun openPanel(context: Context, panelAction: String, fallbackAction: String) {
@@ -176,22 +181,40 @@ fun QuickSettingsCard(
     refreshKey: Int = 0
 ) {
     val context = LocalContext.current
-    val palette = LocalLauncherTheme.current.palette
+    val lifecycleOwner = LocalLifecycleOwner.current
     var state by remember { mutableStateOf(sampleQuickSettings(context)) }
+    val torchOn by TorchManager.torchOn.collectAsState()
 
-    // Poll only while page 0 is showing; the effect is cancelled when it isn't
-    LaunchedEffect(isActivePage, refreshKey) {
+    // Event-driven via system broadcasts, scoped to STARTED & active Page 0 (zero polling).
+    LaunchedEffect(isActivePage, refreshKey, lifecycleOwner) {
         if (!isActivePage) return@LaunchedEffect
-        while (true) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             state = sampleQuickSettings(context)
-            delay(QUICK_SETTINGS_POLL_MS)
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(ctx: Context?, intent: Intent?) {
+                    state = sampleQuickSettings(context)
+                }
+            }
+            val filter = IntentFilter().apply {
+                addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+                addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+                addAction(AudioManager.RINGER_MODE_CHANGED_ACTION)
+            }
+            ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+            try {
+                awaitCancellation()
+            } finally {
+                try {
+                    context.unregisterReceiver(receiver)
+                } catch (_: Exception) {}
+            }
         }
     }
 
-    // Fast re-sample after a root toggle so the pill flips without waiting for the poll
+    // Fast re-sample after a root toggle so the pill flips immediately even if a broadcast lags.
     val rootToggles = rootToggleCount.intValue
-    LaunchedEffect(rootToggles) {
-        if (rootToggles == 0) return@LaunchedEffect
+    LaunchedEffect(isActivePage, rootToggles) {
+        if (!isActivePage || rootToggles == 0) return@LaunchedEffect
         for (wait in longArrayOf(150L, 350L, 700L)) {
             delay(wait)
             state = sampleQuickSettings(context)
@@ -206,7 +229,7 @@ fun QuickSettingsCard(
     val pills = listOf(
         "📶" to state.wifiOn,
         "ᛒ" to state.bluetoothOn,
-        "🔦" to state.torchOn,
+        "🔦" to torchOn,
         soundGlyph to (state.ringerMode == AudioManager.RINGER_MODE_NORMAL)
     )
     Row(

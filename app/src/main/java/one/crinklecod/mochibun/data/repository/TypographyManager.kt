@@ -8,9 +8,14 @@ import android.provider.OpenableColumns
 import android.util.Log
 import androidx.compose.ui.text.font.FontFamily
 import one.crinklecod.mochibun.ui.theme.MaruMinyaMFontFamily
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -35,6 +40,8 @@ object TypographyManager {
     private const val TAG = "TypographyManager"
     const val FONTS_DIR_NAME = "fonts"
     private const val README_FILE_NAME = "README.txt"
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scanLock = Any()
 
     val BuiltInTypographyOptions = listOf(
         TypographyOption(
@@ -85,59 +92,77 @@ object TypographyManager {
         return dir
     }
 
+    /** Schedules [scanFonts] on [Dispatchers.IO] so startup never blocks the main thread. */
+    fun scanFontsInBackground(context: Context) {
+        val appContext = context.applicationContext
+        ioScope.launch {
+            scanFonts(appContext)
+        }
+    }
+
+    /** Suspends on [Dispatchers.IO] while scanning font directories. */
+    suspend fun scanFontsAsync(context: Context) {
+        val appContext = context.applicationContext
+        withContext(Dispatchers.IO) {
+            scanFonts(appContext)
+        }
+    }
+
     fun scanFonts(context: Context) {
-        try {
-            val primaryDir = getFontsDirectory(context)
-            ensureReadmeExists(primaryDir)
-
-            val directoriesToScan = mutableListOf(primaryDir)
-
-            // Optional secondary external directories if accessible
+        synchronized(scanLock) {
             try {
-                val mochibunExternal = File(Environment.getExternalStorageDirectory(), "Mochibun/fonts")
-                if (mochibunExternal.exists() && mochibunExternal.isDirectory && mochibunExternal.canRead()) {
-                    directoriesToScan.add(mochibunExternal)
-                }
-            } catch (_: Exception) {}
+                val primaryDir = getFontsDirectory(context)
+                ensureReadmeExists(primaryDir)
 
-            val customList = mutableListOf<TypographyOption>()
-            val processedFileNames = mutableSetOf<String>()
+                val directoriesToScan = mutableListOf(primaryDir)
 
-            for (dir in directoriesToScan) {
-                val fontFiles = dir.listFiles { f ->
-                    val ext = f.extension.lowercase()
-                    ext in listOf("ttf", "otf", "ttc")
-                } ?: emptyArray()
+                // Optional secondary external directories if accessible
+                try {
+                    val mochibunExternal = File(Environment.getExternalStorageDirectory(), "Mochibun/fonts")
+                    if (mochibunExternal.exists() && mochibunExternal.isDirectory && mochibunExternal.canRead()) {
+                        directoriesToScan.add(mochibunExternal)
+                    }
+                } catch (_: Exception) {}
 
-                for (file in fontFiles.sortedBy { it.name.lowercase() }) {
-                    if (!processedFileNames.add(file.name.lowercase())) continue
-                    try {
-                        val typeface = Typeface.createFromFile(file)
-                        val family = FontFamily(typeface)
-                        val cleanName = file.nameWithoutExtension
-                            .replace("_", " ")
-                            .replace("-", " ")
-                        val sizeKb = (file.length() / 1024).coerceAtLeast(1)
-                        customList.add(
-                            TypographyOption(
-                                id = "custom:${file.name}",
-                                name = cleanName,
-                                subtitle = "Custom Drop-in ($sizeKb KB)",
-                                sampleText = "あA 12:00",
-                                fontFamily = family,
-                                isExternal = true,
-                                file = file
+                val customList = mutableListOf<TypographyOption>()
+                val processedFileNames = mutableSetOf<String>()
+
+                for (dir in directoriesToScan) {
+                    val fontFiles = dir.listFiles { f ->
+                        val ext = f.extension.lowercase()
+                        ext in listOf("ttf", "otf", "ttc")
+                    } ?: emptyArray()
+
+                    for (file in fontFiles.sortedBy { it.name.lowercase() }) {
+                        if (!processedFileNames.add(file.name.lowercase())) continue
+                        try {
+                            val typeface = Typeface.createFromFile(file)
+                            val family = FontFamily(typeface)
+                            val cleanName = file.nameWithoutExtension
+                                .replace("_", " ")
+                                .replace("-", " ")
+                            val sizeKb = (file.length() / 1024).coerceAtLeast(1)
+                            customList.add(
+                                TypographyOption(
+                                    id = "custom:${file.name}",
+                                    name = cleanName,
+                                    subtitle = "Custom Drop-in ($sizeKb KB)",
+                                    sampleText = "あA 12:00",
+                                    fontFamily = family,
+                                    isExternal = true,
+                                    file = file
+                                )
                             )
-                        )
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed loading font: ${file.name}", e)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed loading font: ${file.name}", e)
+                        }
                     }
                 }
-            }
 
-            _options.value = BuiltInTypographyOptions + customList
-        } catch (e: Exception) {
-            Log.e(TAG, "Error scanning custom fonts", e)
+                _options.value = BuiltInTypographyOptions + customList
+            } catch (e: Exception) {
+                Log.e(TAG, "Error scanning custom fonts", e)
+            }
         }
     }
 

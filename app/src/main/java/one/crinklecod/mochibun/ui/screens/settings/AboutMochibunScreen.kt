@@ -103,7 +103,7 @@ internal fun AboutMochibunScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
+            item(contentType = "about_hero") {
                 val theme = LocalLauncherTheme.current
                 Box(
                     modifier = Modifier
@@ -124,7 +124,7 @@ internal fun AboutMochibunScreen(
                 }
             }
 
-            item {
+            item(contentType = "about_hardware_card") {
                 SettingsCard(categoryTitle = "Hardware Specifications") {
                     SettingsInfoRow(label = "Model / Device", value = deviceDisplay)
                     if (isTargetDevice) {
@@ -161,7 +161,7 @@ internal fun AboutMochibunScreen(
                 }
             }
 
-            item {
+            item(contentType = "about_credits_card") {
                 SettingsCard(categoryTitle = "Open Source, License & Credits") {
                     SettingsInfoRow(label = "License", value = "Apache 2.0 License")
                     SettingsInfoRow(label = "Root Bridge", value = "libsu:core daemon")

@@ -6,6 +6,9 @@ import android.hardware.camera2.CameraManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Lightweight hardware flashlight coordinator for the Chinoe AT-M120 physical keypad shortcuts.
@@ -17,9 +20,11 @@ object TorchManager {
 
     private const val TAG = "TorchManager"
 
-    @Volatile
-    var isTorchOn: Boolean = false
-        private set
+    private val _torchOn = MutableStateFlow(false)
+    val torchOn: StateFlow<Boolean> = _torchOn.asStateFlow()
+
+    val isTorchOn: Boolean
+        get() = _torchOn.value
 
     @Volatile
     private var cachedCameraId: String? = null
@@ -29,12 +34,12 @@ object TorchManager {
 
     private val torchCallback = object : CameraManager.TorchCallback() {
         override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
-            if (cameraId == cachedCameraId) isTorchOn = enabled
+            if (cameraId == cachedCameraId) _torchOn.value = enabled
         }
 
         override fun onTorchModeUnavailable(cameraId: String) {
             // Camera in use by another app: the torch is off as far as we're concerned
-            if (cameraId == cachedCameraId) isTorchOn = false
+            if (cameraId == cachedCameraId) _torchOn.value = false
         }
     }
 
@@ -88,7 +93,7 @@ object TorchManager {
         return try {
             val targetState = !isTorchOn
             cameraManager.setTorchMode(cameraId, targetState)
-            isTorchOn = targetState
+            _torchOn.value = targetState
             Log.d(TAG, "Toggled torch on camera $cameraId: $targetState")
             targetState
         } catch (e: Exception) {

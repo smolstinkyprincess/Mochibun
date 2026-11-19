@@ -3,12 +3,15 @@ package one.crinklecod.mochibun.core.sound
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.SoundPool
+import android.os.SystemClock
 import android.util.Log
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
@@ -39,11 +42,15 @@ data class SoundTheme(
  * Synthesizes tiny 16-bit PCM waveforms procedurally in memory on first run,
  * caching them to avoid bundling binary audio assets in the APK.
  * Audio playback is routed via Android's native SoundPool for sub-5ms tactile response.
+ *
+ * Only the active sound theme is synthesized and loaded into [SoundPool] (and always off the
+ * main thread) so startup stays fast and muted profiles allocate zero native audio buffers.
  */
 object SoundEffectManager {
 
     private const val TAG = "SoundEffectManager"
     private const val SAMPLE_RATE = 22050
+    private const val PENDING_PLAY_MAX_AGE_MS = 500L
 
     val SoundThemes = listOf(
         SoundTheme("kawaii", "Kawaii Pop", "Sweet resonant chimes & bubbly drops"),
@@ -56,6 +63,7 @@ object SoundEffectManager {
     )
 
     private val ALL_SYNTHESIZED_THEMES = listOf("kawaii", "retro", "chiptune", "pager", "thock", "water")
+    private val SYNTHESIZED_THEME_SET = ALL_SYNTHESIZED_THEMES.toSet()
 
     /** Theme id one step from [currentId] in [SoundThemes] order, wrapping; unknown ids start at the first theme. */
     fun nextThemeId(currentId: String, direction: Int): String {
@@ -68,17 +76,135 @@ object SoundEffectManager {
     fun themeName(id: String): String =
         SoundThemes.firstOrNull { it.id == id }?.name ?: SoundThemes.first().name
 
-    private var soundPool: SoundPool? = null
-    private val soundMap = mutableMapOf<Pair<String, SoundEffect>, Int>()
+    private data class PendingPlay(
+        val soundId: Int,
+        val volume: Float,
+        val requestedAtMs: Long
+    )
+
+    private val poolLock = Any()
+    private val loaderExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "MochibunSoundLoader").apply { isDaemon = true }
+    }
+
     @Volatile
-    private var isInitialized = false
+    private var soundPool: SoundPool? = null
+    private val soundMap = ConcurrentHashMap<Pair<String, SoundEffect>, Int>()
+    private val loadedThemes = ConcurrentHashMap.newKeySet<String>()
+    private val readySampleIds = ConcurrentHashMap.newKeySet<Int>()
+
+    @Volatile
+    private var pendingPlay: PendingPlay? = null
+
     @Volatile
     private var currentStreamSetting: String? = null
 
-    @Synchronized
+    /**
+     * Schedules background initialization for only the active theme (or `"thock"` if keypad sounds
+     * are `"off"` while lid-close snap is enabled). If both are disabled, no [SoundPool] or WAV
+     * files are allocated at startup.
+     */
     fun init(context: Context) {
-        val streamPref = PreferencesManager.getLauncherAudioStream(context)
-        if (isInitialized && soundPool != null && currentStreamSetting == streamPref) return
+        val appContext = context.applicationContext
+        val mode = PreferencesManager.getKeypadSoundMode(appContext)
+        val snapEnabled = PreferencesManager.isLidCloseSnapSoundEnabled(appContext)
+        if (mode == "off" && !snapEnabled) return
+
+        val initialTheme = resolveActiveTheme(mode, fallback = "thock")
+        val streamPref = PreferencesManager.getLauncherAudioStream(appContext)
+        scheduleLoadThemes(appContext, listOf(initialTheme), streamPref)
+    }
+
+    /**
+     * Preloads all synthesized themes asynchronously (used when entering Sound Settings so
+     * live cycling previews respond immediately).
+     */
+    fun preloadAllThemes(context: Context) {
+        val appContext = context.applicationContext
+        val streamPref = PreferencesManager.getLauncherAudioStream(appContext)
+        scheduleLoadThemes(appContext, ALL_SYNTHESIZED_THEMES, streamPref)
+    }
+
+    /**
+     * Re-initializes SoundPool off the main thread when the audio stream preference changes.
+     */
+    fun updateAudioStream(context: Context) {
+        val appContext = context.applicationContext
+        val streamPref = PreferencesManager.getLauncherAudioStream(appContext)
+        if (currentStreamSetting == streamPref && soundPool != null) {
+            return
+        }
+        val mode = PreferencesManager.getKeypadSoundMode(appContext)
+        val snapEnabled = PreferencesManager.isLidCloseSnapSoundEnabled(appContext)
+        if (soundPool == null && mode == "off" && !snapEnabled) {
+            currentStreamSetting = streamPref
+            return
+        }
+        val themesToReload = buildSet {
+            addAll(loadedThemes)
+            if (mode != "off") add(resolveActiveTheme(mode, fallback = "kawaii"))
+            else if (snapEnabled) add("thock")
+        }.toList()
+        if (themesToReload.isEmpty()) return
+        scheduleLoadThemes(appContext, themesToReload, streamPref)
+    }
+
+    fun release() {
+        synchronized(poolLock) {
+            try {
+                soundPool?.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error releasing SoundPool", e)
+            }
+            soundPool = null
+            soundMap.clear()
+            loadedThemes.clear()
+            readySampleIds.clear()
+            pendingPlay = null
+            currentStreamSetting = null
+        }
+    }
+
+    private fun resolveActiveTheme(mode: String, fallback: String): String =
+        if (mode in SYNTHESIZED_THEME_SET) mode else fallback
+
+    private fun scheduleLoadThemes(
+        appContext: Context,
+        themes: List<String>,
+        streamPref: String,
+        pendingEffectForFirstTheme: SoundEffect? = null,
+        pendingVolume: Float = 0f
+    ) {
+        loaderExecutor.execute {
+            synchronized(poolLock) {
+                ensurePoolLocked(streamPref)
+                val soundDir = File(appContext.cacheDir, "mochibun_sounds").apply { mkdirs() }
+                for (theme in themes) {
+                    if (!loadedThemes.contains(theme)) {
+                        loadThemeLocked(soundDir, theme)
+                    }
+                }
+                if (pendingEffectForFirstTheme != null && themes.isNotEmpty() && pendingVolume > 0f) {
+                    val soundId = soundMap[themes.first() to pendingEffectForFirstTheme]
+                    val pool = soundPool
+                    if (soundId != null && pool != null) {
+                        if (readySampleIds.contains(soundId)) {
+                            pool.play(soundId, pendingVolume, pendingVolume, 1, 0, 1.0f)
+                        } else {
+                            pendingPlay = PendingPlay(
+                                soundId = soundId,
+                                volume = pendingVolume,
+                                requestedAtMs = SystemClock.uptimeMillis()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun ensurePoolLocked(streamPref: String) {
+        if (soundPool != null && currentStreamSetting == streamPref) return
 
         if (soundPool != null) {
             try {
@@ -88,7 +214,9 @@ object SoundEffectManager {
             }
             soundPool = null
             soundMap.clear()
-            isInitialized = false
+            loadedThemes.clear()
+            readySampleIds.clear()
+            pendingPlay = null
         }
 
         try {
@@ -113,47 +241,28 @@ object SoundEffectManager {
                 .setAudioAttributes(audioAttributes)
                 .build()
 
-            soundPool = pool
-            val soundDir = File(context.cacheDir, "mochibun_sounds").apply { mkdirs() }
-
-            for (theme in ALL_SYNTHESIZED_THEMES) {
-                loadTheme(soundDir, theme)
+            pool.setOnLoadCompleteListener { sp, sampleId, status ->
+                if (status == 0) {
+                    readySampleIds.add(sampleId)
+                    val pending = pendingPlay
+                    if (pending != null && pending.soundId == sampleId) {
+                        pendingPlay = null
+                        if (SystemClock.uptimeMillis() - pending.requestedAtMs <= PENDING_PLAY_MAX_AGE_MS) {
+                            sp.play(sampleId, pending.volume, pending.volume, 1, 0, 1.0f)
+                        }
+                    }
+                }
             }
 
-            isInitialized = true
+            soundPool = pool
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize SoundEffectManager", e)
         }
     }
 
-    /**
-     * Re-initializes SoundPool with updated audio attributes when audio stream preference changes.
-     * Safely releases previous native audio resources to prevent leaks.
-     */
-    @Synchronized
-    fun updateAudioStream(context: Context) {
-        val streamPref = PreferencesManager.getLauncherAudioStream(context)
-        if (currentStreamSetting == streamPref && soundPool != null) {
-            return
-        }
-        init(context)
-    }
-
-    @Synchronized
-    fun release() {
-        try {
-            soundPool?.release()
-        } catch (e: Exception) {
-            Log.w(TAG, "Error releasing SoundPool", e)
-        }
-        soundPool = null
-        soundMap.clear()
-        isInitialized = false
-        currentStreamSetting = null
-    }
-
-    private fun loadTheme(soundDir: File, theme: String) {
+    private fun loadThemeLocked(soundDir: File, theme: String) {
         val pool = soundPool ?: return
+        var loadedAny = false
         for (effect in SoundEffect.entries) {
             try {
                 val file = File(soundDir, "${theme}_${effect.name.lowercase()}.wav")
@@ -162,16 +271,23 @@ object SoundEffectManager {
                     writeWavFile(file, pcm, SAMPLE_RATE)
                 }
                 val id = pool.load(file.absolutePath, 1)
-                soundMap[theme to effect] = id
+                if (id != 0) {
+                    soundMap[theme to effect] = id
+                    loadedAny = true
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed loading sound: $theme/${effect.name}", e)
             }
+        }
+        if (loadedAny) {
+            loadedThemes.add(theme)
         }
     }
 
     /**
      * Plays a physical keypad or navigation sound with immediate, sub-5ms low latency.
-     * Safely non-blocking when called from the main thread.
+     * Safely non-blocking when called from the main thread; lazily loads the active theme
+     * off the main thread on first use.
      *
      * @param volume optional specific volume multiplier. If negative (-1f default),
      * uses the user-configured launcher sound volume preference directly.
@@ -179,16 +295,6 @@ object SoundEffectManager {
     fun play(context: Context, effect: SoundEffect, volume: Float = -1f) {
         val mode = PreferencesManager.getKeypadSoundMode(context)
         if (mode == "off") return
-
-        val streamPref = PreferencesManager.getLauncherAudioStream(context)
-        if (!isInitialized || soundPool == null || currentStreamSetting != streamPref) {
-            init(context.applicationContext)
-        }
-
-        val pool = soundPool ?: return
-        val soundId = soundMap[mode to effect]
-            ?: soundMap["kawaii" to effect]
-            ?: return
 
         val volumePercent = PreferencesManager.getLauncherSoundVolume(context)
         if (volumePercent <= 0) return
@@ -199,9 +305,31 @@ object SoundEffectManager {
         } else {
             masterVolume
         }
+        if (finalVolume <= 0f) return
 
-        if (finalVolume > 0f) {
-            pool.play(soundId, finalVolume, finalVolume, 1, 0, 1.0f)
+        val targetTheme = resolveActiveTheme(mode, fallback = "kawaii")
+        val streamPref = PreferencesManager.getLauncherAudioStream(context)
+        val pool = soundPool
+
+        if (pool == null || currentStreamSetting != streamPref || !loadedThemes.contains(targetTheme)) {
+            scheduleLoadThemes(
+                appContext = context.applicationContext,
+                themes = listOf(targetTheme),
+                streamPref = streamPref,
+                pendingEffectForFirstTheme = effect,
+                pendingVolume = finalVolume
+            )
+            return
+        }
+
+        val soundId = soundMap[targetTheme to effect] ?: return
+        val streamId = pool.play(soundId, finalVolume, finalVolume, 1, 0, 1.0f)
+        if (streamId == 0 && !readySampleIds.contains(soundId)) {
+            pendingPlay = PendingPlay(
+                soundId = soundId,
+                volume = finalVolume,
+                requestedAtMs = SystemClock.uptimeMillis()
+            )
         }
     }
 
@@ -211,15 +339,34 @@ object SoundEffectManager {
      */
     fun playSnap(context: Context) {
         if (!PreferencesManager.isLidCloseSnapSoundEnabled(context)) return
-        val streamPref = PreferencesManager.getLauncherAudioStream(context)
-        if (!isInitialized || soundPool == null || currentStreamSetting != streamPref) {
-            init(context.applicationContext)
-        }
-        val pool = soundPool ?: return
-        val mode = PreferencesManager.getKeypadSoundMode(context).let { if (it == "off") "thock" else it }
-        val soundId = soundMap[mode to SoundEffect.SNAP] ?: soundMap["thock" to SoundEffect.SNAP] ?: return
         val volume = (PreferencesManager.getLauncherSoundVolume(context) / 100f).coerceIn(0f, 1f)
-        if (volume > 0f) pool.play(soundId, volume, volume, 1, 0, 1.0f)
+        if (volume <= 0f) return
+
+        val rawMode = PreferencesManager.getKeypadSoundMode(context).let { if (it == "off") "thock" else it }
+        val targetTheme = resolveActiveTheme(rawMode, fallback = "thock")
+        val streamPref = PreferencesManager.getLauncherAudioStream(context)
+        val pool = soundPool
+
+        if (pool == null || currentStreamSetting != streamPref || !loadedThemes.contains(targetTheme)) {
+            scheduleLoadThemes(
+                appContext = context.applicationContext,
+                themes = listOf(targetTheme),
+                streamPref = streamPref,
+                pendingEffectForFirstTheme = SoundEffect.SNAP,
+                pendingVolume = volume
+            )
+            return
+        }
+
+        val soundId = soundMap[targetTheme to SoundEffect.SNAP] ?: return
+        val streamId = pool.play(soundId, volume, volume, 1, 0, 1.0f)
+        if (streamId == 0 && !readySampleIds.contains(soundId)) {
+            pendingPlay = PendingPlay(
+                soundId = soundId,
+                volume = volume,
+                requestedAtMs = SystemClock.uptimeMillis()
+            )
+        }
     }
 
     /**

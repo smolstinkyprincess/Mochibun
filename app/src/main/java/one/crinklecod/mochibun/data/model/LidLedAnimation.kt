@@ -123,7 +123,7 @@ object LidLedAnimationCodec {
 
     /** JSON if the text is a JSON object, YAML otherwise. */
     fun decode(text: String): Result<LidLedAnimation> = runCatching {
-        val trimmed = text.trimStart('﻿', ' ', '\t', '\r', '\n')
+        val trimmed = text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
         val parsed = if (trimmed.startsWith("{")) {
             json.decodeFromString(LidLedAnimation.serializer(), trimmed)
         } else {

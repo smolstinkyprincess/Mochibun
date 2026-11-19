@@ -7,9 +7,7 @@ import android.app.KeyguardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
-import android.provider.Settings
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -17,14 +15,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,7 +32,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -45,98 +41,40 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import one.crinklecod.mochibun.ui.components.WallpaperOverlay
 import one.crinklecod.mochibun.core.keypad.HOME_FOCUS_MASCOT
-import one.crinklecod.mochibun.core.keypad.HomeTransitionTracker
-import one.crinklecod.mochibun.core.keypad.LauncherKeypadActions
 import one.crinklecod.mochibun.core.keypad.LauncherKeypadState
 import one.crinklecod.mochibun.core.keypad.PET_PILL_AUTO_CLOSE_MS
 import one.crinklecod.mochibun.core.keypad.PET_PILL_FEED
 import one.crinklecod.mochibun.core.keypad.PET_PILL_PET
-import one.crinklecod.mochibun.core.keypad.T9InputState
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
-import one.crinklecod.mochibun.data.model.AppInfo
 import one.crinklecod.mochibun.data.model.FavoriteFolder
 import one.crinklecod.mochibun.data.model.FavoriteSlotItem
 import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
-import one.crinklecod.mochibun.data.repository.BundlePreviewData
 import one.crinklecod.mochibun.data.repository.LidLedAnimationRepository
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
-import one.crinklecod.mochibun.service.InputArbiter
 import one.crinklecod.mochibun.ui.components.WidgetPage
 import one.crinklecod.mochibun.ui.components.MascotReaction
 import one.crinklecod.mochibun.ui.components.MascotReactionKind
 import one.crinklecod.mochibun.pet.FeedResult
 import one.crinklecod.mochibun.pet.PetManager
-import one.crinklecod.mochibun.ui.dialogs.AppActionDialog
-import one.crinklecod.mochibun.ui.dialogs.CreateFavoriteFolderDialog
-import one.crinklecod.mochibun.ui.dialogs.FavoriteFolderDialog
-import one.crinklecod.mochibun.ui.dialogs.FolderActionDialog
-import one.crinklecod.mochibun.ui.dialogs.HardwareButtonsDialog
-import one.crinklecod.mochibun.ui.dialogs.HiddenAppsDialog
-import one.crinklecod.mochibun.ui.dialogs.IconPackSelectionDialog
-import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelDialog
-import one.crinklecod.mochibun.ui.dialogs.QuickMemoDialog
-import one.crinklecod.mochibun.ui.dialogs.IconPickerDialog
-import one.crinklecod.mochibun.ui.dialogs.PresetPreviewDialog
 import one.crinklecod.mochibun.ui.dialogs.awaitFocusSafely
-import one.crinklecod.mochibun.ui.dialogs.dialogWidth
 import one.crinklecod.mochibun.ui.screens.AppDrawerScreen
 import one.crinklecod.mochibun.ui.screens.firstFavoriteIndexOfPage
 import one.crinklecod.mochibun.ui.screens.HomeScreen
 import one.crinklecod.mochibun.ui.screens.NotificationsScreen
-import one.crinklecod.mochibun.ui.screens.SettingsDestination
-import one.crinklecod.mochibun.ui.screens.SettingsHubDialog
-import one.crinklecod.mochibun.ui.screens.ThemeStudioDialog
 import one.crinklecod.mochibun.ui.screens.firstLetterOf
-import one.crinklecod.mochibun.ui.theme.LauncherTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.MochibunSystemBarsEffect
-import one.crinklecod.mochibun.ui.theme.SystemUiThemeBridge
 import one.crinklecod.mochibun.ui.theme.loadSavedTheme
-import one.crinklecod.mochibun.ui.theme.saveTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Unified modal hierarchy to eliminate state explosion and prevent modal overlap.
- */
-sealed interface ActiveModal {
-    data class AppAction(val app: LauncherApp) : ActiveModal
-    data class FolderAction(val folder: FavoriteFolder) : ActiveModal
-    data class FolderView(
-        val folderId: String,
-        val startRename: Boolean = false,
-        val startPicker: Boolean = false
-    ) : ActiveModal
-    data class CreateFolder(val initialApp: LauncherApp? = null) : ActiveModal
-    data class IconPicker(
-        val targetApp: LauncherApp? = null,
-        val targetFolder: FavoriteFolder? = null
-    ) : ActiveModal
-    data class HardwareButtons(val initialKeyCode: Int? = null) : ActiveModal
-    data class IncomingBundlePreview(
-        val preview: BundlePreviewData,
-        val uri: Uri
-    ) : ActiveModal
-    data object SettingsHub : ActiveModal
-    data object KeyboardSettings : ActiveModal
-    data object ThemeStudio : ActiveModal
-    data object IconPackSelection : ActiveModal
-    data object HiddenApps : ActiveModal
-    data object KaomojiWheel : ActiveModal
-    data object QuickMemo : ActiveModal
-    /** Mochibunny's Feed / Pet / Chat pill, drawn inside Home; LauncherKeyHandler routes its keys. */
-    data object PetPill : ActiveModal
-}
 
 internal const val LID_OPEN_ACTION_FRESHNESS_MS = 4_000L
 
@@ -180,7 +118,8 @@ fun MainLauncher(
         LauncherViewModel(context.applicationContext as android.app.Application)
     }
 
-    var activeModal by remember { mutableStateOf<ActiveModal?>(null) }
+    val nav = rememberLauncherNavigationState()
+    var activeModal by nav.activeModalState
     LaunchedEffect(settingsRequestCount) {
         if (settingsRequestCount > 0) activeModal = ActiveModal.KeyboardSettings
     }
@@ -193,9 +132,10 @@ fun MainLauncher(
         PreferencesManager.getPrefs(context)
     }
 
-    var currentTheme by remember {
+    val themeState = remember {
         mutableStateOf(loadSavedTheme(preferences))
     }
+    var currentTheme by themeState
     val activeBorderStyle by one.crinklecod.mochibun.data.repository.CustomCardBorderManager.activeBorderStyle.collectAsState()
     LaunchedEffect(activeBorderStyle) {
         if (currentTheme.borderStyle != activeBorderStyle.id) {
@@ -284,10 +224,10 @@ fun MainLauncher(
             }
         }
 
-    var drawerOpen by remember { mutableStateOf(false) }
+    var drawerOpen by nav.drawerOpenState
     // Active pages: 0 = Widgets, 1 = Home, 2 = Notifications
-    val pagerState = rememberPagerState(initialPage = 1) { 3 }
-    var pendingTargetPage by remember { mutableStateOf<Int?>(null) }
+    val pagerState = nav.pagerState
+    var pendingTargetPage by nav.pendingTargetPageState
     val userName by PreferencesManager.customUserName.collectAsState()
     val isWallpaperOverlayEnabled by PreferencesManager.isWallpaperOverlayEnabled.collectAsState()
 
@@ -326,14 +266,14 @@ fun MainLauncher(
     val kawaiiIconNames = launcherVm.kawaiiIconNames
 
     val favoriteItemCount = favoriteItems.size
-    var selectedFavoriteIndex by remember { mutableIntStateOf(0) }
-    var savedFavoriteIndexOnHome by remember { mutableIntStateOf(0) }
-    val homeTracker = remember { HomeTransitionTracker() }
-    var selectedDrawerIndex by remember { mutableIntStateOf(0) }
-    var drawerRailFocused by remember { mutableStateOf(false) }
-    var drawerRailHoveredLetter by remember { mutableStateOf<Char?>('A') }
+    var selectedFavoriteIndex by nav.selectedFavoriteIndexState
+    var savedFavoriteIndexOnHome by nav.savedFavoriteIndexOnHomeState
+    val homeTracker = nav.homeTracker
+    var selectedDrawerIndex by nav.selectedDrawerIndexState
+    var drawerRailFocused by nav.drawerRailFocusedState
+    var drawerRailHoveredLetter by nav.drawerRailHoveredLetterState
     // Home focus area: 0 = FavoritesCard row, 1 = StatusCard (launcher options / page switcher)
-    var homeFocusArea by remember { mutableIntStateOf(0) }
+    var homeFocusArea by nav.homeFocusAreaState
     // Mochibunny pet pill: selected option, auto-close timer key, and the latest reaction for her
     var petPillSelection by remember { mutableIntStateOf(PET_PILL_FEED) }
     var petPillInteractionTick by remember { mutableIntStateOf(0) }
@@ -342,25 +282,13 @@ fun MainLauncher(
     // Set when the pill closes back to Home, so the focus reset below keeps Mochibunny focused
     var restoreMascotFocus by remember { mutableStateOf(false) }
 
-
-    val moveFavoriteSlotItem: (itemKey: String, direction: Int) -> Unit = remember(launcherVm) {
-        { itemKey, direction ->
-            val targetIndex = launcherVm.moveFavoriteSlotItem(itemKey, direction)
-            if (targetIndex != null) {
-                selectedFavoriteIndex = targetIndex
-                savedFavoriteIndexOnHome = targetIndex
-                homeFocusArea = 0
-            }
-        }
-    }
-
     // 0 = center not pressed, 1 = pressed, 2 = held long (menu already opened)
-    var centerKeyState by remember { mutableIntStateOf(0) }
-    var poundKeyState by remember { mutableIntStateOf(0) }
-    val t9State = remember { T9InputState() }
-    val focusRequester = remember { FocusRequester() }
+    var centerKeyState by nav.centerKeyPressState
+    var poundKeyState by nav.poundKeyPressState
+    val t9State = nav.t9State
+    val focusRequester = nav.focusRequester
 
-    val anyModalOpen = activeModal != null
+    val anyModalOpen = nav.anyModalOpen
 
     LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress) {
         if (!pagerState.isScrollInProgress && (pendingTargetPage == null || pendingTargetPage == pagerState.settledPage)) {
@@ -368,32 +296,14 @@ fun MainLauncher(
         }
     }
 
-    val isHomeScreenActive = !drawerOpen &&
-        !anyModalOpen &&
-        (pendingTargetPage == null || pendingTargetPage == 1) &&
-        pagerState.currentPage == 1 &&
-        pagerState.targetPage == 1 &&
-        pagerState.settledPage == 1 &&
-        !pagerState.isScrollInProgress
+    val isHomeScreenActive = nav.isHomeScreenActive
 
-    val isSidePageActive = !drawerOpen &&
-        !anyModalOpen &&
-        (pagerState.currentPage == 0 || pagerState.currentPage == 2)
-
-    val isDrawerActive = drawerOpen && !anyModalOpen
-
-    val isModalActive = anyModalOpen
+    val isSidePageActive = nav.isSidePageActive
 
     // Home is on screen with at most the pet pill over it. Unlike isHomeScreenActive (false while
     // the pill, a modal, owns the keys), this keeps Home visuals alive: mascot glow & bob, ticker.
-    val isPetPillOpen = activeModal is ActiveModal.PetPill
-    val isHomeVisible = !drawerOpen &&
-        (activeModal == null || isPetPillOpen) &&
-        (pendingTargetPage == null || pendingTargetPage == 1) &&
-        pagerState.currentPage == 1 &&
-        pagerState.targetPage == 1 &&
-        pagerState.settledPage == 1 &&
-        !pagerState.isScrollInProgress
+    val isPetPillOpen = nav.isPetPillOpen
+    val isHomeVisible = nav.isHomeVisible
 
     fun openPetPillModal() {
         if (activeModal != null || drawerOpen) return
@@ -644,16 +554,54 @@ fun MainLauncher(
 
     LaunchedEffect(selectedDrawerIndex, drawerOpen, visibleApps.size) {
         if (drawerOpen && visibleApps.isNotEmpty() && selectedDrawerIndex in visibleApps.indices) {
-            val selectedItem = listState.layoutInfo.visibleItemsInfo.firstOrNull {
+            val layoutInfo = listState.layoutInfo
+            val clearBottom = (layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding)
+                .coerceAtLeast(0)
+            val selectedItem = layoutInfo.visibleItemsInfo.firstOrNull {
                 it.index == selectedDrawerIndex
             }
-            val viewportEnd = listState.layoutInfo.viewportEndOffset
-            val isFullyVisible = selectedItem != null &&
-                selectedItem.offset >= 0 &&
-                (selectedItem.offset + selectedItem.size) <= viewportEnd
-
-            if (!isFullyVisible) {
-                listState.scrollToItem(selectedDrawerIndex)
+            if (selectedItem != null) {
+                val itemEnd = selectedItem.offset + selectedItem.size
+                if (selectedItem.offset < 0) {
+                    listState.scrollBy(selectedItem.offset.toFloat())
+                } else if (itemEnd > clearBottom) {
+                    listState.scrollBy((itemEnd - clearBottom).toFloat())
+                }
+            } else {
+                val firstVisible = layoutInfo.visibleItemsInfo.firstOrNull()
+                val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
+                if (lastVisible != null &&
+                    selectedDrawerIndex > lastVisible.index &&
+                    selectedDrawerIndex - lastVisible.index <= 2
+                ) {
+                    // Use scrollBy so LazyColumn keeps item prefetching active on 1-row steps
+                    val delta = selectedDrawerIndex - lastVisible.index
+                    val stepPx = lastVisible.size + layoutInfo.mainAxisItemSpacing
+                    val estimatedBottom = lastVisible.offset + lastVisible.size + delta * stepPx
+                    val scrollDelta = (estimatedBottom - clearBottom).toFloat()
+                    if (scrollDelta > 0f) {
+                        listState.scrollBy(scrollDelta)
+                    } else {
+                        listState.scrollToItem(
+                            index = selectedDrawerIndex,
+                            scrollOffset = -(clearBottom - lastVisible.size).coerceAtLeast(0)
+                        )
+                    }
+                } else if (firstVisible != null &&
+                    selectedDrawerIndex < firstVisible.index &&
+                    firstVisible.index - selectedDrawerIndex <= 2
+                ) {
+                    val delta = firstVisible.index - selectedDrawerIndex
+                    val stepPx = firstVisible.size + layoutInfo.mainAxisItemSpacing
+                    val scrollDelta = (firstVisible.offset - delta * stepPx).toFloat()
+                    if (scrollDelta < 0f) {
+                        listState.scrollBy(scrollDelta)
+                    } else {
+                        listState.scrollToItem(selectedDrawerIndex)
+                    }
+                } else {
+                    listState.scrollToItem(selectedDrawerIndex)
+                }
             }
         }
     }
@@ -754,152 +702,26 @@ fun MainLauncher(
     }
 
     val keypadActions = remember(launcherVm) {
-        object : LauncherKeypadActions {
-            override fun setDrawerOpen(open: Boolean) {
-                drawerOpen = open
-                if (!open) {
-                    drawerRailFocused = false
-                }
-            }
-            override fun setSelectedDrawerIndex(index: Int) { selectedDrawerIndex = index }
-            override fun setHomeFocusArea(area: Int) { homeFocusArea = area }
-            override fun setSelectedFavoriteIndex(index: Int) { selectedFavoriteIndex = index }
-            override fun setSavedFavoriteIndexOnHome(index: Int) { savedFavoriteIndexOnHome = index }
-            override fun setPendingTargetPage(page: Int?) { pendingTargetPage = page }
-            override fun setCenterKeyState(state: Int) { centerKeyState = state }
-            override fun setDrawerRailFocused(focused: Boolean) { drawerRailFocused = focused }
-            override fun setDrawerRailHoveredLetter(letter: Char?) { drawerRailHoveredLetter = letter }
-            override fun openContextActionForCurrentFocus() = openContextActionForCurrentFocus()
-            override fun openFolder(folderId: String) {
-                activeModal = ActiveModal.FolderView(
-                    folderId = folderId,
-                    startRename = false,
-                    startPicker = false
-                )
-            }
-            override fun openLauncherMenu() { activeModal = ActiveModal.SettingsHub }
-            override fun openSpeedDial(digit: Int) {
-                activeModal = ActiveModal.HardwareButtons(
-                    initialKeyCode = android.view.KeyEvent.KEYCODE_0 + digit
-                )
-            }
-            override fun setPoundKeyState(state: Int) { poundKeyState = state }
-            override fun openKaomojiWheel() { activeModal = ActiveModal.KaomojiWheel }
-            override fun openQuickMemo() { activeModal = ActiveModal.QuickMemo }
-            override fun cycleDrawerSortMode() {
-                val nextMode = launcherVm.cycleAppDrawerSortMode()
-                SoundEffectManager.play(context, SoundEffect.CLICK)
-                Toast.makeText(context, "♡ Sorted: ${nextMode.toastName}", Toast.LENGTH_SHORT).show()
-            }
-            override fun recordAppLaunch(packageName: String) {
-                launcherVm.recordAppLaunch(packageName)
-            }
-            override fun dismissModal() { activeModal = null }
-            override fun openPetPill() = openPetPillModal()
-            override fun setPetPillSelection(index: Int) { petPillSelection = index }
-            override fun activatePetPillOption(index: Int) = runPetPillOption(index)
-            override fun closePetPill() = closePetPillModal()
-            override fun onPetPillInteraction() { petPillInteractionTick++ }
-        }
-    }
-
-    val keyHandler = remember(context, scope, pagerState, listState, homeTracker, t9State, keypadActions) {
-        LauncherKeyHandler(
+        LauncherNavigationKeypadActions(
+            nav = nav,
+            launcherVm = launcherVm,
             context = context,
-            scope = scope,
-            pagerState = pagerState,
-            listState = listState,
-            homeTracker = homeTracker,
-            t9State = t9State,
-            actions = keypadActions
+            onOpenContextAction = openContextActionForCurrentFocus,
+            onOpenPetPill = ::openPetPillModal,
+            onSetPetPillSelection = { index -> petPillSelection = index },
+            onActivatePetPillOption = ::runPetPillOption,
+            onClosePetPill = ::closePetPillModal,
+            onPetPillInteractionTick = { petPillInteractionTick++ }
         )
     }
 
-    fun getCurrentKeypadState(): LauncherKeypadState {
-        return LauncherKeypadState(
-            // Read activeModal live: the captured anyModalOpen val goes stale here, which let the
-            // handler eat D-pad presses meant for an open dialog
-            anyModalOpen = activeModal != null,
-            drawerOpen = drawerOpen,
-            isHomeScreenActive = isHomeScreenActive,
-            isPageTransitioning = !drawerOpen && (pagerState.isScrollInProgress || (pendingTargetPage != null && pendingTargetPage != pagerState.settledPage)),
-            pendingTargetPage = pendingTargetPage,
-            favoriteItemCount = launcherVm.favoriteItems.size,
-            selectedFavoriteIndex = selectedFavoriteIndex,
-            savedFavoriteIndexOnHome = savedFavoriteIndexOnHome,
-            homeFocusArea = homeFocusArea,
-            centerKeyState = centerKeyState,
-            selectedDrawerIndex = selectedDrawerIndex,
-            visibleApps = launcherVm.visibleApps,
-            favoriteApps = launcherVm.favoriteApps,
-            favoriteFolders = launcherVm.favoriteFolders,
-            favoriteItems = launcherVm.favoriteItems,
-            letterStarts = launcherVm.letterStarts,
-            poundKeyState = poundKeyState,
-            isDrawerRailFocused = drawerRailFocused,
-            drawerRailHoveredLetter = drawerRailHoveredLetter,
-            currentPage = pagerState.currentPage,
-            // Text fields only exist inside modals. Requiring one keeps a stale flag (a dialog
-            // closed without a focus event) from silencing digits on Home and in the drawer.
-            isInputActive = InputArbiter.isInputActive && activeModal != null,
-            isPetPillOpen = activeModal is ActiveModal.PetPill,
-            petPillSelectedIndex = petPillSelection
-        )
-    }
+    val keyHandler = rememberLauncherKeyHandler(context, scope, nav, listState, keypadActions)
 
-    // Wrap keypad state evaluation and keyHandler in rememberUpdatedState to prevent stale snapshot reads
-    val currentKeyHandler by rememberUpdatedState(keyHandler)
-    val currentKeypadStateProvider by rememberUpdatedState(::getCurrentKeypadState)
+    fun getCurrentKeypadState(): LauncherKeypadState =
+        nav.buildKeypadState(isHomeScreenActive, launcherVm, petPillSelection)
 
-    // Keep the in-app keypad path active whenever foreground; it is the fallback when the
-    // system_server hook is unavailable or disabled.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, keyHandler) {
-        val listener: (android.view.KeyEvent) -> Boolean = { nativeEvent ->
-            currentKeyHandler.handleKeyEvent(
-                androidx.compose.ui.input.key.KeyEvent(nativeEvent),
-                currentKeypadStateProvider()
-            )
-        }
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                MainActivity.keyEventInterceptor = listener
-            } else if (event == Lifecycle.Event.ON_PAUSE) {
-                MainActivity.keyEventInterceptor = null
-            }
-        }
-        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-            MainActivity.keyEventInterceptor = listener
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            MainActivity.keyEventInterceptor = null
-        }
-    }
+    LauncherKeyEventInterceptorEffect(keyHandler, ::getCurrentKeypadState)
 
-    // Hoisted stable dialog action & navigation callbacks to avoid reallocations on background ticks
-    val dismissActiveModal = remember {
-        { activeModal = null }
-    }
-    val onOpenLauncherOptions = remember {
-        { activeModal = ActiveModal.SettingsHub }
-    }
-    val onOpenThemeStudio = remember {
-        { activeModal = ActiveModal.ThemeStudio }
-    }
-    val onOpenIconPackDialog = remember {
-        { activeModal = ActiveModal.IconPackSelection }
-    }
-    val onOpenHardwareButtons = remember {
-        { activeModal = ActiveModal.HardwareButtons() }
-    }
-    val onOpenHiddenApps = remember {
-        { activeModal = ActiveModal.HiddenApps }
-    }
-    val onCreateFolderClick = remember {
-        { activeModal = ActiveModal.CreateFolder() }
-    }
     val onPickWallpaperClick: () -> Unit = remember(wallpaperPicker) {
         {
             activeModal = null
@@ -909,75 +731,6 @@ fun MainLauncher(
                 android.util.Log.e("MainLauncher", "Failed to launch wallpaper picker", e)
             }
         }
-    }
-    val onResetWallpaperClick = remember(launcherVm) {
-        {
-            activeModal = null
-            launcherVm.resetWallpaper()
-        }
-    }
-    val onSettingsRestored = remember(context, preferences, launcherVm) {
-        {
-            currentTheme = loadSavedTheme(preferences)
-            launcherVm.reloadAllFromPreferences()
-        }
-    }
-    val onIconPackSelected: (String?) -> Unit = remember(launcherVm) {
-        { _ ->
-            activeModal = null
-            launcherVm.onIconPackChanged()
-        }
-    }
-    val onApplyThemeStudio: (LauncherTheme) -> Unit = remember(context, preferences) {
-        { newTheme ->
-            currentTheme = newTheme
-            saveTheme(preferences, newTheme)
-            one.crinklecod.mochibun.data.repository.CustomCardBorderManager.setBorderStyle(
-                context,
-                newTheme.borderStyle
-            )
-            PreferencesManager.setThemePreset(context, newTheme.name)
-            SystemUiThemeBridge.broadcastTheme(context, newTheme)
-            activeModal = null
-        }
-    }
-    val onDismissQuickMemo = remember {
-        {
-            activeModal = null
-            poundKeyState = 0
-        }
-    }
-    val onDismissKaomojiWheel = remember {
-        {
-            activeModal = null
-            poundKeyState = 0
-        }
-    }
-    val onDismissIconPicker = remember(launcherVm) {
-        {
-            activeModal = null
-            launcherVm.clearKawaiiIconNames()
-        }
-    }
-    val onUnhideApp: (LauncherApp) -> Unit = remember(launcherVm) {
-        { app ->
-            launcherVm.unhideApp(app.packageName)
-        }
-    }
-    val onCreateFolder: (String, List<String>) -> Unit = remember(launcherVm) {
-        { folderName, packages ->
-            launcherVm.createFolder(folderName, packages)
-
-            val newCount = launcherVm.favoriteItems.size
-            selectedFavoriteIndex = (newCount - 1).coerceAtLeast(0)
-            savedFavoriteIndexOnHome = selectedFavoriteIndex
-            homeFocusArea = 0
-            drawerOpen = false
-            activeModal = null
-        }
-    }
-    val installedAppsForButtons = remember(apps) {
-        apps.map { AppInfo(it.packageName, it.name) }
     }
 
     CompositionLocalProvider(LocalLauncherTheme provides currentTheme) {
@@ -1000,66 +753,16 @@ fun MainLauncher(
                     }
                 )
         ) {
-            // Unified modal back handler
-            BackHandler(enabled = activeModal != null) {
-                when (val modal = activeModal) {
-                    is ActiveModal.FolderView -> {
-                        val itemIdx = favoriteItems.indexOfFirst {
-                            it is FavoriteSlotItem.Folder && it.folder.id == modal.folderId
-                        }
-                        if (itemIdx != -1) {
-                            selectedFavoriteIndex = itemIdx
-                            savedFavoriteIndexOnHome = itemIdx
-                            homeFocusArea = 0
-                        }
-                        activeModal = null
-                    }
-                    is ActiveModal.FolderAction -> {
-                        val itemIdx = favoriteItems.indexOfFirst {
-                            it is FavoriteSlotItem.Folder && it.folder.id == modal.folder.id
-                        }
-                        if (itemIdx != -1) {
-                            selectedFavoriteIndex = itemIdx
-                            savedFavoriteIndexOnHome = itemIdx
-                            homeFocusArea = 0
-                        }
-                        activeModal = null
-                    }
-                    is ActiveModal.IconPicker -> {
-                        launcherVm.clearKawaiiIconNames()
-                        if (modal.targetFolder != null) {
-                            activeModal = ActiveModal.FolderAction(modal.targetFolder)
-                        } else if (modal.targetApp != null) {
-                            activeModal = ActiveModal.AppAction(modal.targetApp)
-                        } else {
-                            activeModal = null
-                        }
-                    }
-                    is ActiveModal.IncomingBundlePreview -> {
-                        try {
-                            modal.preview.wallpaperPreview?.recycle()
-                        } catch (_: Exception) {}
-                        activeModal = null
-                        onConsumeIncomingBundleUri()
-                    }
-                    is ActiveModal.KaomojiWheel -> {
-                        poundKeyState = 0
-                        activeModal = null
-                    }
-                    is ActiveModal.PetPill -> closePetPillModal()
-                    else -> {
-                        activeModal = null
-                    }
-                }
-            }
-
-            // Return to Home page from side pages
-            BackHandler(enabled = isSidePageActive || (!drawerOpen && !anyModalOpen && (pagerState.currentPage != 1 || pagerState.targetPage != 1 || (pendingTargetPage != null && pendingTargetPage != 1)))) {
-                pendingTargetPage = 1
-                scope.launch {
-                    pagerState.animateScrollToPage(1)
-                }
-            }
+            LauncherBackHandlers(
+                nav = nav,
+                launcherVm = launcherVm,
+                favoriteItems = favoriteItems,
+                isSidePageActive = isSidePageActive,
+                anyModalOpen = anyModalOpen,
+                scope = scope,
+                onClosePetPill = ::closePetPillModal,
+                onConsumeIncomingBundleUri = onConsumeIncomingBundleUri
+            )
 
             if (wallpaperImageBitmap != null) {
                 Image(
@@ -1279,434 +982,72 @@ fun MainLauncher(
                 }
             }
 
-            when (val modal = activeModal) {
-                is ActiveModal.SettingsHub, is ActiveModal.KeyboardSettings -> {
-                    SettingsHubDialog(
-                        initialDestination = if (activeModal is ActiveModal.KeyboardSettings) {
-                            SettingsDestination.Keyboard
-                        } else {
-                            SettingsDestination.Hub
-                        },
-                        onDismiss = dismissActiveModal,
-                        onOpenThemeStudio = onOpenThemeStudio,
-                        onOpenIconPackDialog = onOpenIconPackDialog,
-                        onOpenHardwareButtons = onOpenHardwareButtons,
-                        onOpenHiddenApps = onOpenHiddenApps,
-                        onCreateFolderClick = onCreateFolderClick,
-                        onPickWallpaperClick = onPickWallpaperClick,
-                        onResetWallpaperClick = onResetWallpaperClick,
-                        hasCustomWallpaper = launcherVm.wallpaperUri != null,
-                        onSettingsRestored = onSettingsRestored
-                    )
+            LauncherModalHost(
+                nav = nav,
+                launcherVm = launcherVm,
+                themeState = themeState,
+                preferences = preferences,
+                scope = scope,
+                cardRoundness = cardRoundness,
+                onPickWallpaperClick = onPickWallpaperClick,
+                onConsumeIncomingBundleUri = onConsumeIncomingBundleUri
+            )
+
+            val currentVisibleApps by rememberUpdatedState(visibleApps)
+            val currentSelectedDrawerIndex by rememberUpdatedState(selectedDrawerIndex)
+            val currentLetterStarts by rememberUpdatedState(letterStarts)
+            val onDrawerOptionsClick = remember(launcherVm) {
+                {
+                    currentVisibleApps.getOrNull(currentSelectedDrawerIndex)?.let { app ->
+                        activeModal = ActiveModal.AppAction(app)
+                    }
+                    Unit
                 }
-
-                is ActiveModal.IconPackSelection -> {
-                    IconPackSelectionDialog(
-                        context = context,
-                        onDismiss = dismissActiveModal,
-                        onIconPackSelected = onIconPackSelected
-                    )
+            }
+            val onDrawerCycleSortClick = remember(context, launcherVm) {
+                {
+                    val nextMode = launcherVm.cycleAppDrawerSortMode()
+                    SoundEffectManager.play(context, SoundEffect.CLICK)
+                    Toast.makeText(context, "♡ Sorted: ${nextMode.toastName}", Toast.LENGTH_SHORT).show()
                 }
-
-                is ActiveModal.ThemeStudio -> {
-                    ThemeStudioDialog(
-                        currentTheme = currentTheme,
-                        dialogWidth = dialogWidth,
-                        onDismiss = dismissActiveModal,
-                        onApply = onApplyThemeStudio
-                    )
-                }
-
-                is ActiveModal.HardwareButtons -> {
-                    HardwareButtonsDialog(
-                        installedApps = installedAppsForButtons,
-                        initialCapturedKeyCode = modal.initialKeyCode,
-                        onDismiss = dismissActiveModal
-                    )
-                }
-
-                is ActiveModal.KaomojiWheel -> {
-                    KaomojiWheelDialog(
-                        onDismiss = onDismissKaomojiWheel
-                    )
-                }
-
-                is ActiveModal.QuickMemo -> {
-                    // poundKeyState == 2: opened by a '#' hold that may still be down
-                    val openedByPoundHold = remember { poundKeyState == 2 }
-                    QuickMemoDialog(
-                        onDismiss = onDismissQuickMemo,
-                        waitForPoundRelease = openedByPoundHold
-                    )
-                }
-
-                is ActiveModal.AppAction -> {
-                    val targetApp = modal.app
-                    val onMoveFavoriteLeft = remember(targetApp) {
-                        {
-                            moveFavoriteSlotItem("app:${targetApp.packageName}", -1)
-                            activeModal = null
-                        }
-                    }
-                    val onMoveFavoriteRight = remember(targetApp) {
-                        {
-                            moveFavoriteSlotItem("app:${targetApp.packageName}", 1)
-                            activeModal = null
-                        }
-                    }
-                    val onToggleFavorite = remember(targetApp, launcherVm) {
-                        {
-                            launcherVm.toggleFavoriteApp(targetApp.packageName)
-                            activeModal = null
-                        }
-                    }
-                    val onAppInfo = remember(context, targetApp) {
-                        {
-                            val pkgName = targetApp.packageName
-                            val appInfoIntent = Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.parse("package:$pkgName")
-                            )
-                            context.startActivity(appInfoIntent)
-                            activeModal = null
-                        }
-                    }
-                    val onChangeIcon = remember(targetApp) {
-                        {
-                            activeModal = ActiveModal.IconPicker(targetApp = targetApp)
-                        }
-                    }
-                    val onResetIcon = remember(targetApp, launcherVm) {
-                        {
-                            launcherVm.resetCustomAppIcon(targetApp.packageName)
-                            activeModal = null
-                        }
-                    }
-                    val onHideApp = remember(targetApp, launcherVm) {
-                        {
-                            launcherVm.hideApp(targetApp.packageName)
-                            activeModal = null
-                        }
-                    }
-                    val onCreateFolder = remember(targetApp) {
-                        {
-                            activeModal = ActiveModal.CreateFolder(initialApp = targetApp)
-                        }
-                    }
-
-                    AppActionDialog(
-                        app = targetApp,
-                        favoritePackages = favoritePackages,
-                        cardRoundness = cardRoundness,
-                        onDismiss = dismissActiveModal,
-                        onMoveFavoriteLeft = onMoveFavoriteLeft,
-                        onMoveFavoriteRight = onMoveFavoriteRight,
-                        onToggleFavorite = onToggleFavorite,
-                        onAppInfo = onAppInfo,
-                        onChangeIcon = onChangeIcon,
-                        onResetIcon = onResetIcon,
-                        onHideApp = onHideApp,
-                        onCreateFolder = onCreateFolder,
-                        onOpenLauncherOptions = onOpenLauncherOptions
-                    )
-                }
-
-                is ActiveModal.FolderAction -> {
-                    val targetFolder = favoriteFolders.firstOrNull {
-                        it.id == modal.folder.id
-                    } ?: modal.folder
-                    val folderItemIndex = favoriteItems.indexOfFirst {
-                        it is FavoriteSlotItem.Folder && it.folder.id == targetFolder.id
-                    }
-
-                    val onMoveFolderLeft = remember(targetFolder.id, folderItemIndex) {
-                        {
-                            if (folderItemIndex > 0) {
-                                moveFavoriteSlotItem("folder:${targetFolder.id}", -1)
-                            }
-                            activeModal = null
-                        }
-                    }
-                    val onMoveFolderRight = remember(targetFolder.id, folderItemIndex, favoriteItems.lastIndex) {
-                        {
-                            if (folderItemIndex in 0 until favoriteItems.lastIndex) {
-                                moveFavoriteSlotItem("folder:${targetFolder.id}", 1)
-                            }
-                            activeModal = null
-                        }
-                    }
-                    val onOpenFolder = remember(targetFolder.id) {
-                        {
-                            activeModal = ActiveModal.FolderView(
-                                folderId = targetFolder.id,
-                                startRename = false,
-                                startPicker = false
-                            )
-                        }
-                    }
-                    val onRenameFolder = remember(targetFolder.id) {
-                        {
-                            activeModal = ActiveModal.FolderView(
-                                folderId = targetFolder.id,
-                                startRename = true,
-                                startPicker = false
-                            )
-                        }
-                    }
-                    val onEditFolderApps = remember(targetFolder.id) {
-                        {
-                            activeModal = ActiveModal.FolderView(
-                                folderId = targetFolder.id,
-                                startRename = false,
-                                startPicker = true
-                            )
-                        }
-                    }
-                    val onChangeIconFolder = remember(targetFolder) {
-                        {
-                            activeModal = ActiveModal.IconPicker(targetFolder = targetFolder)
-                        }
-                    }
-                    val onResetIconFolder = remember(targetFolder.id, launcherVm) {
-                        {
-                            launcherVm.resetCustomFolderIcon(targetFolder.id)
-                            activeModal = null
-                        }
-                    }
-                    val onDeleteFolder = remember(targetFolder.id, launcherVm) {
-                        {
-                            val deletedId = targetFolder.id
-                            launcherVm.deleteFolder(deletedId)
-
-                            val newCount = launcherVm.favoriteItems.size
-                            selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
-                                0,
-                                (newCount - 1).coerceAtLeast(0)
-                            )
-                            savedFavoriteIndexOnHome = selectedFavoriteIndex
-                            homeFocusArea = if (newCount > 0) 0 else 1
-                            activeModal = null
-                        }
-                    }
-                    val onDismissFolderAction = remember(targetFolder.id, favoriteItems) {
-                        {
-                            val idx = favoriteItems.indexOfFirst {
-                                it is FavoriteSlotItem.Folder && it.folder.id == targetFolder.id
-                            }
-                            if (idx != -1) {
-                                selectedFavoriteIndex = idx
-                                savedFavoriteIndexOnHome = idx
-                                homeFocusArea = 0
-                            }
-                            activeModal = null
-                        }
-                    }
-
-                    FolderActionDialog(
-                        folder = targetFolder,
-                        canMoveLeft = folderItemIndex > 0,
-                        canMoveRight = folderItemIndex in 0 until favoriteItems.lastIndex,
-                        onMoveLeft = onMoveFolderLeft,
-                        onMoveRight = onMoveFolderRight,
-                        onOpenFolder = onOpenFolder,
-                        onRenameFolder = onRenameFolder,
-                        onEditFolderApps = onEditFolderApps,
-                        onChangeIcon = onChangeIconFolder,
-                        onResetIcon = onResetIconFolder,
-                        onDeleteFolder = onDeleteFolder,
-                        onOpenLauncherOptions = onOpenLauncherOptions,
-                        onDismiss = onDismissFolderAction
-                    )
-                }
-
-                is ActiveModal.IconPicker -> {
-                    val onIconSelected = remember(modal, launcherVm) {
-                        { selectedIconName: String ->
-                            val editingApp = modal.targetApp
-                            val editingFolder = modal.targetFolder
-
-                            when {
-                                editingApp != null -> {
-                                    launcherVm.setCustomAppIcon(editingApp.packageName, selectedIconName)
-                                }
-                                editingFolder != null -> {
-                                    launcherVm.setCustomFolderIcon(editingFolder.id, selectedIconName)
-                                }
-                            }
-                            activeModal = null
-                        }
-                    }
-
-                    IconPickerDialog(
-                        context = context,
-                        iconNames = kawaiiIconNames,
-                        onIconSelected = onIconSelected,
-                        onDismiss = onDismissIconPicker
-                    )
-                }
-
-                is ActiveModal.HiddenApps -> {
-                    HiddenAppsDialog(
-                        hiddenApps = hiddenApps,
-                        onUnhide = onUnhideApp,
-                        onDismiss = dismissActiveModal
-                    )
-                }
-
-                is ActiveModal.FolderView -> {
-                    val openedFolder = favoriteFolders.firstOrNull {
-                        it.id == modal.folderId
-                    }
-
-                    if (openedFolder != null) {
-                        val onLaunchApp: (LauncherApp) -> Unit = remember(context, launcherVm) {
-                            { app ->
-                                launcherVm.recordAppLaunch(app.packageName)
-                                context.packageManager.getLaunchIntentForPackage(
-                                    app.packageName
-                                )?.let(context::startActivity)
-                            }
-                        }
-                        val onRemoveApp: (String) -> Unit = remember(openedFolder.id, launcherVm) {
-                            { packageName ->
-                                launcherVm.removeAppFromFolder(openedFolder.id, packageName)
-                            }
-                        }
-                        val onUpdateApps: (List<String>) -> Unit = remember(openedFolder.id, launcherVm) {
-                            { updatedPackages ->
-                                launcherVm.updateFolderApps(openedFolder.id, updatedPackages)
-                            }
-                        }
-                        val onRename: (String) -> Unit = remember(openedFolder.id, launcherVm) {
-                            { newName ->
-                                launcherVm.renameFolder(openedFolder.id, newName)
-                            }
-                        }
-                        val onDeleteFolder: () -> Unit = remember(openedFolder.id, launcherVm) {
-                            {
-                                val deletedId = openedFolder.id
-                                launcherVm.deleteFolder(deletedId)
-
-                                val newCount = launcherVm.favoriteItems.size
-                                selectedFavoriteIndex = selectedFavoriteIndex.coerceIn(
-                                    0,
-                                    (newCount - 1).coerceAtLeast(0)
-                                )
-                                savedFavoriteIndexOnHome = selectedFavoriteIndex
-                                homeFocusArea = if (newCount > 0) 0 else 1
-                                activeModal = null
-                            }
-                        }
-                        val onDismissFolder: () -> Unit = remember(openedFolder.id, favoriteItems) {
-                            {
-                                val itemIdx = favoriteItems.indexOfFirst {
-                                    it is FavoriteSlotItem.Folder && it.folder.id == modal.folderId
-                                }
-                                if (itemIdx != -1) {
-                                    selectedFavoriteIndex = itemIdx
-                                    savedFavoriteIndexOnHome = itemIdx
-                                    homeFocusArea = 0
-                                }
-                                activeModal = null
-                            }
-                        }
-
-                        FavoriteFolderDialog(
-                            folder = openedFolder,
-                            apps = apps,
-                            availableApps = visibleApps,
-                            existingFolders = favoriteFolders,
-                            initialEditingName = modal.startRename,
-                            initialPickingApps = modal.startPicker,
-                            cardRoundness = cardRoundness,
-                            onLaunchApp = onLaunchApp,
-                            onRemoveApp = onRemoveApp,
-                            onUpdateApps = onUpdateApps,
-                            onRename = onRename,
-                            onDeleteFolder = onDeleteFolder,
-                            onDismiss = onDismissFolder
-                        )
-                    } else {
-                        activeModal = null
+            }
+            val onDrawerAppClick = remember(context, launcherVm) {
+                { app: LauncherApp ->
+                    selectedDrawerIndex =
+                        currentVisibleApps.indexOfFirst { it.componentKey == app.componentKey }
+                    launcherVm.recordAppLaunch(app.packageName)
+                    val launchIntent =
+                        context.packageManager.getLaunchIntentForPackage(app.packageName)
+                    if (launchIntent != null) {
+                        context.startActivity(launchIntent)
                     }
                 }
-
-                is ActiveModal.CreateFolder -> {
-                    CreateFavoriteFolderDialog(
-                        initialApp = modal.initialApp,
-                        availableApps = visibleApps,
-                        existingFolders = favoriteFolders,
-                        onDismiss = dismissActiveModal,
-                        onCreate = onCreateFolder
-                    )
+            }
+            val onDrawerAppLongClick = remember {
+                { app: LauncherApp ->
+                    selectedDrawerIndex =
+                        currentVisibleApps.indexOfFirst { it.componentKey == app.componentKey }
+                    activeModal = ActiveModal.AppAction(app)
                 }
-
-                is ActiveModal.IncomingBundlePreview -> {
-                    val onApplyBundle: (Boolean) -> Unit = remember(modal, context, preferences, launcherVm) {
-                        { clearUnbundledAssets ->
-                            scope.launch(Dispatchers.IO) {
-                                try {
-                                    var mascotNote: String? = null
-                                    context.contentResolver.openInputStream(modal.uri)?.use { stream ->
-                                        ThemeBundleManager.applyBundle(
-                                            context = context,
-                                            inputStream = stream,
-                                            clearUnbundledAssets = clearUnbundledAssets
-                                        ) { mascotNote = it }
-                                    }
-                                    mascotNote?.let { note ->
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(context, note, Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                                    withContext(Dispatchers.Main) {
-                                        currentTheme = loadSavedTheme(preferences)
-                                        SystemUiThemeBridge.broadcastTheme(context, currentTheme)
-                                        launcherVm.reloadAllFromPreferences()
-                                    }
-                                } catch (e: Exception) {
-                                    android.util.Log.e("MainLauncher", "Failed to apply bundle", e)
-                                } finally {
-                                    withContext(Dispatchers.Main) {
-                                        try {
-                                            modal.preview.wallpaperPreview?.recycle()
-                                            modal.preview.mascotPreview?.recycle()
-                                            modal.preview.cardBorderPreview?.recycle()
-                                        } catch (_: Exception) {}
-                                        if (activeModal == modal) {
-                                            activeModal = null
-                                        }
-                                        onConsumeIncomingBundleUri()
-                                    }
-                                }
-                            }
-                        }
+            }
+            val onDrawerBackToHome = remember {
+                {
+                    drawerRailFocused = false
+                    drawerOpen = false
+                }
+            }
+            val onDrawerLetterTap = remember(scope, listState) {
+                { letter: Char ->
+                    drawerRailHoveredLetter = letter
+                    val apps = currentVisibleApps
+                    val starts = currentLetterStarts
+                    val target = starts[letter]
+                        ?: starts.entries.firstOrNull { it.key > letter }?.value
+                        ?: (apps.size - 1)
+                    if (target >= 0 && apps.isNotEmpty()) {
+                        selectedDrawerIndex = target
+                        scope.launch { listState.scrollToItem(target) }
                     }
-                    val onDismissBundle = remember(modal) {
-                        {
-                            try {
-                                modal.preview.wallpaperPreview?.recycle()
-                                modal.preview.mascotPreview?.recycle()
-                                modal.preview.cardBorderPreview?.recycle()
-                            } catch (_: Exception) {}
-                            activeModal = null
-                            onConsumeIncomingBundleUri()
-                        }
-                    }
-
-                    PresetPreviewDialog(
-                        previewData = modal.preview,
-                        onApply = onApplyBundle,
-                        onDismiss = onDismissBundle
-                    )
-                }
-
-                is ActiveModal.PetPill -> {
-                    // Drawn inside HomeScreen, next to Mochibunny (not a dialog window)
-                }
-
-                null -> {
-                    // No modal open
                 }
             }
 
@@ -1720,46 +1061,13 @@ fun MainLauncher(
                     hoveredRailLetter = drawerRailHoveredLetter,
                     sortMode = launcherVm.appDrawerSortMode,
                     listState = listState,
-                    onOptionsClick = {
-                        visibleApps.getOrNull(selectedDrawerIndex)?.let { app ->
-                            activeModal = ActiveModal.AppAction(app)
-                        }
-                    },
-                    onCycleSortClick = {
-                        val nextMode = launcherVm.cycleAppDrawerSortMode()
-                        SoundEffectManager.play(context, SoundEffect.CLICK)
-                        Toast.makeText(context, "♡ Sorted: ${nextMode.toastName}", Toast.LENGTH_SHORT).show()
-                    },
-                    onAppClick = { app ->
-                        selectedDrawerIndex =
-                            visibleApps.indexOfFirst { it.componentKey == app.componentKey }
-                        launcherVm.recordAppLaunch(app.packageName)
-                        val launchIntent =
-                            context.packageManager.getLaunchIntentForPackage(app.packageName)
-                        if (launchIntent != null) {
-                            context.startActivity(launchIntent)
-                        }
-                    },
-                    onAppLongClick = { app ->
-                        selectedDrawerIndex =
-                            visibleApps.indexOfFirst { it.componentKey == app.componentKey }
-                        activeModal = ActiveModal.AppAction(app)
-                    },
-                    onBackToHome = {
-                        drawerRailFocused = false
-                        drawerOpen = false
-                    },
+                    onOptionsClick = onDrawerOptionsClick,
+                    onCycleSortClick = onDrawerCycleSortClick,
+                    onAppClick = onDrawerAppClick,
+                    onAppLongClick = onDrawerAppLongClick,
+                    onBackToHome = onDrawerBackToHome,
                     isModalOpen = anyModalOpen,
-                    onLetterTap = { letter ->
-                        drawerRailHoveredLetter = letter
-                        val target = letterStarts[letter]
-                            ?: letterStarts.entries.firstOrNull { it.key > letter }?.value
-                            ?: (visibleApps.size - 1)
-                        if (target >= 0 && visibleApps.isNotEmpty()) {
-                            selectedDrawerIndex = target
-                            scope.launch { listState.scrollToItem(target) }
-                        }
-                    }
+                    onLetterTap = onDrawerLetterTap
                 )
             }
         }

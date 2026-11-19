@@ -77,8 +77,18 @@ object IconPackManager {
             value.asAndroidBitmap().allocationByteCount
     }
     private val drawableResIdCache = ConcurrentHashMap<String, Int>()
+    private val activeAppCacheKeys = ConcurrentHashMap<String, String>()
     private val appEntryCache = object : LruCache<String, LauncherApp>(APP_ICON_CACHE_BYTES) {
         override fun sizeOf(key: String, value: LauncherApp): Int = value.iconBitmap.allocationByteCount
+
+        override fun entryRemoved(
+            evicted: Boolean,
+            key: String,
+            oldValue: LauncherApp,
+            newValue: LauncherApp?
+        ) {
+            if (evicted) activeAppCacheKeys.remove(key.substringBefore('#'), key)
+        }
     }
 
     fun getSelectedIconPack(context: Context): String {
@@ -108,14 +118,20 @@ object IconPackManager {
             lastLoadedPackageName = null
             imageBitmapCache.evictAll()
             drawableResIdCache.clear()
+            activeAppCacheKeys.clear()
             appEntryCache.evictAll()
         }
     }
 
     fun invalidateAppIcon(packageName: String) {
         val prefix = "$packageName/"
-        for (key in appEntryCache.snapshot().keys) {
-            if (key.startsWith(prefix)) appEntryCache.remove(key)
+        val it = activeAppCacheKeys.entries.iterator()
+        while (it.hasNext()) {
+            val entry = it.next()
+            if (entry.key.startsWith(prefix)) {
+                appEntryCache.remove(entry.value)
+                it.remove()
+            }
         }
     }
 
@@ -130,8 +146,13 @@ object IconPackManager {
      */
     fun retainOnly(componentKeys: Set<String>) {
         synchronized(lock) {
-            for (key in appEntryCache.snapshot().keys) {
-                if (key.substringBefore('#') !in componentKeys) appEntryCache.remove(key)
+            val it = activeAppCacheKeys.entries.iterator()
+            while (it.hasNext()) {
+                val entry = it.next()
+                if (entry.key !in componentKeys) {
+                    appEntryCache.remove(entry.value)
+                    it.remove()
+                }
             }
             imageBitmapCache.evictAll()
             drawableResIdCache.clear()
@@ -467,34 +488,43 @@ object IconPackManager {
         }
     }
 
+    private fun readInstallTime(pm: PackageManager, pkgName: String): Long = try {
+        pm.getPackageInfo(pkgName, 0).firstInstallTime
+    } catch (_: Exception) {
+        0L
+    }
+
     fun getOrLoadLauncherApp(
         context: Context,
         preferences: SharedPreferences,
-        resolveInfo: ResolveInfo
+        resolveInfo: ResolveInfo,
+        includeInstallTime: Boolean = false
     ): LauncherApp {
         val pkgName = resolveInfo.activityInfo.packageName
         val activityName = resolveInfo.activityInfo.name
+        val componentKey = "$pkgName/$activityName"
         val customIconName = preferences.getString("custom_icon_$pkgName", null)
         val selectedPack = getSelectedIconPack(context)
-        val cacheKey = "$pkgName/$activityName#${customIconName.orEmpty()}#$selectedPack"
-
-        appEntryCache.get(cacheKey)?.let { return it }
-
-        // Remove any stale entry for the same component with an older custom icon or pack
-        val componentPrefix = "$pkgName/$activityName#"
-        for (existingKey in appEntryCache.snapshot().keys) {
-            if (existingKey.startsWith(componentPrefix) && existingKey != cacheKey) {
-                appEntryCache.remove(existingKey)
-            }
-        }
-
+        val cacheKey = "$componentKey#${customIconName.orEmpty()}#$selectedPack"
         val pm = context.packageManager
-        val drawable = getAppIconDrawable(context, resolveInfo, customIconName)
-        val installTime = try {
-            pm.getPackageInfo(pkgName, 0).firstInstallTime
-        } catch (_: Exception) {
-            0L
+
+        appEntryCache.get(cacheKey)?.let { cached ->
+            if (!includeInstallTime || cached.installTime > 0L) return cached
+            val installTime = readInstallTime(pm, pkgName)
+            if (installTime <= 0L) return cached
+            val updated = cached.copy(installTime = installTime)
+            appEntryCache.put(cacheKey, updated)
+            return updated
         }
+
+        // Remove any stale entry for the same component with an older custom icon or pack in O(1)
+        val previousKey = activeAppCacheKeys.put(componentKey, cacheKey)
+        if (previousKey != null && previousKey != cacheKey) {
+            appEntryCache.remove(previousKey)
+        }
+
+        val drawable = getAppIconDrawable(context, resolveInfo, customIconName)
+        val installTime = if (includeInstallTime) readInstallTime(pm, pkgName) else 0L
         val app = LauncherApp(
             resolveInfo = resolveInfo,
             name = resolveInfo.loadLabel(pm).toString(),
@@ -503,6 +533,38 @@ object IconPackManager {
         )
         appEntryCache.put(cacheKey, app)
         return app
+    }
+
+    /**
+     * Backfills [LauncherApp.installTime] when switching to
+     * [one.crinklecod.mochibun.data.model.AppDrawerSortMode.NEWEST] after
+     * an initial load that skipped per-app `getPackageInfo` Binder calls.
+     */
+    fun populateInstallTimes(
+        context: Context,
+        preferences: SharedPreferences,
+        apps: List<LauncherApp>
+    ): List<LauncherApp> {
+        val pm = context.packageManager
+        val selectedPack = getSelectedIconPack(context)
+        return apps.map { app ->
+            if (app.installTime > 0L) {
+                app
+            } else {
+                val installTime = readInstallTime(pm, app.packageName)
+                if (installTime <= 0L) {
+                    app
+                } else {
+                    val updated = app.copy(installTime = installTime)
+                    val customIconName = preferences.getString("custom_icon_${app.packageName}", null)
+                    val cacheKey = "${app.packageName}/${app.activityName}#${customIconName.orEmpty()}#$selectedPack"
+                    if (appEntryCache.get(cacheKey) != null) {
+                        appEntryCache.put(cacheKey, updated)
+                    }
+                    updated
+                }
+            }
+        }
     }
 
     private fun loadIconByName(
@@ -555,7 +617,7 @@ object IconPackManager {
         val drawable = loadIconByName(context, drawableName, parsedPack) ?: return null
 
         return try {
-            val imageBitmap = drawableToBitmap(drawable, targetSizePx).asImageBitmap()
+            val imageBitmap = drawableToBitmap(drawable, targetSizePx).compactIfOpaque().asImageBitmap()
             synchronized(imageBitmapCache) {
                 imageBitmapCache.put(cacheKey, imageBitmap)
             }

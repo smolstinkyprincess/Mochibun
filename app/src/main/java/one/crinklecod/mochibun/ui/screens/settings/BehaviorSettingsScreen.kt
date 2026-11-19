@@ -237,7 +237,7 @@ internal fun BehaviorSettingsScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
+            item(contentType = "behavior_folder_card") {
                 SettingsCard(categoryTitle = "Folder Options") {
                     if (onCreateFolderClick != null) {
                         SettingsNavigationRow(
@@ -260,7 +260,7 @@ internal fun BehaviorSettingsScreen(
                     )
                 }
             }
-            item {
+            item(contentType = "behavior_drawer_card") {
                 SettingsCard(categoryTitle = "App Drawer") {
                     SettingsNavigationRow(
                         title = "Hidden Apps",
@@ -272,7 +272,7 @@ internal fun BehaviorSettingsScreen(
                     )
                 }
             }
-            item {
+            item(contentType = "behavior_clamshell_card") {
                 SettingsCard(categoryTitle = "Clamshell & Outer LEDs") {
                     SettingsStepperRow(
                         title = "Lid Open Action",

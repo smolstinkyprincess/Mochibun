@@ -57,6 +57,8 @@ import one.crinklecod.mochibun.core.haptic.HapticManager
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.LocalCardBorderState
+import one.crinklecod.mochibun.data.repository.rememberLiveCardBorderState
 import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelState
 import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelCard
 import one.crinklecod.mochibun.ui.dialogs.handleKaomojiWheelNavKey
@@ -172,7 +174,7 @@ class MochibunImeService : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         displayDensity = resources.displayMetrics.density
-        owner.start()
+        owner.create()
         refreshTheme()
         PreferencesManager.getPrefs(this).registerOnSharedPreferenceChangeListener(themePrefListener)
     }
@@ -278,7 +280,9 @@ class MochibunImeService : InputMethodService() {
             setContent {
                 val density = LocalDensity.current.density
                 displayDensity = density
-                CompositionLocalProvider(LocalLauncherTheme provides imeTheme) {
+                CompositionLocalProvider(
+                    LocalLauncherTheme provides imeTheme
+                ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -289,12 +293,16 @@ class MochibunImeService : InputMethodService() {
                     ) {
                         val wheelState = kaomojiWheelState
                         if (wheelState != null) {
-                            KaomojiWheelCard(
-                                state = wheelState,
-                                onConfirm = ::confirmKaomojiWheel,
-                                onDismiss = { kaomojiWheelState = null },
-                                hintText = "◀▶ Mood  •  ▲▼ Kaomoji  •  Center: Insert"
-                            )
+                            CompositionLocalProvider(
+                                LocalCardBorderState provides rememberLiveCardBorderState()
+                            ) {
+                                KaomojiWheelCard(
+                                    state = wheelState,
+                                    onConfirm = ::confirmKaomojiWheel,
+                                    onDismiss = { kaomojiWheelState = null },
+                                    hintText = "◀▶ Mood  •  ▲▼ Kaomoji  •  Center: Insert"
+                                )
+                            }
                         } else {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -335,6 +343,7 @@ class MochibunImeService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        owner.resume()
         refreshTheme()
         cancelHold()
         handler.removeCallbacks(poundHoldRunnable)
@@ -385,6 +394,7 @@ class MochibunImeService : InputMethodService() {
         resolvePendingTap()
         candidateState.commitActive(commit)
         InputArbiter.updateInputActive(this, false)
+        owner.pause()
         super.onFinishInputView(finishingInput)
     }
 
@@ -871,9 +881,21 @@ class MochibunImeService : InputMethodService() {
         override val savedStateRegistry: SavedStateRegistry get() = savedState.savedStateRegistry
         override val viewModelStore: ViewModelStore get() = store
 
-        fun start() {
+        fun create() {
             savedState.performRestore(null)
-            registry.currentState = Lifecycle.State.RESUMED
+            registry.currentState = Lifecycle.State.CREATED
+        }
+
+        fun resume() {
+            if (registry.currentState != Lifecycle.State.DESTROYED) {
+                registry.currentState = Lifecycle.State.RESUMED
+            }
+        }
+
+        fun pause() {
+            if (registry.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                registry.currentState = Lifecycle.State.CREATED
+            }
         }
 
         fun destroy() {

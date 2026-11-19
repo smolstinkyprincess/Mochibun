@@ -61,7 +61,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.graphics.drawable.toBitmap
+import one.crinklecod.mochibun.core.util.compactIfOpaque
+import one.crinklecod.mochibun.core.util.drawableToBitmap
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
@@ -732,7 +733,7 @@ fun DrawableImage(
 ) {
     val bitmap = remember(drawable) {
         try {
-            drawable.toBitmap().asImageBitmap()
+            drawableToBitmap(drawable, 84).compactIfOpaque().asImageBitmap()
         } catch (e: Exception) {
             null
         }

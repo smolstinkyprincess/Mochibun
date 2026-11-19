@@ -2,19 +2,10 @@ package one.crinklecod.mochibun.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.view.KeyEvent
-import one.crinklecod.mochibun.core.sound.SoundEffectManager
-import one.crinklecod.mochibun.core.system.MediaVolumeLockSync
 import one.crinklecod.mochibun.data.model.AppDrawerSortMode
 import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.model.FavoriteFolder
-import one.crinklecod.mochibun.data.model.PhysicalKey
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import org.json.JSONArray
-import org.json.JSONObject
-import kotlin.collections.emptyList
 
 enum class LidOpenAction(val id: String, val label: String) {
     HOME("home", "Home Screen"),
@@ -250,107 +241,107 @@ object PreferencesManager {
     const val KEY_CUSTOM_ICON_PREFIX = "custom_icon_"
     const val KEY_CUSTOM_FOLDER_ICON_PREFIX = "custom_folder_icon_"
 
-    private val _isWallpaperOverlayEnabled = MutableStateFlow(DEFAULT_WALLPAPER_OVERLAY_ENABLED)
-    val isWallpaperOverlayEnabled: StateFlow<Boolean> = _isWallpaperOverlayEnabled.asStateFlow()
+    val isWallpaperOverlayEnabled: StateFlow<Boolean>
+        get() = AppearancePrefs.isWallpaperOverlayEnabled
 
+    val isSystemMonitorEnabled: StateFlow<Boolean>
+        get() = AppearancePrefs.isSystemMonitorEnabled
 
-    private val _isSystemMonitorEnabled = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_ENABLED)
-    val isSystemMonitorEnabled: StateFlow<Boolean> = _isSystemMonitorEnabled.asStateFlow()
+    val isFolderGridMode: StateFlow<Boolean>
+        get() = AppearancePrefs.isFolderGridMode
 
-    private val _isFolderGridMode = MutableStateFlow(DEFAULT_FOLDER_GRID_MODE)
-    val isFolderGridMode: StateFlow<Boolean> = _isFolderGridMode.asStateFlow()
+    val isDpadWrapAround: StateFlow<Boolean>
+        get() = HardwareInputPrefs.isDpadWrapAround
 
+    val isDpadBoundaryHaptics: StateFlow<Boolean>
+        get() = HardwareInputPrefs.isDpadBoundaryHaptics
 
-    private val _isDpadWrapAround = MutableStateFlow(DEFAULT_DPAD_WRAP_AROUND)
-    val isDpadWrapAround: StateFlow<Boolean> = _isDpadWrapAround.asStateFlow()
+    val lidOpenAction: StateFlow<LidOpenAction>
+        get() = HardwareInputPrefs.lidOpenAction
 
-    private val _isDpadBoundaryHaptics = MutableStateFlow(DEFAULT_DPAD_BOUNDARY_HAPTICS)
-    val isDpadBoundaryHaptics: StateFlow<Boolean> = _isDpadBoundaryHaptics.asStateFlow()
+    val isLidCloseSnapSoundEnabled: StateFlow<Boolean>
+        get() = SoundPrefs.isLidCloseSnapSoundEnabled
 
-    private val _lidOpenAction = MutableStateFlow(LidOpenAction.HOME)
-    val lidOpenAction: StateFlow<LidOpenAction> = _lidOpenAction.asStateFlow()
+    val isSoftKeyNavEnabled: StateFlow<Boolean>
+        get() = HardwareInputPrefs.isSoftKeyNavEnabled
 
-    private val _isLidCloseSnapSoundEnabled = MutableStateFlow(DEFAULT_LID_CLOSE_SNAP_SOUND)
-    val isLidCloseSnapSoundEnabled: StateFlow<Boolean> = _isLidCloseSnapSoundEnabled.asStateFlow()
+    val keypadSoundMode: StateFlow<String>
+        get() = SoundPrefs.keypadSoundMode
 
-    private val _isSoftKeyNavEnabled = MutableStateFlow(DEFAULT_SOFT_KEY_NAV_ENABLED)
-    val isSoftKeyNavEnabled: StateFlow<Boolean> = _isSoftKeyNavEnabled.asStateFlow()
+    val launcherAudioStream: StateFlow<String>
+        get() = SoundPrefs.launcherAudioStream
 
-    private val _keypadSoundMode = MutableStateFlow(DEFAULT_KEYPAD_SOUND_MODE)
-    val keypadSoundMode: StateFlow<String> = _keypadSoundMode.asStateFlow()
+    val launcherSoundVolume: StateFlow<Int>
+        get() = SoundPrefs.launcherSoundVolume
 
-    private val _launcherAudioStream = MutableStateFlow(DEFAULT_LAUNCHER_AUDIO_STREAM)
-    val launcherAudioStream: StateFlow<String> = _launcherAudioStream.asStateFlow()
+    val isLidLedEnabled: StateFlow<Boolean>
+        get() = LidLedPrefs.isLidLedEnabled
 
-    private val _launcherSoundVolume = MutableStateFlow(DEFAULT_LAUNCHER_SOUND_VOLUME)
-    val launcherSoundVolume: StateFlow<Int> = _launcherSoundVolume.asStateFlow()
+    val isLidLedChargingEnabled: StateFlow<Boolean>
+        get() = LidLedPrefs.isLidLedChargingEnabled
 
-    private val _isLidLedEnabled = MutableStateFlow(DEFAULT_LID_LED_ENABLED)
-    val isLidLedEnabled: StateFlow<Boolean> = _isLidLedEnabled.asStateFlow()
+    val appDrawerSortMode: StateFlow<AppDrawerSortMode>
+        get() = AppearancePrefs.appDrawerSortMode
 
-    private val _isLidLedChargingEnabled = MutableStateFlow(DEFAULT_LID_LED_CHARGING)
-    val isLidLedChargingEnabled: StateFlow<Boolean> = _isLidLedChargingEnabled.asStateFlow()
+    val lidLedColor: StateFlow<String>
+        get() = LidLedPrefs.lidLedColor
 
-    private val _appDrawerSortMode = MutableStateFlow(AppDrawerSortMode.ALPHABETICAL)
-    val appDrawerSortMode: StateFlow<AppDrawerSortMode> = _appDrawerSortMode.asStateFlow()
+    val isMediaVolumeLockEnabled: StateFlow<Boolean>
+        get() = SoundPrefs.isMediaVolumeLockEnabled
 
-    private val _lidLedColor = MutableStateFlow(DEFAULT_LID_LED_COLOR)
-    val lidLedColor: StateFlow<String> = _lidLedColor.asStateFlow()
+    val systemMonitorInterval: StateFlow<Int>
+        get() = AppearancePrefs.systemMonitorInterval
 
-    private val _isMediaVolumeLockEnabled = MutableStateFlow(DEFAULT_MEDIA_VOLUME_LOCK_ENABLED)
-    val isMediaVolumeLockEnabled: StateFlow<Boolean> = _isMediaVolumeLockEnabled.asStateFlow()
+    val customUserName: StateFlow<String>
+        get() = AppearancePrefs.customUserName
 
-    private val _systemMonitorInterval = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_INTERVAL)
-    val systemMonitorInterval: StateFlow<Int> = _systemMonitorInterval.asStateFlow()
+    val themePreset: StateFlow<String>
+        get() = AppearancePrefs.themePreset
 
-    private val _customUserName = MutableStateFlow(DEFAULT_CUSTOM_USER_NAME)
-    val customUserName: StateFlow<String> = _customUserName.asStateFlow()
+    val themeFontFamily: StateFlow<String>
+        get() = AppearancePrefs.themeFontFamily
 
-    private val _themePreset = MutableStateFlow(DEFAULT_THEME_PRESET)
-    val themePreset: StateFlow<String> = _themePreset.asStateFlow()
+    val themeBorderStyle: StateFlow<String>
+        get() = AppearancePrefs.themeBorderStyle
 
-    private val _themeFontFamily = MutableStateFlow(DEFAULT_THEME_FONT_FAMILY)
-    val themeFontFamily: StateFlow<String> = _themeFontFamily.asStateFlow()
+    val isRootQuickSettingsEnabled: StateFlow<Boolean>
+        get() = SystemAccessPrefs.isRootQuickSettingsEnabled
 
-    private val _themeBorderStyle = MutableStateFlow(DEFAULT_THEME_BORDER_STYLE)
-    val themeBorderStyle: StateFlow<String> = _themeBorderStyle.asStateFlow()
+    val photoFrameUri: StateFlow<String?>
+        get() = AppearancePrefs.photoFrameUri
 
-    private val _isRootQuickSettingsEnabled = MutableStateFlow(DEFAULT_ROOT_QUICK_SETTINGS_ENABLED)
-    val isRootQuickSettingsEnabled: StateFlow<Boolean> = _isRootQuickSettingsEnabled.asStateFlow()
+    val photoFrameStyle: StateFlow<String>
+        get() = AppearancePrefs.photoFrameStyle
 
-    private val _photoFrameUri = MutableStateFlow<String?>(null)
-    val photoFrameUri: StateFlow<String?> = _photoFrameUri.asStateFlow()
+    val photoFrameLabel: StateFlow<String>
+        get() = AppearancePrefs.photoFrameLabel
 
-    private val _photoFrameStyle = MutableStateFlow(DEFAULT_PHOTO_FRAME_STYLE)
-    val photoFrameStyle: StateFlow<String> = _photoFrameStyle.asStateFlow()
+    val isPhotoFrameEnabled: StateFlow<Boolean>
+        get() = AppearancePrefs.isPhotoFrameEnabled
 
-    private val _photoFrameLabel = MutableStateFlow(DEFAULT_PHOTO_FRAME_LABEL)
-    val photoFrameLabel: StateFlow<String> = _photoFrameLabel.asStateFlow()
-
-    private val _isPhotoFrameEnabled = MutableStateFlow(DEFAULT_PHOTO_FRAME_ENABLED)
-    val isPhotoFrameEnabled: StateFlow<Boolean> = _isPhotoFrameEnabled.asStateFlow()
-
-    private val _isSubDisplayTickerEnabled = MutableStateFlow(DEFAULT_SUB_DISPLAY_TICKER_ENABLED)
     /** Retro keitai "outer sub-display" status marquee on Home. */
-    val isSubDisplayTickerEnabled: StateFlow<Boolean> = _isSubDisplayTickerEnabled.asStateFlow()
+    val isSubDisplayTickerEnabled: StateFlow<Boolean>
+        get() = AppearancePrefs.isSubDisplayTickerEnabled
 
-    private val _isSubDisplayTickerDark = MutableStateFlow(DEFAULT_SUB_DISPLAY_TICKER_DARK)
     /** true = dark sub-OLED look, false = pastel theme-matched look. */
-    val isSubDisplayTickerDark: StateFlow<Boolean> = _isSubDisplayTickerDark.asStateFlow()
+    val isSubDisplayTickerDark: StateFlow<Boolean>
+        get() = AppearancePrefs.isSubDisplayTickerDark
 
-    private val _homeMascotSize = MutableStateFlow(HomeMascotSize.SMALL)
     /** Preset size of the mascot sitting on the Home favorites card. */
-    val homeMascotSize: StateFlow<HomeMascotSize> = _homeMascotSize.asStateFlow()
+    val homeMascotSize: StateFlow<HomeMascotSize>
+        get() = AppearancePrefs.homeMascotSize
 
-    private val _quickMemoText = MutableStateFlow("")
     /** Quick Memo text (`#` hold on Home); shown in the sub-display ticker when non-blank. */
-    val quickMemoText: StateFlow<String> = _quickMemoText.asStateFlow()
+    val quickMemoText: StateFlow<String>
+        get() = QuickMemoPrefs.quickMemoText
 
-    private val _showRootOptions = MutableStateFlow(false)
     /** Whether root / LSPosed rows are shown in settings. Loaded in [init]. */
-    val showRootOptions: StateFlow<Boolean> = _showRootOptions.asStateFlow()
+    val showRootOptions: StateFlow<Boolean>
+        get() = SystemAccessPrefs.showRootOptions
 
-    private var initialized = false
+    /** True once [init] has loaded every StateFlow; getters then serve the cached values. */
+    internal var initialized = false
+        private set
 
     fun init(context: Context) {
         if (!initialized) {
@@ -358,7 +349,7 @@ object PreferencesManager {
             initialized = true
         }
         // Outside the guard so restore / reset-to-defaults (which call init again) refresh it
-        _showRootOptions.value = isShowRootOptions(context)
+        SystemAccessPrefs.refreshShowRootOptions(context)
     }
 
     /**
@@ -367,869 +358,367 @@ object PreferencesManager {
      */
     fun reload(context: Context) {
         val prefs = getPrefs(context)
-        _isRootQuickSettingsEnabled.value = prefs.getBoolean(
-            KEY_ROOT_QUICK_SETTINGS_ENABLED,
-            DEFAULT_ROOT_QUICK_SETTINGS_ENABLED
-        )
-        _isWallpaperOverlayEnabled.value = prefs.getBoolean(
-            KEY_WALLPAPER_OVERLAY_ENABLED,
-            DEFAULT_WALLPAPER_OVERLAY_ENABLED
-        )
-        _isSystemMonitorEnabled.value = prefs.getBoolean(
-            KEY_SYSTEM_MONITOR_ENABLED,
-            DEFAULT_SYSTEM_MONITOR_ENABLED
-        )
-        _isFolderGridMode.value = prefs.getBoolean(
-            KEY_FOLDER_GRID_MODE,
-            DEFAULT_FOLDER_GRID_MODE
-        )
-        _systemMonitorInterval.value = prefs.getInt(
-            KEY_SYSTEM_MONITOR_INTERVAL,
-            DEFAULT_SYSTEM_MONITOR_INTERVAL
-        )
-        _customUserName.value = prefs.getString(
-            KEY_CUSTOM_USER_NAME,
-            DEFAULT_CUSTOM_USER_NAME
-        ) ?: DEFAULT_CUSTOM_USER_NAME
-        _themePreset.value = prefs.getString(
-            KEY_THEME_PRESET,
-            DEFAULT_THEME_PRESET
-        ) ?: DEFAULT_THEME_PRESET
-        _isDpadWrapAround.value = prefs.getBoolean(
-            KEY_DPAD_WRAP_AROUND,
-            DEFAULT_DPAD_WRAP_AROUND
-        )
-        _lidOpenAction.value = LidOpenAction.fromId(
-            prefs.getString(KEY_LID_OPEN_ACTION, DEFAULT_LID_OPEN_ACTION)
-        )
-        _isLidCloseSnapSoundEnabled.value = prefs.getBoolean(
-            KEY_LID_CLOSE_SNAP_SOUND,
-            DEFAULT_LID_CLOSE_SNAP_SOUND
-        )
-        _isDpadBoundaryHaptics.value = prefs.getBoolean(
-            KEY_DPAD_BOUNDARY_HAPTICS,
-            DEFAULT_DPAD_BOUNDARY_HAPTICS
-        )
-        _isSoftKeyNavEnabled.value = prefs.getBoolean(
-            KEY_SOFT_KEY_NAV_ENABLED,
-            DEFAULT_SOFT_KEY_NAV_ENABLED
-        )
-        _keypadSoundMode.value = prefs.getString(
-            KEY_KEYPAD_SOUND_MODE,
-            DEFAULT_KEYPAD_SOUND_MODE
-        ) ?: DEFAULT_KEYPAD_SOUND_MODE
-        _launcherAudioStream.value = prefs.getString(
-            KEY_LAUNCHER_AUDIO_STREAM,
-            DEFAULT_LAUNCHER_AUDIO_STREAM
-        ) ?: DEFAULT_LAUNCHER_AUDIO_STREAM
-        _launcherSoundVolume.value = prefs.getInt(
-            KEY_LAUNCHER_SOUND_VOLUME,
-            DEFAULT_LAUNCHER_SOUND_VOLUME
-        )
-        _isLidLedEnabled.value = prefs.getBoolean(
-            KEY_LID_LED_ENABLED,
-            DEFAULT_LID_LED_ENABLED
-        )
-        _isLidLedChargingEnabled.value = prefs.getBoolean(
-            KEY_LID_LED_CHARGING,
-            DEFAULT_LID_LED_CHARGING
-        )
-        val sortStr = prefs.getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
-        _appDrawerSortMode.value = AppDrawerSortMode.entries.firstOrNull { it.name == sortStr }
-            ?: AppDrawerSortMode.ALPHABETICAL
-        _lidLedColor.value = prefs.getString(
-            KEY_LID_LED_COLOR,
-            DEFAULT_LID_LED_COLOR
-        ) ?: DEFAULT_LID_LED_COLOR
-        _isMediaVolumeLockEnabled.value = prefs.getBoolean(
-            KEY_MEDIA_VOLUME_LOCK_ENABLED,
-            DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
-        )
-        _themeFontFamily.value = prefs.getString(
-            KEY_THEME_FONT_FAMILY,
-            DEFAULT_THEME_FONT_FAMILY
-        ) ?: DEFAULT_THEME_FONT_FAMILY
-        _themeBorderStyle.value = CardBorderStyle.normalizeId(
-            prefs.getString(KEY_THEME_BORDER_STYLE, DEFAULT_THEME_BORDER_STYLE)
-        )
-        _photoFrameUri.value = prefs.getString(KEY_PHOTO_FRAME_URI, null)
-        _photoFrameStyle.value = prefs.getString(
-            KEY_PHOTO_FRAME_STYLE,
-            DEFAULT_PHOTO_FRAME_STYLE
-        ) ?: DEFAULT_PHOTO_FRAME_STYLE
-        _photoFrameLabel.value = prefs.getString(
-            KEY_PHOTO_FRAME_LABEL,
-            DEFAULT_PHOTO_FRAME_LABEL
-        ) ?: DEFAULT_PHOTO_FRAME_LABEL
-        _isPhotoFrameEnabled.value = prefs.getBoolean(
-            KEY_PHOTO_FRAME_ENABLED,
-            DEFAULT_PHOTO_FRAME_ENABLED
-        )
-        _isSubDisplayTickerEnabled.value = prefs.getBoolean(
-            KEY_SUB_DISPLAY_TICKER_ENABLED,
-            DEFAULT_SUB_DISPLAY_TICKER_ENABLED
-        )
-        _isSubDisplayTickerDark.value = prefs.getBoolean(
-            KEY_SUB_DISPLAY_TICKER_DARK,
-            DEFAULT_SUB_DISPLAY_TICKER_DARK
-        )
-        _homeMascotSize.value = HomeMascotSize.fromId(
-            prefs.getString(KEY_HOME_MASCOT_SIZE, DEFAULT_HOME_MASCOT_SIZE)
-        )
-        _quickMemoText.value = prefs.getString(KEY_QUICK_MEMO_TEXT, "") ?: ""
-        _showRootOptions.value = isShowRootOptions(context)
+        SystemAccessPrefs.reload(prefs)
+        AppearancePrefs.reload(prefs)
+        HardwareInputPrefs.reload(prefs)
+        SoundPrefs.reload(prefs)
+        LidLedPrefs.reload(prefs)
+        QuickMemoPrefs.reload(prefs)
+        SystemAccessPrefs.refreshShowRootOptions(context)
     }
-
-    /** `#` is the fixed, always-on Kaomoji Wheel trigger (hold). */
-    fun matchesKaomojiTrigger(eventKeyCode: Int): Boolean = eventKeyCode == KeyEvent.KEYCODE_POUND
-
-    fun formatKeyName(keyCode: Int, scanCode: Int = 0): String {
-        val physical = PhysicalKey.fromKeyCode(keyCode)
-            ?: if (scanCode > 0) PhysicalKey.fromScancode(scanCode) else null
-        if (physical != null) {
-            return physical.keyName
-        }
-        return when (keyCode) {
-            in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> "Key ${keyCode - KeyEvent.KEYCODE_0}"
-            in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> "Numpad ${keyCode - KeyEvent.KEYCODE_NUMPAD_0}"
-            KeyEvent.KEYCODE_MENU -> "Menu Key"
-            KeyEvent.KEYCODE_VOLUME_UP -> "Volume Up"
-            KeyEvent.KEYCODE_VOLUME_DOWN -> "Volume Down"
-            KeyEvent.KEYCODE_VOLUME_MUTE -> "Volume Mute"
-            KeyEvent.KEYCODE_DEL -> "Delete / Clear"
-            KeyEvent.KEYCODE_CLEAR -> "Clear Key"
-            KeyEvent.KEYCODE_SEARCH -> "Search Key"
-            KeyEvent.KEYCODE_FOCUS -> "Camera Focus"
-            KeyEvent.KEYCODE_HEADSETHOOK -> "Headset Button"
-            KeyEvent.KEYCODE_UNKNOWN -> if (scanCode > 0) "ScanCode $scanCode" else "Unknown Key"
-            else -> KeyEvent.keyCodeToString(keyCode)
-                .removePrefix("KEYCODE_")
-                .replace('_', ' ')
-                .lowercase()
-                .replaceFirstChar { it.uppercase() }
-        }
-    }
-
-    fun formatKeyBadge(keyCode: Int, scanCode: Int = 0): String {
-        val physical = PhysicalKey.fromKeyCode(keyCode)
-            ?: if (scanCode > 0) PhysicalKey.fromScancode(scanCode) else null
-        return when (physical) {
-            PhysicalKey.POUND -> "#"
-            PhysicalKey.STAR -> "*"
-            PhysicalKey.F1 -> "F1"
-            PhysicalKey.F2 -> "F2"
-            PhysicalKey.F3 -> "F3"
-            PhysicalKey.F4 -> "F4"
-            PhysicalKey.CAMERA -> "CAM"
-            PhysicalKey.CALL -> "CALL"
-            PhysicalKey.APP_SWITCH -> "REC"
-            PhysicalKey.KEY_ENTER -> "OK"
-            null -> when (keyCode) {
-                in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> "${keyCode - KeyEvent.KEYCODE_0}"
-                in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> "${keyCode - KeyEvent.KEYCODE_NUMPAD_0}"
-                KeyEvent.KEYCODE_MENU -> "MENU"
-                KeyEvent.KEYCODE_VOLUME_UP -> "VOL+"
-                KeyEvent.KEYCODE_VOLUME_DOWN -> "VOL-"
-                KeyEvent.KEYCODE_DEL, KeyEvent.KEYCODE_CLEAR -> "CLR"
-                KeyEvent.KEYCODE_UNKNOWN -> if (scanCode > 0) "SC$scanCode" else "KEY"
-                else -> KeyEvent.keyCodeToString(keyCode).removePrefix("KEYCODE_").take(6)
-            }
-        }
-    }
-
-    fun getKaomojiTriggerBadge(): String = "#"
 
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    fun isWallpaperOverlayEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_WALLPAPER_OVERLAY_ENABLED,
-            DEFAULT_WALLPAPER_OVERLAY_ENABLED
-        )
-    }
+    /** `#` is the fixed, always-on Kaomoji Wheel trigger (hold). */
+    fun matchesKaomojiTrigger(eventKeyCode: Int): Boolean =
+        HardwareInputPrefs.matchesKaomojiTrigger(eventKeyCode)
 
-    fun setWallpaperOverlayEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit()
-            .putBoolean(KEY_WALLPAPER_OVERLAY_ENABLED, enabled)
-            .apply()
-        _isWallpaperOverlayEnabled.value = enabled
-    }
+    fun formatKeyName(keyCode: Int, scanCode: Int = 0): String =
+        HardwareInputPrefs.formatKeyName(keyCode, scanCode)
 
-    fun isSystemMonitorEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_SYSTEM_MONITOR_ENABLED,
-            DEFAULT_SYSTEM_MONITOR_ENABLED
-        )
-    }
+    fun formatKeyBadge(keyCode: Int, scanCode: Int = 0): String =
+        HardwareInputPrefs.formatKeyBadge(keyCode, scanCode)
 
-    fun setSystemMonitorEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_SYSTEM_MONITOR_ENABLED, enabled).apply()
-        _isSystemMonitorEnabled.value = enabled
-    }
+    fun getKaomojiTriggerBadge(): String =
+        HardwareInputPrefs.getKaomojiTriggerBadge()
 
-    fun setPhotoFrameUri(context: Context, uri: String?) {
-        if (uri == null) {
-            getPrefs(context).edit().remove(KEY_PHOTO_FRAME_URI).apply()
-        } else {
-            getPrefs(context).edit().putString(KEY_PHOTO_FRAME_URI, uri).apply()
-        }
-        _photoFrameUri.value = uri
-    }
+    fun isWallpaperOverlayEnabled(context: Context): Boolean =
+        AppearancePrefs.isWallpaperOverlayEnabled(context)
 
-    fun setPhotoFrameStyle(context: Context, style: String) {
-        getPrefs(context).edit().putString(KEY_PHOTO_FRAME_STYLE, style).apply()
-        _photoFrameStyle.value = style
-    }
+    fun setWallpaperOverlayEnabled(context: Context, enabled: Boolean) =
+        AppearancePrefs.setWallpaperOverlayEnabled(context, enabled)
 
-    fun setPhotoFrameLabel(context: Context, label: String) {
-        getPrefs(context).edit().putString(KEY_PHOTO_FRAME_LABEL, label).apply()
-        _photoFrameLabel.value = label
-    }
+    fun isSystemMonitorEnabled(context: Context): Boolean =
+        AppearancePrefs.isSystemMonitorEnabled(context)
 
-    fun setPhotoFrameEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_PHOTO_FRAME_ENABLED, enabled).apply()
-        _isPhotoFrameEnabled.value = enabled
-    }
+    fun setSystemMonitorEnabled(context: Context, enabled: Boolean) =
+        AppearancePrefs.setSystemMonitorEnabled(context, enabled)
 
-    fun isSubDisplayTickerEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_SUB_DISPLAY_TICKER_ENABLED,
-            DEFAULT_SUB_DISPLAY_TICKER_ENABLED
-        )
-    }
+    fun setPhotoFrameUri(context: Context, uri: String?) =
+        AppearancePrefs.setPhotoFrameUri(context, uri)
 
-    fun setSubDisplayTickerEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_SUB_DISPLAY_TICKER_ENABLED, enabled).apply()
-        _isSubDisplayTickerEnabled.value = enabled
-    }
+    fun setPhotoFrameStyle(context: Context, style: String) =
+        AppearancePrefs.setPhotoFrameStyle(context, style)
 
-    fun isSubDisplayTickerDark(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_SUB_DISPLAY_TICKER_DARK,
-            DEFAULT_SUB_DISPLAY_TICKER_DARK
-        )
-    }
+    fun setPhotoFrameLabel(context: Context, label: String) =
+        AppearancePrefs.setPhotoFrameLabel(context, label)
 
-    fun setSubDisplayTickerDark(context: Context, dark: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_SUB_DISPLAY_TICKER_DARK, dark).apply()
-        _isSubDisplayTickerDark.value = dark
-    }
+    fun setPhotoFrameEnabled(context: Context, enabled: Boolean) =
+        AppearancePrefs.setPhotoFrameEnabled(context, enabled)
+
+    fun isSubDisplayTickerEnabled(context: Context): Boolean =
+        AppearancePrefs.isSubDisplayTickerEnabled(context)
+
+    fun setSubDisplayTickerEnabled(context: Context, enabled: Boolean) =
+        AppearancePrefs.setSubDisplayTickerEnabled(context, enabled)
+
+    fun isSubDisplayTickerDark(context: Context): Boolean =
+        AppearancePrefs.isSubDisplayTickerDark(context)
+
+    fun setSubDisplayTickerDark(context: Context, dark: Boolean) =
+        AppearancePrefs.setSubDisplayTickerDark(context, dark)
 
     fun getHomeMascotSize(context: Context): HomeMascotSize =
-        if (initialized) {
-            _homeMascotSize.value
-        } else {
-            HomeMascotSize.fromId(
-                getPrefs(context).getString(KEY_HOME_MASCOT_SIZE, DEFAULT_HOME_MASCOT_SIZE)
-            )
-        }
+        AppearancePrefs.getHomeMascotSize(context)
 
-    fun setHomeMascotSize(context: Context, size: HomeMascotSize) {
-        getPrefs(context).edit().putString(KEY_HOME_MASCOT_SIZE, size.id).apply()
-        _homeMascotSize.value = size
-    }
+    fun setHomeMascotSize(context: Context, size: HomeMascotSize) =
+        AppearancePrefs.setHomeMascotSize(context, size)
 
     /** Saves the memo text (trimmed of trailing blank lines, capped at [QUICK_MEMO_MAX_CHARS]). */
-    fun setQuickMemoText(context: Context, text: String) {
-        val clean = text.take(QUICK_MEMO_MAX_CHARS).trimEnd()
-        getPrefs(context).edit().putString(KEY_QUICK_MEMO_TEXT, clean).apply()
-        _quickMemoText.value = clean
-    }
+    fun setQuickMemoText(context: Context, text: String) =
+        QuickMemoPrefs.setQuickMemoText(context, text)
 
     /** Clear button: empties the memo (which also removes it from the ticker). */
-    fun clearQuickMemo(context: Context) {
-        setQuickMemoText(context, "")
-    }
+    fun clearQuickMemo(context: Context) =
+        QuickMemoPrefs.clearQuickMemo(context)
 
-    fun getDailyStepState(context: Context): DailyStepState? {
-        val prefs = getPrefs(context)
-        val day = prefs.getInt(KEY_STEP_DAY, -1)
-        if (day < 0) return null
-        return DailyStepState(
-            day = day,
-            baseline = prefs.getLong(KEY_STEP_BASELINE, 0L),
-            carried = prefs.getLong(KEY_STEP_CARRIED, 0L),
-            lastCounter = prefs.getLong(KEY_STEP_LAST_COUNTER, 0L)
-        )
-    }
+    fun getDailyStepState(context: Context): DailyStepState? =
+        HomeContentPrefs.getDailyStepState(context)
 
-    fun setDailyStepState(context: Context, state: DailyStepState) {
-        getPrefs(context).edit()
-            .putInt(KEY_STEP_DAY, state.day)
-            .putLong(KEY_STEP_BASELINE, state.baseline)
-            .putLong(KEY_STEP_CARRIED, state.carried)
-            .putLong(KEY_STEP_LAST_COUNTER, state.lastCounter)
-            .apply()
-    }
+    fun setDailyStepState(context: Context, state: DailyStepState) =
+        HomeContentPrefs.setDailyStepState(context, state)
 
-    fun isFolderGridMode(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_FOLDER_GRID_MODE,
-            DEFAULT_FOLDER_GRID_MODE
-        )
-    }
+    fun isFolderGridMode(context: Context): Boolean =
+        AppearancePrefs.isFolderGridMode(context)
 
-    fun setFolderGridMode(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_FOLDER_GRID_MODE, enabled).apply()
-        _isFolderGridMode.value = enabled
-    }
+    fun setFolderGridMode(context: Context, enabled: Boolean) =
+        AppearancePrefs.setFolderGridMode(context, enabled)
 
-    fun getSystemMonitorInterval(context: Context): Int {
-        return getPrefs(context).getInt(
-            KEY_SYSTEM_MONITOR_INTERVAL,
-            DEFAULT_SYSTEM_MONITOR_INTERVAL
-        )
-    }
+    fun getSystemMonitorInterval(context: Context): Int =
+        AppearancePrefs.getSystemMonitorInterval(context)
 
-    fun setSystemMonitorInterval(context: Context, seconds: Int) {
-        getPrefs(context).edit().putInt(KEY_SYSTEM_MONITOR_INTERVAL, seconds).apply()
-        _systemMonitorInterval.value = seconds
-    }
+    fun setSystemMonitorInterval(context: Context, seconds: Int) =
+        AppearancePrefs.setSystemMonitorInterval(context, seconds)
 
-    fun getCustomUserName(context: Context): String {
-        return getPrefs(context).getString(
-            KEY_CUSTOM_USER_NAME,
-            DEFAULT_CUSTOM_USER_NAME
-        ) ?: DEFAULT_CUSTOM_USER_NAME
-    }
+    fun getCustomUserName(context: Context): String =
+        AppearancePrefs.getCustomUserName(context)
 
-    fun setCustomUserName(context: Context, name: String) {
-        getPrefs(context).edit().putString(KEY_CUSTOM_USER_NAME, name).apply()
-        _customUserName.value = name
-    }
+    fun setCustomUserName(context: Context, name: String) =
+        AppearancePrefs.setCustomUserName(context, name)
 
-    fun getThemePreset(context: Context): String {
-        return getPrefs(context).getString(
-            KEY_THEME_PRESET,
-            DEFAULT_THEME_PRESET
-        ) ?: DEFAULT_THEME_PRESET
-    }
+    fun getThemePreset(context: Context): String =
+        AppearancePrefs.getThemePreset(context)
 
-    fun setThemePreset(context: Context, preset: String) {
-        getPrefs(context).edit().putString(KEY_THEME_PRESET, preset).apply()
-        _themePreset.value = preset
-    }
+    fun setThemePreset(context: Context, preset: String) =
+        AppearancePrefs.setThemePreset(context, preset)
 
-    fun isDpadWrapAround(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_DPAD_WRAP_AROUND,
-            DEFAULT_DPAD_WRAP_AROUND
-        )
-    }
+    fun isDpadWrapAround(context: Context): Boolean =
+        HardwareInputPrefs.isDpadWrapAround(context)
 
-    fun setDpadWrapAround(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_DPAD_WRAP_AROUND, enabled).apply()
-        _isDpadWrapAround.value = enabled
-    }
+    fun setDpadWrapAround(context: Context, enabled: Boolean) =
+        HardwareInputPrefs.setDpadWrapAround(context, enabled)
 
-    fun isDpadBoundaryHaptics(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_DPAD_BOUNDARY_HAPTICS,
-            DEFAULT_DPAD_BOUNDARY_HAPTICS
-        )
-    }
+    fun isDpadBoundaryHaptics(context: Context): Boolean =
+        HardwareInputPrefs.isDpadBoundaryHaptics(context)
 
     fun getLidOpenAction(context: Context): LidOpenAction =
-        LidOpenAction.fromId(getPrefs(context).getString(KEY_LID_OPEN_ACTION, DEFAULT_LID_OPEN_ACTION))
+        HardwareInputPrefs.getLidOpenAction(context)
 
-    fun setLidOpenAction(context: Context, action: LidOpenAction) {
-        getPrefs(context).edit().putString(KEY_LID_OPEN_ACTION, action.id).apply()
-        _lidOpenAction.value = action
-    }
+    fun setLidOpenAction(context: Context, action: LidOpenAction) =
+        HardwareInputPrefs.setLidOpenAction(context, action)
 
-    fun getLastLaunchedPackage(context: Context): String? {
-        val pkg = getPrefs(context).getString(KEY_LAST_LAUNCHED_PACKAGE, null)?.trim()
-        return if (pkg.isNullOrEmpty() || pkg == context.packageName) null else pkg
-    }
+    fun getLastLaunchedPackage(context: Context): String? =
+        HardwareInputPrefs.getLastLaunchedPackage(context)
 
-    fun setLastLaunchedPackage(context: Context, packageName: String?) {
-        val pkg = packageName?.trim()
-        if (pkg.isNullOrEmpty() || pkg == context.packageName) return
-        getPrefs(context).edit().putString(KEY_LAST_LAUNCHED_PACKAGE, pkg).apply()
-    }
+    fun setLastLaunchedPackage(context: Context, packageName: String?) =
+        HardwareInputPrefs.setLastLaunchedPackage(context, packageName)
 
     fun isLidCloseSnapSoundEnabled(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_LID_CLOSE_SNAP_SOUND, DEFAULT_LID_CLOSE_SNAP_SOUND)
+        SoundPrefs.isLidCloseSnapSoundEnabled(context)
 
-    fun setLidCloseSnapSoundEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_LID_CLOSE_SNAP_SOUND, enabled).apply()
-        _isLidCloseSnapSoundEnabled.value = enabled
-    }
+    fun setLidCloseSnapSoundEnabled(context: Context, enabled: Boolean) =
+        SoundPrefs.setLidCloseSnapSoundEnabled(context, enabled)
 
-    fun setDpadBoundaryHaptics(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_DPAD_BOUNDARY_HAPTICS, enabled).apply()
-        _isDpadBoundaryHaptics.value = enabled
-    }
+    fun setDpadBoundaryHaptics(context: Context, enabled: Boolean) =
+        HardwareInputPrefs.setDpadBoundaryHaptics(context, enabled)
 
-    fun getKeypadSoundMode(context: Context? = null): String {
-        return if (initialized) {
-            _keypadSoundMode.value
-        } else if (context != null) {
-            getPrefs(context).getString(
-                KEY_KEYPAD_SOUND_MODE,
-                DEFAULT_KEYPAD_SOUND_MODE
-            ) ?: DEFAULT_KEYPAD_SOUND_MODE
-        } else {
-            _keypadSoundMode.value
-        }
-    }
+    fun getKeypadSoundMode(context: Context? = null): String =
+        SoundPrefs.getKeypadSoundMode(context)
 
-    fun setKeypadSoundMode(context: Context, mode: String) {
-        getPrefs(context).edit().putString(KEY_KEYPAD_SOUND_MODE, mode).apply()
-        _keypadSoundMode.value = mode
-    }
+    fun setKeypadSoundMode(context: Context, mode: String) =
+        SoundPrefs.setKeypadSoundMode(context, mode)
 
-    fun getLauncherAudioStream(context: Context? = null): String {
-        return if (initialized) {
-            _launcherAudioStream.value
-        } else if (context != null) {
-            getPrefs(context).getString(
-                KEY_LAUNCHER_AUDIO_STREAM,
-                DEFAULT_LAUNCHER_AUDIO_STREAM
-            ) ?: DEFAULT_LAUNCHER_AUDIO_STREAM
-        } else {
-            _launcherAudioStream.value
-        }
-    }
+    fun getLauncherAudioStream(context: Context? = null): String =
+        SoundPrefs.getLauncherAudioStream(context)
 
-    fun setLauncherAudioStream(context: Context, stream: String) {
-        getPrefs(context).edit().putString(KEY_LAUNCHER_AUDIO_STREAM, stream).apply()
-        _launcherAudioStream.value = stream
-        SoundEffectManager.updateAudioStream(context)
-    }
+    fun setLauncherAudioStream(context: Context, stream: String) =
+        SoundPrefs.setLauncherAudioStream(context, stream)
 
-    fun getLauncherSoundVolume(context: Context? = null): Int {
-        return if (initialized) {
-            _launcherSoundVolume.value
-        } else if (context != null) {
-            getPrefs(context).getInt(
-                KEY_LAUNCHER_SOUND_VOLUME,
-                DEFAULT_LAUNCHER_SOUND_VOLUME
-            )
-        } else {
-            _launcherSoundVolume.value
-        }
-    }
+    fun getLauncherSoundVolume(context: Context? = null): Int =
+        SoundPrefs.getLauncherSoundVolume(context)
 
-    fun setLauncherSoundVolume(context: Context, volume: Int) {
-        val clamped = volume.coerceIn(0, 100)
-        getPrefs(context).edit().putInt(KEY_LAUNCHER_SOUND_VOLUME, clamped).apply()
-        _launcherSoundVolume.value = clamped
-    }
+    fun setLauncherSoundVolume(context: Context, volume: Int) =
+        SoundPrefs.setLauncherSoundVolume(context, volume)
 
-    fun isLidLedEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_LID_LED_ENABLED,
-            DEFAULT_LID_LED_ENABLED
-        )
-    }
+    fun isLidLedEnabled(context: Context): Boolean =
+        LidLedPrefs.isLidLedEnabled(context)
 
-    fun setLidLedEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_LID_LED_ENABLED, enabled).apply()
-        _isLidLedEnabled.value = enabled
-    }
+    fun setLidLedEnabled(context: Context, enabled: Boolean) =
+        LidLedPrefs.setLidLedEnabled(context, enabled)
 
-    fun isLidLedChargingEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_LID_LED_CHARGING,
-            DEFAULT_LID_LED_CHARGING
-        )
-    }
+    fun isLidLedChargingEnabled(context: Context): Boolean =
+        LidLedPrefs.isLidLedChargingEnabled(context)
 
-    fun setLidLedChargingEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_LID_LED_CHARGING, enabled).apply()
-        _isLidLedChargingEnabled.value = enabled
-    }
+    fun setLidLedChargingEnabled(context: Context, enabled: Boolean) =
+        LidLedPrefs.setLidLedChargingEnabled(context, enabled)
 
-    fun getLidLedColor(context: Context): String {
-        return getPrefs(context).getString(
-            KEY_LID_LED_COLOR,
-            DEFAULT_LID_LED_COLOR
-        ) ?: DEFAULT_LID_LED_COLOR
-    }
+    fun getLidLedColor(context: Context): String =
+        LidLedPrefs.getLidLedColor(context)
 
-    fun getAppDrawerSortMode(context: Context? = null): AppDrawerSortMode {
-        return if (initialized) {
-            _appDrawerSortMode.value
-        } else if (context != null) {
-            val sortStr = getPrefs(context).getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
-            AppDrawerSortMode.entries.firstOrNull { it.name == sortStr } ?: AppDrawerSortMode.ALPHABETICAL
-        } else {
-            AppDrawerSortMode.ALPHABETICAL
-        }
-    }
+    fun getAppDrawerSortMode(context: Context? = null): AppDrawerSortMode =
+        AppearancePrefs.getAppDrawerSortMode(context)
 
-    fun setAppDrawerSortMode(context: Context, mode: AppDrawerSortMode) {
-        getPrefs(context).edit().putString(KEY_APP_DRAWER_SORT_MODE, mode.name).apply()
-        _appDrawerSortMode.value = mode
-    }
+    fun setAppDrawerSortMode(context: Context, mode: AppDrawerSortMode) =
+        AppearancePrefs.setAppDrawerSortMode(context, mode)
 
-    fun setLidLedColor(context: Context, color: String) {
-        getPrefs(context).edit().putString(KEY_LID_LED_COLOR, color).apply()
-        _lidLedColor.value = color
-    }
+    fun setLidLedColor(context: Context, color: String) =
+        LidLedPrefs.setLidLedColor(context, color)
 
     fun getLidLedNotificationAnimationId(context: Context): String =
-        getPrefs(context).getString(KEY_LID_LED_NOTIFICATION_ANIMATION_ID, "") ?: ""
+        LidLedPrefs.getLidLedNotificationAnimationId(context)
 
-    fun setLidLedNotificationAnimationId(context: Context, id: String) {
-        getPrefs(context).edit().putString(KEY_LID_LED_NOTIFICATION_ANIMATION_ID, id).apply()
-    }
+    fun setLidLedNotificationAnimationId(context: Context, id: String) =
+        LidLedPrefs.setLidLedNotificationAnimationId(context, id)
 
     fun getLidLedChargingAnimationId(context: Context): String =
-        getPrefs(context).getString(KEY_LID_LED_CHARGING_ANIMATION_ID, "") ?: ""
+        LidLedPrefs.getLidLedChargingAnimationId(context)
 
-    fun setLidLedChargingAnimationId(context: Context, id: String) {
-        getPrefs(context).edit().putString(KEY_LID_LED_CHARGING_ANIMATION_ID, id).apply()
-    }
+    fun setLidLedChargingAnimationId(context: Context, id: String) =
+        LidLedPrefs.setLidLedChargingAnimationId(context, id)
 
-    fun isMediaVolumeLockEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(
-            KEY_MEDIA_VOLUME_LOCK_ENABLED,
-            DEFAULT_MEDIA_VOLUME_LOCK_ENABLED
-        )
-    }
+    fun isMediaVolumeLockEnabled(context: Context): Boolean =
+        SoundPrefs.isMediaVolumeLockEnabled(context)
 
-    fun setMediaVolumeLockEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_MEDIA_VOLUME_LOCK_ENABLED, enabled).apply()
-        _isMediaVolumeLockEnabled.value = enabled
-        MediaVolumeLockSync.push(context, enabled)
-    }
+    fun setMediaVolumeLockEnabled(context: Context, enabled: Boolean) =
+        SoundPrefs.setMediaVolumeLockEnabled(context, enabled)
 
-    fun getThemeFontFamily(context: Context? = null): String {
-        return if (initialized) {
-            _themeFontFamily.value
-        } else if (context != null) {
-            getPrefs(context).getString(
-                KEY_THEME_FONT_FAMILY,
-                DEFAULT_THEME_FONT_FAMILY
-            ) ?: DEFAULT_THEME_FONT_FAMILY
-        } else {
-            _themeFontFamily.value
-        }
-    }
+    fun getThemeFontFamily(context: Context? = null): String =
+        AppearancePrefs.getThemeFontFamily(context)
 
-    fun setThemeFontFamily(context: Context, family: String) {
-        getPrefs(context).edit().putString(KEY_THEME_FONT_FAMILY, family).apply()
-        _themeFontFamily.value = family
-    }
+    fun setThemeFontFamily(context: Context, family: String) =
+        AppearancePrefs.setThemeFontFamily(context, family)
 
-    fun getThemeBorderStyle(context: Context? = null): String {
-        return if (initialized) {
-            _themeBorderStyle.value
-        } else if (context != null) {
-            CardBorderStyle.normalizeId(
-                getPrefs(context).getString(KEY_THEME_BORDER_STYLE, DEFAULT_THEME_BORDER_STYLE)
-            )
-        } else {
-            _themeBorderStyle.value
-        }
-    }
+    fun getThemeBorderStyle(context: Context? = null): String =
+        AppearancePrefs.getThemeBorderStyle(context)
 
-    fun setThemeBorderStyle(context: Context, borderStyle: String) {
-        val normalized = CardBorderStyle.normalizeId(borderStyle)
-        getPrefs(context).edit().putString(KEY_THEME_BORDER_STYLE, normalized).apply()
-        _themeBorderStyle.value = normalized
-    }
+    fun setThemeBorderStyle(context: Context, borderStyle: String) =
+        AppearancePrefs.setThemeBorderStyle(context, borderStyle)
 
-    fun getWallpaperUri(context: Context): String? {
-        return getPrefs(context).getString(KEY_WALLPAPER_URI, null)
-    }
+    fun getWallpaperUri(context: Context): String? =
+        AppearancePrefs.getWallpaperUri(context)
 
-    fun setWallpaperUri(context: Context, uri: String?) {
-        if (uri == null) {
-            getPrefs(context).edit().remove(KEY_WALLPAPER_URI).apply()
-        } else {
-            getPrefs(context).edit().putString(KEY_WALLPAPER_URI, uri).apply()
-        }
-    }
+    fun setWallpaperUri(context: Context, uri: String?) =
+        AppearancePrefs.setWallpaperUri(context, uri)
 
-    fun getHiddenPackages(context: Context): Set<String> {
-        val prefs = getPrefs(context)
-        return try {
-            val rawObj = prefs.all[KEY_HIDDEN_APPS]
-            when (rawObj) {
-                is Set<*> -> {
-                    val set = rawObj.filterIsInstance<String>().toSet()
-                    setHiddenPackages(context, set)
-                    set
-                }
-                is String -> {
-                    if (rawObj.isBlank()) emptySet() else rawObj.split(",").toSet()
-                }
-                else -> emptySet()
-            }
-        } catch (_: Exception) {
-            emptySet()
-        }
-    }
+    fun getHiddenPackages(context: Context): Set<String> =
+        HomeContentPrefs.getHiddenPackages(context)
 
-    fun setHiddenPackages(context: Context, packages: Set<String>) {
-        getPrefs(context).edit().putString(KEY_HIDDEN_APPS, packages.joinToString(",")).apply()
-    }
+    fun setHiddenPackages(context: Context, packages: Set<String>) =
+        HomeContentPrefs.setHiddenPackages(context, packages)
 
-    fun addHiddenPackage(context: Context, packageName: String) {
-        val current = getHiddenPackages(context).toMutableSet()
-        current.add(packageName)
-        setHiddenPackages(context, current)
-    }
+    fun addHiddenPackage(context: Context, packageName: String) =
+        HomeContentPrefs.addHiddenPackage(context, packageName)
 
-    fun removeHiddenPackage(context: Context, packageName: String) {
-        val current = getHiddenPackages(context).toMutableSet()
-        current.remove(packageName)
-        setHiddenPackages(context, current)
-    }
+    fun removeHiddenPackage(context: Context, packageName: String) =
+        HomeContentPrefs.removeHiddenPackage(context, packageName)
 
-    fun setCustomAppIcon(context: Context, packageName: String, iconName: String?) {
-        val key = "$KEY_CUSTOM_ICON_PREFIX$packageName"
-        val editor = getPrefs(context).edit()
-        if (iconName != null) {
-            editor.putString(key, iconName).apply()
-        } else {
-            editor.remove(key).apply()
-        }
-    }
+    fun setCustomAppIcon(context: Context, packageName: String, iconName: String?) =
+        HomeContentPrefs.setCustomAppIcon(context, packageName, iconName)
 
-    fun setCustomFolderIcon(context: Context, folderId: String, iconName: String?) {
-        val key = "$KEY_CUSTOM_FOLDER_ICON_PREFIX$folderId"
-        val editor = getPrefs(context).edit()
-        if (iconName != null) {
-            editor.putString(key, iconName).apply()
-        } else {
-            editor.remove(key).apply()
-        }
-    }
+    fun setCustomFolderIcon(context: Context, folderId: String, iconName: String?) =
+        HomeContentPrefs.setCustomFolderIcon(context, folderId, iconName)
 
-    fun saveFavoriteFolders(context: Context, folders: List<FavoriteFolder>) {
-        val array = JSONArray()
-        folders.forEach { folder ->
-            val obj = JSONObject()
-            obj.put("id", folder.id)
-            obj.put("name", folder.name)
-            obj.put("apps", JSONArray(folder.appPackages))
-            array.put(obj)
-        }
-        getPrefs(context).edit().putString(KEY_FAVORITE_FOLDERS, array.toString()).apply()
-    }
+    fun saveFavoriteFolders(context: Context, folders: List<FavoriteFolder>) =
+        HomeContentPrefs.saveFavoriteFolders(context, folders)
 
-    fun loadFavoriteFolders(context: Context): List<FavoriteFolder> {
-        val raw = getPrefs(context).getString(KEY_FAVORITE_FOLDERS, null) ?: return emptyList()
-        return try {
-            val array = JSONArray(raw)
-            val list = mutableListOf<FavoriteFolder>()
-            for (i in 0 until array.length()) {
-                val obj = array.getJSONObject(i)
-                val id = obj.getString("id")
-                val name = obj.getString("name")
-                val appsArray = obj.getJSONArray("apps")
-                val apps = mutableListOf<String>()
-                for (j in 0 until appsArray.length()) {
-                    apps.add(appsArray.getString(j))
-                }
-                list.add(FavoriteFolder(id = id, name = name, appPackages = apps))
-            }
-            list
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
+    fun loadFavoriteFolders(context: Context): List<FavoriteFolder> =
+        HomeContentPrefs.loadFavoriteFolders(context)
 
-    fun getFavoriteItemKeys(context: Context): List<String> {
-        val raw = getPrefs(context).getString(KEY_FAVORITE_ITEMS_ORDERED, "") ?: ""
-        if (raw.isBlank()) return emptyList()
-        return raw.split("|").filter { it.isNotEmpty() }
-    }
+    fun getFavoriteItemKeys(context: Context): List<String> =
+        HomeContentPrefs.getFavoriteItemKeys(context)
 
-    fun saveFavoriteItemKeys(context: Context, keys: List<String>) {
-        getPrefs(context).edit()
-            .putString(KEY_FAVORITE_ITEMS_ORDERED, keys.joinToString("|"))
-            .apply()
-    }
+    fun saveFavoriteItemKeys(context: Context, keys: List<String>) =
+        HomeContentPrefs.saveFavoriteItemKeys(context, keys)
 
-    fun getSpeedDialPackage(context: Context, digit: Int): String? {
-        if (digit !in 2..9) return null
-        return getPrefs(context).getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
-    }
+    fun getSpeedDialPackage(context: Context, digit: Int): String? =
+        HardwareInputPrefs.getSpeedDialPackage(context, digit)
 
-    fun setSpeedDialPackage(context: Context, digit: Int, packageName: String?) {
-        if (digit !in 2..9) return
-        val prefs = getPrefs(context)
-        if (packageName == null) {
-            prefs.edit().remove("$KEY_SPEED_DIAL_PREFIX$digit").apply()
-        } else {
-            prefs.edit().putString("$KEY_SPEED_DIAL_PREFIX$digit", packageName).apply()
-        }
-    }
+    fun setSpeedDialPackage(context: Context, digit: Int, packageName: String?) =
+        HardwareInputPrefs.setSpeedDialPackage(context, digit, packageName)
 
-    fun getAllSpeedDials(context: Context): Map<Int, String> {
-        val map = mutableMapOf<Int, String>()
-        val prefs = getPrefs(context)
-        for (digit in 2..9) {
-            val pkg = prefs.getString("$KEY_SPEED_DIAL_PREFIX$digit", null)
-            if (pkg != null) {
-                map[digit] = pkg
-            }
-        }
-        return map
-    }
+    fun getAllSpeedDials(context: Context): Map<Int, String> =
+        HardwareInputPrefs.getAllSpeedDials(context)
 
-    fun isRootQuickSettingsEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_ROOT_QUICK_SETTINGS_ENABLED, DEFAULT_ROOT_QUICK_SETTINGS_ENABLED)
-    }
+    fun isRootQuickSettingsEnabled(context: Context): Boolean =
+        SystemAccessPrefs.isRootQuickSettingsEnabled(context)
 
-    fun setRootQuickSettingsEnabled(context: Context, enabled: Boolean) {
-        _isRootQuickSettingsEnabled.value = enabled
-        getPrefs(context).edit().putBoolean(KEY_ROOT_QUICK_SETTINGS_ENABLED, enabled).apply()
-    }
+    fun setRootQuickSettingsEnabled(context: Context, enabled: Boolean) =
+        SystemAccessPrefs.setRootQuickSettingsEnabled(context, enabled)
 
     /** Root options start visible only when a su binary is present. */
-    fun defaultShowRootOptions(suPresent: Boolean): Boolean = suPresent
+    fun defaultShowRootOptions(suPresent: Boolean): Boolean =
+        SystemAccessPrefs.defaultShowRootOptions(suPresent)
 
     fun isShowRootOptions(
         context: Context,
         suPresent: Boolean = one.crinklecod.mochibun.core.system.RootShell.isSuBinaryPresent()
-    ): Boolean = getPrefs(context).getBoolean(KEY_SHOW_ROOT_OPTIONS, defaultShowRootOptions(suPresent))
+    ): Boolean =
+        SystemAccessPrefs.isShowRootOptions(context, suPresent)
 
-    fun setShowRootOptions(context: Context, show: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_SHOW_ROOT_OPTIONS, show).apply()
-        _showRootOptions.value = show
-    }
+    fun setShowRootOptions(context: Context, show: Boolean) =
+        SystemAccessPrefs.setShowRootOptions(context, show)
 
     /**
      * Root's hall-switch reader or the LSPosed key hook already resets the UI on a real flip
      * close, so the screen-off reset defaults on only when neither is around.
      */
-    fun defaultNonRootScreenOffReset(lidDetectionActive: Boolean): Boolean = !lidDetectionActive
+    fun defaultNonRootScreenOffReset(lidDetectionActive: Boolean): Boolean =
+        SystemAccessPrefs.defaultNonRootScreenOffReset(lidDetectionActive)
 
     /** True when root (hall-switch reader) or the LSPosed key hook can see the flip close. */
     fun isLidDetectionActive(context: Context): Boolean =
-        one.crinklecod.mochibun.core.system.RootShell.isSuBinaryPresent() ||
-            one.crinklecod.mochibun.core.system.KeyHookStatus.isActive(context)
+        SystemAccessPrefs.isLidDetectionActive(context)
 
     /** [lidDetectionActive] overrides the device probe (tests); it is only consulted while unset. */
-    fun isNonRootScreenOffResetEnabled(context: Context, lidDetectionActive: Boolean? = null): Boolean {
-        val prefs = getPrefs(context)
-        if (prefs.contains(KEY_NON_ROOT_SCREEN_OFF_RESET)) {
-            return prefs.getBoolean(KEY_NON_ROOT_SCREEN_OFF_RESET, true)
-        }
-        return defaultNonRootScreenOffReset(lidDetectionActive ?: isLidDetectionActive(context))
-    }
+    fun isNonRootScreenOffResetEnabled(context: Context, lidDetectionActive: Boolean? = null): Boolean =
+        SystemAccessPrefs.isNonRootScreenOffResetEnabled(context, lidDetectionActive)
 
-    fun setNonRootScreenOffResetEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_NON_ROOT_SCREEN_OFF_RESET, enabled).apply()
-    }
+    fun setNonRootScreenOffResetEnabled(context: Context, enabled: Boolean) =
+        SystemAccessPrefs.setNonRootScreenOffResetEnabled(context, enabled)
 
     fun isKeyHookEnabled(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_HOOK_KEY_ENABLED, DEFAULT_HOOK_KEY_ENABLED)
+        SystemAccessPrefs.isKeyHookEnabled(context)
 
-    fun setKeyHookEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_HOOK_KEY_ENABLED, enabled).apply()
-    }
+    fun setKeyHookEnabled(context: Context, enabled: Boolean) =
+        SystemAccessPrefs.setKeyHookEnabled(context, enabled)
 
     fun isSystemUiHookEnabled(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_HOOK_SYSUI_ENABLED, DEFAULT_HOOK_SYSUI_ENABLED)
+        SystemAccessPrefs.isSystemUiHookEnabled(context)
 
-    fun setSystemUiHookEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_HOOK_SYSUI_ENABLED, enabled).apply()
-    }
+    fun setSystemUiHookEnabled(context: Context, enabled: Boolean) =
+        SystemAccessPrefs.setSystemUiHookEnabled(context, enabled)
 
-    fun isCursorWatchdogEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_CURSOR_WATCHDOG_ENABLED, DEFAULT_CURSOR_WATCHDOG_ENABLED)
-    }
+    fun isCursorWatchdogEnabled(context: Context): Boolean =
+        SystemAccessPrefs.isCursorWatchdogEnabled(context)
 
     /** How long a keypad key must be held in MochibunImeService to type its digit. */
     fun getImeHoldDelayMs(context: Context): Int =
-        getPrefs(context).getInt(KEY_IME_HOLD_DELAY_MS, DEFAULT_IME_HOLD_DELAY_MS)
-            .coerceIn(MIN_IME_HOLD_DELAY_MS, MAX_IME_HOLD_DELAY_MS)
+        HardwareInputPrefs.getImeHoldDelayMs(context)
 
-    fun setImeHoldDelayMs(context: Context, delayMs: Int) {
-        getPrefs(context).edit()
-            .putInt(KEY_IME_HOLD_DELAY_MS, delayMs.coerceIn(MIN_IME_HOLD_DELAY_MS, MAX_IME_HOLD_DELAY_MS))
-            .apply()
-    }
+    fun setImeHoldDelayMs(context: Context, delayMs: Int) =
+        HardwareInputPrefs.setImeHoldDelayMs(context, delayMs)
 
     /** Idle time after which MochibunImeService commits a pending multi-tap letter. */
     fun getImeIdleCommitMs(context: Context): Int =
-        getPrefs(context).getInt(KEY_IME_IDLE_COMMIT_MS, DEFAULT_IME_IDLE_COMMIT_MS)
-            .coerceIn(MIN_IME_IDLE_COMMIT_MS, MAX_IME_IDLE_COMMIT_MS)
+        HardwareInputPrefs.getImeIdleCommitMs(context)
 
     /** Next auto-commit delay one [STEP_IME_IDLE_COMMIT_MS] notch in [direction] (-1 / +1), clamped. */
     fun stepImeIdleCommitMs(currentMs: Int, direction: Int): Int =
-        (currentMs + direction * STEP_IME_IDLE_COMMIT_MS)
-            .coerceIn(MIN_IME_IDLE_COMMIT_MS, MAX_IME_IDLE_COMMIT_MS)
+        HardwareInputPrefs.stepImeIdleCommitMs(currentMs, direction)
 
-    fun setImeIdleCommitMs(context: Context, delayMs: Int) {
-        getPrefs(context).edit()
-            .putInt(KEY_IME_IDLE_COMMIT_MS, delayMs.coerceIn(MIN_IME_IDLE_COMMIT_MS, MAX_IME_IDLE_COMMIT_MS))
-            .apply()
-    }
+    fun setImeIdleCommitMs(context: Context, delayMs: Int) =
+        HardwareInputPrefs.setImeIdleCommitMs(context, delayMs)
 
     /** Short vibration when a held key in MochibunImeService types its digit. */
     fun isImeHoldVibrationEnabled(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_IME_HOLD_VIBRATION, DEFAULT_IME_HOLD_VIBRATION)
+        HardwareInputPrefs.isImeHoldVibrationEnabled(context)
 
     fun isImeHoldForDigitEnabled(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_IME_HOLD_FOR_DIGIT_ENABLED, DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED)
+        HardwareInputPrefs.isImeHoldForDigitEnabled(context)
 
-    fun setImeHoldForDigitEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_IME_HOLD_FOR_DIGIT_ENABLED, enabled).apply()
-    }
+    fun setImeHoldForDigitEnabled(context: Context, enabled: Boolean) =
+        HardwareInputPrefs.setImeHoldForDigitEnabled(context, enabled)
 
     fun isImeAutoCommitEnabled(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_IME_AUTO_COMMIT_ENABLED, DEFAULT_IME_AUTO_COMMIT_ENABLED)
+        HardwareInputPrefs.isImeAutoCommitEnabled(context)
 
-    fun setImeAutoCommitEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_IME_AUTO_COMMIT_ENABLED, enabled).apply()
-    }
+    fun setImeAutoCommitEnabled(context: Context, enabled: Boolean) =
+        HardwareInputPrefs.setImeAutoCommitEnabled(context, enabled)
 
-    fun setImeHoldVibrationEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_IME_HOLD_VIBRATION, enabled).apply()
-    }
+    fun setImeHoldVibrationEnabled(context: Context, enabled: Boolean) =
+        HardwareInputPrefs.setImeHoldVibrationEnabled(context, enabled)
 
     fun isSoftKeyNavEnabled(context: Context): Boolean =
-        if (initialized) {
-            _isSoftKeyNavEnabled.value
-        } else {
-            getPrefs(context).getBoolean(KEY_SOFT_KEY_NAV_ENABLED, DEFAULT_SOFT_KEY_NAV_ENABLED)
-        }
+        HardwareInputPrefs.isSoftKeyNavEnabled(context)
 
-    fun setSoftKeyNavEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_SOFT_KEY_NAV_ENABLED, enabled).apply()
-        _isSoftKeyNavEnabled.value = enabled
-        syncSoftKeyNavToGlobal(context)
-    }
+    fun setSoftKeyNavEnabled(context: Context, enabled: Boolean) =
+        HardwareInputPrefs.setSoftKeyNavEnabled(context, enabled)
 
     /**
      * Mirrors the Soft-Key Navigation pref into Settings.Global for MochibunKeyHook. Writes only
      * when the stored global differs. Tries a direct write first (works once WRITE_SECURE_SETTINGS
      * is granted), then falls back to root. Without either, the in-app handler still honours the pref.
      */
-    fun syncSoftKeyNavToGlobal(context: Context) {
-        mirrorIntToGlobal(context, GLOBAL_SOFT_KEY_NAV_ENABLED, if (isSoftKeyNavEnabled(context)) 1 else 0, 1)
-    }
+    fun syncSoftKeyNavToGlobal(context: Context) =
+        HardwareInputPrefs.syncSoftKeyNavToGlobal(context)
 
     /**
      * Writes [value] to Settings.Global [name] for MochibunKeyHook, only when it differs from the
      * stored value ([defaultValue] when unset). Direct write first (needs WRITE_SECURE_SETTINGS),
      * then root. Without either the hook keeps reading [defaultValue].
      */
-    internal fun mirrorIntToGlobal(context: Context, name: String, value: Int, defaultValue: Int) {
-        val resolver = context.contentResolver
-        val current = try {
-            android.provider.Settings.Global.getInt(resolver, name, defaultValue)
-        } catch (_: Exception) {
-            Int.MIN_VALUE
-        }
-        if (current == value) return
-        val written = try {
-            android.provider.Settings.Global.putInt(resolver, name, value)
-        } catch (_: SecurityException) {
-            false
-        }
-        if (!written) {
-            one.crinklecod.mochibun.core.system.RootShell.submit("settings put global $name $value")
-        }
-    }
+    internal fun mirrorIntToGlobal(context: Context, name: String, value: Int, defaultValue: Int) =
+        HardwareInputPrefs.mirrorIntToGlobal(context, name, value, defaultValue)
 }

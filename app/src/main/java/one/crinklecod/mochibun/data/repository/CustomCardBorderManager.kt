@@ -8,8 +8,10 @@ import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -445,12 +447,30 @@ object CustomCardBorderManager {
 }
 
 /**
- * Remembers the single app-wide [CustomCardBorderFrame] when a custom 9-slice `card_border.png` is active,
- * or `null` when procedural borders should be rendered.
+ * Immutable snapshot of the active card border configuration, hoisted once per composition tree
+ * via [LocalCardBorderState] so individual cards and containers do not attach duplicate
+ * `StateFlow` collectors or `produceState` coroutines.
+ */
+@Immutable
+data class CardBorderThemeState(
+    val style: CardBorderStyle = CardBorderStyle.SOLID,
+    val source: CustomCardBorderSource = CustomCardBorderSource.None,
+    val frame: CustomCardBorderFrame? = null
+) {
+    val hasCustomBorder: Boolean
+        get() = frame != null || source is CustomCardBorderSource.Custom
+}
+
+val LocalCardBorderState = compositionLocalOf<CardBorderThemeState?> { null }
+
+/**
+ * Collects [CustomCardBorderManager.activeBorderStyle], [CustomCardBorderManager.source], and
+ * resolves the single shared [CustomCardBorderFrame] once at a composition root.
  */
 @Composable
-fun rememberCustomCardBorderFrame(): CustomCardBorderFrame? {
+fun rememberLiveCardBorderState(): CardBorderThemeState {
     val context = LocalContext.current
+    val style by CustomCardBorderManager.activeBorderStyle.collectAsState()
     val source by CustomCardBorderManager.source.collectAsState()
     val frame by produceState(CustomCardBorderManager.cachedFrame(source), source) {
         value = if (source is CustomCardBorderSource.Custom) {
@@ -459,5 +479,27 @@ fun rememberCustomCardBorderFrame(): CustomCardBorderFrame? {
             null
         }
     }
-    return if (source is CustomCardBorderSource.Custom) frame else null
+    val activeFrame = if (source is CustomCardBorderSource.Custom) frame else null
+    return remember(style, source, activeFrame) {
+        CardBorderThemeState(
+            style = style,
+            source = source,
+            frame = activeFrame
+        )
+    }
 }
+
+/**
+ * Reads the hoisted [CardBorderThemeState] from [LocalCardBorderState] when provided, or
+ * falls back to [rememberLiveCardBorderState] for standalone composition trees (e.g. previews).
+ */
+@Composable
+fun currentCardBorderState(): CardBorderThemeState =
+    LocalCardBorderState.current ?: rememberLiveCardBorderState()
+
+/**
+ * Remembers the single app-wide [CustomCardBorderFrame] when a custom 9-slice `card_border.png` is active,
+ * or `null` when procedural borders should be rendered.
+ */
+@Composable
+fun rememberCustomCardBorderFrame(): CustomCardBorderFrame? = currentCardBorderState().frame

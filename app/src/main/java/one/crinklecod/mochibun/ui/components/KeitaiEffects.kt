@@ -11,17 +11,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * 4-frame stepped keitai mascot bob (0px -> 1px -> 2px -> 1px), driven by a shared stepped clock
@@ -73,25 +80,75 @@ fun rememberKeitaiStep(
  * doesn't skip it. The progress is read only in the graphics layer, so each step redraws the layer
  * without recomposing the dialog.
  */
-fun Modifier.curtainUnfurl(visible: Boolean): Modifier = composed {
-    val progress = remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(visible) {
-        val from = progress.floatValue
-        val target = if (visible) 1f else 0f
-        for (step in 1..CURTAIN_STEPS) {
-            delay(CURTAIN_STEP_MS)
-            withFrameNanos { progress.floatValue = from + (target - from) * step / CURTAIN_STEPS }
+fun Modifier.curtainUnfurl(visible: Boolean): Modifier = this
+    .clip(RectangleShape)
+    .then(CurtainUnfurlElement(visible))
+
+private data class CurtainUnfurlElement(val visible: Boolean) : ModifierNodeElement<CurtainUnfurlNode>() {
+    override fun create() = CurtainUnfurlNode(visible)
+    override fun update(node: CurtainUnfurlNode) = node.update(visible)
+}
+
+/**
+ * [Modifier.Node] form of the curtain (no `composed` subcomposition per modal): the blinds steps run
+ * in the node's coroutine scope and the progress is read only inside the layer block.
+ */
+private class CurtainUnfurlNode(private var visible: Boolean) : Modifier.Node(), LayoutModifierNode {
+
+    private val progress = mutableFloatStateOf(0f)
+    private var unfurlJob: Job? = null
+
+    private val layerBlock: GraphicsLayerScope.() -> Unit = {
+        scaleY = progress.floatValue
+        transformOrigin = CURTAIN_ORIGIN
+    }
+
+    // Visibility changes animate via the layer state; nothing to re-measure.
+    override val shouldAutoInvalidate: Boolean get() = false
+
+    override fun onAttach() {
+        // Equivalent to the first LaunchedEffect(visible) run: starts rolled up and unrolls.
+        if (progress.floatValue != targetProgress()) launchUnfurl()
+    }
+
+    override fun onDetach() {
+        unfurlJob = null
+    }
+
+    override fun onReset() {
+        // Recycled nodes start rolled up again, like a freshly remembered state would.
+        progress.floatValue = 0f
+    }
+
+    fun update(visible: Boolean) {
+        if (this.visible == visible) return
+        this.visible = visible
+        if (isAttached) launchUnfurl()
+    }
+
+    private fun targetProgress(): Float = if (visible) 1f else 0f
+
+    private fun launchUnfurl() {
+        unfurlJob?.cancel()
+        unfurlJob = coroutineScope.launch {
+            val from = progress.floatValue
+            val target = targetProgress()
+            for (step in 1..CURTAIN_STEPS) {
+                delay(CURTAIN_STEP_MS)
+                withFrameNanos { progress.floatValue = from + (target - from) * step / CURTAIN_STEPS }
+            }
         }
     }
 
-    this
-        .clip(RectangleShape)
-        .graphicsLayer {
-            scaleY = progress.floatValue
-            transformOrigin = TransformOrigin(0.5f, 0f)
+    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+        val placeable = measurable.measure(constraints)
+        return layout(placeable.width, placeable.height) {
+            placeable.placeWithLayer(0, 0, layerBlock = layerBlock)
         }
+    }
 }
 
+private val CURTAIN_ORIGIN = TransformOrigin(0.5f, 0f)
 private const val CURTAIN_STEPS = 5
 private const val CURTAIN_STEP_MS = 28L
 

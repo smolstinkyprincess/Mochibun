@@ -57,19 +57,25 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private var launchCounts by mutableStateOf<Map<String, Int>>(emptyMap())
 
     val visibleApps by derivedStateOf {
-        val filtered = if (hiddenPackages.isEmpty()) {
-            apps
+        val currentApps = apps
+        val hidden = hiddenPackages
+        val filtered = if (hidden.isEmpty()) {
+            currentApps
         } else {
-            apps.filter { it.packageName !in hiddenPackages }
+            currentApps.filter { it.packageName !in hidden }
         }
         when (appDrawerSortMode) {
-            AppDrawerSortMode.ALPHABETICAL -> filtered.sortedBy { it.lowercaseName }
+            // apps is already sorted by lowercaseName in loadApps() and preserved by populateInstallTimes()
+            AppDrawerSortMode.ALPHABETICAL -> filtered
             AppDrawerSortMode.NEWEST -> filtered.sortedWith(
                 compareByDescending<LauncherApp> { it.installTime }.thenBy { it.lowercaseName }
             )
-            AppDrawerSortMode.MOST_USED -> filtered.sortedWith(
-                compareByDescending<LauncherApp> { launchCounts[it.packageName] ?: 0 }.thenBy { it.lowercaseName }
-            )
+            AppDrawerSortMode.MOST_USED -> {
+                val counts = launchCounts
+                filtered.sortedWith(
+                    compareByDescending<LauncherApp> { counts[it.packageName] ?: 0 }.thenBy { it.lowercaseName }
+                )
+            }
         }
     }
 
@@ -195,11 +201,30 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private var installTimesLoaded = false
+
     // ── App Discovery & Two-Phase Loading ─────────────────────────────────────
     fun cycleAppDrawerSortMode(): AppDrawerSortMode {
         val nextMode = appDrawerSortMode.next()
         appDrawerSortMode = nextMode
         PreferencesManager.setAppDrawerSortMode(context, nextMode)
+        if (nextMode == AppDrawerSortMode.NEWEST && !installTimesLoaded && apps.isNotEmpty()) {
+            val snapshot = apps
+            viewModelScope.launch {
+                val prefs = PreferencesManager.getPrefs(context)
+                val updated = withContext(Dispatchers.IO) {
+                    IconPackManager.populateInstallTimes(context, prefs, snapshot)
+                }
+                if (apps === snapshot) {
+                    apps = updated
+                } else if (apps.isNotEmpty()) {
+                    apps = withContext(Dispatchers.IO) {
+                        IconPackManager.populateInstallTimes(context, prefs, apps)
+                    }
+                }
+                installTimesLoaded = true
+            }
+        }
         return nextMode
     }
 
@@ -233,11 +258,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun loadApps() {
-        appDrawerSortMode = PreferencesManager.getAppDrawerSortMode(context)
+        val sortMode = PreferencesManager.getAppDrawerSortMode(context)
+        appDrawerSortMode = sortMode
+        val needInstallTime = sortMode == AppDrawerSortMode.NEWEST
         viewModelScope.launch {
-            launchCounts = withContext(Dispatchers.IO) {
-                loadLaunchCounts()
-            }
             val prefs = PreferencesManager.getPrefs(context)
 
             // Fast favorites loader for instant home screen render
@@ -255,27 +279,33 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                             IconPackManager.getOrLoadLauncherApp(
                                 context = context,
                                 preferences = prefs,
-                                resolveInfo = resolveInfo
+                                resolveInfo = resolveInfo,
+                                includeInstallTime = false
                             )
                         }
                 }
                 earlyFavoriteApps = fastFavs
             }
 
-            // Full app drawer list query
-            val loadedApps = withContext(Dispatchers.IO) {
+            // Full app drawer list query (+ launch counts for MOST_USED sorting)
+            val (loadedCounts, loadedApps) = withContext(Dispatchers.IO) {
+                val counts = loadLaunchCounts()
                 IconPackManager.getActiveParsedPack(context)
-                context.packageManager
+                val list = context.packageManager
                     .queryIntentActivities(launcherIntent, 0)
                     .map { resolveInfo ->
                         IconPackManager.getOrLoadLauncherApp(
                             context = context,
                             preferences = prefs,
-                            resolveInfo = resolveInfo
+                            resolveInfo = resolveInfo,
+                            includeInstallTime = needInstallTime
                         )
                     }
                     .sortedBy { it.lowercaseName }
+                counts to list
             }
+            launchCounts = loadedCounts
+            installTimesLoaded = needInstallTime
             apps = loadedApps
             val compacted = loadedApps.count { it.iconBitmap.config == Bitmap.Config.RGB_565 }
             Log.d(TAG, "Drawer loaded: ${loadedApps.size} icons, $compacted compacted to RGB_565")

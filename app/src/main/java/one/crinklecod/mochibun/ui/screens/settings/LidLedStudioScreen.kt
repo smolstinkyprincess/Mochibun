@@ -375,7 +375,7 @@ private fun LidLedLibrary(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
+            item(contentType = "led_studio_action_row") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     StudioChip(
                         label = "+ Create New",
@@ -391,7 +391,7 @@ private fun LidLedLibrary(
                     )
                 }
             }
-            item {
+            item(contentType = "led_studio_packs_chip") {
                 StudioChip(
                     label = "Get more .mochibunled packs ♡",
                     isFocused = focusedRow == 1,
@@ -404,7 +404,7 @@ private fun LidLedLibrary(
                     }
                 )
             }
-            item {
+            item(contentType = "led_animation_card") {
                 AnimationCard(
                     title = "Classic Keitai Light",
                     subtitle = "Shimmer / solid • Outer LED Color",
@@ -422,7 +422,12 @@ private fun LidLedLibrary(
                     }
                 )
             }
-            itemsIndexed(animations, key = { _, anim -> anim.id }) { index, anim ->
+            itemsIndexed(
+                animations,
+                key = { _, anim -> anim.id },
+                // Same AnimationCard as the "Classic" item above, so their slots can be reused.
+                contentType = { _, _ -> "led_animation_card" }
+            ) { index, anim ->
                 val firstRow = 3 + index * 2
                 val cardFocused = animIndexOf(focusedRow) == index
                 val builtIn = LidLedAnimationRepository.isBuiltIn(anim.id)

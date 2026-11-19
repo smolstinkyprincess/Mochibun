@@ -191,7 +191,7 @@ internal fun AppearanceSettingsScreen(
     }
 
     LaunchedEffect(Unit) {
-        TypographyManager.scanFonts(context)
+        TypographyManager.scanFontsAsync(context)
     }
 
     LaunchedEffect(targetCardIndex) {
@@ -394,7 +394,7 @@ internal fun AppearanceSettingsScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
+            item(contentType = "appearance_theme_card") {
                 SettingsCard(categoryTitle = "Theme & Palette") {
                     SettingsNavigationRow(
                         title = "Theme Studio",
@@ -487,7 +487,7 @@ internal fun AppearanceSettingsScreen(
                 }
             }
 
-            item {
+            item(contentType = "appearance_greeting_card") {
                 SettingsCard(categoryTitle = "Greeting & Standby") {
                     SettingsTextInputRow(
                         title = "Display Name (Greeting)",
@@ -524,7 +524,7 @@ internal fun AppearanceSettingsScreen(
                 }
             }
 
-            item {
+            item(contentType = "appearance_wallpaper_card") {
                 SettingsCard(categoryTitle = "Wallpaper & Deco") {
                     SettingsNavigationRow(
                         title = "Pick from Gallery",
@@ -600,7 +600,7 @@ internal fun AppearanceSettingsScreen(
                 }
             }
 
-            item {
+            item(contentType = "appearance_widget_deck_card") {
                 SettingsCard(categoryTitle = "Widget Deck") {
                     SettingsToggleRow(
                         title = "System Monitor Card",

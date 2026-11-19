@@ -396,6 +396,12 @@ fun rememberBowBitmap(): ImageBitmap {
     }
 }
 
+/** Drops cached dialog icon and bow bitmaps on critical memory trim; re-decodes on demand. */
+fun clearDialogBitmapCaches() {
+    cachedDialogIconBitmaps.clear()
+    cachedBowBitmap = null
+}
+
 @Composable
 fun PixelRibbonBow(
     modifier: Modifier = Modifier,

@@ -47,24 +47,42 @@ fun drawableToBitmap(
     return bitmap
 }
 
+private const val MAX_COMPACT_SCRATCH_PIXELS = 256 * 256
+private val compactScratchPixels = ThreadLocal<IntArray?>()
+
 /**
  * Re-encodes a fully opaque icon as RGB_565, halving its pixel memory. Icons with any transparency
  * (adaptive-icon corners, most icon pack art) keep ARGB_8888, so nothing gains a black background.
+ *
+ * Uses a thread-local scratch [IntArray] for icon-sized bitmaps to avoid transient array churn
+ * across 80+ app drawer icons.
  */
 fun Bitmap.compactIfOpaque(): Bitmap {
     if (config != Bitmap.Config.ARGB_8888) return this
-    val pixels = IntArray(width * height)
+    val pixelCount = width * height
+    if (pixelCount <= 0) return this
+    val pixels = if (pixelCount <= MAX_COMPACT_SCRATCH_PIXELS) {
+        val existing = compactScratchPixels.get()
+        if (existing != null && existing.size >= pixelCount) {
+            existing
+        } else {
+            IntArray(pixelCount).also { compactScratchPixels.set(it) }
+        }
+    } else {
+        IntArray(pixelCount)
+    }
     getPixels(pixels, 0, width, 0, 0, width, height)
-    if (!isFullyOpaque(pixels)) return this
+    if (!isFullyOpaque(pixels, pixelCount)) return this
     val compact = copy(Bitmap.Config.RGB_565, false) ?: return this
     recycle()
     return compact
 }
 
-internal fun isFullyOpaque(pixels: IntArray): Boolean {
-    if (pixels.isEmpty()) return false
-    for (pixel in pixels) {
-        if (pixel ushr 24 != 0xFF) return false
+internal fun isFullyOpaque(pixels: IntArray, count: Int = pixels.size): Boolean {
+    if (count <= 0 || pixels.isEmpty()) return false
+    val limit = count.coerceAtMost(pixels.size)
+    for (i in 0 until limit) {
+        if (pixels[i] ushr 24 != 0xFF) return false
     }
     return true
 }

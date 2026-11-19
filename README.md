@@ -164,7 +164,12 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 
 > **Other flip phones**: Since v2.2.1 Mochibun installs on Android 8.1+ (`minSdk 27`) devices that support `armeabi-v7a` (32-bit or dual-ABI 64-bit ARM), e.g. Kyocera DIGNO Keitai 3 (`902KC` / `903KC`) or `KYF42`. Note that `arm64`-only phones and x86 emulators cannot install the `armeabi-v7a` APK. These phones are community-untested: AT-M120-only extras (outer lid LEDs, pastel SystemUI hooks) hide or quietly do nothing, and 1 GB RAM phones get a smaller image cache with still GIFs. Pick a **Cursor Toggle Key** in *Settings > Cursor & Hardware* if your phone has no F4 side key.
 
-> **Note on Performance**: Heavy GPU runtime blurs (`Modifier.blur()`) are strictly avoided, so animations stay buttery smooth even on modest flip-phone hardware ♡
+> **Measured Performance on AT-M120 (`v2.4.2` release APK)**:
+> Heavy GPU runtime blurs (`Modifier.blur()`) are strictly avoided, opaque icons compact to `RGB_565`, and background/IME work pauses when hidden. Measured on an actual **ALT Mive Style Folder (AT-M120)** (`1.82 GiB` RAM, Android 12, `MochibunImeService` active as default keyboard):
+> - **Release APK size:** `3.17 MiB` (`3,328,228 B`)
+> - **Home idle memory:** `~107–109 MiB` Total PSS (`~61 MiB` Private Dirty; settles to `~83 MiB` PSS after clean pagecache eviction)
+> - **Post-stress peak memory:** `~93–106 MiB` Total PSS across App Drawer scrolling, sort cycling, T9 search, pager swipes, Settings, and IME Kaomoji Wheel; drops by `~6.8 MiB` immediately on `TRIM_MEMORY_RUNNING_CRITICAL`
+> - **Frame & GPU timings:** `0.00%` jank at Home idle (`10 ms` p50 / `14 ms` p95 CPU; `3 ms` p50 / `4 ms` p95 GPU, `0` missed vsyncs); `5 ms` p95 (`7 ms` p99) GPU time under rapid App Drawer flings (`93 ms` p95 CPU); `899 ms` median warm activity launch (`856–939 ms` over 3 trials)
 
 ---
 

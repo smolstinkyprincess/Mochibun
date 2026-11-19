@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.palette
 import kotlinx.coroutines.Dispatchers
@@ -77,11 +82,14 @@ data class SystemStats(
  */
 object SystemStatsSampler {
     private val WHITESPACE_REGEX = "\\s+".toRegex()
+    private const val PSS_REFRESH_INTERVAL_MS = 10_000L
 
     private var lastProcCpuTimeMs: Long = -1L
     private var lastSampleUptimeMs: Long = -1L
     private var lastSysTotalTicks: Long = -1L
     private var lastSysIdleTicks: Long = -1L
+    private var lastPssSampleUptimeMs: Long = -1L
+    private var lastMochibunPssMb: Long = 0L
 
     init {
         try {
@@ -95,12 +103,16 @@ object SystemStatsSampler {
         } catch (_: Throwable) {}
     }
 
-    fun sample(context: Context): SystemStats {
+    fun sample(context: Context, forcePssRefresh: Boolean = false): SystemStats {
         // --- 1. RAM Sampling ---
         var totalRamMb = 0L
         var usedRamMb = 0L
         var ramPercent = 0f
-        var mochibunPssMb = 0L
+        var mochibunPssMb = lastMochibunPssMb
+        val nowUptime = SystemClock.uptimeMillis()
+        val shouldRefreshPss = forcePssRefresh ||
+            lastPssSampleUptimeMs < 0L ||
+            (nowUptime - lastPssSampleUptimeMs) >= PSS_REFRESH_INTERVAL_MS
 
         try {
             val am = context.getSystemService(ActivityManager::class.java)
@@ -115,21 +127,26 @@ object SystemStatsSampler {
                 (usedRamMb.toFloat() / totalRamMb.toFloat()) * 100f
             } else 0f
 
-            // Mochibun process PSS in MB
-            try {
-                val pssArr = am.getProcessMemoryInfo(intArrayOf(Process.myPid()))
-                val pssKb = pssArr.firstOrNull()?.totalPss ?: 0
-                if (pssKb > 0) {
-                    mochibunPssMb = pssKb / 1024L
-                }
-            } catch (_: Throwable) {}
+            // Mochibun process PSS in MB (throttled to avoid heavy AMS Binder/smaps IPC every tick)
+            if (shouldRefreshPss) {
+                try {
+                    val pssArr = am.getProcessMemoryInfo(intArrayOf(Process.myPid()))
+                    val pssKb = pssArr.firstOrNull()?.totalPss ?: 0
+                    if (pssKb > 0) {
+                        mochibunPssMb = pssKb / 1024L
+                        lastMochibunPssMb = mochibunPssMb
+                        lastPssSampleUptimeMs = nowUptime
+                    }
+                } catch (_: Throwable) {}
+            }
         } catch (_: Throwable) {}
 
         if (mochibunPssMb <= 0L) {
             try {
-                val pssBytes = Debug.getPss()
-                if (pssBytes > 0) {
-                    mochibunPssMb = pssBytes / (1024L * 1024L)
+                // Debug.getPss() returns kilobytes.
+                val pssKb = Debug.getPss()
+                if (pssKb > 0) {
+                    mochibunPssMb = (pssKb / 1024L).coerceAtLeast(1L)
                 }
             } catch (_: Throwable) {}
         }
@@ -140,7 +157,6 @@ object SystemStatsSampler {
 
         // --- 2. CPU Sampling ---
         val nowProcCpu = Process.getElapsedCpuTime()
-        val nowUptime = SystemClock.uptimeMillis()
         val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
 
         var mochibunCpuPercent = 0f
@@ -216,9 +232,11 @@ fun SystemMonitorCard(
     triggerRefreshKey: Int = 0
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
     val cardShape = remember { RoundedCornerShape(22.dp) }
+    val intervalSec by PreferencesManager.systemMonitorInterval.collectAsState()
 
     var stats by remember { mutableStateOf(SystemStats()) }
     var isSparkling by remember { mutableStateOf(false) }
@@ -228,21 +246,24 @@ fun SystemMonitorCard(
         if (triggerRefreshKey > 0) {
             isSparkling = true
             withContext(Dispatchers.IO) {
-                stats = SystemStatsSampler.sample(context)
+                stats = SystemStatsSampler.sample(context, forcePssRefresh = true)
             }
             delay(1200)
             isSparkling = false
         }
     }
 
-    // Low-overhead background sampling coroutine, runs strictly when active on page 0
-    LaunchedEffect(isActivePage) {
+    // Lifecycle-scoped background sampling coroutine, runs only while STARTED on page 0
+    LaunchedEffect(isActivePage, intervalSec, lifecycleOwner) {
         if (!isActivePage) return@LaunchedEffect
-        withContext(Dispatchers.IO) {
-            stats = SystemStatsSampler.sample(context)
-            while (isActive) {
-                delay(2800)
-                stats = SystemStatsSampler.sample(context)
+        val intervalMs = intervalSec.coerceIn(1, 60) * 1000L
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            withContext(Dispatchers.IO) {
+                stats = SystemStatsSampler.sample(context, forcePssRefresh = stats.totalRamMb == 0L)
+                while (isActive) {
+                    delay(intervalMs)
+                    stats = SystemStatsSampler.sample(context)
+                }
             }
         }
     }

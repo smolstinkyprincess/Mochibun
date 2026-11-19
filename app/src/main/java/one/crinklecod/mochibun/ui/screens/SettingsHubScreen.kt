@@ -299,7 +299,7 @@ private fun SettingsHubRootScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
+            item(contentType = "settings_hub_nav_card") {
                 SettingsCard(categoryTitle = "Look & Aesthetic") {
                     SettingsNavigationRow(
                         title = "Appearance",
@@ -312,7 +312,7 @@ private fun SettingsHubRootScreen(
                 }
             }
 
-            item {
+            item(contentType = "settings_hub_nav_card") {
                 SettingsCard(categoryTitle = "Typing") {
                     SettingsNavigationRow(
                         title = "Keyboard",
@@ -325,7 +325,7 @@ private fun SettingsHubRootScreen(
                 }
             }
 
-            item {
+            item(contentType = "settings_hub_nav_card") {
                 SettingsCard(categoryTitle = "Pointer & Controls") {
                     SettingsNavigationRow(
                         title = "Virtual Cursor",
@@ -338,7 +338,7 @@ private fun SettingsHubRootScreen(
                 }
             }
 
-            item {
+            item(contentType = "settings_hub_nav_card") {
                 SettingsCard(categoryTitle = "Sound & Feedback") {
                     SettingsNavigationRow(
                         title = "Sound & Feedback",
@@ -351,7 +351,7 @@ private fun SettingsHubRootScreen(
                 }
             }
 
-            item {
+            item(contentType = "settings_hub_nav_card") {
                 SettingsCard(categoryTitle = "Layout & Features") {
                     SettingsNavigationRow(
                         title = "Behavior",
@@ -364,7 +364,7 @@ private fun SettingsHubRootScreen(
                 }
             }
 
-            item {
+            item(contentType = "settings_hub_nav_card") {
                 SettingsCard(categoryTitle = "Permissions & Superuser") {
                     SettingsNavigationRow(
                         title = "Permissions & Root",
@@ -377,7 +377,7 @@ private fun SettingsHubRootScreen(
                 }
             }
 
-            item {
+            item(contentType = "settings_hub_nav_card") {
                 SettingsCard(categoryTitle = "Data & Storage") {
                     SettingsNavigationRow(
                         title = "Backup & Restore",
@@ -390,7 +390,7 @@ private fun SettingsHubRootScreen(
                 }
             }
 
-            item {
+            item(contentType = "settings_hub_nav_card") {
                 SettingsCard(categoryTitle = "System & Specs") {
                     SettingsNavigationRow(
                         title = "About Mochibun",

@@ -6,8 +6,12 @@ import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.model.MascotAtlasValidator
 import one.crinklecod.mochibun.data.model.YamlTheme
 import one.crinklecod.mochibun.data.model.toLauncherTheme
+import one.crinklecod.mochibun.data.repository.CardBorderSpec
+import one.crinklecod.mochibun.data.repository.CardBorderThemeState
 import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
+import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -119,6 +123,24 @@ class CustomCardBorderTest {
         val parsedDefault = yaml.decodeFromString(YamlTheme.serializer(), defaultYaml)
         assertEquals("solid", parsedDefault.resolvedBorderStyle())
         assertEquals("solid", parsedDefault.toLauncherTheme().borderStyle)
+    }
+
+    @Test
+    fun cardBorderThemeState_hasCustomBorderReflectsSourceAndFrame() {
+        val defaultState = CardBorderThemeState()
+        assertFalse(defaultState.hasCustomBorder)
+
+        val customSource = CustomCardBorderSource.Custom(
+            file = File("custom_card_border.png"),
+            spec = CardBorderSpec(width = 48, height = 48, slicePx = 16),
+            version = 1L
+        )
+        val customState = CardBorderThemeState(
+            style = CardBorderStyle.LACE,
+            source = customSource,
+            frame = null
+        )
+        assertTrue(customState.hasCustomBorder)
     }
 
     private fun assertNull(value: Any?) {

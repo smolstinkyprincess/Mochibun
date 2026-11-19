@@ -20,7 +20,11 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import one.crinklecod.mochibun.core.util.findActivity
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.LocalCardBorderState
 import one.crinklecod.mochibun.data.repository.TypographyManager
+import one.crinklecod.mochibun.data.repository.rememberLiveCardBorderState
+import one.crinklecod.mochibun.ui.components.LocalCloudDriftPx
+import one.crinklecod.mochibun.ui.components.rememberLiveCloudDriftPx
 
 // Baseline pastel pink palette used across launcher surfaces and interactive cards
 private val PinkColorScheme = lightColorScheme(
@@ -46,12 +50,16 @@ fun MochibunTheme(
     content: @Composable () -> Unit
 ) {
     val fontId by PreferencesManager.themeFontFamily.collectAsState()
-    val resolvedFontFamily = remember(fontId) {
+    val fontOptions by TypographyManager.options.collectAsState()
+    val resolvedFontFamily = remember(fontId, fontOptions) {
         TypographyManager.resolveFontFamily(fontId)
     }
     val typography = remember(resolvedFontFamily) {
         getLauncherTypography(resolvedFontFamily)
     }
+
+    val cardBorderState = rememberLiveCardBorderState()
+    val cloudDriftPx = rememberLiveCloudDriftPx()
 
     val view = LocalView.current
 
@@ -66,7 +74,9 @@ fun MochibunTheme(
 
     CompositionLocalProvider(
         LocalLauncherFontFamily provides resolvedFontFamily,
-        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = resolvedFontFamily)
+        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = resolvedFontFamily),
+        LocalCardBorderState provides cardBorderState,
+        LocalCloudDriftPx provides cloudDriftPx
     ) {
         MaterialTheme(
             colorScheme = PinkColorScheme,

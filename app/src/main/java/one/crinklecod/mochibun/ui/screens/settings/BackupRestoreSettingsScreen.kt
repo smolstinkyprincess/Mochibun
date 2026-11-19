@@ -280,7 +280,7 @@ internal fun BackupRestoreSettingsScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
+            item(contentType = "backup_bundle_card") {
                 SettingsCard(categoryTitle = "Share & Theme Presets") {
                     SettingsNavigationRow(
                         title = "Export Setup Bundle (.mochibundle)",
@@ -306,7 +306,7 @@ internal fun BackupRestoreSettingsScreen(
                 }
             }
 
-            item {
+            item(contentType = "backup_full_card") {
                 SettingsCard(categoryTitle = "Full System Backup") {
                     SettingsNavigationRow(
                         title = "Export Full Backup",
@@ -332,7 +332,7 @@ internal fun BackupRestoreSettingsScreen(
                 }
             }
 
-            item {
+            item(contentType = "backup_factory_reset_card") {
                 SettingsCard(categoryTitle = "Factory Reset") {
                     SettingsNavigationRow(
                         title = "Reset to Factory Defaults",

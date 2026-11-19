@@ -4,7 +4,6 @@ import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.drawable.Drawable
 import android.provider.Settings
 import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
@@ -13,6 +12,7 @@ import android.util.LruCache
 import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import one.crinklecod.mochibun.core.util.compactIfOpaque
 import one.crinklecod.mochibun.core.util.drawableToBitmap
 import one.crinklecod.mochibun.data.model.MochibunNotificationItem
 import one.crinklecod.mochibun.service.MochibunNotificationListenerService
@@ -52,7 +52,6 @@ object NotificationTracker {
 
     private data class CachedAppMeta(
         val name: String,
-        val icon: Drawable?,
         val iconBitmap: ImageBitmap?
     )
 
@@ -195,7 +194,7 @@ object NotificationTracker {
             text = text,
             postTime = sbn.postTime,
             contentIntent = sbn.notification.contentIntent,
-            appIcon = meta.icon,
+            appIcon = null,
             isIncomingCall = isIncomingCall(sbn.notification),
             appIconBitmap = meta.iconBitmap
         )
@@ -218,13 +217,13 @@ object NotificationTracker {
             val label = pm.getApplicationLabel(appInfo).toString()
             val drawable = pm.getApplicationIcon(appInfo)
             val bitmap = try {
-                drawableToBitmap(drawable, 48).asImageBitmap()
+                drawableToBitmap(drawable, 48).compactIfOpaque().asImageBitmap()
             } catch (_: Exception) {
                 null
             }
-            CachedAppMeta(label, drawable, bitmap)
+            CachedAppMeta(label, bitmap)
         } catch (_: Exception) {
-            CachedAppMeta(packageName, null, null)
+            CachedAppMeta(packageName, null)
         }
         appMetadataCache.put(packageName, result)
         return result

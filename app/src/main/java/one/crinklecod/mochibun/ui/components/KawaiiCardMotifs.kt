@@ -1,30 +1,40 @@
 package one.crinklecod.mochibun.ui.components
 
 import kotlinx.coroutines.launch
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
+import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.currentValueOf
+import androidx.compose.ui.node.requireDensity
+import androidx.compose.ui.node.requireLayoutCoordinates
+import androidx.compose.ui.relocation.bringIntoView
+import androidx.compose.ui.unit.Constraints
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
+import one.crinklecod.mochibun.data.repository.LocalCardBorderState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import one.crinklecod.mochibun.core.haptic.HapticManager
 import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.CustomCardBorderFrame
 import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
-import one.crinklecod.mochibun.data.repository.rememberCustomCardBorderFrame
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,13 +48,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -58,6 +70,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -240,11 +253,51 @@ fun headerFlankedCardMotifs(): List<CardMotifSpec> = listOf(
 // Direct Lightweight Canvas Drawing Functions
 // ============================================================================
 
-private val SharedMotifPath = Path()
+// Immutable unit paths (size = 1f, centered at origin) so Skia keeps stable path generation IDs
+// and reuses cached masks across draws instead of invalidating SW Path Mask on reset().
+private val UnitFourPointSparklePath = Path().apply {
+    val half = 0.5f
+    moveTo(0f, -half)
+    quadraticTo(0f, 0f, half, 0f)
+    quadraticTo(0f, 0f, 0f, half)
+    quadraticTo(0f, 0f, -half, 0f)
+    quadraticTo(0f, 0f, 0f, -half)
+    close()
+}
 
-// Motifs are drawn on the main thread only, so like SharedMotifPath a single cached Stroke is
-// safe to share. It is only rebuilt when a caller asks for a different width (rare: widths are
-// a handful of fixed dp values), so steady-state drawing allocates nothing.
+private val UnitDiamondGlintPath = Path().apply {
+    val halfH = 0.5f
+    val halfW = 0.32f
+    moveTo(0f, -halfH)
+    lineTo(halfW, 0f)
+    lineTo(0f, halfH)
+    lineTo(-halfW, 0f)
+    close()
+}
+
+private val UnitMiniHeartPath = Path().apply {
+    moveTo(0f, 0.38f)
+    cubicTo(-0.52f, -0.12f, -0.52f, -0.52f, 0f, -0.18f)
+    cubicTo(0.52f, -0.52f, 0.52f, -0.12f, 0f, 0.38f)
+    close()
+}
+
+private val UnitStarletPath = Path().apply {
+    val outerR = 0.5f
+    val innerR = outerR * 0.42f
+    val angleOffset = -PI.toFloat() / 2f
+    val step = PI.toFloat() / 5f
+    for (i in 0 until 10) {
+        val r = if (i % 2 == 0) outerR else innerR
+        val angle = angleOffset + i * step
+        val x = r * cos(angle)
+        val y = r * sin(angle)
+        if (i == 0) moveTo(x, y) else lineTo(x, y)
+    }
+    close()
+}
+
+// Motifs are drawn on the main thread only, so a single cached Stroke is safe to share.
 private var cachedMotifStroke = Stroke(width = 1.2f)
 
 private fun motifStroke(widthPx: Float): Stroke {
@@ -262,20 +315,16 @@ fun DrawScope.drawFourPointSparkle(
     hollow: Boolean = false,
     strokeWidthPx: Float = 1.2f
 ) {
-    val half = sizePx * 0.5f
-    val path = SharedMotifPath.apply {
-        reset()
-        moveTo(center.x, center.y - half)
-        quadraticTo(center.x, center.y, center.x + half, center.y)
-        quadraticTo(center.x, center.y, center.x, center.y + half)
-        quadraticTo(center.x, center.y, center.x - half, center.y)
-        quadraticTo(center.x, center.y, center.x, center.y - half)
-        close()
-    }
-    if (hollow) {
-        drawPath(path, color, style = motifStroke(strokeWidthPx))
-    } else {
-        drawPath(path, color, style = Fill)
+    if (sizePx <= 0f) return
+    withTransform({
+        translate(center.x, center.y)
+        scale(sizePx, sizePx, Offset.Zero)
+    }) {
+        if (hollow) {
+            drawPath(UnitFourPointSparklePath, color, style = motifStroke(strokeWidthPx / sizePx))
+        } else {
+            drawPath(UnitFourPointSparklePath, color, style = Fill)
+        }
     }
 }
 
@@ -288,17 +337,13 @@ fun DrawScope.drawDiamondGlint(
     color: Color,
     strokeWidthPx: Float = 1.0f
 ) {
-    val halfH = sizePx * 0.5f
-    val halfW = sizePx * 0.32f
-    val diamondPath = SharedMotifPath.apply {
-        reset()
-        moveTo(center.x, center.y - halfH)
-        lineTo(center.x + halfW, center.y)
-        lineTo(center.x, center.y + halfH)
-        lineTo(center.x - halfW, center.y)
-        close()
+    if (sizePx <= 0f) return
+    withTransform({
+        translate(center.x, center.y)
+        scale(sizePx, sizePx, Offset.Zero)
+    }) {
+        drawPath(UnitDiamondGlintPath, color, style = Fill)
     }
-    drawPath(diamondPath, color, style = Fill)
 
     val arm = sizePx * 0.65f
     drawLine(
@@ -325,27 +370,16 @@ fun DrawScope.drawMiniHeart(
     hollow: Boolean = true,
     strokeWidthPx: Float = 1.2f
 ) {
-    val w = sizePx
-    val h = sizePx
-    val path = SharedMotifPath.apply {
-        reset()
-        moveTo(center.x, center.y + h * 0.38f)
-        cubicTo(
-            center.x - w * 0.52f, center.y - h * 0.12f,
-            center.x - w * 0.52f, center.y - h * 0.52f,
-            center.x, center.y - h * 0.18f
-        )
-        cubicTo(
-            center.x + w * 0.52f, center.y - h * 0.52f,
-            center.x + w * 0.52f, center.y - h * 0.12f,
-            center.x, center.y + h * 0.38f
-        )
-        close()
-    }
-    if (hollow) {
-        drawPath(path, color, style = motifStroke(strokeWidthPx))
-    } else {
-        drawPath(path, color, style = Fill)
+    if (sizePx <= 0f) return
+    withTransform({
+        translate(center.x, center.y)
+        scale(sizePx, sizePx, Offset.Zero)
+    }) {
+        if (hollow) {
+            drawPath(UnitMiniHeartPath, color, style = motifStroke(strokeWidthPx / sizePx))
+        } else {
+            drawPath(UnitMiniHeartPath, color, style = Fill)
+        }
     }
 }
 
@@ -359,25 +393,16 @@ fun DrawScope.drawStarlet(
     hollow: Boolean = false,
     strokeWidthPx: Float = 1.2f
 ) {
-    val outerR = sizePx * 0.5f
-    val innerR = outerR * 0.42f
-    val path = SharedMotifPath.apply { reset() }
-    val angleOffset = -PI.toFloat() / 2f
-    val step = PI.toFloat() / 5f
-
-    for (i in 0 until 10) {
-        val r = if (i % 2 == 0) outerR else innerR
-        val angle = angleOffset + i * step
-        val x = center.x + r * cos(angle)
-        val y = center.y + r * sin(angle)
-        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-    }
-    path.close()
-
-    if (hollow) {
-        drawPath(path, color, style = motifStroke(strokeWidthPx))
-    } else {
-        drawPath(path, color, style = Fill)
+    if (sizePx <= 0f) return
+    withTransform({
+        translate(center.x, center.y)
+        scale(sizePx, sizePx, Offset.Zero)
+    }) {
+        if (hollow) {
+            drawPath(UnitStarletPath, color, style = motifStroke(strokeWidthPx / sizePx))
+        } else {
+            drawPath(UnitStarletPath, color, style = Fill)
+        }
     }
 }
 
@@ -394,8 +419,12 @@ fun DrawScope.drawStarlet(
  *   or [ActiveTheme.selectionGlow] with luminous alphas (0.35f to 0.75f).
  * - Focus integration: when [isFocused] is true, renders 1–2 tiny sparkle motifs
  *   gently accentuating the outer glow halo without overwhelming the selection border.
- * - Hardware friendly: executed via [drawBehind] using direct Canvas paths without GPU blur
+ * - Hardware friendly: drawn behind the content using direct Canvas paths without GPU blur
  *   or bitmap overhead.
+ *
+ * Implemented as a [Modifier.Node] (not `composed`) so each card skips a per-modifier
+ * subcomposition; theme tokens are read via [currentValueOf] inside draw, which Compose observes
+ * so a live theme switch still redraws the motifs.
  */
 fun Modifier.kawaiiCardMotifs(
     isFocused: Boolean = false,
@@ -404,83 +433,132 @@ fun Modifier.kawaiiCardMotifs(
     accentColor: Color? = null,
     primaryColor: Color? = null,
     glowColor: Color? = null
-): Modifier = composed {
-    val effectiveAccent = accentColor ?: ActiveTheme.accentDeep
-    val effectivePrimary = primaryColor ?: ActiveTheme.primary
-    val effectiveGlow = glowColor ?: ActiveTheme.selectionGlow
+): Modifier = this
+    .graphicsLayer { clip = false }
+    .then(
+        KawaiiCardMotifsElement(
+            isFocused = isFocused,
+            cornerRadius = cornerRadius,
+            motifs = motifs,
+            accentColor = accentColor,
+            primaryColor = primaryColor,
+            glowColor = glowColor
+        )
+    )
 
-    this
-        .graphicsLayer { clip = false }
-        .drawBehind {
-            val w = size.width
-            val h = size.height
-            val r = cornerRadius.toPx()
+private data class KawaiiCardMotifsElement(
+    val isFocused: Boolean,
+    val cornerRadius: Dp,
+    val motifs: List<CardMotifSpec>,
+    val accentColor: Color?,
+    val primaryColor: Color?,
+    val glowColor: Color?
+) : ModifierNodeElement<KawaiiCardMotifsNode>() {
+    override fun create() = KawaiiCardMotifsNode(
+        isFocused, cornerRadius, motifs, accentColor, primaryColor, glowColor
+    )
 
-            // 1. Draw static boundary motifs (restrained, delicate accents)
-            motifs.forEach { motif ->
-                val sizePx = motif.sizeDp.toPx()
-                val offXPx = motif.offsetXDp.toPx()
-                val offYPx = motif.offsetYDp.toPx()
+    // Draw nodes auto-invalidate on update, so only the fields need refreshing.
+    override fun update(node: KawaiiCardMotifsNode) {
+        node.isFocused = isFocused
+        node.cornerRadius = cornerRadius
+        node.motifs = motifs
+        node.accentColor = accentColor
+        node.primaryColor = primaryColor
+        node.glowColor = glowColor
+    }
+}
 
-                val baseCenter = when (motif.anchor) {
-                    CardMotifAnchor.TOP_LEFT -> Offset(r * 0.45f + offXPx, offYPx)
-                    CardMotifAnchor.TOP_RIGHT -> Offset(w - r * 0.45f + offXPx, offYPx)
-                    CardMotifAnchor.BOTTOM_LEFT -> Offset(r * 0.45f + offXPx, h + offYPx)
-                    CardMotifAnchor.BOTTOM_RIGHT -> Offset(w - r * 0.45f + offXPx, h + offYPx)
-                    CardMotifAnchor.HEADER_LEFT -> Offset(r + offXPx, 14.dp.toPx() + offYPx)
-                    CardMotifAnchor.HEADER_RIGHT -> Offset(w - r + offXPx, 14.dp.toPx() + offYPx)
-                    CardMotifAnchor.CUSTOM -> Offset(offXPx, offYPx)
-                }
+private class KawaiiCardMotifsNode(
+    var isFocused: Boolean,
+    var cornerRadius: Dp,
+    var motifs: List<CardMotifSpec>,
+    var accentColor: Color?,
+    var primaryColor: Color?,
+    var glowColor: Color?
+) : Modifier.Node(), DrawModifierNode, CompositionLocalConsumerModifierNode {
 
-                val motifColor = when (motif.type) {
-                    KawaiiMotifType.SPARKLE_FOUR_POINT_FILLED -> effectivePrimary
-                    KawaiiMotifType.SPARKLE_FOUR_POINT_HOLLOW -> effectiveGlow
-                    KawaiiMotifType.DIAMOND_GLINT -> effectivePrimary
-                    KawaiiMotifType.MINI_HEART_OUTLINE -> effectiveAccent
-                    KawaiiMotifType.MINI_HEART_FILLED -> effectivePrimary
-                    KawaiiMotifType.STARLET_FILLED -> effectivePrimary
-                    KawaiiMotifType.STARLET_HOLLOW -> effectiveAccent
-                }.copy(alpha = motif.alpha)
+    override fun ContentDrawScope.draw() {
+        val palette = currentValueOf(LocalLauncherTheme).palette
+        val effectiveAccent = accentColor ?: palette.deepAccent
+        val effectivePrimary = primaryColor ?: palette.primary
+        val effectiveGlow = glowColor ?: palette.selectionGlow
 
-                when (motif.type) {
-                    KawaiiMotifType.SPARKLE_FOUR_POINT_FILLED ->
-                        drawFourPointSparkle(baseCenter, sizePx, motifColor, hollow = false)
-                    KawaiiMotifType.SPARKLE_FOUR_POINT_HOLLOW ->
-                        drawFourPointSparkle(baseCenter, sizePx, motifColor, hollow = true, strokeWidthPx = 1.1.dp.toPx())
-                    KawaiiMotifType.DIAMOND_GLINT ->
-                        drawDiamondGlint(baseCenter, sizePx, motifColor, strokeWidthPx = 1.0.dp.toPx())
-                    KawaiiMotifType.MINI_HEART_OUTLINE ->
-                        drawMiniHeart(baseCenter, sizePx, motifColor, hollow = true, strokeWidthPx = 1.1.dp.toPx())
-                    KawaiiMotifType.MINI_HEART_FILLED ->
-                        drawMiniHeart(baseCenter, sizePx, motifColor, hollow = false)
-                    KawaiiMotifType.STARLET_FILLED ->
-                        drawStarlet(baseCenter, sizePx, motifColor, hollow = false)
-                    KawaiiMotifType.STARLET_HOLLOW ->
-                        drawStarlet(baseCenter, sizePx, motifColor, hollow = true, strokeWidthPx = 1.1.dp.toPx())
-                }
+        val w = size.width
+        val h = size.height
+        val r = cornerRadius.toPx()
+
+        // 1. Draw static boundary motifs (restrained, delicate accents).
+        // Indexed loop: no Iterator allocation per frame.
+        val specs = motifs
+        for (i in specs.indices) {
+            val motif = specs[i]
+            val sizePx = motif.sizeDp.toPx()
+            val offXPx = motif.offsetXDp.toPx()
+            val offYPx = motif.offsetYDp.toPx()
+
+            val baseCenter = when (motif.anchor) {
+                CardMotifAnchor.TOP_LEFT -> Offset(r * 0.45f + offXPx, offYPx)
+                CardMotifAnchor.TOP_RIGHT -> Offset(w - r * 0.45f + offXPx, offYPx)
+                CardMotifAnchor.BOTTOM_LEFT -> Offset(r * 0.45f + offXPx, h + offYPx)
+                CardMotifAnchor.BOTTOM_RIGHT -> Offset(w - r * 0.45f + offXPx, h + offYPx)
+                CardMotifAnchor.HEADER_LEFT -> Offset(r + offXPx, 14.dp.toPx() + offYPx)
+                CardMotifAnchor.HEADER_RIGHT -> Offset(w - r + offXPx, 14.dp.toPx() + offYPx)
+                CardMotifAnchor.CUSTOM -> Offset(offXPx, offYPx)
             }
 
-            // 2. Focus Integration: 1–2 tiny sparkle motifs gently accentuating the outer glow halo
-            if (isFocused) {
-                // Top-right outer halo sparkle
-                val focusSparkleTopRight = Offset(w + 1.5.dp.toPx(), -2.dp.toPx())
-                drawFourPointSparkle(
-                    center = focusSparkleTopRight,
-                    sizePx = 7.5.dp.toPx(),
-                    color = effectiveGlow.copy(alpha = 0.85f),
-                    hollow = false
-                )
+            val motifColor = when (motif.type) {
+                KawaiiMotifType.SPARKLE_FOUR_POINT_FILLED -> effectivePrimary
+                KawaiiMotifType.SPARKLE_FOUR_POINT_HOLLOW -> effectiveGlow
+                KawaiiMotifType.DIAMOND_GLINT -> effectivePrimary
+                KawaiiMotifType.MINI_HEART_OUTLINE -> effectiveAccent
+                KawaiiMotifType.MINI_HEART_FILLED -> effectivePrimary
+                KawaiiMotifType.STARLET_FILLED -> effectivePrimary
+                KawaiiMotifType.STARLET_HOLLOW -> effectiveAccent
+            }.copy(alpha = motif.alpha)
 
-                // Bottom-left outer halo diamond glint
-                val focusGlintBottomLeft = Offset(-2.dp.toPx(), h + 2.dp.toPx())
-                drawDiamondGlint(
-                    center = focusGlintBottomLeft,
-                    sizePx = 6.0.dp.toPx(),
-                    color = effectiveGlow.copy(alpha = 0.75f),
-                    strokeWidthPx = 1.0.dp.toPx()
-                )
+            when (motif.type) {
+                KawaiiMotifType.SPARKLE_FOUR_POINT_FILLED ->
+                    drawFourPointSparkle(baseCenter, sizePx, motifColor, hollow = false)
+                KawaiiMotifType.SPARKLE_FOUR_POINT_HOLLOW ->
+                    drawFourPointSparkle(baseCenter, sizePx, motifColor, hollow = true, strokeWidthPx = 1.1.dp.toPx())
+                KawaiiMotifType.DIAMOND_GLINT ->
+                    drawDiamondGlint(baseCenter, sizePx, motifColor, strokeWidthPx = 1.0.dp.toPx())
+                KawaiiMotifType.MINI_HEART_OUTLINE ->
+                    drawMiniHeart(baseCenter, sizePx, motifColor, hollow = true, strokeWidthPx = 1.1.dp.toPx())
+                KawaiiMotifType.MINI_HEART_FILLED ->
+                    drawMiniHeart(baseCenter, sizePx, motifColor, hollow = false)
+                KawaiiMotifType.STARLET_FILLED ->
+                    drawStarlet(baseCenter, sizePx, motifColor, hollow = false)
+                KawaiiMotifType.STARLET_HOLLOW ->
+                    drawStarlet(baseCenter, sizePx, motifColor, hollow = true, strokeWidthPx = 1.1.dp.toPx())
             }
         }
+
+        // 2. Focus Integration: 1–2 tiny sparkle motifs gently accentuating the outer glow halo
+        if (isFocused) {
+            // Top-right outer halo sparkle
+            val focusSparkleTopRight = Offset(w + 1.5.dp.toPx(), -2.dp.toPx())
+            drawFourPointSparkle(
+                center = focusSparkleTopRight,
+                sizePx = 7.5.dp.toPx(),
+                color = effectiveGlow.copy(alpha = 0.85f),
+                hollow = false
+            )
+
+            // Bottom-left outer halo diamond glint
+            val focusGlintBottomLeft = Offset(-2.dp.toPx(), h + 2.dp.toPx())
+            drawDiamondGlint(
+                center = focusGlintBottomLeft,
+                sizePx = 6.0.dp.toPx(),
+                color = effectiveGlow.copy(alpha = 0.75f),
+                strokeWidthPx = 1.0.dp.toPx()
+            )
+        }
+
+        // Motifs sit behind the card (same order as the former drawBehind).
+        drawContent()
+    }
 }
 
 // ============================================================================
@@ -690,8 +768,10 @@ internal class NineSliceDestGeometry(
  * 2. **5 Procedural Border Styles** ([CardBorderStyle]: `SOLID`, `DOUBLE`, `LACE`, `STITCH`, `PIXEL`)
  *    when no custom 9-slice PNG is active.
  *
- * All `Stroke`, `Path`, `PathEffect`, and `IntOffset`/`IntSize` objects are precomputed in
- * `drawWithCache` so zero allocations occur inside the per-frame draw lambda.
+ * Implemented as a [Modifier.Node] (not `composed`) so each bordered card skips a per-modifier
+ * subcomposition. All `Stroke`, `Path`, `PathEffect`, and `IntOffset`/`IntSize` objects are
+ * precomputed into a cached draw plan that is rebuilt only when the size, density, resolved
+ * color, style, or 9-slice frame changes, so zero allocations occur on ordinary frames.
  */
 fun Modifier.mochibunCardBorder(
     cornerRadius: Dp = 22.dp,
@@ -699,215 +779,329 @@ fun Modifier.mochibunCardBorder(
     borderWidth: Dp = 1.5.dp,
     allowCustomNineSlice: Boolean = true,
     styleOverride: CardBorderStyle? = null
-): Modifier = composed {
-    val resolvedColor = if (borderColor != Color.Unspecified) borderColor else ActiveTheme.cardBorder
-    val activeStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
-    val resolvedStyle = styleOverride ?: activeStyle
-    val customFrame = if (allowCustomNineSlice) rememberCustomCardBorderFrame() else null
+): Modifier = this
+    .graphicsLayer { clip = false }
+    .then(
+        MochibunCardBorderElement(
+            cornerRadius = cornerRadius,
+            borderColor = borderColor,
+            borderWidth = borderWidth,
+            allowCustomNineSlice = allowCustomNineSlice,
+            styleOverride = styleOverride
+        )
+    )
 
-    this
-        .graphicsLayer { clip = false }
-        .drawWithCache {
-            val w = size.width
-            val h = size.height
-            val maxRadius = min(w, h) / 2f
-            val r = cornerRadius.toPx().coerceIn(0f, maxRadius)
+private data class MochibunCardBorderElement(
+    val cornerRadius: Dp,
+    val borderColor: Color,
+    val borderWidth: Dp,
+    val allowCustomNineSlice: Boolean,
+    val styleOverride: CardBorderStyle?
+) : ModifierNodeElement<MochibunCardBorderNode>() {
+    override fun create() = MochibunCardBorderNode(
+        cornerRadius, borderColor, borderWidth, allowCustomNineSlice, styleOverride
+    )
 
-            if (customFrame != null && w >= 4f && h >= 4f) {
-                val nineSlice = NineSliceDestGeometry(
-                    frame = customFrame,
-                    leftPx = 0,
-                    topPx = 0,
-                    widthPx = w.roundToInt(),
-                    heightPx = h.roundToInt()
+    override fun update(node: MochibunCardBorderNode) {
+        node.cornerRadius = cornerRadius
+        node.borderColor = borderColor
+        node.borderWidth = borderWidth
+        node.allowCustomNineSlice = allowCustomNineSlice
+        node.styleOverride = styleOverride
+        // Geometry depends on radius/width; the draw itself is auto-invalidated on update.
+        node.invalidatePlan()
+    }
+}
+
+private class MochibunCardBorderNode(
+    var cornerRadius: Dp,
+    var borderColor: Color,
+    var borderWidth: Dp,
+    var allowCustomNineSlice: Boolean,
+    var styleOverride: CardBorderStyle?
+) : Modifier.Node(), DrawModifierNode, CompositionLocalConsumerModifierNode {
+
+    private var plan: (DrawScope.() -> Unit)? = null
+    private var planWidth = 0f
+    private var planHeight = 0f
+    private var planDensity = 0f
+    private var planColor = Color.Unspecified
+    private var planStyle: CardBorderStyle? = null
+    private var planFrame: CustomCardBorderFrame? = null
+
+    fun invalidatePlan() {
+        plan = null
+    }
+
+    override fun onReset() {
+        plan = null
+        planFrame = null
+    }
+
+    override fun ContentDrawScope.draw() {
+        // currentValueOf reads inside draw are snapshot-observed, so a theme or border swap
+        // invalidates this draw just like the former composed{} recomposition did.
+        val resolvedColor = if (borderColor != Color.Unspecified) {
+            borderColor
+        } else {
+            currentValueOf(LocalLauncherTheme).palette.outline
+        }
+        val borderState = currentValueOf(LocalCardBorderState)
+        // Every Mochibun composition root (MochibunTheme, IME, Recents) provides
+        // LocalCardBorderState; the manager snapshot only covers bare trees such as previews.
+        val resolvedStyle = styleOverride
+            ?: borderState?.style
+            ?: CustomCardBorderManager.activeBorderStyle.value
+        val customFrame = if (!allowCustomNineSlice) {
+            null
+        } else if (borderState != null) {
+            borderState.frame
+        } else {
+            CustomCardBorderManager.source.value.let { source ->
+                if (source is CustomCardBorderSource.Custom) CustomCardBorderManager.cachedFrame(source) else null
+            }
+        }
+
+        val w = size.width
+        val h = size.height
+        var drawPlan = plan
+        if (
+            drawPlan == null ||
+            w != planWidth ||
+            h != planHeight ||
+            density != planDensity ||
+            resolvedColor != planColor ||
+            resolvedStyle != planStyle ||
+            customFrame !== planFrame
+        ) {
+            drawPlan = buildCardBorderPlan(
+                w = w,
+                h = h,
+                cornerRadius = cornerRadius,
+                borderWidth = borderWidth,
+                resolvedColor = resolvedColor,
+                resolvedStyle = resolvedStyle,
+                customFrame = customFrame
+            )
+            plan = drawPlan
+            planWidth = w
+            planHeight = h
+            planDensity = density
+            planColor = resolvedColor
+            planStyle = resolvedStyle
+            planFrame = customFrame
+        }
+
+        drawContent()
+        drawPlan()
+    }
+}
+
+/**
+ * Precomputes every geometry object for one border configuration and returns the zero-allocation
+ * draw block (the equivalent of a `drawWithCache` build pass).
+ */
+private fun DrawScope.buildCardBorderPlan(
+    w: Float,
+    h: Float,
+    cornerRadius: Dp,
+    borderWidth: Dp,
+    resolvedColor: Color,
+    resolvedStyle: CardBorderStyle,
+    customFrame: CustomCardBorderFrame?
+): DrawScope.() -> Unit {
+    val maxRadius = min(w, h) / 2f
+    val r = cornerRadius.toPx().coerceIn(0f, maxRadius)
+
+    if (customFrame != null && w >= 4f && h >= 4f) {
+        val nineSlice = NineSliceDestGeometry(
+            frame = customFrame,
+            leftPx = 0,
+            topPx = 0,
+            widthPx = w.roundToInt(),
+            heightPx = h.roundToInt()
+        )
+        return borderPlan { nineSlice.draw(this, customFrame) }
+    }
+
+    return when (resolvedStyle) {
+        CardBorderStyle.SOLID -> {
+            val strokePx = borderWidth.toPx()
+            val half = strokePx / 2f
+            val topLeft = Offset(half, half)
+            val rectSize = Size((w - strokePx).coerceAtLeast(0f), (h - strokePx).coerceAtLeast(0f))
+            val corner = CornerRadius((r - half).coerceAtLeast(0f))
+            val stroke = Stroke(width = strokePx)
+            borderPlan {
+                drawRoundRect(
+                    color = resolvedColor,
+                    topLeft = topLeft,
+                    size = rectSize,
+                    cornerRadius = corner,
+                    style = stroke
                 )
-                onDrawWithContent {
-                    drawContent()
-                    nineSlice.draw(this, customFrame)
-                }
-            } else {
-                when (resolvedStyle) {
-                    CardBorderStyle.SOLID -> {
-                        val strokePx = borderWidth.toPx()
-                        val half = strokePx / 2f
-                        val topLeft = Offset(half, half)
-                        val rectSize = Size((w - strokePx).coerceAtLeast(0f), (h - strokePx).coerceAtLeast(0f))
-                        val corner = CornerRadius((r - half).coerceAtLeast(0f))
-                        val stroke = Stroke(width = strokePx)
-                        onDrawWithContent {
-                            drawContent()
-                            drawRoundRect(
-                                color = resolvedColor,
-                                topLeft = topLeft,
-                                size = rectSize,
-                                cornerRadius = corner,
-                                style = stroke
-                            )
-                        }
-                    }
+            }
+        }
 
-                    CardBorderStyle.DOUBLE -> {
-                        val outerStrokePx = 1.5.dp.toPx()
-                        val innerStrokePx = 1.0.dp.toPx()
-                        val outerHalf = outerStrokePx / 2f
-                        val innerInset = 3.5.dp.toPx()
+        CardBorderStyle.DOUBLE -> {
+            val outerStrokePx = 1.5.dp.toPx()
+            val innerStrokePx = 1.0.dp.toPx()
+            val outerHalf = outerStrokePx / 2f
+            val innerInset = 3.5.dp.toPx()
 
-                        val outerTopLeft = Offset(outerHalf, outerHalf)
-                        val outerSize = Size(
-                            (w - outerStrokePx).coerceAtLeast(0f),
-                            (h - outerStrokePx).coerceAtLeast(0f)
-                        )
-                        val outerCorner = CornerRadius((r - outerHalf).coerceAtLeast(0f))
-                        val outerStroke = Stroke(width = outerStrokePx)
+            val outerTopLeft = Offset(outerHalf, outerHalf)
+            val outerSize = Size(
+                (w - outerStrokePx).coerceAtLeast(0f),
+                (h - outerStrokePx).coerceAtLeast(0f)
+            )
+            val outerCorner = CornerRadius((r - outerHalf).coerceAtLeast(0f))
+            val outerStroke = Stroke(width = outerStrokePx)
 
-                        val innerTopLeft = Offset(innerInset, innerInset)
-                        val innerSize = Size(
-                            (w - innerInset * 2f).coerceAtLeast(0f),
-                            (h - innerInset * 2f).coerceAtLeast(0f)
-                        )
-                        val innerCorner = CornerRadius((r - innerInset).coerceAtLeast(0f))
-                        val innerStroke = Stroke(width = innerStrokePx)
-                        val innerColor = resolvedColor.copy(alpha = (resolvedColor.alpha * 0.72f).coerceIn(0f, 1f))
+            val innerTopLeft = Offset(innerInset, innerInset)
+            val innerSize = Size(
+                (w - innerInset * 2f).coerceAtLeast(0f),
+                (h - innerInset * 2f).coerceAtLeast(0f)
+            )
+            val innerCorner = CornerRadius((r - innerInset).coerceAtLeast(0f))
+            val innerStroke = Stroke(width = innerStrokePx)
+            val innerColor = resolvedColor.copy(alpha = (resolvedColor.alpha * 0.72f).coerceIn(0f, 1f))
 
-                        onDrawWithContent {
-                            drawContent()
-                            drawRoundRect(
-                                color = resolvedColor,
-                                topLeft = outerTopLeft,
-                                size = outerSize,
-                                cornerRadius = outerCorner,
-                                style = outerStroke
-                            )
-                            if (innerSize.width > 0f && innerSize.height > 0f) {
-                                drawRoundRect(
-                                    color = innerColor,
-                                    topLeft = innerTopLeft,
-                                    size = innerSize,
-                                    cornerRadius = innerCorner,
-                                    style = innerStroke
-                                )
-                            }
-                        }
-                    }
-
-                    CardBorderStyle.LACE -> {
-                        val baseStrokePx = 1.2.dp.toPx()
-                        val scallopStrokePx = 1.1.dp.toPx()
-                        val half = baseStrokePx / 2f
-                        val baseTopLeft = Offset(half, half)
-                        val baseSize = Size((w - baseStrokePx).coerceAtLeast(0f), (h - baseStrokePx).coerceAtLeast(0f))
-                        val baseCorner = CornerRadius((r - half).coerceAtLeast(0f))
-                        val baseStroke = Stroke(width = baseStrokePx)
-                        val scallopStroke = Stroke(
-                            width = scallopStrokePx,
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
-                        )
-                        val lacePath = buildLaceBorderPath(
-                            inset = half,
-                            width = w,
-                            height = h,
-                            cornerRadiusPx = (r - half).coerceAtLeast(0f),
-                            scallopRadiusPx = 3.dp.toPx(),
-                            scallopStepPx = 6.dp.toPx()
-                        )
-                        val laceColor = resolvedColor.copy(alpha = (resolvedColor.alpha * 0.85f).coerceIn(0f, 1f))
-                        onDrawWithContent {
-                            drawContent()
-                            drawPath(
-                                path = lacePath,
-                                color = laceColor,
-                                style = scallopStroke
-                            )
-                            drawRoundRect(
-                                color = resolvedColor,
-                                topLeft = baseTopLeft,
-                                size = baseSize,
-                                cornerRadius = baseCorner,
-                                style = baseStroke
-                            )
-                        }
-                    }
-
-                    CardBorderStyle.STITCH -> {
-                        val outerStrokePx = 1.0.dp.toPx()
-                        val outerHalf = outerStrokePx / 2f
-                        val outerTopLeft = Offset(outerHalf, outerHalf)
-                        val outerSize = Size(
-                            (w - outerStrokePx).coerceAtLeast(0f),
-                            (h - outerStrokePx).coerceAtLeast(0f)
-                        )
-                        val outerCorner = CornerRadius((r - outerHalf).coerceAtLeast(0f))
-                        val outerStroke = Stroke(width = outerStrokePx)
-                        val outerColor = resolvedColor.copy(alpha = (resolvedColor.alpha * 0.55f).coerceIn(0f, 1f))
-
-                        val stitchInset = 3.dp.toPx()
-                        val stitchStrokePx = 1.35.dp.toPx()
-                        val stitchTopLeft = Offset(stitchInset, stitchInset)
-                        val stitchSize = Size(
-                            (w - stitchInset * 2f).coerceAtLeast(0f),
-                            (h - stitchInset * 2f).coerceAtLeast(0f)
-                        )
-                        val stitchCorner = CornerRadius((r - stitchInset).coerceAtLeast(0f))
-                        val dashEffect = PathEffect.dashPathEffect(
-                            intervals = floatArrayOf(5.dp.toPx(), 3.dp.toPx()),
-                            phase = 0f
-                        )
-                        val stitchStroke = Stroke(
-                            width = stitchStrokePx,
-                            cap = StrokeCap.Round,
-                            pathEffect = dashEffect
-                        )
-
-                        onDrawWithContent {
-                            drawContent()
-                            drawRoundRect(
-                                color = outerColor,
-                                topLeft = outerTopLeft,
-                                size = outerSize,
-                                cornerRadius = outerCorner,
-                                style = outerStroke
-                            )
-                            if (stitchSize.width > 0f && stitchSize.height > 0f) {
-                                drawRoundRect(
-                                    color = resolvedColor,
-                                    topLeft = stitchTopLeft,
-                                    size = stitchSize,
-                                    cornerRadius = stitchCorner,
-                                    style = stitchStroke
-                                )
-                            }
-                        }
-                    }
-
-                    CardBorderStyle.PIXEL -> {
-                        val stepPx = 2.dp.toPx().coerceAtLeast(1f)
-                        val half = stepPx / 2f
-                        val pixelPath = buildPixelBorderPath(
-                            left = half,
-                            top = half,
-                            right = w - half,
-                            bottom = h - half,
-                            stepPx = stepPx
-                        )
-                        val pixelStroke = Stroke(
-                            width = stepPx,
-                            cap = StrokeCap.Butt,
-                            join = StrokeJoin.Miter
-                        )
-                        onDrawWithContent {
-                            drawContent()
-                            drawPath(
-                                path = pixelPath,
-                                color = resolvedColor,
-                                style = pixelStroke
-                            )
-                        }
-                    }
+            borderPlan {
+                drawRoundRect(
+                    color = resolvedColor,
+                    topLeft = outerTopLeft,
+                    size = outerSize,
+                    cornerRadius = outerCorner,
+                    style = outerStroke
+                )
+                if (innerSize.width > 0f && innerSize.height > 0f) {
+                    drawRoundRect(
+                        color = innerColor,
+                        topLeft = innerTopLeft,
+                        size = innerSize,
+                        cornerRadius = innerCorner,
+                        style = innerStroke
+                    )
                 }
             }
         }
+
+        CardBorderStyle.LACE -> {
+            val baseStrokePx = 1.2.dp.toPx()
+            val scallopStrokePx = 1.1.dp.toPx()
+            val half = baseStrokePx / 2f
+            val baseTopLeft = Offset(half, half)
+            val baseSize = Size((w - baseStrokePx).coerceAtLeast(0f), (h - baseStrokePx).coerceAtLeast(0f))
+            val baseCorner = CornerRadius((r - half).coerceAtLeast(0f))
+            val baseStroke = Stroke(width = baseStrokePx)
+            val scallopStroke = Stroke(
+                width = scallopStrokePx,
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round
+            )
+            val lacePath = buildLaceBorderPath(
+                inset = half,
+                width = w,
+                height = h,
+                cornerRadiusPx = (r - half).coerceAtLeast(0f),
+                scallopRadiusPx = 3.dp.toPx(),
+                scallopStepPx = 6.dp.toPx()
+            )
+            val laceColor = resolvedColor.copy(alpha = (resolvedColor.alpha * 0.85f).coerceIn(0f, 1f))
+            borderPlan {
+                drawPath(
+                    path = lacePath,
+                    color = laceColor,
+                    style = scallopStroke
+                )
+                drawRoundRect(
+                    color = resolvedColor,
+                    topLeft = baseTopLeft,
+                    size = baseSize,
+                    cornerRadius = baseCorner,
+                    style = baseStroke
+                )
+            }
+        }
+
+        CardBorderStyle.STITCH -> {
+            val outerStrokePx = 1.0.dp.toPx()
+            val outerHalf = outerStrokePx / 2f
+            val outerTopLeft = Offset(outerHalf, outerHalf)
+            val outerSize = Size(
+                (w - outerStrokePx).coerceAtLeast(0f),
+                (h - outerStrokePx).coerceAtLeast(0f)
+            )
+            val outerCorner = CornerRadius((r - outerHalf).coerceAtLeast(0f))
+            val outerStroke = Stroke(width = outerStrokePx)
+            val outerColor = resolvedColor.copy(alpha = (resolvedColor.alpha * 0.55f).coerceIn(0f, 1f))
+
+            val stitchInset = 3.dp.toPx()
+            val stitchStrokePx = 1.35.dp.toPx()
+            val stitchTopLeft = Offset(stitchInset, stitchInset)
+            val stitchSize = Size(
+                (w - stitchInset * 2f).coerceAtLeast(0f),
+                (h - stitchInset * 2f).coerceAtLeast(0f)
+            )
+            val stitchCorner = CornerRadius((r - stitchInset).coerceAtLeast(0f))
+            val dashEffect = PathEffect.dashPathEffect(
+                intervals = floatArrayOf(5.dp.toPx(), 3.dp.toPx()),
+                phase = 0f
+            )
+            val stitchStroke = Stroke(
+                width = stitchStrokePx,
+                cap = StrokeCap.Round,
+                pathEffect = dashEffect
+            )
+
+            borderPlan {
+                drawRoundRect(
+                    color = outerColor,
+                    topLeft = outerTopLeft,
+                    size = outerSize,
+                    cornerRadius = outerCorner,
+                    style = outerStroke
+                )
+                if (stitchSize.width > 0f && stitchSize.height > 0f) {
+                    drawRoundRect(
+                        color = resolvedColor,
+                        topLeft = stitchTopLeft,
+                        size = stitchSize,
+                        cornerRadius = stitchCorner,
+                        style = stitchStroke
+                    )
+                }
+            }
+        }
+
+        CardBorderStyle.PIXEL -> {
+            val stepPx = 2.dp.toPx().coerceAtLeast(1f)
+            val half = stepPx / 2f
+            val pixelPath = buildPixelBorderPath(
+                left = half,
+                top = half,
+                right = w - half,
+                bottom = h - half,
+                stepPx = stepPx
+            )
+            val pixelStroke = Stroke(
+                width = stepPx,
+                cap = StrokeCap.Butt,
+                join = StrokeJoin.Miter
+            )
+            borderPlan {
+                drawPath(
+                    path = pixelPath,
+                    color = resolvedColor,
+                    style = pixelStroke
+                )
+            }
+        }
+    }
 }
+
+/** Names a border draw block; avoids a bare lambda being parsed as the preceding call's trailing lambda. */
+private fun borderPlan(block: DrawScope.() -> Unit): DrawScope.() -> Unit = block
 
 /**
  * Reusable Mochibun Kawaii Card wrapper component.
@@ -947,7 +1141,20 @@ fun KawaiiCard(
 private val GLOW_EXPANSIONS_DP = floatArrayOf(3.5f, 2.4f, 1.4f, 0.6f)
 private val GLOW_ALPHAS = floatArrayOf(0.16f, 0.35f, 0.60f, 0.78f)
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * Mochibun soft pastel focus halo for D-pad selection.
+ *
+ * Built from two [Modifier.Node]s instead of `composed` (no per-item subcomposition, which matters
+ * for long D-pad lists on the MT6761):
+ * 1. A selection-effects node that runs the focus-gain tick haptic, the optional 1.0 → 1.06 → 1.0
+ *    spring pop (applied on a `clip = false` graphics layer around the content), and the optional
+ *    bring-into-view request from its own coroutine scope.
+ * 2. A draw node placed *inside* that layer that paints the unclipped glow passes, tint, outline,
+ *    and halo sparkles, so the halo scales with the pop exactly as before.
+ *
+ * `isSelected` remains the caller-owned selection flag (not a focus listener), preserving each
+ * screen's explicit D-pad focus contract.
+ */
 fun Modifier.softGlowFocus(
     isSelected: Boolean,
     cornerRadius: Dp = 22.dp,
@@ -956,139 +1163,260 @@ fun Modifier.softGlowFocus(
     containerTint: Color? = null,
     // Scroll the focused item into view. Off for fixed overlays (the pet pill): its request
     // would otherwise reach the Home HorizontalPager and flip it to another page.
-    bringIntoView: Boolean = true
-): Modifier = composed {
-    val context = LocalContext.current
-    val scaleAnim = remember { Animatable(1.0f) }
+    bringIntoView: Boolean = true,
+    // Set false in rapid-scroll lists (App Drawer) to avoid multi-frame scale layer invalidation.
+    animateScale: Boolean = true
+): Modifier {
+    // Separate element types so the non-scaling variant adds no layout coordinator or layer.
+    val effects: Modifier = if (animateScale) {
+        SoftGlowScaleEffectsElement(isSelected, bringIntoView)
+    } else {
+        SoftGlowEffectsElement(isSelected, bringIntoView)
+    }
+    return this
+        .then(effects)
+        .then(SoftGlowDrawElement(isSelected, cornerRadius, glowColor, borderColor, containerTint))
+}
 
-    val theme = LocalLauncherTheme.current
-    val effectiveGlow = glowColor ?: theme.selectionGlowColor
-    val effectiveBorder = borderColor ?: theme.cardBorderColor
-    val effectiveTint = containerTint ?: theme.surfaceTint
+private data class SoftGlowEffectsElement(
+    val isSelected: Boolean,
+    val bringIntoView: Boolean
+) : ModifierNodeElement<SoftGlowEffectsNode>() {
+    override fun create() = SoftGlowEffectsNode(isSelected, bringIntoView)
+    override fun update(node: SoftGlowEffectsNode) = node.update(isSelected, bringIntoView)
+}
 
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
-    val localDensity = LocalDensity.current
-    // Built once per density instead of on every focused frame.
-    val glowStroke = remember(localDensity) { Stroke(width = 2.0f * localDensity.density) }
-    val borderStroke = remember(localDensity) { Stroke(width = 1.8f * localDensity.density) }
-    val componentHeight = remember { mutableFloatStateOf(0f) }
+private data class SoftGlowScaleEffectsElement(
+    val isSelected: Boolean,
+    val bringIntoView: Boolean
+) : ModifierNodeElement<SoftGlowScaleEffectsNode>() {
+    override fun create() = SoftGlowScaleEffectsNode(isSelected, bringIntoView)
+    override fun update(node: SoftGlowScaleEffectsNode) = node.update(isSelected, bringIntoView)
+}
 
-    LaunchedEffect(isSelected) {
+/**
+ * Runs the selection side effects that used to live in `LaunchedEffect(isSelected)`: relaunched
+ * whenever [isSelected] flips, cancelled with the node's coroutine scope on detach.
+ */
+private open class SoftGlowEffectsNode(
+    var isSelected: Boolean,
+    var requestBringIntoView: Boolean
+) : Modifier.Node(), CompositionLocalConsumerModifierNode {
+
+    /** Spring pop driver; only the scaling subclass owns one. */
+    open val scaleAnim: Animatable<Float, AnimationVector1D>? get() = null
+
+    private var effectJob: Job? = null
+
+    // Parameter updates never require relayout/redraw here: the layer reads the Animatable.
+    override val shouldAutoInvalidate: Boolean get() = false
+
+    override fun onAttach() {
+        // A fresh LaunchedEffect would only do work when selected (or to settle a stale pop),
+        // so skip launching a coroutine for every unselected list item that attaches.
+        val anim = scaleAnim
+        if (isSelected || (anim != null && anim.value != 1.0f)) launchSelectionEffect()
+    }
+
+    override fun onDetach() {
+        effectJob = null
+    }
+
+    fun update(isSelected: Boolean, bringIntoView: Boolean) {
+        val selectionChanged = this.isSelected != isSelected
+        this.isSelected = isSelected
+        this.requestBringIntoView = bringIntoView
+        if (selectionChanged && isAttached) launchSelectionEffect()
+    }
+
+    private fun launchSelectionEffect() {
+        effectJob?.cancel()
+        effectJob = coroutineScope.launch { runSelectionEffect() }
+    }
+
+    private suspend fun CoroutineScope.runSelectionEffect() {
+        val anim = scaleAnim
         if (isSelected) {
             // Tactile tick haptic on focus gain
-            if (PreferencesManager.isDpadBoundaryHaptics(context)) {
-                HapticManager.vibrateTick(context, fallbackDurationMs = 14)
+            if (PreferencesManager.isDpadBoundaryHaptics.value) {
+                HapticManager.vibrateTick(currentValueOf(LocalContext), fallbackDurationMs = 14)
             }
-            launch {
-                try {
-                    // Keitai focus pop: transient spring scale 1.0f -> 1.06f -> 1.0f
-                    scaleAnim.animateTo(
-                        targetValue = 1.06f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMedium
+            if (anim != null) {
+                launch {
+                    try {
+                        // Keitai focus pop: transient spring scale 1.0f -> 1.06f -> 1.0f
+                        anim.animateTo(
+                            targetValue = 1.06f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            )
                         )
-                    )
-                    scaleAnim.animateTo(
-                        targetValue = 1.0f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMedium
+                        anim.animateTo(
+                            targetValue = 1.0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            )
                         )
-                    )
-                } catch (_: Exception) {
-                    if (scaleAnim.value != 1.0f) scaleAnim.snapTo(1.0f)
+                    } catch (_: Exception) {
+                        if (anim.value != 1.0f) anim.snapTo(1.0f)
+                    }
                 }
             }
-            if (!bringIntoView) return@LaunchedEffect
-            val topMargin = with(localDensity) { 58.dp.toPx() }
-            val bottomMargin = with(localDensity) { 72.dp.toPx() }
-            try {
-                bringIntoViewRequester.bringIntoView(
-                    Rect(
+            if (requestBringIntoView) {
+                try {
+                    val density = requireDensity()
+                    val topMargin = with(density) { 58.dp.toPx() }
+                    val bottomMargin = with(density) { 72.dp.toPx() }
+                    val componentHeight = requireLayoutCoordinates().size.height.toFloat()
+                    val rect = Rect(
                         left = 0f,
                         top = -topMargin,
                         right = 0f,
-                        bottom = componentHeight.floatValue + bottomMargin
+                        bottom = componentHeight + bottomMargin
                     )
-                )
-            } catch (_: Throwable) {
+                    bringIntoView { rect }
+                } catch (_: Throwable) {
+                }
             }
-        } else if (scaleAnim.value != 1.0f) {
-            scaleAnim.snapTo(1.0f)
+        } else if (anim != null && anim.value != 1.0f) {
+            anim.snapTo(1.0f)
         }
     }
+}
 
-    this
-        .onSizeChanged { componentHeight.floatValue = it.height.toFloat() }
-        .bringIntoViewRequester(bringIntoViewRequester)
-        .graphicsLayer {
-            val s = scaleAnim.value
-            scaleX = s
-            scaleY = s
-            clip = false
+/**
+ * Scaling variant: also a [LayoutModifierNode] that places the content on a `clip = false`
+ * graphics layer whose scale reads [scaleAnim], so the pop only updates RenderNode properties
+ * (no re-measure, no re-record), exactly like the former `graphicsLayer {}` block.
+ */
+private class SoftGlowScaleEffectsNode(
+    isSelected: Boolean,
+    bringIntoView: Boolean
+) : SoftGlowEffectsNode(isSelected, bringIntoView), LayoutModifierNode {
+
+    override val scaleAnim: Animatable<Float, AnimationVector1D> = Animatable(1.0f)
+
+    private val layerBlock: GraphicsLayerScope.() -> Unit = {
+        val s = scaleAnim.value
+        scaleX = s
+        scaleY = s
+        clip = false
+    }
+
+    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+        val placeable = measurable.measure(constraints)
+        return layout(placeable.width, placeable.height) {
+            placeable.placeWithLayer(0, 0, layerBlock = layerBlock)
         }
-        .then(
-            if (isSelected) {
-                Modifier.drawWithContent {
-                    val cornerPx = cornerRadius.toPx()
-                    val d = density
+    }
+}
 
-                    // 1. Concentric halo passes extending 0.6dp to 3.5dp beyond the component boundary
-                    for (i in 0 until 4) {
-                        val expansion = GLOW_EXPANSIONS_DP[i] * d
-                        val alpha = GLOW_ALPHAS[i]
-                        drawRoundRect(
-                            color = effectiveGlow.copy(alpha = alpha),
-                            topLeft = Offset(-expansion, -expansion),
-                            size = Size(size.width + expansion * 2f, size.height + expansion * 2f),
-                            cornerRadius = CornerRadius(cornerPx + expansion, cornerPx + expansion),
-                            style = glowStroke
-                        )
-                    }
+private data class SoftGlowDrawElement(
+    val isSelected: Boolean,
+    val cornerRadius: Dp,
+    val glowColor: Color?,
+    val borderColor: Color?,
+    val containerTint: Color?
+) : ModifierNodeElement<SoftGlowDrawNode>() {
+    override fun create() = SoftGlowDrawNode(isSelected, cornerRadius, glowColor, borderColor, containerTint)
 
-                    // 2. Subtle frosted pastel fill over the focused surface
-                    if (effectiveTint != Color.Transparent && effectiveTint.alpha > 0f) {
-                        drawRoundRect(
-                            color = effectiveTint.copy(alpha = 0.35f),
-                            topLeft = Offset.Zero,
-                            size = size,
-                            cornerRadius = CornerRadius(cornerPx, cornerPx)
-                        )
-                    }
+    // Draw nodes auto-invalidate on update.
+    override fun update(node: SoftGlowDrawNode) {
+        node.isSelected = isSelected
+        node.cornerRadius = cornerRadius
+        node.glowColor = glowColor
+        node.borderColor = borderColor
+        node.containerTint = containerTint
+    }
+}
 
-                    // 3. Draw card container content
-                    drawContent()
+private class SoftGlowDrawNode(
+    var isSelected: Boolean,
+    var cornerRadius: Dp,
+    var glowColor: Color?,
+    var borderColor: Color?,
+    var containerTint: Color?
+) : Modifier.Node(), DrawModifierNode, CompositionLocalConsumerModifierNode {
 
-                    // 4. Crisp theme outline stroke defining inner boundary
-                    drawRoundRect(
-                        color = effectiveBorder,
-                        topLeft = Offset.Zero,
-                        size = size,
-                        cornerRadius = CornerRadius(cornerPx, cornerPx),
-                        style = borderStroke
-                    )
+    // Built once per density instead of on every focused frame.
+    private var strokeDensity = 0f
+    private var glowStroke = Stroke(width = 2.0f)
+    private var borderStroke = Stroke(width = 1.8f)
 
-                    // 5. Delicate outer glow halo focus accents (1–2 tiny sparkles)
-                    val focusSparkleTopRight = Offset(size.width + 1.5f * d, -2f * d)
-                    drawFourPointSparkle(
-                        center = focusSparkleTopRight,
-                        sizePx = 7.5f * d,
-                        color = effectiveGlow.copy(alpha = 0.85f),
-                        hollow = false
-                    )
-                    val focusGlintBottomLeft = Offset(-2f * d, size.height + 1.5f * d)
-                    drawDiamondGlint(
-                        center = focusGlintBottomLeft,
-                        sizePx = 6.0f * d,
-                        color = effectiveGlow.copy(alpha = 0.75f),
-                        strokeWidthPx = 1.0f * d
-                    )
-                }
-            } else {
-                Modifier
-            }
+    override fun ContentDrawScope.draw() {
+        if (!isSelected) {
+            drawContent()
+            return
+        }
+
+        val d = density
+        if (d != strokeDensity) {
+            strokeDensity = d
+            glowStroke = Stroke(width = 2.0f * d)
+            borderStroke = Stroke(width = 1.8f * d)
+        }
+
+        // Read in draw (snapshot-observed) so a live theme switch repaints the halo.
+        val theme = currentValueOf(LocalLauncherTheme)
+        val effectiveGlow = glowColor ?: theme.selectionGlowColor
+        val effectiveBorder = borderColor ?: theme.cardBorderColor
+        val effectiveTint = containerTint ?: theme.surfaceTint
+
+        val cornerPx = cornerRadius.toPx()
+
+        // 1. Concentric halo passes extending 0.6dp to 3.5dp beyond the component boundary
+        for (i in 0 until 4) {
+            val expansion = GLOW_EXPANSIONS_DP[i] * d
+            val alpha = GLOW_ALPHAS[i]
+            drawRoundRect(
+                color = effectiveGlow.copy(alpha = alpha),
+                topLeft = Offset(-expansion, -expansion),
+                size = Size(size.width + expansion * 2f, size.height + expansion * 2f),
+                cornerRadius = CornerRadius(cornerPx + expansion, cornerPx + expansion),
+                style = glowStroke
+            )
+        }
+
+        // 2. Subtle frosted pastel fill over the focused surface
+        if (effectiveTint != Color.Transparent && effectiveTint.alpha > 0f) {
+            drawRoundRect(
+                color = effectiveTint.copy(alpha = 0.35f),
+                topLeft = Offset.Zero,
+                size = size,
+                cornerRadius = CornerRadius(cornerPx, cornerPx)
+            )
+        }
+
+        // 3. Draw card container content
+        drawContent()
+
+        // 4. Crisp theme outline stroke defining inner boundary
+        drawRoundRect(
+            color = effectiveBorder,
+            topLeft = Offset.Zero,
+            size = size,
+            cornerRadius = CornerRadius(cornerPx, cornerPx),
+            style = borderStroke
         )
+
+        // 5. Delicate outer glow halo focus accents (1–2 tiny sparkles)
+        val focusSparkleTopRight = Offset(size.width + 1.5f * d, -2f * d)
+        drawFourPointSparkle(
+            center = focusSparkleTopRight,
+            sizePx = 7.5f * d,
+            color = effectiveGlow.copy(alpha = 0.85f),
+            hollow = false
+        )
+        val focusGlintBottomLeft = Offset(-2f * d, size.height + 1.5f * d)
+        drawDiamondGlint(
+            center = focusGlintBottomLeft,
+            sizePx = 6.0f * d,
+            color = effectiveGlow.copy(alpha = 0.75f),
+            strokeWidthPx = 1.0f * d
+        )
+    }
 }
 
 /**
@@ -1143,7 +1471,7 @@ fun TopLavenderClouds(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
-    val drift = rememberCloudDriftPx()
+    val drift = currentCloudDriftPx()
 
     Box(
         modifier = modifier
@@ -1221,7 +1549,7 @@ fun BottomLavenderClouds(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
-    val drift = rememberCloudDriftPx()
+    val drift = currentCloudDriftPx()
 
     Box(
         modifier = modifier
@@ -1293,33 +1621,43 @@ fun BottomLavenderClouds(
 
 private const val CLOUD_DRIFT_PX = 4f
 private const val CLOUD_DRIFT_PERIOD_MS = 4000L
-private const val CLOUD_DRIFT_STEP_MS = 100L
+private const val CLOUD_DRIFT_STEP_MS = 250L
 
 /** Path overhang past each screen edge: the drift plus the outline stroke width. */
 private fun cloudDriftOverhang(density: Float): Float = CLOUD_DRIFT_PX + 2f * density
+
+val LocalCloudDriftPx = compositionLocalOf<State<Int>?> { null }
 
 /**
  * Gentle horizontal cloud drift: ±[CLOUD_DRIFT_PX] over a 4 s sine period, in whole pixels.
  *
  * Keitai-stepped like the mascot bob: sampled every [CLOUD_DRIFT_STEP_MS] instead of animated per
  * frame, and shifted on the RenderNode via graphicsLayer without mutating paths or re-recording
- * draw blocks. It reads the frame clock directly, so it pauses while the launcher is stopped.
- * Unlike an InfiniteTransition, it isn't skipped when the system animator duration scale is 0.
+ * draw blocks. Gated to [Lifecycle.State.RESUMED] so paused activities/dialogs do 0 work, and
+ * hoisted via [LocalCloudDriftPx] in [one.crinklecod.mochibun.ui.theme.MochibunTheme] so top
+ * and bottom clouds across all pager tabs and dialogs share a single ticker.
  */
 @Composable
-private fun rememberCloudDriftPx(): State<Int> {
+fun rememberLiveCloudDriftPx(): State<Int> {
     val drift = remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
-        var startNanos = -1L
-        while (true) {
-            withFrameNanos { now ->
-                if (startNanos < 0L) startNanos = now
-                val periodMs = (now - startNanos) / 1_000_000L % CLOUD_DRIFT_PERIOD_MS
-                val phase = 2 * PI * periodMs / CLOUD_DRIFT_PERIOD_MS
-                drift.intValue = (CLOUD_DRIFT_PX * sin(phase)).roundToInt()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            var startNanos = -1L
+            while (true) {
+                withFrameNanos { now ->
+                    if (startNanos < 0L) startNanos = now
+                    val periodMs = (now - startNanos) / 1_000_000L % CLOUD_DRIFT_PERIOD_MS
+                    val phase = 2 * PI * periodMs / CLOUD_DRIFT_PERIOD_MS
+                    drift.intValue = (CLOUD_DRIFT_PX * sin(phase)).roundToInt()
+                }
+                delay(CLOUD_DRIFT_STEP_MS)
             }
-            delay(CLOUD_DRIFT_STEP_MS)
         }
     }
     return drift
 }
+
+@Composable
+private fun currentCloudDriftPx(): State<Int> =
+    LocalCloudDriftPx.current ?: rememberLiveCloudDriftPx()

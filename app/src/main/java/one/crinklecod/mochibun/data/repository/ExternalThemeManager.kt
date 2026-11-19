@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Model representing any theme available in the launcher (built-in preset or external YAML theme).
@@ -41,6 +42,7 @@ object ExternalThemeManager {
     private const val THEMES_DIR_NAME = "themes"
     private const val SAMPLE_FILE_NAME = "sample_theme.yaml"
 
+    private val initialized = AtomicBoolean(false)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val BuiltInThemeOptions = listOf(
@@ -131,9 +133,11 @@ decorations:
     }
 
     /**
-     * Initializes external theme scanning asynchronously.
+     * Initializes external theme scanning asynchronously once per process.
+     * Call [scanThemes] directly to force a rescan.
      */
     fun init(context: Context) {
+        if (!initialized.compareAndSet(false, true)) return
         scope.launch {
             scanThemes(context)
         }

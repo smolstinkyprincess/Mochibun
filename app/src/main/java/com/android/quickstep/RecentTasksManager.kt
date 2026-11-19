@@ -35,6 +35,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import one.crinklecod.mochibun.core.system.RootShell
+import one.crinklecod.mochibun.core.util.compactIfOpaque
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import java.io.File
 import java.lang.reflect.Method
@@ -56,7 +57,6 @@ data class RecentTaskInfo(
 
 private data class CachedAppTaskMeta(
     val label: String,
-    val icon: Drawable,
     val iconBitmap: ImageBitmap
 )
 
@@ -114,13 +114,11 @@ class RecentTasksManager(context: Context) {
                     }
 
                     var title = rawInfo.description?.toString() ?: ""
-                    var icon: Drawable? = null
                     var iconBitmap: ImageBitmap? = null
 
                     val cachedMeta = getOrLoadAppMeta(pkgName)
                     if (cachedMeta != null) {
                         if (title.isEmpty()) title = cachedMeta.label
-                        icon = cachedMeta.icon
                         iconBitmap = cachedMeta.iconBitmap
                     } else if (title.isEmpty()) {
                         title = pkgName
@@ -139,7 +137,7 @@ class RecentTasksManager(context: Context) {
                             taskId = taskId,
                             title = title,
                             packageName = pkgName,
-                            icon = icon,
+                            icon = null,
                             iconBitmap = iconBitmap,
                             thumbnail = thumbnailBitmap,
                             baseIntent = baseIntent,
@@ -199,7 +197,6 @@ class RecentTasksManager(context: Context) {
                     if (!isLauncher && result.none { it.taskId == currentTaskId }) {
                         val cachedMeta = getOrLoadAppMeta(currentPkg)
                         val title = cachedMeta?.label ?: currentPkg
-                        val icon = cachedMeta?.icon
                         val iconBitmap = cachedMeta?.iconBitmap
                         val thumbnailBitmap = getTaskThumbnail(currentTaskId)
                         val tintIndex = (Math.abs(currentPkg.hashCode())) % 4
@@ -220,7 +217,7 @@ class RecentTasksManager(context: Context) {
                                 taskId = currentTaskId,
                                 title = title,
                                 packageName = currentPkg,
-                                icon = icon,
+                                icon = null,
                                 iconBitmap = iconBitmap,
                                 thumbnail = thumbnailBitmap,
                                 baseIntent = baseIntent,
@@ -309,11 +306,10 @@ class RecentTasksManager(context: Context) {
             val appInfo = packageManager.getApplicationInfo(pkgName, 0)
             val label = packageManager.getApplicationLabel(appInfo).toString()
             val drawable = packageManager.getApplicationIcon(appInfo)
-            val bmp = drawable.toBitmap(84, 84, Bitmap.Config.ARGB_8888)
+            val bmp = drawable.toBitmap(84, 84, Bitmap.Config.ARGB_8888).compactIfOpaque()
             bmp.prepareToDraw()
             val meta = CachedAppTaskMeta(
                 label = label,
-                icon = drawable,
                 iconBitmap = bmp.asImageBitmap()
             )
             synchronized(appMetaCache) {
@@ -624,6 +620,12 @@ class RecentTasksManager(context: Context) {
         private val PKG_REGEX = Regex("pkg=([a-zA-Z0-9._]+)")
 
         private val appMetaCache = LruCache<String, CachedAppTaskMeta>(32)
+
+        fun clearCache() {
+            synchronized(appMetaCache) {
+                appMetaCache.evictAll()
+            }
+        }
 
         @Volatile
         private var atmService: Any? = null

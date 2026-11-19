@@ -240,7 +240,7 @@ internal fun KeyboardSettingsScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
+            item(contentType = "keyboard_ime_card") {
                 SettingsCard(categoryTitle = "Mochibun Keyboard") {
                     SettingsNavigationRow(
                         title = "Keitai Multi-tap Keyboard",
@@ -262,7 +262,7 @@ internal fun KeyboardSettingsScreen(
                 }
             }
 
-            item {
+            item(contentType = "keyboard_input_card") {
                 SettingsCard(categoryTitle = "Input Behavior") {
                     SettingsToggleRow(
                         title = "Hold for Digit",

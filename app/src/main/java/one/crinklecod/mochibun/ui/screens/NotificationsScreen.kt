@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -41,8 +40,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import one.crinklecod.mochibun.core.util.drawableToBitmap
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.model.MochibunNotificationItem
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
 import one.crinklecod.mochibun.data.repository.NotificationTracker
 import one.crinklecod.mochibun.ui.components.BottomLavenderClouds
 import one.crinklecod.mochibun.ui.components.MochibunMascot
@@ -81,6 +81,7 @@ fun NotificationsScreen(
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
+    val activeBorderStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
 
     val notifications by NotificationTracker.notifications.collectAsState()
     val isServiceConnected by NotificationTracker.isServiceConnected.collectAsState()
@@ -323,7 +324,7 @@ fun NotificationsScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header: Frosted pastel pill card
-            item(key = "header") {
+            item(key = "header", contentType = "header") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -385,7 +386,7 @@ fun NotificationsScreen(
 
             // Top Action Item: Permission Request or Clear All Button
             if (!hasAccess) {
-                item(key = "permission_banner") {
+                item(key = "permission_banner", contentType = "permission_banner") {
                     val isFocused = focusTarget == NotifFocusTarget.TOP_ACTION
                     Box(
                         modifier = Modifier
@@ -446,7 +447,7 @@ fun NotificationsScreen(
                     }
                 }
             } else if (notifications.isNotEmpty()) {
-                item(key = "clear_all_bar") {
+                item(key = "clear_all_bar", contentType = "clear_all_bar") {
                     val isFocused = focusTarget == NotifFocusTarget.TOP_ACTION
                     Row(
                         modifier = Modifier
@@ -486,7 +487,8 @@ fun NotificationsScreen(
             if (hasAccess && notifications.isNotEmpty()) {
                 itemsIndexed(
                     items = notifications,
-                    key = { _, item -> item.key }
+                    key = { _, item -> item.key },
+                    contentType = { _, _ -> "notification_card" }
                 ) { index, item ->
                     val isCardFocused = focusTarget == NotifFocusTarget.NOTIFICATION_CARD && focusedCardIndex == index
                     val isDismissFocused = isCardFocused && focusedCardAction == 1
@@ -496,6 +498,7 @@ fun NotificationsScreen(
                         item = item,
                         palette = palette,
                         cardRoundness = cardRoundness,
+                        borderStyle = activeBorderStyle,
                         isCardFocused = isCardFocused,
                         isBodyFocused = isBodyFocused,
                         isDismissFocused = isDismissFocused,
@@ -505,7 +508,7 @@ fun NotificationsScreen(
                 }
             } else if (hasAccess && notifications.isEmpty()) {
                 // Empty state card
-                item(key = "empty_state") {
+                item(key = "empty_state", contentType = "empty_state") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -574,28 +577,51 @@ private fun NotificationCard(
     item: MochibunNotificationItem,
     palette: one.crinklecod.mochibun.ui.theme.MochibunThemePalette,
     cardRoundness: Dp,
+    borderStyle: CardBorderStyle = CardBorderStyle.SOLID,
     isCardFocused: Boolean,
     isBodyFocused: Boolean,
     isDismissFocused: Boolean,
     onCardClick: () -> Unit,
     onDismissClick: () -> Unit
 ) {
-    val iconBitmap = item.appIconBitmap ?: remember(item.packageName, item.appIcon) {
-        item.appIcon?.let { drawableToBitmap(it, 48).asImageBitmap() }
+    // NotificationTracker pre-decodes icons off the main thread (appIconBitmap) and never ships a raw
+    // Drawable, so there is no composition-time decode fallback here.
+    val iconBitmap = item.appIconBitmap
+    val cardShape = remember(cardRoundness) { RoundedCornerShape(cardRoundness) }
+    val borderColor = if (isBodyFocused) {
+        palette.focusedCardBorder
+    } else if (isCardFocused) {
+        palette.outline
+    } else {
+        palette.unfocusedCardBorder
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isBodyFocused, cornerRadius = cardRoundness)
-            .mochibunCardBorder(
-                cornerRadius = cardRoundness,
-                borderColor = if (isBodyFocused) palette.focusedCardBorder else if (isCardFocused) palette.outline else palette.unfocusedCardBorder,
-                borderWidth = 1.5.dp,
-                allowCustomNineSlice = false
+            .then(
+                if (isBodyFocused) {
+                    Modifier
+                        .graphicsLayer { clip = false }
+                        .softGlowFocus(isSelected = true, cornerRadius = cardRoundness)
+                } else {
+                    Modifier
+                }
             )
-            .clip(RoundedCornerShape(cardRoundness))
+            .then(
+                if (borderStyle != CardBorderStyle.SOLID) {
+                    Modifier.mochibunCardBorder(
+                        cornerRadius = cardRoundness,
+                        borderColor = borderColor,
+                        borderWidth = 1.5.dp,
+                        allowCustomNineSlice = false,
+                        styleOverride = borderStyle
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .clip(cardShape)
             .background(
                 if (isCardFocused) {
                     Brush.horizontalGradient(
@@ -603,6 +629,13 @@ private fun NotificationCard(
                     )
                 } else {
                     SolidColor(palette.unfocusedCardBg)
+                }
+            )
+            .then(
+                if (borderStyle == CardBorderStyle.SOLID) {
+                    Modifier.border(1.5.dp, borderColor, cardShape)
+                } else {
+                    Modifier
                 }
             )
             .clickable { onCardClick() }

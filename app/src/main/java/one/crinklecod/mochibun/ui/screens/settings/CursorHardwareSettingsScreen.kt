@@ -241,7 +241,7 @@ internal fun CursorHardwareSettingsScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
+            item(contentType = "cursor_physics_card") {
                 SettingsCard(categoryTitle = "Movement & Physics") {
                     SettingsStepperRow(
                         title = "Base Speed",
@@ -295,7 +295,7 @@ internal fun CursorHardwareSettingsScreen(
                 }
             }
 
-            item {
+            item(contentType = "cursor_sprite_card") {
                 SettingsCard(categoryTitle = "Custom Cursor Sprite") {
                     SettingsNavigationRow(
                         title = "Cursor Graphic",
@@ -316,7 +316,7 @@ internal fun CursorHardwareSettingsScreen(
                 }
             }
 
-            item {
+            item(contentType = "cursor_keypad_card") {
                 SettingsCard(categoryTitle = "Physical Keypad") {
                     SettingsNavigationRow(
                         title = "Keypad Remapper",
@@ -357,7 +357,7 @@ internal fun CursorHardwareSettingsScreen(
                 }
             }
 
-            item {
+            item(contentType = "cursor_dpad_card") {
                 SettingsCard(categoryTitle = "D-Pad Navigation") {
                     SettingsToggleRow(
                         title = "D-Pad Wrap Around",

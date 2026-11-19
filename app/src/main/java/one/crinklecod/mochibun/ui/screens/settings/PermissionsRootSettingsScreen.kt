@@ -608,11 +608,11 @@ internal fun PermissionsRootSettingsScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             if (showBanner) {
-                item {
+                item(contentType = "permissions_non_root_banner") {
                     NonRootModeBanner()
                 }
             }
-            item {
+            item(contentType = "permissions_essential_card") {
                 SettingsCard(categoryTitle = "Essential Setup • Core Launcher & Keypad") {
                     SettingsNavigationRow(
                         title = "Default Home Launcher",
@@ -683,7 +683,7 @@ internal fun PermissionsRootSettingsScreen(
                 }
             }
             if (showRootOptions) {
-                item {
+                item(contentType = "permissions_root_card") {
                     SettingsCard(categoryTitle = "Magisk Root & Superuser") {
                         val rootLabel = when (rootStatus) {
                             is RootStatus.Granted -> "Granted • root shell authorized"
@@ -777,7 +777,7 @@ internal fun PermissionsRootSettingsScreen(
                     }
                 }
             }
-            item {
+            item(contentType = "permissions_advanced_card") {
                 SettingsCard(categoryTitle = "Advanced") {
                     SettingsToggleRow(
                         title = "Show Root & LSPosed Options",

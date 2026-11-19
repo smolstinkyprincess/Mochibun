@@ -28,12 +28,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import one.crinklecod.mochibun.data.model.CardBorderStyle
-import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
-import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
-import one.crinklecod.mochibun.data.repository.rememberCustomCardBorderFrame
+import one.crinklecod.mochibun.data.repository.currentCardBorderState
 import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import kotlin.math.PI
@@ -91,11 +87,10 @@ fun KeitaiLaceContainer(
     allowCustomNineSlice: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val activeBorderStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
-    val customBorderSource by CustomCardBorderManager.source.collectAsState()
-    val customFrame = if (allowCustomNineSlice) rememberCustomCardBorderFrame() else null
-    val hasCustomBorder = allowCustomNineSlice &&
-        (customFrame != null || customBorderSource is CustomCardBorderSource.Custom)
+    val borderState = currentCardBorderState()
+    val activeBorderStyle = borderState.style
+    val customFrame = if (allowCustomNineSlice) borderState.frame else null
+    val hasCustomBorder = allowCustomNineSlice && borderState.hasCustomBorder
 
     val frameModifier = if (customFrame != null) {
         val cardShape = RoundedCornerShape(cardCornerRadius)

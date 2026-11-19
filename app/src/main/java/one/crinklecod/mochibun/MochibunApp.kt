@@ -8,6 +8,10 @@ import coil.ImageLoaderFactory
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.memory.MemoryCache
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.core.system.ClamshellManager
 import one.crinklecod.mochibun.core.system.CursorServiceWatchdog
@@ -26,9 +30,13 @@ import one.crinklecod.mochibun.data.repository.NotificationTracker
 import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.data.repository.WidgetRepository
 import one.crinklecod.mochibun.pet.PetManager
+import one.crinklecod.mochibun.ui.components.MascotSpriteStore
+import one.crinklecod.mochibun.ui.dialogs.clearDialogBitmapCaches
 import com.topjohnwu.superuser.Shell
 
 class MochibunApp : Application(), ImageLoaderFactory {
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
         Shell.enableVerboseLogging = BuildConfig.DEBUG
@@ -64,20 +72,25 @@ class MochibunApp : Application(), ImageLoaderFactory {
     private fun initUnlockedServices() {
         PreferencesManager.init(this)
         PetManager.init(this)
-        CustomMascotManager.restore(this)
-        CustomCardBorderManager.restore(this)
         ExternalThemeManager.init(this)
         HardwareRemapManager.init(this)
-        TypographyManager.scanFonts(this)
+        TypographyManager.scanFontsInBackground(this)
         LidLedManager.init(this)
         SoundEffectManager.init(this)
         WidgetRepository.init(this)
         CursorServiceWatchdog.init(this)
-        MediaVolumeLockSync.init(this)
-        PreferencesManager.syncSoftKeyNavToGlobal(this)
-        CursorPreferences.syncToggleKeyToGlobal(this)
-        one.crinklecod.mochibun.core.system.TorchManager.init(this)
         // VirtualCursorService is started on demand (F4 / cursor toggle) and stops when hidden.
+
+        // Disk/JSON/PNG header restores and Binder IPCs run off the main thread so cold launch
+        // reaches MainActivity.onCreate() without blocking on I/O or system_server / cameraserver.
+        appScope.launch {
+            CustomMascotManager.restore(this@MochibunApp)
+            CustomCardBorderManager.restore(this@MochibunApp)
+            MediaVolumeLockSync.init(this@MochibunApp)
+            PreferencesManager.syncSoftKeyNavToGlobal(this@MochibunApp)
+            CursorPreferences.syncToggleKeyToGlobal(this@MochibunApp)
+            one.crinklecod.mochibun.core.system.TorchManager.init(this@MochibunApp)
+        }
     }
 
     // Process-wide caches. The drawer list itself is released by MainActivity, which owns the ViewModel.
@@ -85,7 +98,14 @@ class MochibunApp : Application(), ImageLoaderFactory {
         super.onTrimMemory(level)
         val tier = memoryTrimTier(level, launcherVisible = one.crinklecod.mochibun.ui.MainActivity.isForeground)
         if (tier >= MemoryTrimTier.PICKER) IconPackManager.trimPickerCache()
-        if (tier >= MemoryTrimTier.BACKGROUND) NotificationTracker.clearCache()
+        if (tier >= MemoryTrimTier.BACKGROUND) {
+            NotificationTracker.clearCache()
+            com.android.quickstep.RecentTasksManager.clearCache()
+        }
+        if (tier >= MemoryTrimTier.RELEASE_DRAWER) {
+            MascotSpriteStore.clearCache()
+            clearDialogBitmapCaches()
+        }
     }
 
     override fun newImageLoader(): ImageLoader {

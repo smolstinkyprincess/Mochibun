@@ -109,7 +109,7 @@ fun ThemeStudioDialog(
 
     LaunchedEffect(Unit) {
         ExternalThemeManager.scanThemes(context)
-        TypographyManager.scanFonts(context)
+        TypographyManager.scanFontsAsync(context)
     }
 
     // Main dialog focus state:

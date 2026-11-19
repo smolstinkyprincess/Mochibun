@@ -9,5 +9,6 @@ class TorchManagerTest {
     @Test
     fun testTorchInitialStateIsOff() {
         assertFalse("Torch initial state should be off", TorchManager.isTorchOn)
+        assertFalse("Torch StateFlow initial state should be off", TorchManager.torchOn.value)
     }
 }

@@ -52,5 +52,12 @@ class MemoryTrimPolicyTest {
         assertFalse(isFullyOpaque(intArrayOf(0xFF000000.toInt(), 0xFE000000.toInt())))
         assertFalse(isFullyOpaque(intArrayOf(0x00000000)))
         assertFalse(isFullyOpaque(IntArray(0)))
+
+        // Scratch buffer reuse passes an explicit pixel count smaller than pixels.size;
+        // stale transparent entries past `count` must be ignored, and 0 count must return false.
+        val scratch = intArrayOf(0xFF112233.toInt(), 0xFF445566.toInt(), 0x00000000, 0x00000000)
+        assertTrue(isFullyOpaque(scratch, count = 2))
+        assertFalse(isFullyOpaque(scratch, count = 3))
+        assertFalse(isFullyOpaque(scratch, count = 0))
     }
 }

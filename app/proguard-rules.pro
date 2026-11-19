@@ -13,6 +13,8 @@
 # (MochibunKeyHook, MochibunSystemUiHook, ActiveHookTheme) intact
 -keep class one.crinklecod.mochibun.service.** { *; }
 -keep class one.crinklecod.mochibun.xposed.** { *; }
+# SystemUI hook modules (already covered by xposed.** above; listed explicitly for clarity)
+-keep class one.crinklecod.mochibun.xposed.systemui.** { *; }
 -keep class one.crinklecod.mochibun.data.repository.HardwareRemapManager { *; }
 -keep class one.crinklecod.mochibun.core.util.MochibunSystemActions { *; }
 
@@ -22,10 +24,7 @@
 -keep class com.android.systemui.shared.** { *; }
 -dontwarn com.android.systemui.shared.**
 
-# Preserve Compose runtime lambdas & inspection
--keepclassmembers class * {
-    @androidx.compose.runtime.Composable *;
-}
+# Preserve Compose inspection suppression (R8 keeps runtime-needed entries via Compose consumer rules)
 -dontwarn androidx.compose.**
 
 # Keep reflection hooks used for launcher shortcuts and package querying

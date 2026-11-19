@@ -56,10 +56,8 @@ import one.crinklecod.mochibun.core.widget.WidgetFrame
 import one.crinklecod.mochibun.core.util.findActivity
 import one.crinklecod.mochibun.core.util.loadDownsampledPhotoBitmap
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
-import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
-import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import one.crinklecod.mochibun.data.repository.WidgetRepository
-import one.crinklecod.mochibun.data.repository.rememberCustomCardBorderFrame
+import one.crinklecod.mochibun.data.repository.currentCardBorderState
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.data.repository.MediaSessionTracker
@@ -932,9 +930,7 @@ fun WidgetPage(
                 ) {
                     // Pill card: — ♡ Widgets ♡ —
                     val isHeaderFocused = focusSection == WidgetFocusSection.HEADER
-                    val customBorderSource by CustomCardBorderManager.source.collectAsState()
-                    val customBorderFrame = rememberCustomCardBorderFrame()
-                    val hasCustomBorder = customBorderFrame != null || customBorderSource is CustomCardBorderSource.Custom
+                    val hasCustomBorder = currentCardBorderState().hasCustomBorder
                     val effectiveCornerRadius = if (hasCustomBorder) 16.dp else 32.dp
                     // Frosted pastel pill inside the same dainty lace + pearl rim as the Home cards.
                     // The 6dp frill sits inside the original 56dp height.

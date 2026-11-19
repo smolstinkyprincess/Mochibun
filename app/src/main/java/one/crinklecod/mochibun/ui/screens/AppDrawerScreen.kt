@@ -41,6 +41,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -68,8 +69,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.model.AppDrawerSortMode
+import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
 import one.crinklecod.mochibun.ui.theme.*
 import one.crinklecod.mochibun.ui.components.*
 
@@ -104,6 +107,7 @@ fun AppDrawerCard(
     app: LauncherApp,
     index: Int,
     isSelected: Boolean,
+    borderStyle: CardBorderStyle = CardBorderStyle.SOLID,
     onAppClick: (LauncherApp) -> Unit,
     onAppLongClick: (LauncherApp) -> Unit,
     modifier: Modifier = Modifier
@@ -128,15 +132,40 @@ fun AppDrawerCard(
         modifier = modifier
             .fillMaxWidth()
             .height(60.dp)
-            .softGlowFocus(isSelected = isSelected, cornerRadius = 22.dp)
-            .mochibunCardBorder(
-                cornerRadius = 22.dp,
-                borderColor = if (isSelected) theme.selectionGlowColor.copy(alpha = 0.7f) else theme.unfocusedCardBorderColor,
-                borderWidth = 1.5.dp,
-                allowCustomNineSlice = false
+            .then(
+                if (isSelected) {
+                    Modifier.softGlowFocus(
+                        isSelected = true,
+                        cornerRadius = 22.dp,
+                        bringIntoView = false,
+                        animateScale = false
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .then(
+                if (borderStyle != CardBorderStyle.SOLID) {
+                    Modifier.mochibunCardBorder(
+                        cornerRadius = 22.dp,
+                        borderColor = theme.unfocusedCardBorderColor,
+                        borderWidth = 1.5.dp,
+                        allowCustomNineSlice = false,
+                        styleOverride = borderStyle
+                    )
+                } else {
+                    Modifier
+                }
             )
             .clip(DrawerCardShape)
             .background(cardBrush, DrawerCardShape)
+            .then(
+                if (borderStyle == CardBorderStyle.SOLID) {
+                    Modifier.border(1.5.dp, theme.unfocusedCardBorderColor, DrawerCardShape)
+                } else {
+                    Modifier
+                }
+            )
             .combinedClickable(
                 onClick = { onAppClick(app) },
                 onLongClick = { onAppLongClick(app) }
@@ -148,12 +177,11 @@ fun AppDrawerCard(
                 .padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Squircle badge with alternating pastel tint
+            // Squircle badge with alternating pastel tint (icon is 8dp inset, so no corner clip needed)
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .clip(DrawerSquircleShape)
-                    .background(squircleTint.container)
+                    .background(squircleTint.container, DrawerSquircleShape)
                     .border(1.dp, squircleTint.border, DrawerSquircleShape),
                 contentAlignment = Alignment.Center
             ) {
@@ -191,19 +219,19 @@ private fun AlphabetRailItem(
     theme: LauncherTheme,
     modifier: Modifier = Modifier
 ) {
-    val fontSize = if (isActive) 14.5.sp else 12.5.sp
-
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .padding(horizontal = 2.dp, vertical = 0.5.dp)
-            .softGlowFocus(
-                isSelected = isDpadHovered,
-                cornerRadius = 8.dp
-            )
             .then(
                 if (isDpadHovered) {
                     Modifier
+                        .softGlowFocus(
+                            isSelected = true,
+                            cornerRadius = 8.dp,
+                            bringIntoView = false,
+                            animateScale = false
+                        )
                         .clip(RoundedCornerShape(8.dp))
                         .background(theme.focusedContainerColor.copy(alpha = 0.85f))
                         .border(1.dp, theme.selectionGlowColor.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
@@ -214,18 +242,26 @@ private fun AlphabetRailItem(
     ) {
         Text(
             text = letterStr,
-            fontSize = fontSize,
-            lineHeight = fontSize,
+            fontSize = 12.5.sp,
+            lineHeight = 12.5.sp,
             style = LocalTextStyle.current.copy(
                 platformStyle = PlatformTextStyle(includeFontPadding = false)
             ),
-            fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.SemiBold,
+            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
             color = when {
                 isDpadHovered -> theme.palette.textColor
                 isActive -> theme.palette.textColor
                 isAvailable -> theme.palette.textColor.copy(alpha = 0.70f)
                 else -> theme.palette.outline.copy(alpha = 0.45f)
+            },
+            modifier = if (isActive) {
+                Modifier.graphicsLayer {
+                    scaleX = 1.16f
+                    scaleY = 1.16f
+                }
+            } else {
+                Modifier
             }
         )
     }
@@ -314,6 +350,7 @@ fun AppDrawerScreen(
     modifier: Modifier = Modifier
 ) {
     val theme = LocalLauncherTheme.current
+    val activeBorderStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
 
     Box(
         modifier = modifier
@@ -368,12 +405,14 @@ fun AppDrawerScreen(
         ) {
             itemsIndexed(
                 visibleApps,
-                key = { _, app -> app.componentKey }
+                key = { _, app -> app.componentKey },
+                contentType = { _, _ -> "app_card" }
             ) { index, app ->
                 AppDrawerCard(
                     app = app,
                     index = index,
                     isSelected = (index == selectedDrawerIndex) && !isRailFocused,
+                    borderStyle = activeBorderStyle,
                     onAppClick = onAppClick,
                     onAppLongClick = onAppLongClick
                 )
