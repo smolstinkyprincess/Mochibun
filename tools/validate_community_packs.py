@@ -12,10 +12,41 @@ COMMUNITY_DIR = ROOT / "docs" / "community"
 CATALOG_PATH = COMMUNITY_DIR / "catalog.json"
 
 PNG_SIG = b"\x89PNG\r\n\x1a\n"
+SFNT_SIGS = (b"\x00\x01\x00\x00", b"true", b"OTTO")
+OGG_SIG = b"OggS"
+SOUND_CUES = frozenset({"nav", "click", "select", "back", "boundary", "snap", "feed", "pet"})
+ALLOWED_STATIC_ENTRIES = frozenset({
+    "manifest.json",
+    "wallpaper.png",
+    "cursor.gif",
+    "cursor.png",
+    "mascot_atlas.png",
+    "card_border.png",
+    "font.ttf",
+    "font.otf",
+})
+ALLOWED_SOUND_ENTRIES = frozenset(f"sounds/{cue}.ogg" for cue in SOUND_CUES)
+
 MAX_BUNDLE_BYTES = 8 * 1024 * 1024
+MAX_MANIFEST_BYTES = 512 * 1024
+MAX_WALLPAPER_BYTES = 5 * 1024 * 1024
+MAX_CURSOR_BYTES = 2 * 1024 * 1024
 MAX_MASCOT_BYTES = 1536 * 1024
 MAX_BORDER_BYTES = 512 * 1024
+MAX_FONT_BYTES = 4 * 1024 * 1024
+MAX_SOUND_BYTES = 256 * 1024
 HEX_RE = re.compile(r"^#?(?:0x)?(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+
+
+def _is_unsafe_entry_name(name: str) -> bool:
+    return (
+        not name
+        or name.startswith("/")
+        or "\\" in name
+        or ":" in name
+        or "\x00" in name
+        or ".." in name.split("/")
+    )
 
 
 def validate_led_file(path: Path) -> None:
@@ -57,30 +88,66 @@ def validate_led_file(path: Path) -> None:
 
 def validate_bundle_file(path: Path) -> None:
     with zipfile.ZipFile(path, "r") as zf:
-        names = set(zf.namelist())
+        infos = zf.infolist()
+        if sum(info.file_size for info in infos) > MAX_BUNDLE_BYTES:
+            raise ValueError(f"{path}: uncompressed size exceeds 8 MB limit")
+
+        names = set()
+        total = 0
+
+        for info in infos:
+            name = info.filename
+            if _is_unsafe_entry_name(name):
+                raise ValueError(f"{path}: unsafe ZIP entry '{name}'")
+            if info.is_dir():
+                if name != "sounds/":
+                    raise ValueError(f"{path}: unexpected directory entry '{name}'")
+                continue
+            if name not in ALLOWED_STATIC_ENTRIES and name not in ALLOWED_SOUND_ENTRIES:
+                raise ValueError(f"{path}: unsupported ZIP entry '{name}'")
+            names.add(name)
+
+            raw = zf.read(info)
+            size = len(raw)
+            total += size
+            if total > MAX_BUNDLE_BYTES:
+                raise ValueError(f"{path}: uncompressed size {total} exceeds 8 MB limit")
+
+            if name == "manifest.json":
+                if size > MAX_MANIFEST_BYTES:
+                    raise ValueError(f"{path}: manifest.json exceeds 512 KB")
+                manifest = json.loads(raw.decode("utf-8"))
+                if not manifest.get("bundleName") or not isinstance(manifest.get("palette"), dict):
+                    raise ValueError(f"{path}: manifest.json missing bundleName or palette")
+            elif name == "wallpaper.png":
+                if size > MAX_WALLPAPER_BYTES:
+                    raise ValueError(f"{path}: wallpaper.png exceeds 5 MB")
+            elif name in ("cursor.gif", "cursor.png"):
+                if size > MAX_CURSOR_BYTES:
+                    raise ValueError(f"{path}: {name} exceeds 2 MB")
+            elif name == "mascot_atlas.png":
+                if size > MAX_MASCOT_BYTES:
+                    raise ValueError(f"{path}: mascot_atlas.png exceeds 1.5 MB")
+                if not raw.startswith(PNG_SIG):
+                    raise ValueError(f"{path}: mascot_atlas.png is not a valid PNG")
+            elif name == "card_border.png":
+                if size > MAX_BORDER_BYTES:
+                    raise ValueError(f"{path}: card_border.png exceeds 512 KB")
+                if not raw.startswith(PNG_SIG):
+                    raise ValueError(f"{path}: card_border.png is not a valid PNG")
+            elif name in ("font.ttf", "font.otf"):
+                if size == 0 or size > MAX_FONT_BYTES:
+                    raise ValueError(f"{path}: {name} size {size} out of range 1..{MAX_FONT_BYTES}")
+                if not raw.startswith(SFNT_SIGS):
+                    raise ValueError(f"{path}: {name} is not a valid TrueType/OpenType font")
+            elif name in ALLOWED_SOUND_ENTRIES:
+                if size == 0 or size > MAX_SOUND_BYTES:
+                    raise ValueError(f"{path}: {name} size {size} out of range 1..{MAX_SOUND_BYTES}")
+                if not raw.startswith(OGG_SIG):
+                    raise ValueError(f"{path}: {name} is not a valid Ogg file")
+
         if "manifest.json" not in names:
             raise ValueError(f"{path}: missing manifest.json")
-        total = sum(info.file_size for info in zf.infolist())
-        if total > MAX_BUNDLE_BYTES:
-            raise ValueError(f"{path}: uncompressed size {total} exceeds 8 MB limit")
-
-        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
-        if not manifest.get("bundleName") or not isinstance(manifest.get("palette"), dict):
-            raise ValueError(f"{path}: manifest.json missing bundleName or palette")
-
-        if "mascot_atlas.png" in names:
-            raw = zf.read("mascot_atlas.png")
-            if len(raw) > MAX_MASCOT_BYTES:
-                raise ValueError(f"{path}: mascot_atlas.png exceeds 1.5 MB")
-            if not raw.startswith(PNG_SIG):
-                raise ValueError(f"{path}: mascot_atlas.png is not a valid PNG")
-
-        if "card_border.png" in names:
-            raw = zf.read("card_border.png")
-            if len(raw) > MAX_BORDER_BYTES:
-                raise ValueError(f"{path}: card_border.png exceeds 512 KB")
-            if not raw.startswith(PNG_SIG):
-                raise ValueError(f"{path}: card_border.png is not a valid PNG")
 
 
 def main() -> int:

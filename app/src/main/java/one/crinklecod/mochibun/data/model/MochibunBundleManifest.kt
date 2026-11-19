@@ -23,7 +23,13 @@ data class MochibunBundleManifest(
     // Custom mascot atlas (zip entry "mascot_atlas.png"). Older app versions ignore both fields
     // (ignoreUnknownKeys) and skip the unknown entry, so these bundles still import there.
     val hasCustomMascot: Boolean = false,
-    val mascot: BundleMascotConfig? = null
+    val mascot: BundleMascotConfig? = null,
+    // Bundled font (zip entry "font.ttf", or "font.otf") and keypad sound pack ("sounds/<cue>.ogg").
+    // Defaults keep older bundles decoding; older app versions skip these unknown fields/entries.
+    val hasFont: Boolean = false,
+    val fontDisplayName: String? = null,
+    val hasSoundPack: Boolean = false,
+    val soundPackName: String? = null
 )
 
 /**

@@ -35,6 +35,8 @@ import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
 import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.BundlePreviewData
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
+import one.crinklecod.mochibun.data.repository.TypographyManager
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.dialogs.ExportBundleDialog
 import one.crinklecod.mochibun.ui.dialogs.PresetPreviewDialog
@@ -78,32 +80,52 @@ internal fun BackupRestoreSettingsScreen(
     var pendingIncludeDisplayName by remember { mutableStateOf(true) }
     var pendingIncludeMascot by remember { mutableStateOf(true) }
     var pendingIncludeCardBorder by remember { mutableStateOf(true) }
+    var pendingIncludeFont by remember { mutableStateOf(false) }
+    var pendingIncludeSoundPack by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Export dialog offers font / sound-pack rows only when there's something to pack
+    val fontId by PreferencesManager.themeFontFamily.collectAsState()
+    val fontOptions by TypographyManager.options.collectAsState()
+    val bundleSoundPackName by SoundEffectManager.bundleSoundPackName.collectAsState()
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { SoundEffectManager.refreshBundleSoundPackState(context) }
+    }
 
     // Setup Bundle (.mochibundle) Create launcher
     val bundleCreateLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         if (uri != null) {
-            try {
-                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    val result = ThemeBundleManager.exportBundle(
-                        context = context,
-                        outputStream = outputStream,
-                        bundleName = pendingBundleName,
-                        includeWallpaper = pendingIncludeWallpaper,
-                        includeCustomCursor = pendingIncludeCursor,
-                        includeDisplayName = pendingIncludeDisplayName,
-                        includeCustomMascot = pendingIncludeMascot,
-                        includeCustomCardBorder = pendingIncludeCardBorder
-                    )
-                    if (result.isSuccess) {
-                        statusMessage = "Theme bundle exported! ♡"
-                    } else {
-                        statusMessage = "Export failed: ${result.exceptionOrNull()?.message}"
+            // ZIP streaming (up to a 4 MB font + sound pack) stays off the main thread
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                            ThemeBundleManager.exportBundle(
+                                context = context,
+                                outputStream = outputStream,
+                                bundleName = pendingBundleName,
+                                includeWallpaper = pendingIncludeWallpaper,
+                                includeCustomCursor = pendingIncludeCursor,
+                                includeDisplayName = pendingIncludeDisplayName,
+                                includeCustomMascot = pendingIncludeMascot,
+                                includeCustomCardBorder = pendingIncludeCardBorder,
+                                includeFont = pendingIncludeFont,
+                                includeSoundPack = pendingIncludeSoundPack
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Result.failure(e)
                     }
                 }
-            } catch (e: Exception) {
-                statusMessage = "Export failed: ${e.message}"
+                if (result != null) {
+                    statusMessage = if (result.isSuccess) {
+                        "Theme bundle exported! ♡"
+                    } else {
+                        "Export failed: ${result.exceptionOrNull()?.message}"
+                    }
+                }
             }
         }
     }
@@ -113,9 +135,17 @@ internal fun BackupRestoreSettingsScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            try {
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    val previewRes = ThemeBundleManager.readBundleManifest(inputStream)
+            scope.launch {
+                val previewRes = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                            ThemeBundleManager.readBundleManifest(inputStream)
+                        }
+                    } catch (e: Exception) {
+                        Result.failure(Exception("Failed to inspect bundle: ${e.message}", e))
+                    }
+                }
+                if (previewRes != null) {
                     if (previewRes.isSuccess) {
                         pendingImportPreviewData = previewRes.getOrThrow()
                         pendingImportUri = uri
@@ -123,8 +153,6 @@ internal fun BackupRestoreSettingsScreen(
                         statusMessage = "Invalid bundle: ${previewRes.exceptionOrNull()?.message}"
                     }
                 }
-            } catch (e: Exception) {
-                statusMessage = "Failed to inspect bundle: ${e.message}"
             }
         }
     }
@@ -144,7 +172,6 @@ internal fun BackupRestoreSettingsScreen(
         }
     }
 
-    val scope = rememberCoroutineScope()
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -350,16 +377,20 @@ internal fun BackupRestoreSettingsScreen(
         ExportBundleDialog(
             hasCustomMascot = CustomMascotManager.isActive(),
             hasCustomCardBorder = CustomCardBorderManager.isCustomBorderActive(),
+            hasCustomFont = TypographyManager.canExportFont(fontId, fontOptions),
+            hasCustomSoundPack = bundleSoundPackName != null,
             onDismiss = { showExportBundleDialog = false },
-            onExport = { name, wall, cur, mascot, cardBorder, disp ->
-                pendingBundleName = name
-                pendingIncludeWallpaper = wall
-                pendingIncludeCursor = cur
-                pendingIncludeMascot = mascot
-                pendingIncludeCardBorder = cardBorder
-                pendingIncludeDisplayName = disp
+            onExport = { selection ->
+                pendingBundleName = selection.bundleName
+                pendingIncludeWallpaper = selection.includeWallpaper
+                pendingIncludeCursor = selection.includeCustomCursor
+                pendingIncludeMascot = selection.includeCustomMascot
+                pendingIncludeCardBorder = selection.includeCustomCardBorder
+                pendingIncludeDisplayName = selection.includeDisplayName
+                pendingIncludeFont = selection.includeFont
+                pendingIncludeSoundPack = selection.includeSoundPack
                 showExportBundleDialog = false
-                bundleCreateLauncher.launch(ThemeBundleManager.generateBundleFileName(name))
+                bundleCreateLauncher.launch(ThemeBundleManager.generateBundleFileName(selection.bundleName))
             }
         )
     }
@@ -401,25 +432,32 @@ internal fun BackupRestoreSettingsScreen(
             onApply = { clearUnbundledAssets ->
                 val uri = pendingImportUri
                 if (uri != null) {
-                    try {
-                        context.contentResolver.openInputStream(uri)?.use { stream ->
-                            var mascotNote: String? = null
-                            val applyRes = ThemeBundleManager.applyBundle(
-                                context = context,
-                                inputStream = stream,
-                                clearUnbundledAssets = clearUnbundledAssets
-                            ) { mascotNote = it }
+                    val bundleName = preview.manifest.bundleName
+                    // Unzipping + Typeface validation of a bundled font must not block the UI thread
+                    scope.launch {
+                        var mascotNote: String? = null
+                        val applyRes = withContext(Dispatchers.IO) {
+                            try {
+                                context.contentResolver.openInputStream(uri)?.use { stream ->
+                                    ThemeBundleManager.applyBundle(
+                                        context = context,
+                                        inputStream = stream,
+                                        clearUnbundledAssets = clearUnbundledAssets
+                                    ) { mascotNote = it }
+                                }
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
+                        }
+                        if (applyRes != null) {
                             if (applyRes.isSuccess) {
                                 onSettingsRestored?.invoke()
-                                statusMessage = "Preset '${preview.manifest.bundleName}' applied! ♡" +
+                                statusMessage = "Preset '$bundleName' applied! ♡" +
                                     (mascotNote?.let { " ($it)" } ?: "")
                             } else {
                                 statusMessage = "Apply failed: ${applyRes.exceptionOrNull()?.message}"
                             }
                         }
-
-                    } catch (e: Exception) {
-                        statusMessage = "Apply failed: ${e.message}"
                     }
                 }
                 try {

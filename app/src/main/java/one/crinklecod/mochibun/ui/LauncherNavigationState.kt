@@ -228,7 +228,6 @@ internal class LauncherNavigationKeypadActions(
         )
     }
     override fun setPoundKeyState(state: Int) { nav.poundKeyState = state }
-    override fun openKaomojiWheel() { nav.activeModal = ActiveModal.KaomojiWheel }
     override fun openQuickMemo() { nav.activeModal = ActiveModal.QuickMemo }
     override fun cycleDrawerSortMode() {
         val nextMode = launcherVm.cycleAppDrawerSortMode()
@@ -386,10 +385,6 @@ internal fun LauncherBackHandlers(
                 } catch (_: Exception) {}
                 activeModal = null
                 onConsumeIncomingBundleUri()
-            }
-            is ActiveModal.KaomojiWheel -> {
-                poundKeyState = 0
-                activeModal = null
             }
             is ActiveModal.PetPill -> onClosePetPill()
             else -> {

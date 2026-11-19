@@ -39,10 +39,38 @@ import androidx.compose.ui.window.DialogProperties
 import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.repository.BundlePreviewData
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
+import one.crinklecod.mochibun.data.repository.TypographyManager
+import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+/** What the user ticked in [ExportBundleDialog]. */
+data class BundleExportSelection(
+    val bundleName: String,
+    val includeWallpaper: Boolean,
+    val includeCustomCursor: Boolean,
+    val includeCustomMascot: Boolean,
+    val includeCustomCardBorder: Boolean,
+    val includeDisplayName: Boolean,
+    val includeFont: Boolean = false,
+    val includeSoundPack: Boolean = false
+)
+
+/** Focus order of [ExportBundleDialog]; font / sound rows exist only when there is something to pack. */
+internal fun exportDialogRows(hasCustomFont: Boolean, hasCustomSoundPack: Boolean): List<String> = buildList {
+    add("name")
+    add("wallpaper")
+    add("cursor")
+    add("mascot")
+    add("card_border")
+    if (hasCustomFont) add("font")
+    if (hasCustomSoundPack) add("sounds")
+    add("display_name")
+    add("cancel")
+    add("create")
+}
 
 /**
  * Modal dialog for exporting a .mochibun Theme & Setup preset bundle.
@@ -55,22 +83,19 @@ fun ExportBundleDialog(
     onDismiss: () -> Unit,
     hasCustomMascot: Boolean = false,
     hasCustomCardBorder: Boolean = false,
-    onExport: (
-        bundleName: String,
-        includeWallpaper: Boolean,
-        includeCustomCursor: Boolean,
-        includeCustomMascot: Boolean,
-        includeCustomCardBorder: Boolean,
-        includeDisplayName: Boolean
-    ) -> Unit
+    hasCustomFont: Boolean = false,
+    hasCustomSoundPack: Boolean = false,
+    onExport: (BundleExportSelection) -> Unit
 ) {
     val theme = LocalLauncherTheme.current
     var bundleName by remember { mutableStateOf(initialBundleName) }
     var includeWallpaper by remember { mutableStateOf(true) }
     var includeCustomCursor by remember { mutableStateOf(true) }
-    // Checked by default only when a custom mascot atlas / card border is active
+    // Checked by default only when a custom mascot atlas / card border / font / sound pack is active
     var includeCustomMascot by remember { mutableStateOf(hasCustomMascot) }
     var includeCustomCardBorder by remember { mutableStateOf(hasCustomCardBorder) }
+    var includeFont by remember { mutableStateOf(hasCustomFont) }
+    var includeSoundPack by remember { mutableStateOf(hasCustomSoundPack) }
     var includeDisplayName by remember { mutableStateOf(true) }
 
     val focusRequester = remember { FocusRequester() }
@@ -78,8 +103,24 @@ fun ExportBundleDialog(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    // 0: Name, 1: Wallpaper, 2: Cursor, 3: Mascot, 4: CardBorder, 5: DisplayName, 6: Cancel, 7: Create
-    val totalItems = 8
+    val rows = remember(hasCustomFont, hasCustomSoundPack) {
+        exportDialogRows(hasCustomFont, hasCustomSoundPack)
+    }
+    val totalItems = rows.size
+    val focusedRow = rows.getOrNull(focusedIndex)
+    val cancelIndex = rows.indexOf("cancel")
+    val createIndex = rows.indexOf("create")
+
+    fun selection() = BundleExportSelection(
+        bundleName = bundleName,
+        includeWallpaper = includeWallpaper,
+        includeCustomCursor = includeCustomCursor,
+        includeCustomMascot = includeCustomMascot,
+        includeCustomCardBorder = includeCustomCardBorder,
+        includeDisplayName = includeDisplayName,
+        includeFont = hasCustomFont && includeFont,
+        includeSoundPack = hasCustomSoundPack && includeSoundPack
+    )
 
     requestFocusSafely(focusRequester)
 
@@ -113,26 +154,21 @@ fun ExportBundleDialog(
                             sawCenterDown = true
                         } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                             sawCenterDown = false
-                            when (focusedIndex) {
-                                0 -> {
+                            when (focusedRow) {
+                                "name" -> {
                                     try {
                                         nameFieldFocusRequester.requestFocus()
                                     } catch (_: Exception) {}
                                 }
-                                1 -> includeWallpaper = !includeWallpaper
-                                2 -> includeCustomCursor = !includeCustomCursor
-                                3 -> includeCustomMascot = !includeCustomMascot
-                                4 -> includeCustomCardBorder = !includeCustomCardBorder
-                                5 -> includeDisplayName = !includeDisplayName
-                                6 -> onDismiss()
-                                7 -> onExport(
-                                    bundleName,
-                                    includeWallpaper,
-                                    includeCustomCursor,
-                                    includeCustomMascot,
-                                    includeCustomCardBorder,
-                                    includeDisplayName
-                                )
+                                "wallpaper" -> includeWallpaper = !includeWallpaper
+                                "cursor" -> includeCustomCursor = !includeCustomCursor
+                                "mascot" -> includeCustomMascot = !includeCustomMascot
+                                "card_border" -> includeCustomCardBorder = !includeCustomCardBorder
+                                "font" -> includeFont = !includeFont
+                                "sounds" -> includeSoundPack = !includeSoundPack
+                                "display_name" -> includeDisplayName = !includeDisplayName
+                                "cancel" -> onDismiss()
+                                "create" -> onExport(selection())
                             }
                         }
                         return@onPreviewKeyEvent true
@@ -149,14 +185,14 @@ fun ExportBundleDialog(
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
-                            if (focusedIndex == 7) {
-                                focusedIndex = 6
+                            if (focusedIndex == createIndex) {
+                                focusedIndex = cancelIndex
                                 true
                             } else false
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (focusedIndex == 6) {
-                                focusedIndex = 7
+                            if (focusedIndex == cancelIndex) {
+                                focusedIndex = createIndex
                                 true
                             } else false
                         }
@@ -189,8 +225,8 @@ fun ExportBundleDialog(
                         .clip(RoundedCornerShape(12.dp))
                         .background(theme.greetingBgColor)
                         .border(
-                            if (focusedIndex == 0) 2.dp else 1.dp,
-                            if (focusedIndex == 0) theme.greetingColor else theme.greetingOutlineColor,
+                            if (focusedRow == "name") 2.dp else 1.dp,
+                            if (focusedRow == "name") theme.greetingColor else theme.greetingOutlineColor,
                             RoundedCornerShape(12.dp)
                         )
                         .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -206,7 +242,7 @@ fun ExportBundleDialog(
                         singleLine = true,
                         cursorBrush = SolidColor(theme.greetingColor),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusedIndex = 1 }),
+                        keyboardActions = KeyboardActions(onDone = { focusedIndex = rows.indexOf("wallpaper") }),
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(nameFieldFocusRequester)
@@ -219,35 +255,53 @@ fun ExportBundleDialog(
                 CheckboxRow(
                     label = "Include Wallpaper",
                     checked = includeWallpaper,
-                    isFocused = focusedIndex == 1,
+                    isFocused = focusedRow == "wallpaper",
                     onToggle = { includeWallpaper = !includeWallpaper }
                 )
 
                 CheckboxRow(
                     label = "Include Custom Cursor",
                     checked = includeCustomCursor,
-                    isFocused = focusedIndex == 2,
+                    isFocused = focusedRow == "cursor",
                     onToggle = { includeCustomCursor = !includeCustomCursor }
                 )
 
                 CheckboxRow(
                     label = "Include Custom Mascot",
                     checked = includeCustomMascot,
-                    isFocused = focusedIndex == 3,
+                    isFocused = focusedRow == "mascot",
                     onToggle = { includeCustomMascot = !includeCustomMascot }
                 )
 
                 CheckboxRow(
                     label = "Include Custom Card Border",
                     checked = includeCustomCardBorder,
-                    isFocused = focusedIndex == 4,
+                    isFocused = focusedRow == "card_border",
                     onToggle = { includeCustomCardBorder = !includeCustomCardBorder }
                 )
+
+                if (hasCustomFont) {
+                    CheckboxRow(
+                        label = "Include Custom Font",
+                        checked = includeFont,
+                        isFocused = focusedRow == "font",
+                        onToggle = { includeFont = !includeFont }
+                    )
+                }
+
+                if (hasCustomSoundPack) {
+                    CheckboxRow(
+                        label = "Include Custom Sound Pack",
+                        checked = includeSoundPack,
+                        isFocused = focusedRow == "sounds",
+                        onToggle = { includeSoundPack = !includeSoundPack }
+                    )
+                }
 
                 CheckboxRow(
                     label = "Include Display Name",
                     checked = includeDisplayName,
-                    isFocused = focusedIndex == 5,
+                    isFocused = focusedRow == "display_name",
                     onToggle = { includeDisplayName = !includeDisplayName }
                 )
 
@@ -260,25 +314,16 @@ fun ExportBundleDialog(
                 ) {
                     KawaiiClosePill(
                         label = "Cancel",
-                        isFocused = focusedIndex == 6,
+                        isFocused = focusedRow == "cancel",
                         onClick = { onDismiss() },
                         modifier = Modifier.weight(1f)
                     )
 
                     KawaiiDialogPillButton(
                         text = "Create ♡",
-                        isFocused = focusedIndex == 7,
+                        isFocused = focusedRow == "create",
                         isPrimary = true,
-                        onClick = {
-                            onExport(
-                                bundleName,
-                                includeWallpaper,
-                                includeCustomCursor,
-                                includeCustomMascot,
-                                includeCustomCardBorder,
-                                includeDisplayName
-                            )
-                        },
+                        onClick = { onExport(selection()) },
                         modifier = Modifier.weight(1.3f)
                     )
                 }
@@ -563,7 +608,29 @@ fun PresetPreviewDialog(
                     )
                 }
 
-                manifest.palette.fontFamilyId?.takeIf { it.isNotBlank() && it != "default" }?.let { fontId ->
+                previewFontBadgeText(previewData)?.let { fontBadge ->
+                    Text(
+                        text = fontBadge,
+                        fontSize = 11.sp,
+                        color = theme.greetingColor,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                }
+
+                previewSoundPackBadgeText(previewData)?.let { soundBadge ->
+                    Text(
+                        text = soundBadge,
+                        fontSize = 11.sp,
+                        color = theme.greetingColor,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                }
+
+                manifest.palette.fontFamilyId?.takeIf {
+                    it.isNotBlank() && it != "default" && it != TypographyManager.BUNDLE_FONT_ID
+                }?.let { fontId ->
                     Text(
                         text = "🔤 Font: $fontId",
                         fontSize = 10.5.sp,
@@ -624,6 +691,22 @@ internal fun previewMascotBadgeText(preview: BundlePreviewData): String =
     } else {
         "🐰 Custom mascot included"
     }
+
+/** "🔤 Custom Font" badge when the bundle carries a loadable-looking `font.ttf` / `font.otf`. */
+internal fun previewFontBadgeText(preview: BundlePreviewData): String? {
+    if (!preview.hasFontAsset) return null
+    val name = preview.manifest.fontDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+    return if (name != null) "🔤 Custom Font: $name" else "🔤 Custom Font"
+}
+
+/** "🎵 Custom Sound Pack" badge with the number of bundled cues. */
+internal fun previewSoundPackBadgeText(preview: BundlePreviewData): String? {
+    if (!preview.hasSoundPackAsset) return null
+    val name = preview.manifest.soundPackName?.trim()?.takeIf { it.isNotEmpty() }
+    val cues = preview.soundCueCount
+    val cueText = "$cues/${SoundEffect.entries.size} sound${if (cues == 1) "" else "s"}"
+    return if (name != null) "🎵 Custom Sound Pack: $name ($cueText)" else "🎵 Custom Sound Pack ($cueText)"
+}
 
 internal fun previewCardBorderBadgeText(preview: BundlePreviewData): String? = when {
     preview.hasCustomCardBorder -> "🎀 Custom card border included"

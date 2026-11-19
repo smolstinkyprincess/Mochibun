@@ -1,21 +1,19 @@
 package one.crinklecod.mochibun.ui.dialogs
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.view.KeyEvent
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -29,10 +27,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,24 +41,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import one.crinklecod.mochibun.core.keypad.WheelMode
 import one.crinklecod.mochibun.core.keypad.isWheelModeToggleKey
 import one.crinklecod.mochibun.core.keypad.wheelPetalForDigit
@@ -72,6 +64,7 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.ClipRingEntry
 import one.crinklecod.mochibun.data.repository.ClipboardRingRepository
 import one.crinklecod.mochibun.data.repository.KaomojiRepository
+import one.crinklecod.mochibun.ui.components.BottomLavenderClouds
 import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
 import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.performBoundaryHaptic
@@ -165,107 +158,92 @@ class KaomojiWheelState(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * The IME's Kaomoji / Snippet Wheel, staged "rising out of the cloud shelf" like
+ * FavoriteFolderDialog. Z-order, back to front:
+ *   1. flat dim scrim + backdrop sparkles (never blur: PowerVR GE8300); tapping it dismisses
+ *   2. wheel card anchored low, crowned with the ribbon bow; its bottom rim tucks behind the clouds
+ *   3. raised BottomLavenderClouds shelf (+ solid base strip to the screen edge)
+ * No close pill: BACK / F4 / `#` (or a tap on the scrim) dismiss it.
+ *
+ * Hosted only by MochibunImeService (`#` hold while typing), which owns the keypad routing and
+ * makes its window touchable while this is shown.
+ */
 @Composable
-fun KaomojiWheelDialog(
-    onDismiss: () -> Unit
+fun KaomojiWheelCloudStage(
+    state: KaomojiWheelState,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    confirmVerb: String = "Insert"
 ) {
     val context = LocalContext.current
-    val focusRequester = remember { FocusRequester() }
-    val state = remember { KaomojiWheelState() }
-    var sawCenterDown by remember { mutableStateOf(false) }
-    var sawTriggerDown by remember { mutableStateOf(false) }
-    var sawPetalDigitDown by remember { mutableStateOf(false) }
-
-    requestFocusSafely(focusRequester)
-
-    fun copyAndDismiss() {
-        val text = state.currentText
-        val isClip = state.mode == WheelMode.CLIPBOARD_SNIPPETS
-        if (text.isNotBlank()) {
-            try {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText(if (isClip) "Snippet" else "Kaomoji", text)
-                clipboard.setPrimaryClip(clip)
-            } catch (_: Exception) {}
-
-            performBoundaryHaptic(context)
-            SoundEffectManager.play(context, SoundEffect.SELECT)
-            val toast = if (isClip) "♡ Copied to clipboard ♡" else "♡ Copied $text ♡"
-            Toast.makeText(context, toast, Toast.LENGTH_SHORT).show()
-        }
+    val dismissWithSound = {
+        SoundEffectManager.play(context, SoundEffect.BACK)
         onDismiss()
     }
-
-    BasicAlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false
-        ),
+    Box(
         modifier = Modifier
-            .focusRequester(focusRequester)
-            .focusable()
-            .onPreviewKeyEvent { event ->
-                val native = event.nativeKeyEvent
-
-                if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4) {
-                    if (event.type == KeyEventType.KeyUp) {
-                        SoundEffectManager.play(context, SoundEffect.BACK)
-                        onDismiss()
-                    }
-                    return@onPreviewKeyEvent true
-                }
-
-                if (PreferencesManager.matchesKaomojiTrigger(native.keyCode)) {
-                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
-                        sawTriggerDown = true
-                    } else if (event.type == KeyEventType.KeyUp) {
-                        if (sawTriggerDown) {
-                            sawTriggerDown = false
-                            SoundEffectManager.play(context, SoundEffect.BACK)
-                            onDismiss()
-                        }
-                    }
-                    return@onPreviewKeyEvent true
-                }
-
-                if (isCenterActivateKey(native.keyCode)) {
-                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
-                        sawCenterDown = true
-                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
-                        sawCenterDown = false
-                        copyAndDismiss()
-                    }
-                    return@onPreviewKeyEvent true
-                }
-
-                // Clips: a digit picks its petal on press and copies on release, like Center, so
-                // the release never reaches Home (speed dial) after the dialog closes.
-                if (state.mode == WheelMode.CLIPBOARD_SNIPPETS && wheelPetalForDigit(native.keyCode) != null) {
-                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
-                        sawPetalDigitDown = state.selectClip(wheelPetalForDigit(native.keyCode)!!)
-                        if (sawPetalDigitDown) {
-                            SoundEffectManager.play(context, SoundEffect.NAV)
-                        } else {
-                            performBoundaryHaptic(context)
-                        }
-                    } else if (event.type == KeyEventType.KeyUp && sawPetalDigitDown) {
-                        sawPetalDigitDown = false
-                        copyAndDismiss()
-                    }
-                    return@onPreviewKeyEvent true
-                }
-
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-
-                handleKaomojiWheelNavKey(state, native.keyCode, context, onConfirm = ::copyAndDismiss)
-            }
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.38f))
+            .clickable(onClick = dismissWithSound)
     ) {
-        KaomojiWheelCard(state = state, onConfirm = ::copyAndDismiss, onDismiss = onDismiss)
+        FloatingPixelBackdrop()
+
+        // Taps inside the card must not reach the dismissing scrim
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = WHEEL_CARD_BOTTOM_INSET)
+                .graphicsLayer { clip = false }
+                .pointerInput(Unit) { detectTapGestures { } },
+            contentAlignment = Alignment.Center
+        ) {
+            KaomojiWheelCard(
+                state = state,
+                onConfirm = onConfirm,
+                onDismiss = onDismiss,
+                confirmVerb = confirmVerb,
+                showHeaderClose = false,
+                bottomContentInset = WHEEL_CARD_INNER_BOTTOM
+            )
+            // Pixel ribbon bow straddling the top lace rim. KaomojiWheelCard keeps 8dp of outer
+            // padding above the lace, hence -4dp rather than FavoriteFolderDialog's -12dp.
+            PixelRibbonBow(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-4).dp)
+                    .graphicsLayer { clip = false },
+                width = 34.dp,
+                height = 28.dp
+            )
+        }
+
+        // Cloud shelf over the card's lower rim. The cloud paths are anchored to their box
+        // bottom, so the shelf is lifted with an offset rather than made taller.
+        BottomLavenderClouds(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = -WHEEL_CLOUD_SHELF_LIFT)
+        )
+        // Solid base under the lifted shelf: fills the gap to the screen edge and hides the
+        // cloud path's closing outline along its (now visible) bottom edge.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(WHEEL_CLOUD_SHELF_LIFT + 1.dp)
+                .background(ActiveTheme.palette.cloudFront)
+        )
     }
 }
+
+// Cloud-shelf geometry (dp above the screen's bottom edge), matching FavoriteFolderDialog for
+// 480 × 800: the shelf's back puffs cover the lace card's bottom rim (35dp up: the inset plus the
+// card's own 8dp outer padding), and WHEEL_CARD_INNER_BOTTOM lifts the hint pill to ~80dp, clear
+// of the clouds. Clip mode is the tallest layout (~410dp + bow) and still fits under the status bar.
+private val WHEEL_CLOUD_SHELF_LIFT = 10.dp
+private val WHEEL_CARD_BOTTOM_INSET = 27.dp
+private val WHEEL_CARD_INNER_BOTTOM = 16.dp
 
 /**
  * Shared D-pad / digit navigation. Returns true if the key was handled.
@@ -331,7 +309,11 @@ fun KaomojiWheelCard(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     /** "Copy" in the launcher dialog, "Insert" in the IME overlay. */
-    confirmVerb: String = "Copy"
+    confirmVerb: String = "Copy",
+    /** Header "♡ [#]" dismiss badge; the cloud stage hides it (BACK / F4 / `#` dismiss). */
+    showHeaderClose: Boolean = true,
+    /** Extra space under the hint pill so it clears a cloud shelf drawn over the card's rim. */
+    bottomContentInset: Dp = 0.dp
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
@@ -414,7 +396,7 @@ fun KaomojiWheelCard(
             // Header in signature Mochibun style; tapping the title flips the mode
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = if (showHeaderClose) Arrangement.SpaceBetween else Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -428,7 +410,7 @@ fun KaomojiWheelCard(
                         .clickable { toggleMode() }
                         .padding(horizontal = 2.dp)
                 )
-                Text(
+                if (showHeaderClose) Text(
                     text = "♡ [$triggerBadge]",
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
@@ -723,6 +705,7 @@ fun KaomojiWheelCard(
                     textAlign = TextAlign.Center
                 )
             }
+            if (bottomContentInset > 0.dp) Spacer(modifier = Modifier.height(bottomContentInset))
         }
     }
 }

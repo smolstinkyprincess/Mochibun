@@ -338,12 +338,16 @@ fun MainLauncher(
         petPillInteractionTick++
         val kind = when (index) {
             PET_PILL_FEED -> when (PetManager.tryFeed()) {
-                FeedResult.FED -> MascotReactionKind.FED
+                FeedResult.FED -> {
+                    SoundEffectManager.play(context, SoundEffect.FEED)
+                    MascotReactionKind.FED
+                }
                 FeedResult.ALREADY_FULL -> MascotReactionKind.ALREADY_FULL
                 FeedResult.NO_TREATS -> MascotReactionKind.NO_TREATS
             }
             PET_PILL_PET -> {
                 PetManager.pet()
+                SoundEffectManager.play(context, SoundEffect.PET)
                 MascotReactionKind.PETTED
             }
             else -> {

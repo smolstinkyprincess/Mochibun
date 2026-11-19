@@ -80,7 +80,6 @@ interface LauncherKeypadActions {
     fun openFolder(folderId: String)
     fun openLauncherMenu()
     fun openSpeedDial(digit: Int)
-    fun openKaomojiWheel() {}
     fun openQuickMemo() {}
     fun cycleDrawerSortMode() {}
     fun recordAppLaunch(packageName: String) {}

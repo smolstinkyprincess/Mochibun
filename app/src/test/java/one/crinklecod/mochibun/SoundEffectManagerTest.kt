@@ -33,7 +33,7 @@ class SoundEffectManagerTest {
     @Test
     fun testSoundThemesIntegrity() {
         val themes = SoundEffectManager.SoundThemes
-        assertEquals(7, themes.size)
+        assertEquals(8, themes.size)
 
         val ids = themes.map { it.id }
         assertTrue(ids.contains("kawaii"))
@@ -42,6 +42,7 @@ class SoundEffectManagerTest {
         assertTrue(ids.contains("pager"))
         assertTrue(ids.contains("thock"))
         assertTrue(ids.contains("water"))
+        assertTrue(ids.contains("bundle"))
         assertTrue(ids.contains("off"))
     }
 

@@ -5,6 +5,11 @@
  */
 package one.crinklecod.mochibun.ui.dialogs
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -70,6 +75,9 @@ import one.crinklecod.mochibun.ui.theme.selectedContainerColor
 import one.crinklecod.mochibun.ui.theme.destructiveColor
 import one.crinklecod.mochibun.ui.theme.unfocusedCardBgColor
 import kotlinx.coroutines.delay
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 private val SUGGESTED_FOLDER_NAMES = listOf(
     "Messages & Mail",
@@ -636,6 +644,15 @@ fun FavoriteFolderDialog(
 
         val isMainView = !confirmingDelete && !pickingApps && !editingName
 
+        // "Shaker charm" parallax: scattered stickers drift a few dp as the phone tilts.
+        val context = LocalContext.current
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val stickerNudge = remember { StickerNudge() }
+        // Same ~1 GB check the mascot uses for its static-frames fallback (cached after Home).
+        val isOneGbClassDevice = remember(context) { MascotSpriteStore.isStaticFramesOnly(context) }
+        val nudgeEnabled = isMainView && scatterLayout && !isOneGbClassDevice
+        StickerNudgeSensorEffect(nudgeEnabled, context, lifecycleOwner, stickerNudge)
+
         // Z-order, back to front (main sticker view):
         //   1. scrim + backdrop sparkles
         //   2. folder card, anchored low so its bottom rim tucks behind the clouds
@@ -1003,6 +1020,7 @@ fun FavoriteFolderDialog(
                                     FolderStickerScatter(
                                         scatter = layout,
                                         minDepth = minDepth,
+                                        nudge = if (nudgeEnabled) stickerNudge else null,
                                         modifier = trayModifier
                                     ) {
                                         for (index in pageStart..pageEnd) {
@@ -1112,6 +1130,79 @@ private val FOLDER_CARD_INNER_BOTTOM = 22.dp
 /** Close pill (36dp tall) spans 16..52dp: sitting on the front puffs. */
 private val CLOSE_PILL_BOTTOM_INSET = 16.dp
 
+/** Smoothed tilt (-1..1) shared by the sensor listener and the sticker layers. */
+@Stable
+private class StickerNudge {
+    val x = mutableFloatStateOf(0f)
+    val y = mutableFloatStateOf(0f)
+
+    fun clear() {
+        x.floatValue = 0f
+        y.floatValue = 0f
+    }
+}
+
+/**
+ * Listens to the accelerometer only while [enabled] (main sticker view, scatter layout, not a
+ * ~1 GB phone) and the activity is resumed: closing the folder, switching to a sub-view, or
+ * pausing (flip closed, screen off) unregisters it, so it costs nothing otherwise. Phones and
+ * emulators without an accelerometer simply get no nudge.
+ */
+@Composable
+private fun StickerNudgeSensorEffect(
+    enabled: Boolean,
+    context: Context,
+    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+    nudge: StickerNudge
+) {
+    DisposableEffect(enabled, context, lifecycleOwner) {
+        val sensorManager = context.getSystemService(SensorManager::class.java)
+        val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        if (!enabled || sensorManager == null || sensor == null) {
+            nudge.clear()
+            return@DisposableEffect onDispose { }
+        }
+
+        val filter = TiltNudgeFilter()
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                if (filter.update(event.values[0], event.values[1])) {
+                    nudge.x.floatValue = filter.tiltX
+                    nudge.y.floatValue = filter.tiltY
+                }
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        var registered = false
+        fun start() {
+            if (registered) return
+            // Re-capture the neutral angle on every resume: the phone may be held differently.
+            filter.reset()
+            registered = sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+        }
+        fun stop() {
+            if (registered) sensorManager.unregisterListener(listener)
+            registered = false
+            nudge.clear()
+        }
+
+        // addObserver replays the current state, so this starts at once if already resumed.
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> start()
+                Lifecycle.Event.ON_PAUSE -> stop()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            stop()
+        }
+    }
+}
+
 private val CHARM_SIZE = 54.dp
 private val CHARM_ICON_SIZE = 34.dp
 private val CHARM_CORNER = 15.dp
@@ -1127,6 +1218,7 @@ private val TRAY_ROW_PITCH = 66.dp
 private fun FolderStickerScatter(
     scatter: FolderTrayNav.Layout,
     minDepth: Float,
+    nudge: StickerNudge?,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
@@ -1172,14 +1264,28 @@ private fun FolderStickerScatter(
         val width = constraints.maxWidth
         val height = (depth * pitch).toInt() + charm
         val charmConstraints = Constraints.fixed(charm, charm)
+        val maxShift = TiltNudgeFilter.MAX_SHIFT_DP.dp.toPx()
         val placeables = measurables.map { it.measure(charmConstraints) }
         layout(width, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
             placeables.forEachIndexed { i, placeable ->
                 val slot = scatter.slots.getOrNull(i) ?: return@forEachIndexed
                 val x = (slot.x * (width - charm)).toInt()
                 val y = ((slot.y + slackRows) * pitch).toInt()
-                // Untilted charms (neat grid, 0° stickers) skip the extra layer.
-                if (slot.tilt == 0f) {
+                if (nudge != null) {
+                    // The layer block reads the nudge state, so a tilt update only re-runs this
+                    // block on the RenderNode: no recomposition, no relayout, no allocation.
+                    val depth = TiltNudgeFilter.depthFor(i)
+                    placeable.placeWithLayer(x, y) {
+                        val tx = nudge.x.floatValue
+                        val ty = nudge.y.floatValue
+                        // Stickers slide "downhill": left edge down -> drift left; phone laid
+                        // flatter (less gravity down the screen) -> drift up.
+                        translationX = -tx * maxShift * depth
+                        translationY = ty * maxShift * depth
+                        rotationZ = slot.tilt - tx * TiltNudgeFilter.MAX_ROTATION_DEG * depth
+                    }
+                } else if (slot.tilt == 0f) {
+                    // Untilted charms (neat grid, 0° stickers) skip the extra layer.
                     placeable.place(x, y)
                 } else {
                     placeable.placeWithLayer(x, y) { rotationZ = slot.tilt }

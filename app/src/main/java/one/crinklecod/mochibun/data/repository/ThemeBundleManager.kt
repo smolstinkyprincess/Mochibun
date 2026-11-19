@@ -8,6 +8,8 @@ import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import androidx.compose.ui.graphics.toArgb
+import one.crinklecod.mochibun.core.sound.SoundEffect
+import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.core.util.calculateInSampleSize
 import one.crinklecod.mochibun.core.util.downsampleAndSaveImage
 import one.crinklecod.mochibun.data.model.BundleCursorConfig
@@ -53,8 +55,15 @@ data class BundlePreviewData(
     /** A `card_border.png` within the 512 KB limit that is a PNG (fully validated on apply). */
     val hasCardBorderAsset: Boolean = false,
     val mascotPreview: Bitmap? = null,
-    val cardBorderPreview: Bitmap? = null
+    val cardBorderPreview: Bitmap? = null,
+    /** A `font.ttf` / `font.otf` within 4 MB with a TrueType/OpenType header (Typeface-checked on apply). */
+    val hasFontAsset: Boolean = false,
+    /** Number of `sounds/<cue>.ogg` entries within 256 KB each with an `OggS` header. */
+    val soundCueCount: Int = 0
 ) {
+    val hasSoundPackAsset: Boolean
+        get() = soundCueCount > 0
+
     val hasCustomMascot: Boolean
         get() = hasMascotAsset
 
@@ -84,6 +93,11 @@ object ThemeBundleManager {
     const val MASCOT_ENTRY = "mascot_atlas.png"
     /** Always this exact entry name for custom 9-slice card border frames. */
     const val CARD_BORDER_ENTRY = "card_border.png"
+    /** Optional bundled font; [FONT_OTF_ENTRY] is accepted on import, exports always write this. */
+    const val FONT_ENTRY = "font.ttf"
+    const val FONT_OTF_ENTRY = "font.otf"
+    /** Sound cues live at `sounds/<cue>.ogg`, cue names from [SoundEffectManager.BundleCueFileNames]. */
+    const val SOUNDS_ENTRY_PREFIX = "sounds/"
 
     private const val MAX_WALLPAPER_WIDTH = 480
     private const val MAX_WALLPAPER_HEIGHT = 800
@@ -93,6 +107,30 @@ object ThemeBundleManager {
     const val MAX_CURSOR_BYTES = 2L * 1024L * 1024L
     const val MAX_CARD_BORDER_BYTES = CustomCardBorderManager.MAX_BORDER_BYTES
     const val MAX_TOTAL_BUNDLE_BYTES = 8L * 1024L * 1024L
+    const val MAX_FONT_BYTES = TypographyManager.MAX_BUNDLE_FONT_BYTES
+    const val MAX_SOUND_BYTES = SoundEffectManager.MAX_BUNDLE_SOUND_BYTES
+
+    /**
+     * ZIP-slip guard: names that are absolute, contain `..` segments, backslashes, drive
+     * letters or NULs are never treated as assets (they are drained and ignored). Assets are
+     * matched by exact name and written to fixed app paths, so an entry name never becomes a
+     * file path either way.
+     */
+    internal fun isUnsafeEntryName(name: String): Boolean =
+        name.isEmpty() ||
+            name.startsWith("/") ||
+            name.contains('\\') ||
+            name.contains(':') ||
+            name.contains('\u0000') ||
+            name.split('/').any { it == ".." }
+
+    /** The sound cue for an exact `sounds/<cue>.ogg` entry, or null for anything else. */
+    fun soundEffectForEntry(name: String): SoundEffect? {
+        if (isUnsafeEntryName(name) || !name.startsWith(SOUNDS_ENTRY_PREFIX)) return null
+        val fileName = name.removePrefix(SOUNDS_ENTRY_PREFIX)
+        if (fileName.isEmpty() || fileName.contains('/')) return null
+        return SoundEffectManager.effectForBundleCueFileName(fileName)
+    }
 
     private val DISCARD_OUTPUT_STREAM = object : OutputStream() {
         override fun write(value: Int) = Unit
@@ -126,7 +164,9 @@ object ThemeBundleManager {
         includeCustomCursor: Boolean = true,
         includeDisplayName: Boolean = true,
         includeCustomMascot: Boolean = true,
-        includeCustomCardBorder: Boolean = true
+        includeCustomCardBorder: Boolean = true,
+        includeFont: Boolean = false,
+        includeSoundPack: Boolean = false
     ): Result<Unit> {
         return try {
             val launcherPrefs = PreferencesManager.getPrefs(context)
@@ -166,6 +206,14 @@ object ThemeBundleManager {
                 CardBorderStyle.DEFAULT_SLICE_PX
             }
 
+            // Active bundle / drop-in font (always packed as font.ttf) and installed sound pack
+            val fontToBundle = if (includeFont) TypographyManager.exportableActiveFont(context) else null
+            val soundsToBundle = if (includeSoundPack) SoundEffectManager.bundleSoundFiles(context) else emptyMap()
+            val soundPackName = if (soundsToBundle.isNotEmpty()) {
+                SoundEffectManager.refreshBundleSoundPackState(context)
+                SoundEffectManager.bundleSoundPackName.value
+            } else null
+
             val manifest = MochibunBundleManifest(
                 bundleVersion = 1,
                 bundleName = bundleName.ifBlank { "Kawaii Setup" },
@@ -188,7 +236,8 @@ object ThemeBundleManager {
                     cardBorderSlicePx = customBorderSlicePx,
                     outlineColorHex = outlineColorHex,
                     textColorHex = textColorHex,
-                    fontFamilyId = fontFamilyId
+                    // A packed font installs as the "bundle" style on the receiving phone
+                    fontFamilyId = if (fontToBundle != null) TypographyManager.BUNDLE_FONT_ID else fontFamilyId
                 ),
                 cursor = BundleCursorConfig(
                     baseVelocity = CursorPreferences.getMoveSpeed(context),
@@ -203,7 +252,11 @@ object ThemeBundleManager {
                 hasWallpaper = activeWallpaperUri != null,
                 hasCustomCursor = activeCursorUri != null,
                 hasCustomMascot = mascotConfig != null,
-                mascot = mascotConfig
+                mascot = mascotConfig,
+                hasFont = fontToBundle != null,
+                fontDisplayName = fontToBundle?.displayName,
+                hasSoundPack = soundsToBundle.isNotEmpty(),
+                soundPackName = soundPackName
             )
 
             // 3. Stream directly to ZipOutputStream
@@ -271,6 +324,32 @@ object ThemeBundleManager {
                     }
                 }
 
+                if (fontToBundle != null) {
+                    try {
+                        fontToBundle.file.inputStream().use { fontIn ->
+                            zipOut.putNextEntry(ZipEntry(FONT_ENTRY))
+                            fontIn.copyTo(zipOut, bufferSize = 8192)
+                            zipOut.closeEntry()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w(TAG, "Failed to bundle custom font", e)
+                    }
+                }
+
+                soundsToBundle.forEach { (effect, file) ->
+                    try {
+                        file.inputStream().use { soundIn ->
+                            zipOut.putNextEntry(
+                                ZipEntry(SOUNDS_ENTRY_PREFIX + SoundEffectManager.bundleCueFileName(effect))
+                            )
+                            soundIn.copyTo(zipOut, bufferSize = 8192)
+                            zipOut.closeEntry()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w(TAG, "Failed to bundle sound ${effect.name}", e)
+                    }
+                }
+
                 zipOut.finish()
                 zipOut.flush()
             }
@@ -295,6 +374,8 @@ object ThemeBundleManager {
             var hasCardBorder = false
             var mascotBytes: ByteArray? = null
             var cardBorderBytes: ByteArray? = null
+            var hasFont = false
+            val soundCues = mutableSetOf<SoundEffect>()
 
             ZipInputStream(bufferedIn).use { zipIn ->
                 var entry = zipIn.nextEntry
@@ -350,12 +431,21 @@ object ThemeBundleManager {
                                 }
                             }
                         }
-                        else -> copyBounded(
-                            zipIn,
-                            DISCARD_OUTPUT_STREAM,
-                            MAX_TOTAL_BUNDLE_BYTES,
-                            totalBytes
-                        )
+                        FONT_ENTRY, FONT_OTF_ENTRY -> {
+                            val header = readEntryHeader(zipIn, MAX_FONT_BYTES, totalBytes)
+                            hasFont = header != null && TypographyManager.isSfntHeader(header)
+                        }
+                        else -> {
+                            val soundEffect = soundEffectForEntry(entry.name)
+                            if (soundEffect != null) {
+                                val header = readEntryHeader(zipIn, MAX_SOUND_BYTES, totalBytes)
+                                if (header != null && SoundEffectManager.isOggHeader(header)) {
+                                    soundCues.add(soundEffect)
+                                }
+                            } else {
+                                copyBounded(zipIn, DISCARD_OUTPUT_STREAM, MAX_TOTAL_BUNDLE_BYTES, totalBytes)
+                            }
+                        }
                     }
                     zipIn.closeEntry()
                     entry = zipIn.nextEntry
@@ -380,7 +470,9 @@ object ThemeBundleManager {
                         hasMascotAsset = hasMascot,
                         hasCardBorderAsset = hasCardBorder,
                         mascotPreview = mascotPreview,
-                        cardBorderPreview = cardBorderPreview
+                        cardBorderPreview = cardBorderPreview,
+                        hasFontAsset = hasFont,
+                        soundCueCount = soundCues.size
                     )
                 )
             }
@@ -412,6 +504,10 @@ object ThemeBundleManager {
             var mascotWithinLimit = false
             var stagedCardBorderFile: File? = null
             var cardBorderWithinLimit = false
+            var stagedFontFile: File? = null
+            var fontWithinLimit = false
+            val stagedSounds = mutableMapOf<SoundEffect, File>()
+            var oversizedSoundCount = 0
             val totalBytes = AtomicLong()
 
             ZipInputStream(BufferedInputStream(inputStream)).use { zipIn ->
@@ -478,12 +574,27 @@ object ThemeBundleManager {
                                 readCardBorderEntry(zipIn, out, totalBytes)
                             }
                         }
-                        else -> copyBounded(
-                            zipIn,
-                            DISCARD_OUTPUT_STREAM,
-                            MAX_TOTAL_BUNDLE_BYTES,
-                            totalBytes
-                        )
+                        FONT_ENTRY, FONT_OTF_ENTRY -> {
+                            val fontFile = File.createTempFile("theme_bundle_font_", ".ttf", context.cacheDir)
+                            stagedFiles.add(fontFile)
+                            stagedFontFile = fontFile
+                            fontWithinLimit = FileOutputStream(fontFile).use { out ->
+                                readLimitedEntry(zipIn, out, MAX_FONT_BYTES, totalBytes)
+                            }
+                        }
+                        else -> {
+                            val soundEffect = soundEffectForEntry(entry.name)
+                            if (soundEffect != null) {
+                                val soundFile = File.createTempFile("theme_bundle_sound_", ".ogg", context.cacheDir)
+                                stagedFiles.add(soundFile)
+                                val withinLimit = FileOutputStream(soundFile).use { out ->
+                                    readLimitedEntry(zipIn, out, MAX_SOUND_BYTES, totalBytes)
+                                }
+                                if (withinLimit) stagedSounds[soundEffect] = soundFile else oversizedSoundCount++
+                            } else {
+                                copyBounded(zipIn, DISCARD_OUTPUT_STREAM, MAX_TOTAL_BUNDLE_BYTES, totalBytes)
+                            }
+                        }
                     }
                     zipIn.closeEntry()
                     entry = zipIn.nextEntry
@@ -519,6 +630,19 @@ object ThemeBundleManager {
                 }
             }
 
+            // Bundled font: installed (and selected) only after Typeface validation; a bad font is
+            // skipped and the rest of the bundle still applies.
+            var installedBundleFont = false
+            stagedFontFile?.let { staged ->
+                if (!fontWithinLimit) {
+                    onMascotSkipped("Custom font skipped: bigger than 4 MB")
+                } else {
+                    TypographyManager.installBundleFont(context, staged, targetManifest.fontDisplayName)
+                        .onSuccess { installedBundleFont = true }
+                        .onFailure { onMascotSkipped("Custom font skipped: ${it.message}") }
+                }
+            }
+
             // 1. Apply Palette & Colors
             val launcherPrefs = PreferencesManager.getPrefs(context)
             val editor = launcherPrefs.edit()
@@ -546,10 +670,18 @@ object ThemeBundleManager {
             editor.putString(PreferencesManager.KEY_THEME_BORDER_STYLE, resolvedBorderStyle.id)
             CustomCardBorderManager.setBorderStyle(context, resolvedBorderStyle)
 
-            p.fontFamilyId?.takeIf { it.isNotBlank() }?.let { requestedFontId ->
-                if (TypographyManager.options.value.any { it.id == requestedFontId }) {
-                    PreferencesManager.setThemeFontFamily(context, requestedFontId)
-                }
+            if (installedBundleFont) {
+                PreferencesManager.setThemeFontFamily(context, TypographyManager.BUNDLE_FONT_ID)
+            } else {
+                // "bundle" without a font in this archive would select whatever font an earlier
+                // bundle left behind, so it is ignored here.
+                p.fontFamilyId
+                    ?.takeIf { it.isNotBlank() && it != TypographyManager.BUNDLE_FONT_ID }
+                    ?.let { requestedFontId ->
+                        if (TypographyManager.options.value.any { it.id == requestedFontId }) {
+                            PreferencesManager.setThemeFontFamily(context, requestedFontId)
+                        }
+                    }
             }
 
             // 2. Apply Greeting
@@ -639,6 +771,23 @@ object ThemeBundleManager {
                 CustomCardBorderManager.resetCustomBorder(context)
             }
 
+            // Bundled sound pack: replaces any earlier pack. Selected as the keypad profile
+            // unless keypad sounds are muted (importing a theme shouldn't unmute the phone).
+            if (stagedSounds.isNotEmpty()) {
+                SoundEffectManager.installBundleSounds(
+                    context,
+                    stagedSounds,
+                    targetManifest.soundPackName ?: targetManifest.bundleName
+                ).onSuccess {
+                    if (PreferencesManager.getKeypadSoundMode(context) != "off") {
+                        PreferencesManager.setKeypadSoundMode(context, SoundEffectManager.BUNDLE_THEME_ID)
+                    }
+                }.onFailure { onMascotSkipped("Custom sounds skipped: ${it.message}") }
+            }
+            if (oversizedSoundCount > 0) {
+                onMascotSkipped("$oversizedSoundCount sound(s) skipped: bigger than 256 KB")
+            }
+
             editor.apply()
             PreferencesManager.init(context)
             one.crinklecod.mochibun.ui.theme.SystemUiThemeBridge.broadcastSavedTheme(context)
@@ -660,11 +809,33 @@ object ThemeBundleManager {
      * real bytes (never `ZipEntry.size`). Returns false when the entry is larger: the rest is then
      * drained under the whole-bundle limit, so only the mascot is rejected, not the bundle.
      */
-    private fun readMascotEntry(input: InputStream, output: OutputStream, totalCounter: AtomicLong): Boolean {
+    private fun readMascotEntry(input: InputStream, output: OutputStream, totalCounter: AtomicLong): Boolean =
+        readLimitedEntry(input, output, MascotAtlasValidator.MAX_ATLAS_BYTES, totalCounter)
+
+    /**
+     * Streams an entry into [output] up to [maxBytes], counting real bytes (never trusting
+     * `ZipEntry.size`). An oversized entry is drained under the whole-bundle limit and false is
+     * returned, so only that asset is rejected, not the bundle.
+     */
+    private fun readLimitedEntry(
+        input: InputStream,
+        output: OutputStream,
+        maxBytes: Long,
+        totalCounter: AtomicLong
+    ): Boolean {
         val counting = BundleByteCounter(input, totalCounter)
-        val withinLimit = MascotAtlasValidator.copyAtMost(counting, output, MascotAtlasValidator.MAX_ATLAS_BYTES)
+        val withinLimit = MascotAtlasValidator.copyAtMost(counting, output, maxBytes)
         if (!withinLimit) copyBounded(input, DISCARD_OUTPUT_STREAM, MAX_TOTAL_BUNDLE_BYTES, totalCounter)
         return withinLimit
+    }
+
+    /**
+     * Preview helper: keeps only the first 16 bytes of an entry (for magic-number checks) while
+     * counting the rest, so inspecting a 4 MB font never buffers it. Null when over [maxBytes].
+     */
+    private fun readEntryHeader(input: InputStream, maxBytes: Long, totalCounter: AtomicLong): ByteArray? {
+        val header = HeaderCaptureOutputStream(16)
+        return if (readLimitedEntry(input, header, maxBytes, totalCounter)) header.bytes() else null
     }
 
     /**
@@ -672,12 +843,8 @@ object ThemeBundleManager {
      * bytes. If oversized, drains the entry under the whole-bundle limit and returns false so the
      * rest of the bundle still imports cleanly.
      */
-    private fun readCardBorderEntry(input: InputStream, output: OutputStream, totalCounter: AtomicLong): Boolean {
-        val counting = BundleByteCounter(input, totalCounter)
-        val withinLimit = MascotAtlasValidator.copyAtMost(counting, output, MAX_CARD_BORDER_BYTES)
-        if (!withinLimit) copyBounded(input, DISCARD_OUTPUT_STREAM, MAX_TOTAL_BUNDLE_BYTES, totalCounter)
-        return withinLimit
-    }
+    private fun readCardBorderEntry(input: InputStream, output: OutputStream, totalCounter: AtomicLong): Boolean =
+        readLimitedEntry(input, output, MAX_CARD_BORDER_BYTES, totalCounter)
 
     private fun readBytesBounded(
         input: InputStream,
@@ -772,4 +939,24 @@ private class BundleByteCounter(input: InputStream, private val total: AtomicLon
         }
         return n
     }
+}
+
+/** Keeps the first [capacity] bytes written and discards the rest. */
+private class HeaderCaptureOutputStream(capacity: Int) : OutputStream() {
+    private val buffer = ByteArray(capacity)
+    private var size = 0
+
+    override fun write(value: Int) {
+        if (size < buffer.size) buffer[size++] = value.toByte()
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        val n = minOf(len, buffer.size - size)
+        if (n > 0) {
+            System.arraycopy(b, off, buffer, size, n)
+            size += n
+        }
+    }
+
+    fun bytes(): ByteArray = buffer.copyOf(size)
 }

@@ -47,6 +47,8 @@ internal fun SoundFeedbackSettingsScreen(
     val keypadSoundMode by PreferencesManager.keypadSoundMode.collectAsState()
     val mediaVolumeLock by PreferencesManager.isMediaVolumeLockEnabled.collectAsState()
     val lidSnapSound by PreferencesManager.isLidCloseSnapSoundEnabled.collectAsState()
+    // Non-null while a .mochibundle sound pack is installed (refreshed off-thread by preloadAllThemes)
+    val bundleSoundPackName by SoundEffectManager.bundleSoundPackName.collectAsState()
     val totalItems = 5
 
     LaunchedEffect(Unit) {
@@ -67,11 +69,16 @@ internal fun SoundFeedbackSettingsScreen(
         PreferencesManager.setLauncherAudioStream(context, next)
     }
 
-    // Cycles every SoundEffectManager theme (incl. Muted). Reads the pref directly rather than the
-    // collected state, which lags a frame and made quick repeated presses land on the same theme.
+    // Cycles every SoundEffectManager theme (incl. Muted, plus "Custom Bundle" while a bundle sound
+    // pack is installed). Reads the pref directly rather than the collected state, which lags a
+    // frame and made quick repeated presses land on the same theme.
     fun changeSoundProfile(direction: Int) {
         val current = PreferencesManager.getKeypadSoundMode(context)
-        PreferencesManager.setKeypadSoundMode(context, SoundEffectManager.nextThemeId(current, direction))
+        val includeBundle = SoundEffectManager.bundleSoundPackName.value != null
+        PreferencesManager.setKeypadSoundMode(
+            context,
+            SoundEffectManager.nextThemeId(current, direction, includeBundle)
+        )
         // Live preview with the newly selected profile (silent for Muted)
         SoundEffectManager.play(context, SoundEffect.CLICK)
     }
@@ -213,7 +220,7 @@ internal fun SoundFeedbackSettingsScreen(
                     SettingsStepperRow(
                         title = "Sound Profile",
                         subtitle = "Pick a cute keypad sound theme (plays a preview ♪)",
-                        valueDisplay = SoundEffectManager.themeName(keypadSoundMode),
+                        valueDisplay = SoundEffectManager.themeName(keypadSoundMode, bundleSoundPackName),
                         isFocused = focusedIndex == 3,
                         jumpNumber = 4,
                         onDecrement = { changeSoundProfile(-1) },

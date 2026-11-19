@@ -12,6 +12,9 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
@@ -25,7 +28,9 @@ enum class SoundEffect {
     SELECT,
     BACK,
     BOUNDARY,
-    SNAP
+    SNAP,
+    FEED,
+    PET
 }
 
 /**
@@ -59,22 +64,178 @@ object SoundEffectManager {
         SoundTheme("pager", "Cyber Pager", "90s Pokebell & Tamagotchi crystal pings"),
         SoundTheme("thock", "Tactile Thock", "Deep mechanical switch & clamshell acoustics"),
         SoundTheme("water", "Water Drop", "Organic calming water bubbles & droplets"),
+        SoundTheme("bundle", "Custom Bundle", "Sound pack imported from a .mochibundle"),
         SoundTheme("off", "Muted / Off", "Silent keypad navigation")
     )
 
-    private val ALL_SYNTHESIZED_THEMES = listOf("kawaii", "retro", "chiptune", "pager", "thock", "water")
-    private val SYNTHESIZED_THEME_SET = ALL_SYNTHESIZED_THEMES.toSet()
+    // ── Sound pack imported from a .mochibundle ("sounds/<cue>.ogg") ─────────────────────────
 
-    /** Theme id one step from [currentId] in [SoundThemes] order, wrapping; unknown ids start at the first theme. */
-    fun nextThemeId(currentId: String, direction: Int): String {
-        val index = SoundThemes.indexOfFirst { it.id == currentId }
-        if (index < 0) return SoundThemes.first().id
-        return SoundThemes[Math.floorMod(index + direction, SoundThemes.size)].id
+    /** Sound-profile id of the imported pack; cues it lacks use [BUNDLE_FALLBACK_THEME]. */
+    const val BUNDLE_THEME_ID = "bundle"
+    const val BUNDLE_SOUNDS_DIR_NAME = "bundle_sounds"
+    /** Per-cue uncompressed cap: SoundPool decodes each sample fully into native memory. */
+    const val MAX_BUNDLE_SOUND_BYTES = 256L * 1024L
+    /** Synthesized theme used for any cue a bundle pack doesn't include (or fails to decode). */
+    const val BUNDLE_FALLBACK_THEME = "kawaii"
+    private const val BUNDLE_PACK_NAME_FILE = "pack_name.txt"
+    private const val BUNDLE_FALLBACK_NAME = "Custom Bundle"
+    private const val MAX_PACK_NAME_CHARS = 40
+
+    /** File name of [effect] inside a bundle (`sounds/<name>`) and in [BUNDLE_SOUNDS_DIR_NAME]. */
+    fun bundleCueFileName(effect: SoundEffect): String = "${effect.name.lowercase()}.ogg"
+
+    /** Every supported cue file name, e.g. `nav.ogg`, `click.ogg`, ... */
+    val BundleCueFileNames: List<String> = SoundEffect.entries.map { bundleCueFileName(it) }
+
+    fun effectForBundleCueFileName(fileName: String): SoundEffect? =
+        SoundEffect.entries.firstOrNull { bundleCueFileName(it) == fileName.lowercase() }
+
+    /** True for an Ogg container page header (`OggS`). */
+    fun isOggHeader(header: ByteArray): Boolean =
+        header.size >= 4 &&
+            header[0] == 'O'.code.toByte() &&
+            header[1] == 'g'.code.toByte() &&
+            header[2] == 'g'.code.toByte() &&
+            header[3] == 'S'.code.toByte()
+
+    /** Size + `OggS` header check; SoundPool reports real decode failures asynchronously. */
+    fun isValidBundleCueFile(file: File): Boolean {
+        if (!file.isFile || file.length() <= 0L || file.length() > MAX_BUNDLE_SOUND_BYTES) return false
+        val header = ByteArray(4)
+        val read = runCatching { file.inputStream().use { it.read(header) } }.getOrDefault(-1)
+        return read == 4 && isOggHeader(header)
     }
 
-    /** Display name for a theme id, e.g. "retro" -> "Retro Keitai". */
-    fun themeName(id: String): String =
-        SoundThemes.firstOrNull { it.id == id }?.name ?: SoundThemes.first().name
+    fun bundleSoundsDir(context: Context): File = File(context.filesDir, BUNDLE_SOUNDS_DIR_NAME)
+
+    /**
+     * Where each cue of the bundle profile comes from: the pack's `.ogg`, or null meaning the
+     * synthesized [BUNDLE_FALLBACK_THEME] sample.
+     */
+    internal fun resolveBundleCueSources(bundleDir: File): Map<SoundEffect, File?> =
+        SoundEffect.entries.associateWith { effect ->
+            File(bundleDir, bundleCueFileName(effect)).takeIf { isValidBundleCueFile(it) }
+        }
+
+    /** Valid installed cue files (what an export packs as `sounds/<cue>.ogg`). */
+    fun bundleSoundFiles(context: Context): Map<SoundEffect, File> =
+        resolveBundleCueSources(bundleSoundsDir(context))
+            .mapNotNull { (effect, file) -> file?.let { effect to it } }
+            .toMap()
+
+    private val _bundleSoundPackName = MutableStateFlow<String?>(null)
+
+    /** Display name of the installed bundle sound pack, or null when none is installed. */
+    val bundleSoundPackName: StateFlow<String?> = _bundleSoundPackName.asStateFlow()
+
+    private fun sanitizePackName(raw: String?): String? =
+        raw?.filterNot { it.isISOControl() }?.trim()?.take(MAX_PACK_NAME_CHARS)?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** Re-reads [BUNDLE_SOUNDS_DIR_NAME] into [bundleSoundPackName]. Reads files: call off the main thread. */
+    fun refreshBundleSoundPackState(context: Context) {
+        val dir = bundleSoundsDir(context)
+        _bundleSoundPackName.value = if (bundleSoundFiles(context).isEmpty()) {
+            null
+        } else {
+            sanitizePackName(runCatching { File(dir, BUNDLE_PACK_NAME_FILE).readText() }.getOrNull())
+                ?: BUNDLE_FALLBACK_NAME
+        }
+    }
+
+    /**
+     * Replaces the installed pack with the valid entries of [staged] (oversized / non-Ogg files
+     * are dropped). The new pack is assembled in a sibling temp dir, then swapped in, so a
+     * failure never leaves a half-written pack. Call off the main thread.
+     *
+     * @return number of cues installed
+     */
+    fun installBundleSounds(context: Context, staged: Map<SoundEffect, File>, packName: String?): Result<Int> {
+        return try {
+            val valid = staged.filterValues { isValidBundleCueFile(it) }
+            if (valid.isEmpty()) {
+                return Result.failure(IllegalArgumentException("no valid .ogg sound cues"))
+            }
+            val dir = bundleSoundsDir(context)
+            val temp = File(context.filesDir, "$BUNDLE_SOUNDS_DIR_NAME.tmp")
+            temp.deleteRecursively()
+            if (!temp.mkdirs()) return Result.failure(IllegalStateException("couldn't create sound folder"))
+            valid.forEach { (effect, file) ->
+                file.copyTo(File(temp, bundleCueFileName(effect)), overwrite = true)
+            }
+            sanitizePackName(packName)?.let { File(temp, BUNDLE_PACK_NAME_FILE).writeText(it) }
+
+            dir.deleteRecursively()
+            if (!temp.renameTo(dir)) {
+                temp.deleteRecursively()
+                return Result.failure(IllegalStateException("couldn't save sound pack"))
+            }
+            refreshBundleSoundPackState(context)
+            reloadBundleSounds(context)
+            Result.success(valid.size)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to install bundle sounds", e)
+            Result.failure(e)
+        }
+    }
+
+    /** Deletes the bundle pack; the "bundle" profile then plays [BUNDLE_FALLBACK_THEME] sounds. */
+    fun resetBundleSounds(context: Context) {
+        bundleSoundsDir(context).deleteRecursively()
+        refreshBundleSoundPackState(context)
+        reloadBundleSounds(context)
+    }
+
+    /**
+     * Drops cached "bundle" samples so the next play (or an immediate reload, when the bundle
+     * profile is active and the pool exists) picks up the new `.ogg` files.
+     */
+    fun reloadBundleSounds(context: Context) {
+        val appContext = context.applicationContext ?: context
+        loaderExecutor.execute {
+            synchronized(poolLock) {
+                val pool = soundPool
+                for (effect in SoundEffect.entries) {
+                    val oldId = soundMap.remove(BUNDLE_THEME_ID to effect) ?: continue
+                    readySampleIds.remove(oldId)
+                    bundleSampleEffects.remove(oldId)
+                    runCatching { pool?.unload(oldId) }
+                }
+                loadedThemes.remove(BUNDLE_THEME_ID)
+                if (pool != null && PreferencesManager.getKeypadSoundMode(appContext) == BUNDLE_THEME_ID) {
+                    loadThemeLocked(
+                        File(appContext.cacheDir, SYNTH_CACHE_DIR_NAME).apply { mkdirs() },
+                        bundleSoundsDir(appContext),
+                        BUNDLE_THEME_ID
+                    )
+                }
+            }
+        }
+    }
+
+    private val ALL_SYNTHESIZED_THEMES = listOf("kawaii", "retro", "chiptune", "pager", "thock", "water")
+    private val SYNTHESIZED_THEME_SET = ALL_SYNTHESIZED_THEMES.toSet()
+    private const val SYNTH_CACHE_DIR_NAME = "mochibun_sounds"
+
+    /**
+     * Theme id one step from [currentId] in [SoundThemes] order, wrapping; unknown ids start at
+     * the first theme. The "bundle" profile is only part of the cycle when [includeBundle]
+     * (i.e. a bundle sound pack is installed).
+     */
+    fun nextThemeId(currentId: String, direction: Int, includeBundle: Boolean = false): String {
+        val cycle = if (includeBundle) SoundThemes else SoundThemes.filterNot { it.id == BUNDLE_THEME_ID }
+        val index = cycle.indexOfFirst { it.id == currentId }
+        if (index < 0) return cycle.first().id
+        return cycle[Math.floorMod(index + direction, cycle.size)].id
+    }
+
+    /**
+     * Display name for a theme id, e.g. "retro" -> "Retro Keitai". The bundle profile shows
+     * [bundlePackName] when known.
+     */
+    fun themeName(id: String, bundlePackName: String? = null): String {
+        if (id == BUNDLE_THEME_ID && !bundlePackName.isNullOrBlank()) return bundlePackName
+        return SoundThemes.firstOrNull { it.id == id }?.name ?: SoundThemes.first().name
+    }
 
     private data class PendingPlay(
         val soundId: Int,
@@ -92,6 +253,8 @@ object SoundEffectManager {
     private val soundMap = ConcurrentHashMap<Pair<String, SoundEffect>, Int>()
     private val loadedThemes = ConcurrentHashMap.newKeySet<String>()
     private val readySampleIds = ConcurrentHashMap.newKeySet<Int>()
+    /** Samples loaded from bundle `.ogg` files, so a decode failure can fall back per cue. */
+    private val bundleSampleEffects = ConcurrentHashMap<Int, SoundEffect>()
 
     @Volatile
     private var pendingPlay: PendingPlay? = null
@@ -106,6 +269,7 @@ object SoundEffectManager {
      */
     fun init(context: Context) {
         val appContext = context.applicationContext
+        loaderExecutor.execute { refreshBundleSoundPackState(appContext) }
         val mode = PreferencesManager.getKeypadSoundMode(appContext)
         val snapEnabled = PreferencesManager.isLidCloseSnapSoundEnabled(appContext)
         if (mode == "off" && !snapEnabled) return
@@ -122,7 +286,14 @@ object SoundEffectManager {
     fun preloadAllThemes(context: Context) {
         val appContext = context.applicationContext
         val streamPref = PreferencesManager.getLauncherAudioStream(appContext)
-        scheduleLoadThemes(appContext, ALL_SYNTHESIZED_THEMES, streamPref)
+        loaderExecutor.execute { refreshBundleSoundPackState(appContext) }
+        // Settings can cycle to the bundle profile, so warm it too when a pack is installed
+        val themes = if (_bundleSoundPackName.value != null) {
+            ALL_SYNTHESIZED_THEMES + BUNDLE_THEME_ID
+        } else {
+            ALL_SYNTHESIZED_THEMES
+        }
+        scheduleLoadThemes(appContext, themes, streamPref)
     }
 
     /**
@@ -160,13 +331,14 @@ object SoundEffectManager {
             soundMap.clear()
             loadedThemes.clear()
             readySampleIds.clear()
+            bundleSampleEffects.clear()
             pendingPlay = null
             currentStreamSetting = null
         }
     }
 
     private fun resolveActiveTheme(mode: String, fallback: String): String =
-        if (mode in SYNTHESIZED_THEME_SET) mode else fallback
+        if (mode in SYNTHESIZED_THEME_SET || mode == BUNDLE_THEME_ID) mode else fallback
 
     private fun scheduleLoadThemes(
         appContext: Context,
@@ -178,10 +350,12 @@ object SoundEffectManager {
         loaderExecutor.execute {
             synchronized(poolLock) {
                 ensurePoolLocked(streamPref)
-                val soundDir = File(appContext.cacheDir, "mochibun_sounds").apply { mkdirs() }
+                val soundDir = File(appContext.cacheDir, SYNTH_CACHE_DIR_NAME).apply { mkdirs() }
+                synthCacheDir = soundDir
+                val bundleDir = bundleSoundsDir(appContext)
                 for (theme in themes) {
                     if (!loadedThemes.contains(theme)) {
-                        loadThemeLocked(soundDir, theme)
+                        loadThemeLocked(soundDir, bundleDir, theme)
                     }
                 }
                 if (pendingEffectForFirstTheme != null && themes.isNotEmpty() && pendingVolume > 0f) {
@@ -216,6 +390,7 @@ object SoundEffectManager {
             soundMap.clear()
             loadedThemes.clear()
             readySampleIds.clear()
+            bundleSampleEffects.clear()
             pendingPlay = null
         }
 
@@ -242,6 +417,11 @@ object SoundEffectManager {
                 .build()
 
             pool.setOnLoadCompleteListener { sp, sampleId, status ->
+                val bundleEffect = bundleSampleEffects.remove(sampleId)
+                if (status != 0 && bundleEffect != null) {
+                    // A bundle .ogg passed the header check but SoundPool couldn't decode it
+                    loaderExecutor.execute { replaceFailedBundleSample(sp, sampleId, bundleEffect) }
+                }
                 if (status == 0) {
                     readySampleIds.add(sampleId)
                     val pending = pendingPlay
@@ -260,19 +440,26 @@ object SoundEffectManager {
         }
     }
 
-    private fun loadThemeLocked(soundDir: File, theme: String) {
+    @Volatile
+    private var synthCacheDir: File? = null
+
+    /**
+     * Loads every cue of [theme] into the pool. For the bundle profile each cue prefers the
+     * pack's `.ogg` from [bundleDir] and otherwise uses the synthesized fallback theme, so a
+     * pack with only `click.ogg` still has every other sound. Always runs on [loaderExecutor].
+     */
+    private fun loadThemeLocked(soundDir: File, bundleDir: File, theme: String) {
         val pool = soundPool ?: return
+        val bundleSources = if (theme == BUNDLE_THEME_ID) resolveBundleCueSources(bundleDir) else emptyMap()
         var loadedAny = false
         for (effect in SoundEffect.entries) {
             try {
-                val file = File(soundDir, "${theme}_${effect.name.lowercase()}.wav")
-                if (!file.exists() || file.length() < 44) {
-                    val pcm = synthesizePcm(theme, effect)
-                    writeWavFile(file, pcm, SAMPLE_RATE)
-                }
+                val bundleFile = bundleSources[effect]
+                val file = bundleFile ?: synthesizedSampleFile(soundDir, theme, effect)
                 val id = pool.load(file.absolutePath, 1)
                 if (id != 0) {
                     soundMap[theme to effect] = id
+                    if (bundleFile != null) bundleSampleEffects[id] = effect
                     loadedAny = true
                 }
             } catch (e: Exception) {
@@ -281,6 +468,35 @@ object SoundEffectManager {
         }
         if (loadedAny) {
             loadedThemes.add(theme)
+        }
+    }
+
+    /** Cached synthesized WAV for [theme] (the bundle profile maps to [BUNDLE_FALLBACK_THEME]). */
+    private fun synthesizedSampleFile(soundDir: File, theme: String, effect: SoundEffect): File {
+        val synthTheme = if (theme in SYNTHESIZED_THEME_SET) theme else BUNDLE_FALLBACK_THEME
+        val file = File(soundDir, "${synthTheme}_${effect.name.lowercase()}.wav")
+        if (!file.exists() || file.length() < 44) {
+            writeWavFile(file, synthesizePcm(synthTheme, effect), SAMPLE_RATE)
+        }
+        return file
+    }
+
+    /** Swaps an undecodable bundle sample for the synthesized fallback cue. */
+    private fun replaceFailedBundleSample(sp: SoundPool, failedId: Int, effect: SoundEffect) {
+        synchronized(poolLock) {
+            val pool = soundPool
+            val soundDir = synthCacheDir
+            if (pool !== sp || soundDir == null) return
+            if (soundMap[BUNDLE_THEME_ID to effect] != failedId) return
+            try {
+                runCatching { pool.unload(failedId) }
+                val file = synthesizedSampleFile(soundDir, BUNDLE_THEME_ID, effect)
+                val id = pool.load(file.absolutePath, 1)
+                if (id != 0) soundMap[BUNDLE_THEME_ID to effect] = id else soundMap.remove(BUNDLE_THEME_ID to effect)
+                Log.w(TAG, "Bundle sound ${bundleCueFileName(effect)} failed to decode; using fallback")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed loading fallback for bundle cue ${effect.name}", e)
+            }
         }
     }
 
@@ -463,6 +679,47 @@ object SoundEffectManager {
                     (s * 22000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
+
+            SoundEffect.FEED -> {
+                // Cheerful ascending two-note nibble/sparkle chime (85ms: E6 -> A6 + C7 sparkle)
+                val durationMs = 85
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                val splitSec = 0.036
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s = if (t < splitSec) {
+                        val env = sin(PI * (t / splitSec)) * exp(-t * 35.0)
+                        sin(2.0 * PI * 1318.51 * t) * env
+                    } else {
+                        val t2 = t - splitSec
+                        val env = exp(-t2 * 45.0) * (1.0 - exp(-t2 * 420.0))
+                        (sin(2.0 * PI * 1760.0 * t2) * 0.65 + sin(2.0 * PI * 2093.0 * t2) * 0.35) * env
+                    }
+                    (s * 25000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.PET -> {
+                // Soft warm purr/chirp chime (95ms: gentle purr swell into a soft C6 chirp)
+                val durationMs = 95
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                val splitSec = 0.048
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s = if (t < splitSec) {
+                        val purrMod = 0.65 + 0.35 * sin(2.0 * PI * 28.0 * t)
+                        val env = sin(PI * (t / splitSec))
+                        sin(2.0 * PI * 340.0 * t) * purrMod * env * 0.85
+                    } else {
+                        val t2 = t - splitSec
+                        val progress = t2 / (durationMs / 1000.0 - splitSec)
+                        val freq = 880.0 + progress * 220.0
+                        val env = sin(PI * progress.coerceIn(0.0, 1.0)) * exp(-t2 * 32.0)
+                        sin(2.0 * PI * freq * t2) * env
+                    }
+                    (s * 22000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
         }
     }
 
@@ -536,6 +793,38 @@ object SoundEffectManager {
                     val t = i.toDouble() / SAMPLE_RATE
                     val s = (sin(2.0 * PI * 1500.0 * t) * exp(-t * 400.0) * 0.6 + sin(2.0 * PI * 300.0 * t) * exp(-t * 180.0) * 0.4)
                     (s * 26000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.FEED -> {
+                // 70ms ascending two-note keitai treat chime (1046 Hz -> 1568 Hz)
+                val durationMs = 70
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val isFirst = t < 0.032
+                    val localT = if (isFirst) t else t - 0.032
+                    val freq = if (isFirst) 1046.5 else 1567.98
+                    val s = sin(2.0 * PI * freq * localT) * exp(-localT * 65.0)
+                    (s * 24000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.PET -> {
+                // 75ms warm keitai purr-chirp (360 Hz soft pulse -> 880 Hz chirp)
+                val durationMs = 75
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val isFirst = t < 0.035
+                    val s = if (isFirst) {
+                        val mod = 0.6 + 0.4 * sin(2.0 * PI * 30.0 * t)
+                        sin(2.0 * PI * 360.0 * t) * mod * sin(PI * (t / 0.035))
+                    } else {
+                        val t2 = t - 0.035
+                        sin(2.0 * PI * 880.0 * t2) * exp(-t2 * 70.0)
+                    }
+                    (s * 21000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
         }
@@ -625,6 +914,38 @@ object SoundEffectManager {
                     (s * 18000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
+
+            SoundEffect.FEED -> {
+                // 80ms 8-bit ascending two-note treat arpeggio (C6 -> G6)
+                val durationMs = 80
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val isFirst = t < 0.036
+                    val noteT = if (isFirst) t else t - 0.036
+                    val s = if (isFirst) {
+                        pulseWave(t * 1046.5, 0.25) * exp(-noteT * 55.0)
+                    } else {
+                        pulseWave(t * 1567.98, 0.5) * exp(-noteT * 50.0)
+                    }
+                    (s * 19000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.PET -> {
+                // 80ms warm 8-bit purr-chirp (C4 square purr -> C5 chirp)
+                val durationMs = 80
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val isFirst = t < 0.040
+                    val noteT = if (isFirst) t else t - 0.040
+                    val freq = if (isFirst) 261.63 else 523.25
+                    val env = if (isFirst) sin(PI * (t / 0.040)) * 0.7 else exp(-noteT * 55.0)
+                    val s = pulseWave(t * freq, 0.5) * env
+                    (s * 16500).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
         }
     }
 
@@ -711,6 +1032,34 @@ object SoundEffectManager {
                     (s * 21000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
+
+            SoundEffect.FEED -> {
+                // 76ms crystal Pokebell two-note ascending chime (A6 -> E7)
+                val durationMs = 76
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val isFirst = t < 0.034
+                    val localT = if (isFirst) t else t - 0.034
+                    val freq = if (isFirst) 1760.0 else 2637.02
+                    val s = sin(2.0 * PI * freq * localT) * exp(-localT * 60.0)
+                    (s * 22000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.PET -> {
+                // 80ms soft cyber purr/chirp ping (784 Hz warm swell -> 1175 Hz chirp)
+                val durationMs = 80
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val progress = i.toDouble() / samples
+                    val freq = 784.0 + progress * 391.0
+                    val env = sin(PI * progress) * exp(-t * 24.0)
+                    val s = sin(2.0 * PI * freq * t) * env
+                    (s * 20000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
         }
     }
 
@@ -794,6 +1143,35 @@ object SoundEffectManager {
                     (s * 26000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
+
+            SoundEffect.FEED -> {
+                // 70ms warm wooden marimba double-tap (520 Hz -> 780 Hz)
+                val durationMs = 70
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val s1 = sin(2.0 * PI * 520.0 * t) * exp(-t * 110.0) * 0.55
+                    val s2 = if (t >= 0.028) {
+                        val t2 = t - 0.028
+                        sin(2.0 * PI * 780.0 * t2) * exp(-t2 * 95.0) * 0.65
+                    } else 0.0
+                    ( (s1 + s2) * 25000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.PET -> {
+                // 80ms cozy wooden purr resonance into soft 480 Hz bloom
+                val durationMs = 80
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val progress = i.toDouble() / samples
+                    val purr = sin(2.0 * PI * 240.0 * t) * (0.65 + 0.35 * sin(2.0 * PI * 26.0 * t)) * 0.6
+                    val chirp = sin(2.0 * PI * 480.0 * t) * 0.4
+                    val env = sin(PI * progress) * exp(-t * 22.0)
+                    ((purr + chirp) * env * 22000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
         }
     }
 
@@ -875,6 +1253,42 @@ object SoundEffectManager {
                     val freq = 520.0 - (i.toDouble() / samples * 260.0)
                     val s = sin(2.0 * PI * freq * t) * exp(-t * 100.0)
                     (s * 23000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.FEED -> {
+                // 80ms cheerful ascending twin bubble sparkle (900->1250 Hz then 1350->1900 Hz)
+                val durationMs = 80
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val splitSec = 0.036
+                    val s = if (t < splitSec) {
+                        val p = t / splitSec
+                        val freq = 900.0 + p * 350.0
+                        sin(2.0 * PI * freq * t) * sin(PI * p) * exp(-t * 35.0)
+                    } else {
+                        val t2 = t - splitSec
+                        val p = t2 / (durationMs / 1000.0 - splitSec)
+                        val freq = 1350.0 + p * 550.0
+                        sin(2.0 * PI * freq * t2) * sin(PI * p.coerceIn(0.0, 1.0)) * exp(-t2 * 30.0)
+                    }
+                    (s * 24000).toInt().coerceIn(-32767, 32767).toShort()
+                }
+            }
+
+            SoundEffect.PET -> {
+                // 90ms soft warm bubble purr/chirp ripple (420 -> 680 Hz with gentle swell)
+                val durationMs = 90
+                val samples = (SAMPLE_RATE * durationMs / 1000)
+                ShortArray(samples) { i ->
+                    val t = i.toDouble() / SAMPLE_RATE
+                    val progress = i.toDouble() / samples
+                    val freq = 420.0 + progress * 260.0
+                    val ripple = 0.72 + 0.28 * sin(2.0 * PI * 24.0 * t)
+                    val env = sin(PI * progress) * exp(-t * 18.0)
+                    val s = sin(2.0 * PI * freq * t) * ripple * env
+                    (s * 22000).toInt().coerceIn(-32767, 32767).toShort()
                 }
             }
         }

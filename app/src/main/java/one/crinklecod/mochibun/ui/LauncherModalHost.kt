@@ -31,7 +31,6 @@ import one.crinklecod.mochibun.ui.dialogs.HardwareButtonsDialog
 import one.crinklecod.mochibun.ui.dialogs.HiddenAppsDialog
 import one.crinklecod.mochibun.ui.dialogs.IconPackSelectionDialog
 import one.crinklecod.mochibun.ui.dialogs.IconPickerDialog
-import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelDialog
 import one.crinklecod.mochibun.ui.dialogs.PresetPreviewDialog
 import one.crinklecod.mochibun.ui.dialogs.QuickMemoDialog
 import one.crinklecod.mochibun.ui.dialogs.dialogWidth
@@ -69,7 +68,6 @@ sealed interface ActiveModal {
     data object ThemeStudio : ActiveModal
     data object IconPackSelection : ActiveModal
     data object HiddenApps : ActiveModal
-    data object KaomojiWheel : ActiveModal
     data object QuickMemo : ActiveModal
     /** Mochibunny's Feed / Pet / Chat pill, drawn inside Home; LauncherKeyHandler routes its keys. */
     data object PetPill : ActiveModal
@@ -179,12 +177,6 @@ internal fun LauncherModalHost(
             poundKeyState = 0
         }
     }
-    val onDismissKaomojiWheel = remember {
-        {
-            activeModal = null
-            poundKeyState = 0
-        }
-    }
     val onDismissIconPicker = remember(launcherVm) {
         {
             activeModal = null
@@ -256,12 +248,6 @@ internal fun LauncherModalHost(
                 installedApps = installedAppsForButtons,
                 initialCapturedKeyCode = modal.initialKeyCode,
                 onDismiss = dismissActiveModal
-            )
-        }
-
-        is ActiveModal.KaomojiWheel -> {
-            KaomojiWheelDialog(
-                onDismiss = onDismissKaomojiWheel
             )
         }
 

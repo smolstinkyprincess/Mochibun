@@ -76,18 +76,31 @@ class SettingsPreferencesTest {
 
     @Test
     fun soundProfileCyclesEveryThemeAndWraps() {
-        val ids = SoundEffectManager.SoundThemes.map { it.id }
-        var id = ids.first()
-        val visited = mutableListOf(id)
-        repeat(ids.size - 1) {
+        val builtInIds = SoundEffectManager.SoundThemes
+            .filterNot { it.id == SoundEffectManager.BUNDLE_THEME_ID }
+            .map { it.id }
+        var id = builtInIds.first()
+        val visitedBuiltIn = mutableListOf(id)
+        repeat(builtInIds.size - 1) {
             id = SoundEffectManager.nextThemeId(id, 1)
-            visited += id
+            visitedBuiltIn += id
         }
-        assertEquals(ids, visited)
-        assertEquals(ids.first(), SoundEffectManager.nextThemeId(ids.last(), 1))
-        assertEquals(ids.last(), SoundEffectManager.nextThemeId(ids.first(), -1))
+        assertEquals(builtInIds, visitedBuiltIn)
+        assertEquals(builtInIds.first(), SoundEffectManager.nextThemeId(builtInIds.last(), 1))
+        assertEquals(builtInIds.last(), SoundEffectManager.nextThemeId(builtInIds.first(), -1))
         // Unknown / legacy ids recover to the first theme instead of sticking
-        assertEquals(ids.first(), SoundEffectManager.nextThemeId("bogus", 1))
+        assertEquals(builtInIds.first(), SoundEffectManager.nextThemeId("bogus", 1))
+
+        val allIds = SoundEffectManager.SoundThemes.map { it.id }
+        var bundleCycleId = allIds.first()
+        val visitedAll = mutableListOf(bundleCycleId)
+        repeat(allIds.size - 1) {
+            bundleCycleId = SoundEffectManager.nextThemeId(bundleCycleId, 1, includeBundle = true)
+            visitedAll += bundleCycleId
+        }
+        assertEquals(allIds, visitedAll)
+        assertEquals(allIds.first(), SoundEffectManager.nextThemeId(allIds.last(), 1, includeBundle = true))
+        assertEquals(allIds.last(), SoundEffectManager.nextThemeId(allIds.first(), -1, includeBundle = true))
     }
 
     @Test

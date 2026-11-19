@@ -102,6 +102,7 @@ internal fun AppearanceSettingsScreen(
     val homeMascotSize by PreferencesManager.homeMascotSize.collectAsState()
     val fontId by PreferencesManager.themeFontFamily.collectAsState()
     val fontOptions by TypographyManager.options.collectAsState()
+    val hasBundleFont = fontOptions.any { it.id == TypographyManager.BUNDLE_FONT_ID }
     val mascotSource by MascotSpriteStore.source.collectAsState()
     val hasCustomMascot = mascotSource is MascotSpriteSource.Custom
     val activeBorderStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
@@ -146,6 +147,7 @@ internal fun AppearanceSettingsScreen(
 
     // Dynamic item list based on custom wallpaper, mascot, and border state
     val items = remember(
+        hasBundleFont,
         hasCustomWallpaper,
         hasCustomMascot,
         hasCustomBorder,
@@ -155,6 +157,7 @@ internal fun AppearanceSettingsScreen(
         buildList {
             add("theme")
             add("typography")
+            if (hasBundleFont) add("reset_font")
             add("community_gallery")
             add("border_style")
             add("pick_border")
@@ -182,7 +185,8 @@ internal fun AppearanceSettingsScreen(
     // Card that holds the focused row; read lazily by ScrollToFocusedItem (not in composition).
     fun targetCardIndex(): Int =
         when (items.getOrNull(focusedIndex)) {
-            "theme", "typography", "community_gallery", "border_style", "pick_border", "reset_border" -> 0
+            "theme", "typography", "reset_font", "community_gallery", "border_style", "pick_border",
+            "reset_border" -> 0
             "name", "sub_display_ticker", "sub_display_style" -> 1
             "icon_pack", "pick_wallpaper", "reset_wallpaper", "pick_mascot", "reset_mascot",
             "mascot_size", "wallpaper_stickers" -> 2
@@ -207,6 +211,16 @@ internal fun AppearanceSettingsScreen(
                 val nextIdx = if (curIdx < fontOptions.size - 1) curIdx + 1 else 0
                 PreferencesManager.setThemeFontFamily(context, fontOptions[nextIdx].id)
                 SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            "reset_font" -> {
+                // Deleting the imported font is the only way it goes away; picking another
+                // Font Style keeps it installed and selectable.
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                focusedIndex = items.indexOf("typography").coerceAtLeast(0)
+                scope.launch {
+                    withContext(Dispatchers.IO) { TypographyManager.resetBundleFont(context) }
+                    Toast.makeText(context, "♡ Bundle font removed", Toast.LENGTH_SHORT).show()
+                }
             }
             "community_gallery" -> {
                 SoundEffectManager.play(context, SoundEffect.SELECT)
@@ -424,6 +438,16 @@ internal fun AppearanceSettingsScreen(
                             SoundEffectManager.play(context, SoundEffect.NAV)
                         }
                     )
+                    if (hasBundleFont) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SettingsActionRow(
+                            title = "Remove Bundle Font",
+                            isFocused = items.getOrNull(focusedIndex) == "reset_font",
+                            isDestructive = true,
+                            jumpNumber = (items.indexOf("reset_font") + 1).takeIf { it <= 9 },
+                            onClick = { activateAppearanceItem(items.indexOf("reset_font")) }
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Community Gallery",

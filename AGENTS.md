@@ -221,7 +221,7 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
             │   │                          # WallpaperOverlay, JumpNumberBadge, PixelSpray, Stickers
             │   ├── dialogs/               # DialogComponents (KeitaiLaceDialogWithClose), QuickMemoDialog,
             │   │                          # AppActionDialog, FolderActionDialog, FavoriteFolderDialog,
-            │   │                          # CreateFavoriteFolderDialog, KaomojiWheelDialog, HardwareButtonsDialog,
+            │   │                          # CreateFavoriteFolderDialog, KaomojiWheel (IME-only), HardwareButtonsDialog,
             │   │                          # ThemeBundleDialogs, WidgetDialogs, PhotoFrameActionDialog,
             │   │                          # IconPickerDialog, IconPackSelectionDialog, HiddenAppsDialog,
             │   │                          # LidLedColorPickerDialog, ResizeWithKeyboard

@@ -26,8 +26,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -35,7 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.ComposeView
@@ -59,9 +60,10 @@ import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.ClipboardRingRepository
 import one.crinklecod.mochibun.data.repository.LocalCardBorderState
+import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.data.repository.rememberLiveCardBorderState
 import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelState
-import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelCard
+import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelCloudStage
 import one.crinklecod.mochibun.ui.dialogs.handleKaomojiWheelNavKey
 import one.crinklecod.mochibun.ui.components.KeitaiCandidatePools
 import one.crinklecod.mochibun.ui.components.KeitaiCandidateState
@@ -273,8 +275,14 @@ class MochibunImeService : InputMethodService() {
             outInsets.contentTopInsets = fullViewHeight
             outInsets.visibleTopInsets = fullViewHeight
         }
-        outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
-        outInsets.touchableRegion.setEmpty()
+        if (kaomojiWheelState != null) {
+            // The wheel's cloud stage takes taps (petals, hub, scrim-to-dismiss)
+            outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_FRAME
+        } else {
+            // Strip only: every touch passes through to the app underneath
+            outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
+            outInsets.touchableRegion.setEmpty()
+        }
     }
 
     override fun onCreateInputView(): View {
@@ -299,15 +307,26 @@ class MochibunImeService : InputMethodService() {
             setContent {
                 val density = LocalDensity.current.density
                 displayDensity = density
+                // Same font as the launcher (incl. a .mochibundle font); both flows are shared
+                // in-process, so a font change or bundle import re-renders the pill immediately.
+                val fontId by PreferencesManager.themeFontFamily.collectAsState()
+                val fontOptions by TypographyManager.options.collectAsState()
+                val imeFontFamily = remember(fontId, fontOptions) {
+                    TypographyManager.resolveFontFamily(fontId)
+                }
+                val baseTextStyle = LocalTextStyle.current
+                val imeTextStyle = remember(baseTextStyle, imeFontFamily) {
+                    baseTextStyle.copy(fontFamily = imeFontFamily)
+                }
                 CompositionLocalProvider(
-                    LocalLauncherTheme provides imeTheme
+                    LocalLauncherTheme provides imeTheme,
+                    LocalTextStyle provides imeTextStyle
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             // Full-height spike for validating IME window sizing and insets.
-                            .height(resources.configuration.screenHeightDp.dp)
-                            .padding(start = 14.dp, end = 14.dp, bottom = 10.dp, top = 2.dp),
+                            .height(resources.configuration.screenHeightDp.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         val wheelState = kaomojiWheelState
@@ -315,16 +334,19 @@ class MochibunImeService : InputMethodService() {
                             CompositionLocalProvider(
                                 LocalCardBorderState provides rememberLiveCardBorderState()
                             ) {
-                                KaomojiWheelCard(
+                                // Edge to edge: the cloud shelf and scrim span the whole window
+                                KaomojiWheelCloudStage(
                                     state = wheelState,
                                     onConfirm = ::confirmKaomojiWheel,
-                                    onDismiss = { kaomojiWheelState = null },
+                                    onDismiss = ::closeKaomojiWheel,
                                     confirmVerb = "Insert"
                                 )
                             }
                         } else {
                             Box(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(start = 14.dp, end = 14.dp, bottom = 10.dp, top = 2.dp),
                                 contentAlignment = Alignment.BottomCenter
                             ) {
                                 KeitaiCandidateStrip(
@@ -350,7 +372,8 @@ class MochibunImeService : InputMethodService() {
                                             alpha = pillAlpha
                                             compositingStrategy = CompositingStrategy.ModulateAlpha
                                         }
-                                        .shadow(elevation = 4.dp, shape = CircleShape)
+                                    // No elevation shadow: the cloud strip draws its own flat
+                                    // drop shadow (its scalloped outline isn't convex).
                                 )
                             }
                         }
@@ -399,7 +422,7 @@ class MochibunImeService : InputMethodService() {
 
     override fun onFinishInputView(finishingInput: Boolean) {
         handler.removeCallbacks(poundHoldRunnable)
-        kaomojiWheelState = null
+        closeKaomojiWheel()
         currentInputConnection?.requestCursorUpdates(0)
         handler.removeCallbacks(pillIdleFadeRunnable)
         moveAnimator?.cancel()
@@ -498,7 +521,11 @@ class MochibunImeService : InputMethodService() {
         if (keyCode !in consumedDown.indices) return super.onKeyDown(keyCode, event)
         kaomojiWheelState?.let { wheelState ->
             consumedDown[keyCode] = true
-            if (keyCode == KeyEvent.KEYCODE_POUND && event.repeatCount > 0) poundRepeated = true
+            if (keyCode == KeyEvent.KEYCODE_POUND) {
+                if (event.repeatCount > 0) poundRepeated = true
+                // A '#' tap that closes the wheel must not also type its space on release
+                else poundWheelTriggered = true
+            }
             if (event.repeatCount == 0) handleKaomojiWheelKey(wheelState, keyCode)
             return true
         }
@@ -670,14 +697,15 @@ class MochibunImeService : InputMethodService() {
             syncComposing()
         }
         kaomojiWheelState = KaomojiWheelState()
+        refreshTouchableInsets()
         HapticManager.vibrateTick(this)
         SoundEffectManager.play(this, SoundEffect.SELECT)
     }
 
     private fun handleKaomojiWheelKey(state: KaomojiWheelState, keyCode: Int) {
         when (keyCode) {
-            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_POUND ->
-                kaomojiWheelState = null
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_F4,
+            KeyEvent.KEYCODE_POUND -> closeKaomojiWheel()
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER -> confirmKaomojiWheel()
@@ -688,7 +716,7 @@ class MochibunImeService : InputMethodService() {
     private fun confirmKaomojiWheel() {
         // Kaomoji, or the full clip / snippet text in Clips & Snippets mode
         val text = kaomojiWheelState?.currentText.orEmpty()
-        kaomojiWheelState = null
+        closeKaomojiWheel()
         if (text.isNotBlank()) {
             batchEdit {
                 candidateState.commitActive(commit)
@@ -698,6 +726,21 @@ class MochibunImeService : InputMethodService() {
             HapticManager.vibrateTick(this)
             SoundEffectManager.play(this, SoundEffect.SELECT)
         }
+    }
+
+    /** Back to the T9 cloud strip, with touches passing through to the app again. */
+    private fun closeKaomojiWheel() {
+        if (kaomojiWheelState == null) return
+        kaomojiWheelState = null
+        refreshTouchableInsets()
+    }
+
+    /**
+     * The wheel swap keeps the root's size, so no View layout (and hence no onComputeInsets)
+     * would otherwise follow it; request one so the touchable region flips with the wheel.
+     */
+    private fun refreshTouchableInsets() {
+        window?.window?.decorView?.requestLayout()
     }
 
     /** Ends the pending keypad press: key already acted on DOWN, so just clear hold timer state. */

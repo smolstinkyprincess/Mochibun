@@ -2,15 +2,25 @@ package one.crinklecod.mochibun
 
 import android.content.ContextWrapper
 import android.content.SharedPreferences
+import kotlinx.serialization.encodeToString
+import one.crinklecod.mochibun.core.sound.SoundEffect
+import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.model.BundleCursorConfig
+import one.crinklecod.mochibun.data.model.BundleGreetingConfig
 import one.crinklecod.mochibun.data.model.BundleMascotConfig
 import one.crinklecod.mochibun.data.model.BundleMascotDialogue
 import one.crinklecod.mochibun.data.model.BundleMascotSlot
+import one.crinklecod.mochibun.data.model.BundlePaletteConfig
 import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.model.MascotAtlasValidator
+import one.crinklecod.mochibun.data.model.MochibunBundleManifest
+import one.crinklecod.mochibun.data.model.bundleJsonFormat
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
 import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import one.crinklecod.mochibun.data.repository.CustomMascotManager
+import one.crinklecod.mochibun.data.repository.ThemeBundleManager
+import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.pet.PetMood
 import one.crinklecod.mochibun.ui.components.MascotAnimSlot
 import one.crinklecod.mochibun.ui.components.MascotReactionKind
@@ -25,20 +35,18 @@ import one.crinklecod.mochibun.ui.components.PET_SULKY_LINES
 import one.crinklecod.mochibun.ui.components.petMoodLines
 import one.crinklecod.mochibun.ui.components.selectReactionLine
 import one.crinklecod.mochibun.ui.components.selectSpeechBubbleDialogue
+import one.crinklecod.mochibun.ui.dialogs.exportDialogRows
+import one.crinklecod.mochibun.ui.dialogs.previewFontBadgeText
 import one.crinklecod.mochibun.ui.dialogs.previewMascotBadgeText
+import one.crinklecod.mochibun.ui.dialogs.previewSoundPackBadgeText
+import org.junit.After
 import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNull
-import org.junit.Before
-import one.crinklecod.mochibun.data.model.BundleGreetingConfig
-import one.crinklecod.mochibun.data.model.BundlePaletteConfig
-import one.crinklecod.mochibun.data.model.MochibunBundleManifest
-import one.crinklecod.mochibun.data.model.bundleJsonFormat
-import one.crinklecod.mochibun.data.repository.ThemeBundleManager
-import kotlinx.serialization.encodeToString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -46,9 +54,12 @@ import java.io.File
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 class ThemeBundleManagerTest {
+
+    private lateinit var originalFontValidator: (File) -> Boolean
 
     @Before
     fun resetMascot() {
@@ -56,6 +67,13 @@ class ThemeBundleManagerTest {
         // Plain JVM has no real BitmapFactory: read the PNG header instead
         CustomMascotManager.platformBounds = { MascotAtlasValidator.readPngSize(it) }
         CustomCardBorderManager.platformBounds = { MascotAtlasValidator.readPngSize(it) }
+        originalFontValidator = TypographyManager.fontFileValidator
+        TypographyManager.fontFileValidator = { true }
+    }
+
+    @After
+    fun restoreTypographyValidator() {
+        TypographyManager.fontFileValidator = originalFontValidator
     }
 
     // ── Custom mascot atlas (mascot_atlas.png) ──────────────────────────────
@@ -445,6 +463,412 @@ class ThemeBundleManagerTest {
         }
     }
 
+    // ── Bundled fonts (font.ttf / font.otf) & sound packs (sounds/*.ogg) ───
+
+    @Test
+    fun manifestFontAndSoundFields_defaultForLegacyAndRoundTrip() {
+        val legacyJson = """
+            {
+              "bundleVersion": 1,
+              "bundleName": "Legacy Pack",
+              "author": "Mochi User",
+              "createdAtEpochSec": 1729600000,
+              "greeting": {"userName": "Mochi User", "showSparkles": true},
+              "palette": {
+                "activePresetId": "sakura_dream",
+                "isCustom": false,
+                "bgColorHex": "#FFF5F8",
+                "cardColorHex": "#FCE4EC",
+                "greetingColorHex": "#A04064",
+                "actionColorHex": "#A04064",
+                "cardRoundnessDp": 20.0
+              },
+              "cursor": {
+                "baseVelocity": 10.0,
+                "accelerationMulti": 1.05,
+                "pointerSizeDp": 28.0,
+                "clickMethod": "ACCESSIBILITY_GESTURE",
+                "hotspot": "CENTER"
+              },
+              "hasWallpaper": false,
+              "hasCustomCursor": false
+            }
+        """.trimIndent()
+        val legacy = bundleJsonFormat.decodeFromString<MochibunBundleManifest>(legacyJson)
+        assertFalse(legacy.hasFont)
+        assertNull(legacy.fontDisplayName)
+        assertFalse(legacy.hasSoundPack)
+        assertNull(legacy.soundPackName)
+
+        val modern = validManifest().copy(
+            hasFont = true,
+            fontDisplayName = "PixelMplus10",
+            hasSoundPack = true,
+            soundPackName = "Crystal Bell"
+        )
+        val decoded = bundleJsonFormat.decodeFromString<MochibunBundleManifest>(
+            bundleJsonFormat.encodeToString(modern)
+        )
+        assertTrue(decoded.hasFont)
+        assertEquals("PixelMplus10", decoded.fontDisplayName)
+        assertTrue(decoded.hasSoundPack)
+        assertEquals("Crystal Bell", decoded.soundPackName)
+    }
+
+    @Test
+    fun bundledFontAndSoundPack_previewInstallAndRoundTripThroughExport() {
+        val ttfBytes = fakeTtf(128)
+        val navOgg = fakeOgg(96)
+        val clickOgg = fakeOgg(112)
+        val manifest = validManifest().copy(
+            bundleName = "Sakura Studio",
+            hasFont = true,
+            fontDisplayName = "PixelMplus10",
+            hasSoundPack = true,
+            soundPackName = "Sakura Chimes"
+        )
+        val bundle = createZip(
+            "manifest.json" to manifestBytes(manifest),
+            "font.ttf" to ttfBytes,
+            "sounds/nav.ogg" to navOgg,
+            "sounds/click.ogg" to clickOgg
+        )
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow()
+        assertTrue(preview.hasFontAsset)
+        assertTrue(preview.hasSoundPackAsset)
+        assertEquals(2, preview.soundCueCount)
+        assertEquals("🔤 Custom Font: PixelMplus10", previewFontBadgeText(preview))
+        assertEquals("🎵 Custom Sound Pack: Sakura Chimes (2/8 sounds)", previewSoundPackBadgeText(preview))
+        assertEquals(
+            listOf("name", "wallpaper", "cursor", "mascot", "card_border", "font", "sounds", "display_name", "cancel", "create"),
+            exportDialogRows(hasCustomFont = true, hasCustomSoundPack = true)
+        )
+        assertEquals(
+            listOf("name", "wallpaper", "cursor", "mascot", "card_border", "display_name", "cancel", "create"),
+            exportDialogRows(hasCustomFont = false, hasCustomSoundPack = false)
+        )
+
+        var exportedWithAssets = ByteArray(0)
+        var exportedWithoutAssets = ByteArray(0)
+        withTestContext { source ->
+            var skipped: String? = null
+            val applied = ThemeBundleManager.applyBundle(source, ByteArrayInputStream(bundle)) { skipped = it }
+            assertTrue(applied.isSuccess)
+            assertNull(skipped)
+
+            assertArrayEquals(ttfBytes, TypographyManager.bundleFontFile(source).readBytes())
+            assertEquals("PixelMplus10", TypographyManager.bundleFontDisplayName(source))
+            assertEquals(TypographyManager.BUNDLE_FONT_ID, PreferencesManager.getThemeFontFamily(source))
+
+            val installedSounds = SoundEffectManager.bundleSoundFiles(source)
+            assertEquals(setOf(SoundEffect.NAV, SoundEffect.CLICK), installedSounds.keys)
+            assertArrayEquals(navOgg, installedSounds[SoundEffect.NAV]!!.readBytes())
+            assertArrayEquals(clickOgg, installedSounds[SoundEffect.CLICK]!!.readBytes())
+            assertEquals("Sakura Chimes", SoundEffectManager.bundleSoundPackName.value)
+            assertEquals(SoundEffectManager.BUNDLE_THEME_ID, PreferencesManager.getKeypadSoundMode(source))
+            assertTrue("Staging files cleaned", source.cacheDir.listFiles().isNullOrEmpty())
+
+            val outWith = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(
+                source,
+                outWith,
+                bundleName = "Sakura Re-export",
+                includeFont = true,
+                includeSoundPack = true
+            ).getOrThrow()
+            exportedWithAssets = outWith.toByteArray()
+
+            val outWithout = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(
+                source,
+                outWithout,
+                bundleName = "Sakura Plain",
+                includeFont = false,
+                includeSoundPack = false
+            ).getOrThrow()
+            exportedWithoutAssets = outWithout.toByteArray()
+
+            // Reset helpers clear bundle font & sounds and revert font choice to default
+            TypographyManager.resetBundleFont(source)
+            assertFalse(TypographyManager.bundleFontFile(source).exists())
+            assertEquals("default", PreferencesManager.getThemeFontFamily(source))
+
+            SoundEffectManager.resetBundleSounds(source)
+            assertTrue(SoundEffectManager.bundleSoundFiles(source).isEmpty())
+            assertNull(SoundEffectManager.bundleSoundPackName.value)
+        }
+
+        val entriesWith = zipEntryNames(exportedWithAssets)
+        assertTrue(ThemeBundleManager.FONT_ENTRY in entriesWith)
+        assertTrue("sounds/nav.ogg" in entriesWith)
+        assertTrue("sounds/click.ogg" in entriesWith)
+
+        val entriesWithout = zipEntryNames(exportedWithoutAssets)
+        assertFalse(ThemeBundleManager.FONT_ENTRY in entriesWithout)
+        assertFalse(entriesWithout.any { it.startsWith(ThemeBundleManager.SOUNDS_ENTRY_PREFIX) })
+
+        val previewWithout = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(exportedWithoutAssets)).getOrThrow()
+        assertFalse(previewWithout.hasFontAsset)
+        assertFalse(previewWithout.hasSoundPackAsset)
+        assertFalse(previewWithout.manifest.hasFont)
+        assertFalse(previewWithout.manifest.hasSoundPack)
+        assertNull(previewWithout.manifest.fontDisplayName)
+        assertNull(previewWithout.manifest.soundPackName)
+
+        withTestContext { target ->
+            ThemeBundleManager.applyBundle(target, ByteArrayInputStream(exportedWithAssets)).getOrThrow()
+            assertArrayEquals(ttfBytes, TypographyManager.bundleFontFile(target).readBytes())
+            assertEquals("PixelMplus10", TypographyManager.bundleFontDisplayName(target))
+            assertEquals(TypographyManager.BUNDLE_FONT_ID, PreferencesManager.getThemeFontFamily(target))
+
+            val targetSounds = SoundEffectManager.bundleSoundFiles(target)
+            assertEquals(setOf(SoundEffect.NAV, SoundEffect.CLICK), targetSounds.keys)
+            assertArrayEquals(navOgg, targetSounds[SoundEffect.NAV]!!.readBytes())
+            assertArrayEquals(clickOgg, targetSounds[SoundEffect.CLICK]!!.readBytes())
+            assertEquals("Sakura Chimes", SoundEffectManager.bundleSoundPackName.value)
+            assertEquals(SoundEffectManager.BUNDLE_THEME_ID, PreferencesManager.getKeypadSoundMode(target))
+        }
+    }
+
+    @Test
+    fun otfFontImportsAndReExportsAsFontTtf_andMutedSoundsStayMuted() {
+        val otfBytes = fakeOtf(128)
+        val snapOgg = fakeOgg(80)
+        val manifest = validManifest().copy(bundleName = "OTF & Muted")
+        val bundle = createZip(
+            "manifest.json" to manifestBytes(manifest),
+            "font.otf" to otfBytes,
+            "sounds/snap.ogg" to snapOgg
+        )
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow()
+        assertTrue(preview.hasFontAsset)
+        assertEquals(1, preview.soundCueCount)
+        assertEquals("🔤 Custom Font", previewFontBadgeText(preview))
+        assertEquals("🎵 Custom Sound Pack (1/8 sound)", previewSoundPackBadgeText(preview))
+
+        withTestContext { context ->
+            PreferencesManager.setKeypadSoundMode(context, "off")
+            ThemeBundleManager.applyBundle(context, ByteArrayInputStream(bundle)).getOrThrow()
+
+            assertArrayEquals(otfBytes, TypographyManager.bundleFontFile(context).readBytes())
+            assertEquals(TypographyManager.BUNDLE_FONT_ID, PreferencesManager.getThemeFontFamily(context))
+            // Sound pack installs cleanly without unmuting a muted keypad profile
+            assertEquals(setOf(SoundEffect.SNAP), SoundEffectManager.bundleSoundFiles(context).keys)
+            assertEquals("OTF & Muted", SoundEffectManager.bundleSoundPackName.value)
+            assertEquals("off", PreferencesManager.getKeypadSoundMode(context))
+
+            val out = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(
+                context,
+                out,
+                bundleName = "OTF Re-export",
+                includeFont = true,
+                includeSoundPack = true
+            ).getOrThrow()
+            val exportedEntries = zipEntryNames(out.toByteArray())
+            assertTrue(ThemeBundleManager.FONT_ENTRY in exportedEntries)
+            assertFalse(ThemeBundleManager.FONT_OTF_ENTRY in exportedEntries)
+            assertTrue("sounds/snap.ogg" in exportedEntries)
+        }
+    }
+
+    @Test
+    fun fontAndSoundGuardrails_rejectOversizedInvalidHeadersAndZipTraversal() {
+        val oversizedFont = fakeTtf(ThemeBundleManager.MAX_FONT_BYTES.toInt() + 1)
+        val oversizedOgg = fakeOgg(ThemeBundleManager.MAX_SOUND_BYTES.toInt() + 1)
+        val validOgg = fakeOgg(96)
+
+        // 1. Oversized font + oversized sound cue + valid sound cue: bad assets skipped, rest applies
+        val mixedBundle = createZip(
+            "manifest.json" to manifestBytes(),
+            "font.ttf" to oversizedFont,
+            "sounds/nav.ogg" to oversizedOgg,
+            "sounds/click.ogg" to validOgg
+        )
+        val mixedPreview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(mixedBundle)).getOrThrow()
+        assertFalse("Oversized font must not be marked valid in preview", mixedPreview.hasFontAsset)
+        assertEquals("Only the within-limit sound cue should count", 1, mixedPreview.soundCueCount)
+
+        withTestContext { context ->
+            val warnings = mutableListOf<String>()
+            val applied = ThemeBundleManager.applyBundle(context, ByteArrayInputStream(mixedBundle)) { warnings.add(it) }
+            assertTrue("Bundle still applies when oversized font/sound are skipped", applied.isSuccess)
+            assertTrue(warnings.any { it.contains("4 MB") })
+            assertTrue(warnings.any { it.contains("256 KB") })
+            assertFalse(TypographyManager.bundleFontFile(context).exists())
+            assertNotEquals(TypographyManager.BUNDLE_FONT_ID, PreferencesManager.getThemeFontFamily(context))
+            assertEquals(setOf(SoundEffect.CLICK), SoundEffectManager.bundleSoundFiles(context).keys)
+        }
+
+        // 2. Invalid font header (ttcf collection) and invalid sound header (non-OggS)
+        val badHeaderBundle = createZip(
+            "manifest.json" to manifestBytes(),
+            "font.ttf" to ("ttcf" + "0".repeat(60)).toByteArray(Charsets.ISO_8859_1),
+            "sounds/nav.ogg" to ("RIFF" + "0".repeat(60)).toByteArray(Charsets.ISO_8859_1)
+        )
+        val badPreview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(badHeaderBundle)).getOrThrow()
+        assertFalse(badPreview.hasFontAsset)
+        assertEquals(0, badPreview.soundCueCount)
+
+        withTestContext { context ->
+            val warnings = mutableListOf<String>()
+            val applied = ThemeBundleManager.applyBundle(context, ByteArrayInputStream(badHeaderBundle)) { warnings.add(it) }
+            assertTrue(applied.isSuccess)
+            assertTrue(warnings.any { it.contains("TrueType/OpenType") })
+            assertTrue(warnings.any { it.contains("Custom sounds skipped") })
+            assertFalse(TypographyManager.bundleFontFile(context).exists())
+            assertTrue(SoundEffectManager.bundleSoundFiles(context).isEmpty())
+        }
+
+        // 3. Platform Typeface rejection (e.g., corrupted SFNT tables despite valid header)
+        TypographyManager.fontFileValidator = { false }
+        val unloadableFontBundle = createZip(
+            "manifest.json" to manifestBytes(),
+            "font.ttf" to fakeTtf(128)
+        )
+        withTestContext { context ->
+            val warnings = mutableListOf<String>()
+            assertTrue(ThemeBundleManager.applyBundle(context, ByteArrayInputStream(unloadableFontBundle)) { warnings.add(it) }.isSuccess)
+            assertTrue(warnings.any { it.contains("couldn't load this font") })
+            assertFalse(TypographyManager.bundleFontFile(context).exists())
+            assertNotEquals(TypographyManager.BUNDLE_FONT_ID, PreferencesManager.getThemeFontFamily(context))
+        }
+        TypographyManager.fontFileValidator = { true }
+
+        // 4. ZIP path traversal & disallowed entry paths are ignored safely
+        val traversalNames = listOf(
+            "sounds/../evil.ogg",
+            "sounds/../nav.ogg",
+            "/sounds/nav.ogg",
+            "sounds\\nav.ogg",
+            "sounds/sub/nav.ogg",
+            "sounds/unknown.ogg",
+            "sounds/nav.wav",
+            "../font.ttf",
+            "fonts/font.ttf"
+        )
+        for (badName in traversalNames) {
+            assertNull("Entry '$badName' must be rejected", ThemeBundleManager.soundEffectForEntry(badName))
+        }
+        val traversalBundle = createZip(
+            "manifest.json" to manifestBytes(),
+            "sounds/../evil.ogg" to validOgg,
+            "/sounds/nav.ogg" to validOgg,
+            "sounds\\click.ogg" to validOgg,
+            "sounds/sub/select.ogg" to validOgg,
+            "sounds/unknown.ogg" to validOgg,
+            "../font.ttf" to fakeTtf(64),
+            "fonts/font.ttf" to fakeTtf(64)
+        )
+        val traversalPreview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(traversalBundle)).getOrThrow()
+        assertFalse(traversalPreview.hasFontAsset)
+        assertEquals(0, traversalPreview.soundCueCount)
+        withTestContext { context ->
+            assertTrue(ThemeBundleManager.applyBundle(context, ByteArrayInputStream(traversalBundle)).isSuccess)
+            assertFalse(File(context.filesDir.parentFile, "evil.ogg").exists())
+            assertFalse(File(context.filesDir.parentFile, "font.ttf").exists())
+            assertTrue(context.filesDir.listFiles().isNullOrEmpty())
+        }
+    }
+
+    @Test
+    fun soundEffectManager_cueMappingAndBundleFallbackBehavior() {
+        // Exact cue mapping & case insensitivity (all 8 cues including feed & pet)
+        assertEquals(8, SoundEffectManager.BundleCueFileNames.size)
+        assertTrue("feed.ogg" in SoundEffectManager.BundleCueFileNames)
+        assertTrue("pet.ogg" in SoundEffectManager.BundleCueFileNames)
+        for (effect in SoundEffect.entries) {
+            val fileName = SoundEffectManager.bundleCueFileName(effect)
+            assertEquals("${effect.name.lowercase()}.ogg", fileName)
+            assertEquals(effect, SoundEffectManager.effectForBundleCueFileName(fileName))
+            assertEquals(effect, SoundEffectManager.effectForBundleCueFileName(fileName.uppercase()))
+            assertEquals(effect, ThemeBundleManager.soundEffectForEntry("sounds/$fileName"))
+        }
+        assertNull(SoundEffectManager.effectForBundleCueFileName("unknown.ogg"))
+        assertNull(SoundEffectManager.effectForBundleCueFileName("nav.wav"))
+        assertNull(SoundEffectManager.effectForBundleCueFileName(""))
+
+        // Partial bundle directory: valid .ogg cues resolve to files, missing/corrupt cues resolve to null (fallback = "kawaii")
+        assertEquals("kawaii", SoundEffectManager.BUNDLE_FALLBACK_THEME)
+        val tempRoot = Files.createTempDirectory("mochibun-cue-resolve").toFile()
+        try {
+            File(tempRoot, "nav.ogg").writeBytes(fakeOgg(64))
+            File(tempRoot, "feed.ogg").writeBytes(fakeOgg(72))
+            File(tempRoot, "click.ogg").writeBytes("NOT_OGG".toByteArray())
+            File(tempRoot, "select.ogg").writeBytes(fakeOgg(SoundEffectManager.MAX_BUNDLE_SOUND_BYTES.toInt() + 1))
+
+            val resolved = SoundEffectManager.resolveBundleCueSources(tempRoot)
+            assertEquals(File(tempRoot, "nav.ogg"), resolved[SoundEffect.NAV])
+            assertEquals(File(tempRoot, "feed.ogg"), resolved[SoundEffect.FEED])
+            assertNull("Non-OggS cue must fall back to built-in", resolved[SoundEffect.CLICK])
+            assertNull("Oversized cue must fall back to built-in", resolved[SoundEffect.SELECT])
+            assertNull("Missing cue must fall back to built-in", resolved[SoundEffect.BACK])
+            assertNull("Missing cue must fall back to built-in", resolved[SoundEffect.BOUNDARY])
+            assertNull("Missing cue must fall back to built-in", resolved[SoundEffect.SNAP])
+            assertNull("Missing cue must fall back to built-in", resolved[SoundEffect.PET])
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+
+        // Theme cycling & naming with/without bundle pack
+        assertEquals("off", SoundEffectManager.nextThemeId("water", +1, includeBundle = false))
+        assertEquals(SoundEffectManager.BUNDLE_THEME_ID, SoundEffectManager.nextThemeId("water", +1, includeBundle = true))
+        assertEquals("off", SoundEffectManager.nextThemeId(SoundEffectManager.BUNDLE_THEME_ID, +1, includeBundle = true))
+        assertEquals("water", SoundEffectManager.nextThemeId(SoundEffectManager.BUNDLE_THEME_ID, -1, includeBundle = true))
+        assertEquals("kawaii", SoundEffectManager.nextThemeId("unknown_theme", +1, includeBundle = false))
+
+        assertEquals("Bell Chime", SoundEffectManager.themeName(SoundEffectManager.BUNDLE_THEME_ID, "Bell Chime"))
+        assertEquals("Custom Bundle", SoundEffectManager.themeName(SoundEffectManager.BUNDLE_THEME_ID, null))
+        assertEquals("Custom Bundle", SoundEffectManager.themeName(SoundEffectManager.BUNDLE_THEME_ID, "   "))
+    }
+
+    @Test
+    fun feedAndPetSoundCues_previewInstallAndRoundTrip() {
+        val cuePayloads = SoundEffect.entries.associateWith { effect ->
+            fakeOgg(72 + effect.ordinal * 8)
+        }
+        val manifest = validManifest().copy(
+            bundleName = "Pet Snack Audio",
+            hasSoundPack = true,
+            soundPackName = "Bunny Chirps"
+        )
+        val zipEntries = buildList {
+            add("manifest.json" to manifestBytes(manifest))
+            cuePayloads.forEach { (effect, bytes) ->
+                add("sounds/${SoundEffectManager.bundleCueFileName(effect)}" to bytes)
+            }
+        }.toTypedArray()
+        val bundle = createZip(*zipEntries)
+
+        val preview = ThemeBundleManager.readBundleManifest(ByteArrayInputStream(bundle)).getOrThrow()
+        assertTrue(preview.hasSoundPackAsset)
+        assertEquals(8, preview.soundCueCount)
+        assertEquals("🎵 Custom Sound Pack: Bunny Chirps (8/8 sounds)", previewSoundPackBadgeText(preview))
+
+        withTestContext { source ->
+            ThemeBundleManager.applyBundle(source, ByteArrayInputStream(bundle)).getOrThrow()
+            val installed = SoundEffectManager.bundleSoundFiles(source)
+            assertEquals(SoundEffect.entries.toSet(), installed.keys)
+            assertArrayEquals(cuePayloads[SoundEffect.FEED]!!, installed[SoundEffect.FEED]!!.readBytes())
+            assertArrayEquals(cuePayloads[SoundEffect.PET]!!, installed[SoundEffect.PET]!!.readBytes())
+            assertEquals("Bunny Chirps", SoundEffectManager.bundleSoundPackName.value)
+
+            val out = ByteArrayOutputStream()
+            ThemeBundleManager.exportBundle(
+                source,
+                out,
+                bundleName = "Pet Snack Re-export",
+                includeSoundPack = true
+            ).getOrThrow()
+            val reExportedEntries = zipEntryNames(out.toByteArray())
+            assertTrue("sounds/feed.ogg" in reExportedEntries)
+            assertTrue("sounds/pet.ogg" in reExportedEntries)
+            assertEquals(8, reExportedEntries.count { it.startsWith("sounds/") })
+        }
+    }
+
     @Test
     fun testManifestSerializationRoundtrip() {
         val original = MochibunBundleManifest(
@@ -784,6 +1208,38 @@ class ThemeBundleManagerTest {
         hasCustomCursor = false
     )
 
+    private fun fakeTtf(totalBytes: Int = 64): ByteArray = ByteArray(maxOf(4, totalBytes)).apply {
+        this[0] = 0x00
+        this[1] = 0x01
+        this[2] = 0x00
+        this[3] = 0x00
+    }
+
+    private fun fakeOtf(totalBytes: Int = 64): ByteArray = ByteArray(maxOf(4, totalBytes)).apply {
+        this[0] = 'O'.code.toByte()
+        this[1] = 'T'.code.toByte()
+        this[2] = 'T'.code.toByte()
+        this[3] = 'O'.code.toByte()
+    }
+
+    private fun fakeOgg(totalBytes: Int = 64): ByteArray = ByteArray(maxOf(4, totalBytes)).apply {
+        this[0] = 'O'.code.toByte()
+        this[1] = 'g'.code.toByte()
+        this[2] = 'g'.code.toByte()
+        this[3] = 'S'.code.toByte()
+    }
+
+    private fun zipEntryNames(bytes: ByteArray): Set<String> = buildSet {
+        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                add(entry.name)
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+        }
+    }
+
     private fun createZip(vararg entries: Pair<String, ByteArray>): ByteArray {
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
@@ -798,10 +1254,14 @@ class ThemeBundleManagerTest {
 
     private fun withTestContext(block: (BundleTestContext) -> Unit) {
         val root = Files.createTempDirectory("mochibun-bundle-test").toFile()
+        val context = BundleTestContext(root, testSharedPreferences())
         try {
-            block(BundleTestContext(root, testSharedPreferences()))
+            PreferencesManager.reload(context)
+            SoundEffectManager.refreshBundleSoundPackState(context)
+            block(context)
         } finally {
             root.deleteRecursively()
+            SoundEffectManager.refreshBundleSoundPackState(context)
         }
     }
 
