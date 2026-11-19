@@ -12,6 +12,7 @@ import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.NonSkippableComposable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -91,33 +92,50 @@ internal class LauncherNavigationState(
     val isPetPillOpen: Boolean
         get() = activeModal is ActiveModal.PetPill
 
-    /** Home owns the keypad: settled on page 1 with no drawer, modal or page transition. */
-    val isHomeScreenActive: Boolean
-        get() = !drawerOpen &&
+    // The three flags below are derivedStateOf-backed: MainLauncher reads them in its body, and a
+    // plain getter would subscribe it to currentPage / targetPage / settledPage / isScrollInProgress,
+    // recomposing the whole launcher root 4-6 times per swipe. Derived, the root only recomposes
+    // when the Boolean itself flips (MT6761 JIT: each root pass costs whole frames).
+
+    private val isHomeScreenActiveState = derivedStateOf {
+        !drawerOpen &&
             !anyModalOpen &&
             (pendingTargetPage == null || pendingTargetPage == 1) &&
             pagerState.currentPage == 1 &&
             pagerState.targetPage == 1 &&
             pagerState.settledPage == 1 &&
             !pagerState.isScrollInProgress
+    }
 
-    val isSidePageActive: Boolean
-        get() = !drawerOpen &&
+    private val isSidePageActiveState = derivedStateOf {
+        !drawerOpen &&
             !anyModalOpen &&
             (pagerState.currentPage == 0 || pagerState.currentPage == 2)
+    }
 
-    /**
-     * Home is on screen with at most the pet pill over it. Unlike [isHomeScreenActive] (false while
-     * the pill, a modal, owns the keys), this keeps Home visuals alive: mascot glow & bob, ticker.
-     */
-    val isHomeVisible: Boolean
-        get() = !drawerOpen &&
+    private val isHomeVisibleState = derivedStateOf {
+        !drawerOpen &&
             (activeModal == null || isPetPillOpen) &&
             (pendingTargetPage == null || pendingTargetPage == 1) &&
             pagerState.currentPage == 1 &&
             pagerState.targetPage == 1 &&
             pagerState.settledPage == 1 &&
             !pagerState.isScrollInProgress
+    }
+
+    /** Home owns the keypad: settled on page 1 with no drawer, modal or page transition. */
+    val isHomeScreenActive: Boolean
+        get() = isHomeScreenActiveState.value
+
+    val isSidePageActive: Boolean
+        get() = isSidePageActiveState.value
+
+    /**
+     * Home is on screen with at most the pet pill over it. Unlike [isHomeScreenActive] (false while
+     * the pill, a modal, owns the keys), this keeps Home visuals alive: mascot glow & bob, ticker.
+     */
+    val isHomeVisible: Boolean
+        get() = isHomeVisibleState.value
 
     /**
      * Snapshot handed to [LauncherKeyHandler] for every key event. [isHomeScreenActive] is passed in

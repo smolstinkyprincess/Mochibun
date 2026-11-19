@@ -597,7 +597,14 @@ fun FavoriteFolderDialog(
 
         LaunchedEffect(selectedAppIndex, folderApps.size, focusSection) {
             if (focusSection == 1 && folderApps.isNotEmpty() && selectedAppIndex in folderApps.indices) {
-                appListState.animateScrollToItem(selectedAppIndex)
+                // Only scroll when the focused row is not already fully on screen: an unconditional
+                // animateScrollToItem ran a multi-frame scroll-to-top on every D-pad press.
+                val info = appListState.layoutInfo
+                val row = info.visibleItemsInfo.firstOrNull { it.index == selectedAppIndex }
+                val fullyVisible = row != null &&
+                    row.offset >= info.viewportStartOffset &&
+                    row.offset + row.size <= info.viewportEndOffset
+                if (!fullyVisible) appListState.animateScrollToItem(selectedAppIndex)
             }
         }
 
@@ -727,68 +734,22 @@ fun FavoriteFolderDialog(
                                 ) {
                                     itemsIndexed(
                                         availableApps,
-                                        key = { _, app -> app.componentKey }
+                                        key = { _, app -> app.componentKey },
+                                        contentType = { _, _ -> "folder_picker_row" }
                                     ) { index, app ->
                                         val pkg = app.packageName
                                         val checked = pkg in draftPackages
-                                        val isRowFocused = pickerZone == 0 && pickerAppIndex == index
-                                        val rowShape = RoundedCornerShape(12.dp)
-
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .graphicsLayer { clip = false }
-                                                .softGlowFocus(isSelected = isRowFocused, cornerRadius = 12.dp)
-                                                .clip(rowShape)
-                                                .background(
-                                                    if (isRowFocused) theme.selectedContainerColor else Color.Transparent
-                                                )
-                                                .border(
-                                                    width = if (isRowFocused) 1.5.dp else 0.dp,
-                                                    color = if (isRowFocused) ActiveTheme.palette.focusedCardBorder else Color.Transparent,
-                                                    shape = rowShape
-                                                )
-                                                .clickable {
-                                                    pickerZone = 0
-                                                    pickerAppIndex = index
-                                                    draftPackages = if (checked) draftPackages - pkg else draftPackages + pkg
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Image(
-                                                bitmap = app.imageBitmap,
-                                                contentDescription = app.name,
-                                                filterQuality = FilterQuality.None,
-                                                modifier = Modifier.size(32.dp)
-                                            )
-                                            Spacer(Modifier.width(10.dp))
-                                            Text(
-                                                text = app.name,
-                                                color = ActiveTheme.textPrimary,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.5.sp,
-                                                modifier = Modifier.weight(1f),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Spacer(Modifier.width(6.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(24.dp)
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .background(if (checked) ActiveTheme.accentDeep else Color.Transparent)
-                                                    .border(1.5.dp, ActiveTheme.accentDeep, RoundedCornerShape(8.dp)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = if (checked) "✓" else "＋",
-                                                    color = if (checked) Color.White else ActiveTheme.accentDeep,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 13.sp
-                                                )
+                                        FolderPickerAppRow(
+                                            app = app,
+                                            checked = checked,
+                                            isFocused = pickerZone == 0 && pickerAppIndex == index,
+                                            selectedContainerColor = theme.selectedContainerColor,
+                                            onClick = {
+                                                pickerZone = 0
+                                                pickerAppIndex = index
+                                                draftPackages = if (checked) draftPackages - pkg else draftPackages + pkg
                                             }
-                                        }
+                                        )
                                     }
                                 }
 
@@ -994,126 +955,30 @@ fun FavoriteFolderDialog(
                                     ) {
                                         itemsIndexed(
                                             folderApps,
-                                            key = { _, app -> app.packageName }
+                                            key = { _, app -> app.packageName },
+                                            contentType = { _, _ -> "folder_app_row" }
                                         ) { index, app ->
-                                            val isRowFocused = focusSection == 1 && selectedAppIndex == index
-                                            val tint = SQUIRCLE_TINTS[index % SQUIRCLE_TINTS.size]
-                                            val rowShape = RoundedCornerShape(16.dp)
-                                            val squircleShape = RoundedCornerShape(12.dp)
-
-                                            val scale by animateFloatAsState(
-                                                targetValue = if (isRowFocused) 1.02f else 1.0f,
-                                                animationSpec = tween(100),
-                                                label = "folderAppRowScale"
+                                            FolderAppRow(
+                                                app = app,
+                                                tint = SQUIRCLE_TINTS[index % SQUIRCLE_TINTS.size],
+                                                isFocused = focusSection == 1 && selectedAppIndex == index,
+                                                managing = managing,
+                                                onClick = {
+                                                    focusSection = 1
+                                                    selectedAppIndex = index
+                                                    if (managing) {
+                                                        onRemoveApp(app.packageName)
+                                                    } else {
+                                                        onLaunchApp(app)
+                                                        onDismiss()
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    focusSection = 1
+                                                    selectedAppIndex = index
+                                                    managing = !managing
+                                                }
                                             )
-
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(46.dp)
-                                                    .graphicsLayer {
-                                                        scaleX = scale
-                                                        scaleY = scale
-                                                        clip = false
-                                                    }
-                                                    .softGlowFocus(
-                                                        isSelected = isRowFocused,
-                                                        cornerRadius = 16.dp,
-                                                        glowColor = ActiveTheme.selectionGlow,
-                                                        borderColor = ActiveTheme.primary,
-                                                        containerTint = ActiveTheme.surfaceTint
-                                                    )
-                                                    .clip(rowShape)
-                                                    .background(
-                                                        if (isRowFocused) {
-                                                            ActiveTheme.current.focusedContainerColor
-                                                        } else {
-                                                            ActiveTheme.current.unfocusedCardBgColor.copy(alpha = 0.85f)
-                                                        }
-                                                    )
-                                                    .then(
-                                                        if (!isRowFocused) {
-                                                            Modifier.border(
-                                                                1.dp,
-                                                                ActiveTheme.cardBorder.copy(alpha = 0.45f),
-                                                                rowShape
-                                                            )
-                                                        } else {
-                                                            Modifier
-                                                        }
-                                                    )
-                                                    .combinedClickable(
-                                                        onClick = {
-                                                            focusSection = 1
-                                                            selectedAppIndex = index
-                                                            if (managing) {
-                                                                onRemoveApp(app.packageName)
-                                                            } else {
-                                                                onLaunchApp(app)
-                                                                onDismiss()
-                                                            }
-                                                        },
-                                                        onLongClick = {
-                                                            focusSection = 1
-                                                            selectedAppIndex = index
-                                                            managing = !managing
-                                                        }
-                                                    )
-                                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                // Left-aligned squircle icon container with alternating pastel tint
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(32.dp)
-                                                        .clip(squircleShape)
-                                                        .background(tint.container, squircleShape)
-                                                        .border(
-                                                            width = 1.dp,
-                                                            color = tint.border,
-                                                            shape = squircleShape
-                                                        ),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Image(
-                                                        bitmap = app.imageBitmap,
-                                                        contentDescription = app.name,
-                                                        filterQuality = FilterQuality.None,
-                                                        modifier = Modifier.size(22.dp)
-                                                    )
-                                                }
-
-                                                Spacer(Modifier.width(10.dp))
-
-                                                // Medium-bold deep violet/plum app label (no numbers)
-                                                Text(
-                                                    text = app.name,
-                                                    fontSize = 13.5.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = ActiveTheme.textPrimary,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-
-                                                if (managing) {
-                                                    Spacer(Modifier.width(6.dp))
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(20.dp)
-                                                            .clip(RoundedCornerShape(6.dp))
-                                                            .background(destructiveColor),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Text(
-                                                            text = "✕",
-                                                            fontSize = 10.sp,
-                                                            color = Color.White,
-                                                            fontWeight = FontWeight.Bold
-                                                        )
-                                                    }
-                                                }
-                                            }
                                         }
                                     }
                                 }
@@ -1135,6 +1000,185 @@ fun FavoriteFolderDialog(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * One row of the folder's app list. A separate skippable composable so a D-pad step only
+ * recomposes the two rows whose [isFocused] flips, not every visible row.
+ */
+@Composable
+private fun FolderAppRow(
+    app: LauncherApp,
+    tint: FolderSquircleTint,
+    isFocused: Boolean,
+    managing: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val rowShape = RoundedCornerShape(16.dp)
+    val squircleShape = RoundedCornerShape(12.dp)
+    // Steady 1.02x while focused, on top of softGlowFocus's own pop. Applied directly in the layer
+    // (no per-row animateFloatAsState) so idle rows carry no Animatable.
+    val scale = if (isFocused) 1.02f else 1.0f
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                clip = false
+            }
+            .softGlowFocus(
+                isSelected = isFocused,
+                cornerRadius = 16.dp,
+                glowColor = ActiveTheme.selectionGlow,
+                borderColor = ActiveTheme.primary,
+                containerTint = ActiveTheme.surfaceTint
+            )
+            .clip(rowShape)
+            .background(
+                if (isFocused) {
+                    ActiveTheme.current.focusedContainerColor
+                } else {
+                    ActiveTheme.current.unfocusedCardBgColor.copy(alpha = 0.85f)
+                }
+            )
+            .then(
+                if (!isFocused) {
+                    Modifier.border(
+                        1.dp,
+                        ActiveTheme.cardBorder.copy(alpha = 0.45f),
+                        rowShape
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left-aligned squircle icon container with alternating pastel tint
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(squircleShape)
+                .background(tint.container, squircleShape)
+                .border(
+                    width = 1.dp,
+                    color = tint.border,
+                    shape = squircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                bitmap = app.imageBitmap,
+                contentDescription = app.name,
+                filterQuality = FilterQuality.None,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        Spacer(Modifier.width(10.dp))
+
+        // Medium-bold deep violet/plum app label (no numbers)
+        Text(
+            text = app.name,
+            fontSize = 13.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = ActiveTheme.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+
+        if (managing) {
+            Spacer(Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(destructiveColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "✕",
+                    fontSize = 10.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One row of the "add apps" picker. Skippable for the same reason as [FolderAppRow]: picker D-pad
+ * steps and check toggles recompose only the rows that changed.
+ */
+@Composable
+private fun FolderPickerAppRow(
+    app: LauncherApp,
+    checked: Boolean,
+    isFocused: Boolean,
+    selectedContainerColor: Color,
+    onClick: () -> Unit
+) {
+    val rowShape = RoundedCornerShape(12.dp)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 12.dp)
+            .clip(rowShape)
+            .background(
+                if (isFocused) selectedContainerColor else Color.Transparent
+            )
+            .border(
+                width = if (isFocused) 1.5.dp else 0.dp,
+                color = if (isFocused) ActiveTheme.palette.focusedCardBorder else Color.Transparent,
+                shape = rowShape
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            bitmap = app.imageBitmap,
+            contentDescription = app.name,
+            filterQuality = FilterQuality.None,
+            modifier = Modifier.size(32.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = app.name,
+            color = ActiveTheme.textPrimary,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.5.sp,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.width(6.dp))
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (checked) ActiveTheme.accentDeep else Color.Transparent)
+                .border(1.5.dp, ActiveTheme.accentDeep, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (checked) "✓" else "＋",
+                color = if (checked) Color.White else ActiveTheme.accentDeep,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
         }
     }
 }

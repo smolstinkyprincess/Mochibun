@@ -82,6 +82,17 @@ internal fun Boolean.unlessBackPillFocused(): Boolean =
     this && !LocalSettingsBackPillFocused.current.value
 
 /**
+ * Row text marquee: only the focused row scrolls (endlessly while focused); every other row is
+ * static. The node always stays in the chain and only its `iterations` change: adding/removing
+ * `basicMarquee` per D-pad step re-measured the text and spiked D-pad p99 on the MT6761.
+ */
+internal fun Modifier.settingsMarquee(focused: Boolean): Modifier = basicMarquee(
+    iterations = if (focused) Int.MAX_VALUE else 0,
+    initialDelayMillis = 800,
+    velocity = 24.dp
+)
+
+/**
  * Standardized Settings Screen Scaffold for the Chinoe AT-M120 (480x800).
  * Features vector Bézier scalloped cloud framing, a centered kawaii title, and a Back pill floating
  * bottom-centre over the clouds (like [one.crinklecod.mochibun.ui.components.KawaiiReturnHomePill]
@@ -374,7 +385,7 @@ fun SettingsNavigationRow(
                 fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
-                modifier = Modifier.basicMarquee()
+                modifier = Modifier.settingsMarquee(focused)
             )
             if (subtitle != null) {
                 Text(
@@ -383,7 +394,7 @@ fun SettingsNavigationRow(
                     fontSize = 10.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Clip,
-                    modifier = Modifier.basicMarquee()
+                    modifier = Modifier.settingsMarquee(focused)
                 )
             }
         }
@@ -446,7 +457,7 @@ fun SettingsToggleRow(
                 fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
-                modifier = Modifier.basicMarquee()
+                modifier = Modifier.settingsMarquee(focused)
             )
             if (subtitle != null) {
                 Text(
@@ -455,7 +466,7 @@ fun SettingsToggleRow(
                     fontSize = 10.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Clip,
-                    modifier = Modifier.basicMarquee()
+                    modifier = Modifier.settingsMarquee(focused)
                 )
             }
         }
@@ -536,7 +547,7 @@ fun SettingsStepperRow(
                 fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
-                modifier = Modifier.basicMarquee()
+                modifier = Modifier.settingsMarquee(focused)
             )
             if (subtitle != null) {
                 Text(
@@ -545,7 +556,7 @@ fun SettingsStepperRow(
                     fontSize = 10.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Clip,
-                    modifier = Modifier.basicMarquee()
+                    modifier = Modifier.settingsMarquee(focused)
                 )
             }
         }
@@ -600,7 +611,7 @@ fun SettingsStepperRow(
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Clip,
-                    modifier = Modifier.basicMarquee()
+                    modifier = Modifier.settingsMarquee(focused)
                 )
             }
 
@@ -662,7 +673,7 @@ fun SettingsTextInputRow(
                 fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
-                modifier = Modifier.basicMarquee()
+                modifier = Modifier.settingsMarquee(focused)
             )
             if (subtitle != null) {
                 Text(
@@ -671,7 +682,7 @@ fun SettingsTextInputRow(
                     fontSize = 10.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Clip,
-                    modifier = Modifier.basicMarquee()
+                    modifier = Modifier.settingsMarquee(focused)
                 )
             }
         }
@@ -703,7 +714,7 @@ fun SettingsTextInputRow(
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Clip,
-                    modifier = Modifier.basicMarquee()
+                    modifier = Modifier.settingsMarquee(focused)
                 )
             }
         }
@@ -740,7 +751,7 @@ fun SettingsInfoRow(
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Clip,
-            modifier = Modifier.basicMarquee()
+            modifier = Modifier.settingsMarquee(focused)
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -753,7 +764,7 @@ fun SettingsInfoRow(
             textAlign = TextAlign.End,
             modifier = Modifier
                 .weight(1f, fill = false)
-                .basicMarquee()
+                .settingsMarquee(focused)
         )
     }
 }
@@ -808,7 +819,7 @@ fun SettingsActionRow(
             overflow = TextOverflow.Clip,
             modifier = Modifier
                 .padding(horizontal = if (jumpNumber != null) 22.dp else 0.dp)
-                .basicMarquee()
+                .settingsMarquee(focused)
         )
         if (jumpNumber != null) {
             JumpNumberBadge(

@@ -42,6 +42,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -333,8 +334,10 @@ fun DrawerAlphabetRail(
 @Composable
 fun AppDrawerScreen(
     visibleApps: List<LauncherApp>,
-    selectedDrawerIndex: Int,
-    currentDrawerLetter: Char?,
+    // Provider, not a value: the focused index changes on every D-pad step / T9 jump, and reading
+    // it only inside derived states and item scopes keeps those steps from recomposing MainLauncher
+    // and every visible card (only the two cards whose selection flips recompose).
+    selectedDrawerIndex: () -> Int,
     letterStarts: Map<Char, Int>,
     isRailFocused: Boolean = false,
     hoveredRailLetter: Char? = null,
@@ -351,6 +354,21 @@ fun AppDrawerScreen(
 ) {
     val theme = LocalLauncherTheme.current
     val activeBorderStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
+
+    // Each of these flips far less often than the index itself (letter boundary, -1 header pill,
+    // valid focus), so this body only recomposes on those transitions.
+    val currentDrawerLetter by remember(visibleApps, selectedDrawerIndex) {
+        derivedStateOf {
+            val index = selectedDrawerIndex()
+            if (index in visibleApps.indices) firstLetterOf(visibleApps[index].name) else null
+        }
+    }
+    val isHeaderPillFocused by remember(selectedDrawerIndex) {
+        derivedStateOf { selectedDrawerIndex() == -1 }
+    }
+    val hasValidSelection by remember(visibleApps, selectedDrawerIndex) {
+        derivedStateOf { selectedDrawerIndex() in visibleApps.indices }
+    }
 
     Box(
         modifier = modifier
@@ -408,10 +426,13 @@ fun AppDrawerScreen(
                 key = { _, app -> app.componentKey },
                 contentType = { _, _ -> "app_card" }
             ) { index, app ->
+                val isFocusedItem by remember(index, selectedDrawerIndex) {
+                    derivedStateOf { selectedDrawerIndex() == index }
+                }
                 AppDrawerCard(
                     app = app,
                     index = index,
-                    isSelected = (index == selectedDrawerIndex) && !isRailFocused,
+                    isSelected = isFocusedItem && !isRailFocused,
                     borderStyle = activeBorderStyle,
                     onAppClick = onAppClick,
                     onAppLongClick = onAppLongClick
@@ -432,7 +453,7 @@ fun AppDrawerScreen(
             contentAlignment = Alignment.Center
         ) {
             // UP past the first card parks focus at -1: show the return pill in the header slot
-            if (selectedDrawerIndex == -1 && !isRailFocused) {
+            if (isHeaderPillFocused && !isRailFocused) {
                 KawaiiReturnHomePill(isFocused = true, onClick = onBackToHome)
             } else {
                 MochibunSectionHeader("Applications")
@@ -464,7 +485,7 @@ fun AppDrawerScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val hasFocusedApp = selectedDrawerIndex in visibleApps.indices && !isRailFocused
+            val hasFocusedApp = hasValidSelection && !isRailFocused
             SoftKeyPromptPill(
                 label = "Options",
                 icon = "♡",

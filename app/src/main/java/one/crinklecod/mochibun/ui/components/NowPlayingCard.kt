@@ -48,7 +48,6 @@ import one.crinklecod.mochibun.ui.theme.LauncherTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.cardBorderColor
 import one.crinklecod.mochibun.ui.theme.focusedContainerColor
-import java.util.Locale
 
 internal fun computeDisplayPositionMs(
     mediaState: MochibunMediaState,
@@ -64,16 +63,22 @@ internal fun computeDisplayPositionMs(
     return raw.coerceIn(0L, mediaState.durationMs)
 }
 
+// Hand-rolled instead of String.format: this runs every second while music plays, and
+// java.util.Formatter (pattern parse + allocations) is slow under JIT-only ART on the MT6761.
 internal fun formatMediaDuration(ms: Long): String {
     val totalSeconds = ms.coerceAtLeast(0L) / 1000L
     val hours = totalSeconds / 3600L
     val minutes = (totalSeconds % 3600L) / 60L
     val seconds = totalSeconds % 60L
-    return if (hours > 0L) {
-        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
-    } else {
-        String.format(Locale.US, "%d:%02d", minutes, seconds)
+    val sb = StringBuilder(8)
+    if (hours > 0L) {
+        sb.append(hours).append(':')
+        if (minutes < 10L) sb.append('0')
     }
+    sb.append(minutes).append(':')
+    if (seconds < 10L) sb.append('0')
+    sb.append(seconds)
+    return sb.toString()
 }
 
 /**
@@ -83,7 +88,8 @@ internal fun formatMediaDuration(ms: Long): String {
 fun HeartScrubberProgressBar(
     progress: Float,
     modifier: Modifier = Modifier,
-    tickKey: Int = 0,
+    // Read only inside the draw block, so a playback tick invalidates draw, not composition
+    tick: (() -> Int)? = null,
     progressProvider: (() -> Float)? = null
 ) {
     val heartPath = remember { Path() }
@@ -99,8 +105,7 @@ fun HeartScrubberProgressBar(
             .fillMaxWidth()
             .height(14.dp)
     ) {
-        @Suppress("UNUSED_EXPRESSION")
-        tickKey // Invalidates draw only when the 1 Hz playback tick advances
+        tick?.invoke() // Invalidates draw only when the 1 Hz playback tick advances
 
         val w = size.width
         val h = size.height
@@ -303,7 +308,7 @@ fun TransportButton(
 private fun PlaybackArtistAndTimeRow(
     artist: String,
     mediaState: MochibunMediaState,
-    secondTick: Int
+    secondTick: () -> Int
 ) {
     val hasDuration = mediaState.durationMs > 0L
     Row(
@@ -321,20 +326,29 @@ private fun PlaybackArtistAndTimeRow(
             modifier = Modifier.weight(1f)
         )
         if (hasDuration) {
-            @Suppress("UNUSED_EXPRESSION")
-            secondTick
-            val posMs = computeDisplayPositionMs(mediaState, SystemClock.elapsedRealtime())
-            val timeText = "${formatMediaDuration(posMs)} / ${formatMediaDuration(mediaState.durationMs)}"
-            Text(
-                text = timeText,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-                color = ActiveTheme.textPrimary.copy(alpha = 0.62f),
-                maxLines = 1,
-                softWrap = false
-            )
+            val durationText = remember(mediaState.durationMs) { formatMediaDuration(mediaState.durationMs) }
+            PlaybackTimeText(mediaState = mediaState, durationText = durationText, secondTick = secondTick)
         }
     }
+}
+
+/** The ticking "m:ss / m:ss" label: the only part of the card that recomposes once a second. */
+@Composable
+private fun PlaybackTimeText(
+    mediaState: MochibunMediaState,
+    durationText: String,
+    secondTick: () -> Int
+) {
+    secondTick() // Subscribes only this scope to the 1 Hz playback tick
+    val posMs = computeDisplayPositionMs(mediaState, SystemClock.elapsedRealtime())
+    Text(
+        text = "${formatMediaDuration(posMs)} / $durationText",
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Medium,
+        color = ActiveTheme.textPrimary.copy(alpha = 0.62f),
+        maxLines = 1,
+        softWrap = false
+    )
 }
 
 /**
@@ -362,12 +376,15 @@ fun NowPlayingCard(
     val mascotTick = remember(mascotStep) { { mascotStep.intValue } }
     val mascotSlot = if (mediaState.isPlaying) MascotAnimSlot.HAPPY else currentMoodSlot()
 
-    // 1 Hz playback progress ticker, paused automatically off-screen or when paused.
+    // 1 Hz playback progress ticker, paused automatically off-screen or when paused. Read only via
+    // playbackTickProvider in the time label / scrubber draw, never in this body: reading it here
+    // recomposed the whole card (marquee title, transport pills) every second.
     val playbackTick = rememberKeitaiStep(
         active = mediaState.isPlaying && mediaState.durationMs > 0L,
         totalSteps = 36_000,
         stepDurationMs = 1_000L
     )
+    val playbackTickProvider = remember(playbackTick) { { playbackTick.intValue } }
 
     Box(
         modifier = modifier
@@ -446,12 +463,12 @@ fun NowPlayingCard(
                         PlaybackArtistAndTimeRow(
                             artist = mediaState.artist.ifBlank { "Unknown Artist" },
                             mediaState = mediaState,
-                            secondTick = playbackTick.intValue
+                            secondTick = playbackTickProvider
                         )
                         Spacer(modifier = Modifier.height(5.dp))
                         HeartScrubberProgressBar(
                             progress = 0f,
-                            tickKey = playbackTick.intValue,
+                            tick = playbackTickProvider,
                             progressProvider = {
                                 if (mediaState.durationMs <= 0L) {
                                     0f

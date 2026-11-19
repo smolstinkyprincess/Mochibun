@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -66,13 +67,13 @@ import one.crinklecod.mochibun.ui.screens.AppDrawerScreen
 import one.crinklecod.mochibun.ui.screens.firstFavoriteIndexOfPage
 import one.crinklecod.mochibun.ui.screens.HomeScreen
 import one.crinklecod.mochibun.ui.screens.NotificationsScreen
-import one.crinklecod.mochibun.ui.screens.firstLetterOf
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.MochibunSystemBarsEffect
 import one.crinklecod.mochibun.ui.theme.loadSavedTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 
 
@@ -290,10 +291,16 @@ fun MainLauncher(
 
     val anyModalOpen = nav.anyModalOpen
 
-    LaunchedEffect(pagerState.settledPage, pagerState.isScrollInProgress) {
-        if (!pagerState.isScrollInProgress && (pendingTargetPage == null || pendingTargetPage == pagerState.settledPage)) {
-            pendingTargetPage = null
-        }
+    // snapshotFlow, not LaunchedEffect keys: reading settledPage / isScrollInProgress as keys in
+    // this body would recompose the whole launcher root on every swipe. pendingTargetPage is read
+    // inside collect (untracked) so it fires on the same transitions as before.
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage to pagerState.isScrollInProgress }
+            .collect { (settledPage, scrolling) ->
+                if (!scrolling && (pendingTargetPage == null || pendingTargetPage == settledPage)) {
+                    pendingTargetPage = null
+                }
+            }
     }
 
     val isHomeScreenActive = nav.isHomeScreenActive
@@ -552,55 +559,62 @@ fun MainLauncher(
             selectedDrawerIndex.coerceIn(0, (visibleApps.size - 1).coerceAtLeast(0))
     }
 
-    LaunchedEffect(selectedDrawerIndex, drawerOpen, visibleApps.size) {
-        if (drawerOpen && visibleApps.isNotEmpty() && selectedDrawerIndex in visibleApps.indices) {
-            val layoutInfo = listState.layoutInfo
-            val clearBottom = (layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding)
-                .coerceAtLeast(0)
-            val selectedItem = layoutInfo.visibleItemsInfo.firstOrNull {
-                it.index == selectedDrawerIndex
-            }
-            if (selectedItem != null) {
-                val itemEnd = selectedItem.offset + selectedItem.size
-                if (selectedItem.offset < 0) {
-                    listState.scrollBy(selectedItem.offset.toFloat())
-                } else if (itemEnd > clearBottom) {
-                    listState.scrollBy((itemEnd - clearBottom).toFloat())
+    // Keep the focused drawer card on screen. selectedDrawerIndex is observed with snapshotFlow
+    // rather than used as an effect key: a key read here recomposed the whole launcher root on
+    // every D-pad step / T9 jump in the drawer. collectLatest cancels an in-flight scroll when the
+    // next step arrives, like the old effect restart did.
+    LaunchedEffect(drawerOpen, visibleApps.size) {
+        if (!drawerOpen) return@LaunchedEffect
+        snapshotFlow { nav.selectedDrawerIndex }.collectLatest { selectedDrawerIndex ->
+            if (visibleApps.isNotEmpty() && selectedDrawerIndex in visibleApps.indices) {
+                val layoutInfo = listState.layoutInfo
+                val clearBottom = (layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding)
+                    .coerceAtLeast(0)
+                val selectedItem = layoutInfo.visibleItemsInfo.firstOrNull {
+                    it.index == selectedDrawerIndex
                 }
-            } else {
-                val firstVisible = layoutInfo.visibleItemsInfo.firstOrNull()
-                val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
-                if (lastVisible != null &&
-                    selectedDrawerIndex > lastVisible.index &&
-                    selectedDrawerIndex - lastVisible.index <= 2
-                ) {
-                    // Use scrollBy so LazyColumn keeps item prefetching active on 1-row steps
-                    val delta = selectedDrawerIndex - lastVisible.index
-                    val stepPx = lastVisible.size + layoutInfo.mainAxisItemSpacing
-                    val estimatedBottom = lastVisible.offset + lastVisible.size + delta * stepPx
-                    val scrollDelta = (estimatedBottom - clearBottom).toFloat()
-                    if (scrollDelta > 0f) {
-                        listState.scrollBy(scrollDelta)
-                    } else {
-                        listState.scrollToItem(
-                            index = selectedDrawerIndex,
-                            scrollOffset = -(clearBottom - lastVisible.size).coerceAtLeast(0)
-                        )
+                if (selectedItem != null) {
+                    val itemEnd = selectedItem.offset + selectedItem.size
+                    if (selectedItem.offset < 0) {
+                        listState.scrollBy(selectedItem.offset.toFloat())
+                    } else if (itemEnd > clearBottom) {
+                        listState.scrollBy((itemEnd - clearBottom).toFloat())
                     }
-                } else if (firstVisible != null &&
-                    selectedDrawerIndex < firstVisible.index &&
-                    firstVisible.index - selectedDrawerIndex <= 2
-                ) {
-                    val delta = firstVisible.index - selectedDrawerIndex
-                    val stepPx = firstVisible.size + layoutInfo.mainAxisItemSpacing
-                    val scrollDelta = (firstVisible.offset - delta * stepPx).toFloat()
-                    if (scrollDelta < 0f) {
-                        listState.scrollBy(scrollDelta)
+                } else {
+                    val firstVisible = layoutInfo.visibleItemsInfo.firstOrNull()
+                    val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
+                    if (lastVisible != null &&
+                        selectedDrawerIndex > lastVisible.index &&
+                        selectedDrawerIndex - lastVisible.index <= 2
+                    ) {
+                        // Use scrollBy so LazyColumn keeps item prefetching active on 1-row steps
+                        val delta = selectedDrawerIndex - lastVisible.index
+                        val stepPx = lastVisible.size + layoutInfo.mainAxisItemSpacing
+                        val estimatedBottom = lastVisible.offset + lastVisible.size + delta * stepPx
+                        val scrollDelta = (estimatedBottom - clearBottom).toFloat()
+                        if (scrollDelta > 0f) {
+                            listState.scrollBy(scrollDelta)
+                        } else {
+                            listState.scrollToItem(
+                                index = selectedDrawerIndex,
+                                scrollOffset = -(clearBottom - lastVisible.size).coerceAtLeast(0)
+                            )
+                        }
+                    } else if (firstVisible != null &&
+                        selectedDrawerIndex < firstVisible.index &&
+                        firstVisible.index - selectedDrawerIndex <= 2
+                    ) {
+                        val delta = firstVisible.index - selectedDrawerIndex
+                        val stepPx = firstVisible.size + layoutInfo.mainAxisItemSpacing
+                        val scrollDelta = (firstVisible.offset - delta * stepPx).toFloat()
+                        if (scrollDelta < 0f) {
+                            listState.scrollBy(scrollDelta)
+                        } else {
+                            listState.scrollToItem(selectedDrawerIndex)
+                        }
                     } else {
                         listState.scrollToItem(selectedDrawerIndex)
                     }
-                } else {
-                    listState.scrollToItem(selectedDrawerIndex)
                 }
             }
         }
@@ -693,14 +707,6 @@ fun MainLauncher(
         }
     }
 
-    val currentDrawerLetter = remember(drawerOpen, selectedDrawerIndex, visibleApps) {
-        if (drawerOpen && selectedDrawerIndex in visibleApps.indices) {
-            firstLetterOf(visibleApps[selectedDrawerIndex].name)
-        } else {
-            null
-        }
-    }
-
     val keypadActions = remember(launcherVm) {
         LauncherNavigationKeypadActions(
             nav = nav,
@@ -784,8 +790,8 @@ fun MainLauncher(
             }
 
             val keyboardController = LocalSoftwareKeyboardController.current
-            LaunchedEffect(pagerState.currentPage) {
-                keyboardController?.hide()
+            LaunchedEffect(pagerState, keyboardController) {
+                snapshotFlow { pagerState.currentPage }.collect { keyboardController?.hide() }
             }
 
             val onHomeHeaderClick = remember {
@@ -868,11 +874,13 @@ fun MainLauncher(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Transparent)
-                    .pointerInput(drawerOpen, pagerState.currentPage, isHomeScreenActive) {
+                    // Keyed on Unit and reading nav live: keying on currentPage restarted the
+                    // detector mid-swipe and subscribed the root to page changes.
+                    .pointerInput(nav) {
                         detectVerticalDragGestures { _, dragAmount ->
-                            if (!drawerOpen && isHomeScreenActive && dragAmount < -32) {
-                                selectedDrawerIndex = 0
-                                drawerOpen = true
+                            if (!nav.drawerOpen && nav.isHomeScreenActive && dragAmount < -32) {
+                                nav.selectedDrawerIndex = 0
+                                nav.drawerOpen = true
                             }
                         }
                     },
@@ -994,11 +1002,13 @@ fun MainLauncher(
             )
 
             val currentVisibleApps by rememberUpdatedState(visibleApps)
-            val currentSelectedDrawerIndex by rememberUpdatedState(selectedDrawerIndex)
+            // Read lazily (callbacks / AppDrawerScreen scopes) so drawer focus moves never
+            // invalidate this root composable
+            val drawerIndexProvider = remember(nav) { { nav.selectedDrawerIndex } }
             val currentLetterStarts by rememberUpdatedState(letterStarts)
             val onDrawerOptionsClick = remember(launcherVm) {
                 {
-                    currentVisibleApps.getOrNull(currentSelectedDrawerIndex)?.let { app ->
+                    currentVisibleApps.getOrNull(nav.selectedDrawerIndex)?.let { app ->
                         activeModal = ActiveModal.AppAction(app)
                     }
                     Unit
@@ -1054,8 +1064,7 @@ fun MainLauncher(
             if (drawerOpen) {
                 AppDrawerScreen(
                     visibleApps = visibleApps,
-                    selectedDrawerIndex = selectedDrawerIndex,
-                    currentDrawerLetter = currentDrawerLetter,
+                    selectedDrawerIndex = drawerIndexProvider,
                     letterStarts = letterStarts,
                     isRailFocused = drawerRailFocused,
                     hoveredRailLetter = drawerRailHoveredLetter,

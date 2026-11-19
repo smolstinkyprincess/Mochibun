@@ -19,22 +19,24 @@ import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -116,14 +118,16 @@ fun QuickMemoDialog(
     val textFocusRequester = remember { FocusRequester() }
 
     // Auto-save on every exit path (the modal can also be closed from outside, e.g. a flip close).
-    val latestText by rememberUpdatedState(memoValue.text)
-    val latestSlot by rememberUpdatedState(slot)
+    // onDispose reads the states directly (latest values) instead of rememberUpdatedState(memoValue.text),
+    // which read the draft in this scope and recomposed the whole dialog on every typed character.
     DisposableEffect(Unit) {
         onDispose {
-            PreferencesManager.setQuickMemoSlotText(context, latestSlot, latestText)
-            PreferencesManager.setLastOpenedQuickMemoSlot(context, latestSlot)
+            PreferencesManager.setQuickMemoSlotText(context, slot, memoValue.text)
+            PreferencesManager.setLastOpenedQuickMemoSlot(context, slot)
         }
     }
+    // Flips only when the open slot goes blank <-> non-blank, so the slot bar skips other keystrokes
+    val isOpenSlotFilled by remember { derivedStateOf { memoValue.text.isNotBlank() } }
 
     /** Saves the current draft, then loads [target] into the editor. */
     fun switchSlot(target: Int) {
@@ -332,7 +336,7 @@ fun QuickMemoDialog(
                     activeSlot = slot,
                     pinnedSlot = pinnedSlot,
                     // The open slot's dot follows the live draft, the others their saved text
-                    isFilled = { n -> if (n == slot) memoValue.text.isNotBlank() else savedSlots.getOrElse(n - 1) { "" }.isNotBlank() },
+                    isFilled = { n -> if (n == slot) isOpenSlotFilled else savedSlots.getOrElse(n - 1) { "" }.isNotBlank() },
                     barFocused = focusZone == ZONE_SLOTS,
                     onSlotClick = { n ->
                         // Touch: tap a slot to open it, tap the open slot again to pin it
@@ -342,25 +346,24 @@ fun QuickMemoDialog(
 
                 Spacer(Modifier.height(8.dp))
 
-                OutlinedTextField(
-                    value = memoValue,
+                // Built here (this scope no longer recomposes per keystroke) and handed to the
+                // field, so typing does not rebuild TextFieldColors / TextStyle each character.
+                val fontFamily = LocalLauncherFontFamily.current
+                val memoTextStyle = remember(fontFamily) { TextStyle(fontFamily = fontFamily, fontSize = 14.sp) }
+                val memoFieldColors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = theme.appActionColor,
+                    unfocusedBorderColor = theme.greetingOutlineColor,
+                    focusedTextColor = theme.fgTextColor,
+                    unfocusedTextColor = theme.fgTextColor,
+                    focusedContainerColor = softSurfaceColor,
+                    unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.7f)
+                )
+                QuickMemoTextField(
+                    value = { memoValue },
                     onValueChange = { memoValue = it.limitTextLength(maxChars) },
-                    placeholder = { Text("jot something cute ♡") },
-                    minLines = 3,
-                    maxLines = 5,
-                    shape = RoundedCornerShape(14.dp),
-                    textStyle = TextStyle(fontFamily = LocalLauncherFontFamily.current, fontSize = 14.sp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = theme.appActionColor,
-                        unfocusedBorderColor = theme.greetingOutlineColor,
-                        focusedTextColor = theme.fgTextColor,
-                        unfocusedTextColor = theme.fgTextColor,
-                        focusedContainerColor = softSurfaceColor,
-                        unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.7f)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(textFocusRequester)
+                    textStyle = memoTextStyle,
+                    colors = memoFieldColors,
+                    focusRequester = textFocusRequester
                 )
 
                 Row(
@@ -376,10 +379,10 @@ fun QuickMemoDialog(
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
-                    Text(
-                        text = "${memoValue.text.length}/$maxChars",
-                        color = theme.cardTextColor,
-                        fontSize = 11.sp
+                    MemoCharCounter(
+                        length = { memoValue.text.length },
+                        maxChars = maxChars,
+                        color = theme.cardTextColor
                     )
                 }
 
@@ -467,4 +470,41 @@ private fun QuickMemoSlotBar(
             }
         }
     }
+}
+
+/**
+ * The memo field, isolated so only this scope reads the draft: each keystroke recomposes the
+ * field, not the slot bar, hints and buttons around it.
+ */
+@Composable
+private fun QuickMemoTextField(
+    value: () -> TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    textStyle: TextStyle,
+    colors: TextFieldColors,
+    focusRequester: FocusRequester
+) {
+    OutlinedTextField(
+        value = value(),
+        onValueChange = onValueChange,
+        placeholder = { Text("jot something cute ♡") },
+        minLines = 3,
+        maxLines = 5,
+        shape = RoundedCornerShape(14.dp),
+        textStyle = textStyle,
+        colors = colors,
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester)
+    )
+}
+
+/** "n/140" counter; reads the length in its own scope so typing only recomposes this Text. */
+@Composable
+private fun MemoCharCounter(length: () -> Int, maxChars: Int, color: Color) {
+    Text(
+        text = "${length()}/$maxChars",
+        color = color,
+        fontSize = 11.sp
+    )
 }

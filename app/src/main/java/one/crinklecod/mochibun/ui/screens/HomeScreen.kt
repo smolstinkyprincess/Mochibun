@@ -200,8 +200,10 @@ fun HomeScreen(
     onFavoritePageChange: (page: Int) -> Unit = {}
 ) {
     val theme = LocalLauncherTheme.current
-    val notifications by NotificationTracker.notifications.collectAsState()
-    val unreadNotifCount = notifications.size
+    // Only the count is shown on Home. Collecting the whole list recomposed this body on every
+    // notification repost (new list instance each time, even when the size is unchanged).
+    val notificationsState = NotificationTracker.notifications.collectAsState()
+    val unreadNotifCount by remember { derivedStateOf { notificationsState.value.size } }
     val isTickerEnabled by PreferencesManager.isSubDisplayTickerEnabled.collectAsState()
     val isTickerDark by PreferencesManager.isSubDisplayTickerDark.collectAsState()
     val homeMascotSize by PreferencesManager.homeMascotSize.collectAsState()
