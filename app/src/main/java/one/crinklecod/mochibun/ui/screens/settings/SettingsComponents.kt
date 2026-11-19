@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.ui.components.BottomLavenderClouds
+import one.crinklecod.mochibun.ui.components.DocomoPictogram
 import one.crinklecod.mochibun.ui.components.JumpNumberBadge
 import one.crinklecod.mochibun.ui.components.TopLavenderClouds
 import one.crinklecod.mochibun.ui.components.mochibunCardBorder
@@ -338,9 +339,10 @@ fun SettingsCard(
 fun SettingsNavigationRow(
     title: String,
     subtitle: String? = null,
-    icon: String,
+    icon: String = "",
     isFocused: Boolean,
     modifier: Modifier = Modifier,
+    docomoIndex: Int? = null,
     jumpNumber: Int? = null,
     onClick: () -> Unit
 ) {
@@ -368,10 +370,17 @@ fun SettingsNavigationRow(
                 .border(1.dp, ActiveTheme.cardBorder, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = icon,
-                fontSize = 16.sp
-            )
+            if (docomoIndex != null) {
+                DocomoPictogram(
+                    index = docomoIndex,
+                    size = 16.dp
+                )
+            } else {
+                Text(
+                    text = icon,
+                    fontSize = 16.sp
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(10.dp))

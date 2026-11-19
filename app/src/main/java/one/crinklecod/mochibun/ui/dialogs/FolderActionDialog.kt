@@ -38,8 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import one.crinklecod.mochibun.R
 import one.crinklecod.mochibun.data.model.FavoriteFolder
+import one.crinklecod.mochibun.ui.components.DocomoPictogram
 import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
@@ -71,7 +71,7 @@ fun FolderActionDialog(
 
     data class FolderMenuAction(
         val label: String,
-        val iconResId: Int? = null,
+        val docomoIndex: Int? = null,
         val enabled: Boolean = true,
         val isDestructive: Boolean = false,
         val onClick: () -> Unit
@@ -84,42 +84,42 @@ fun FolderActionDialog(
             add(
                 FolderMenuAction(
                     label = "Open folder",
-                    iconResId = R.drawable.add_folder,
+                    docomoIndex = 102,
                     onClick = onOpenFolder
                 )
             )
             add(
                 FolderMenuAction(
                     label = "Rename folder",
-                    iconResId = R.drawable.customize,
+                    docomoIndex = 104,
                     onClick = onRenameFolder
                 )
             )
             add(
                 FolderMenuAction(
                     label = "Add / remove apps",
-                    iconResId = R.drawable.add_folder,
+                    docomoIndex = 105,
                     onClick = onEditFolderApps
                 )
             )
             add(
                 FolderMenuAction(
                     label = "Change folder icon",
-                    iconResId = R.drawable.customize,
+                    docomoIndex = 13,
                     onClick = onChangeIcon
                 )
             )
             add(
                 FolderMenuAction(
                     label = "Reset folder icon",
-                    iconResId = R.drawable.reset,
+                    docomoIndex = 40,
                     onClick = onResetIcon
                 )
             )
             add(
                 FolderMenuAction(
                     label = "Delete folder",
-                    iconResId = R.drawable.rem_folder,
+                    docomoIndex = 17,
                     isDestructive = true,
                     onClick = {
                         confirmDeleteIndex = 0
@@ -131,12 +131,12 @@ fun FolderActionDialog(
                 add(
                     FolderMenuAction(
                         label = "Launcher options",
-                        iconResId = R.drawable.options,
+                        docomoIndex = 144,
                         onClick = onOpenLauncherOptions
                     )
                 )
             }
-            add(FolderMenuAction("♥ Close ♥", onClick = onDismiss))
+            add(FolderMenuAction("Close", onClick = onDismiss))
         }
     }
 
@@ -304,12 +304,22 @@ fun FolderActionDialog(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "🗑 Delete '${folder.name}'?",
-                        fontWeight = FontWeight.Bold,
-                        color = destructiveColor,
-                        fontSize = 17.sp
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DocomoPictogram(
+                            index = 17,
+                            tint = destructiveColor.copy(alpha = 0.85f),
+                            size = 16.dp
+                        )
+                        Text(
+                            text = "Delete '${folder.name}'?",
+                            fontWeight = FontWeight.Bold,
+                            color = destructiveColor,
+                            fontSize = 17.sp
+                        )
+                    }
 
                     Text(
                         text = "This removes the folder from favorites. None of your installed apps will be uninstalled ♡",
@@ -344,14 +354,23 @@ fun FolderActionDialog(
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Text(
-                        text = "📁 ${folder.name}",
-                        color = theme.fgTextColor,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DocomoPictogram(
+                            index = 102,
+                            size = 16.dp
+                        )
+                        Text(
+                            text = folder.name,
+                            color = theme.fgTextColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
 
                     Text(
                         text = "${folder.appPackages.size} app(s) inside ♡",
@@ -396,7 +415,7 @@ fun FolderActionDialog(
                         KawaiiDialogItem(
                             text = item.label,
                             isFocused = selectedIndex == idx,
-                            iconResId = item.iconResId,
+                            docomoIndex = item.docomoIndex,
                             enabled = item.enabled,
                             isDestructive = item.isDestructive,
                             modifier = Modifier.fillMaxWidth(),

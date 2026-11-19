@@ -20,12 +20,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.data.model.AppInfo
+import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.prefs.CursorPreferences
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.HardwareRemapManager
 import one.crinklecod.mochibun.service.InputArbiter
-import one.crinklecod.mochibun.service.VirtualCursorService
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
+import one.crinklecod.mochibun.ui.dialogs.KeyGuideTab
+import one.crinklecod.mochibun.ui.dialogs.MochibunKeyGuideDialog
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 import java.util.Locale
@@ -36,7 +39,9 @@ import java.util.Locale
 @Composable
 internal fun CursorHardwareSettingsScreen(
     onBack: () -> Unit,
-    onOpenHardwareButtons: (() -> Unit)?,
+    onOpenHardwareButtons: (() -> Unit)? = null,
+    installedApps: () -> List<LauncherApp> = { emptyList() },
+    onNestedBackHandlerChanged: ((() -> Unit)?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -56,6 +61,7 @@ internal fun CursorHardwareSettingsScreen(
     val dpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
     val boundaryHaptics by PreferencesManager.isDpadBoundaryHaptics.collectAsState()
     var lastKeyPressedReadout by remember { mutableStateOf("Press any key...") }
+    var showKeypadRemapper by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         val observer: (KeyEvent) -> Unit = { event ->
@@ -148,7 +154,7 @@ internal fun CursorHardwareSettingsScreen(
                 customUri = null
                 focusedIndex = 5
             }
-            7 -> onOpenHardwareButtons?.invoke()
+            7 -> showKeypadRemapper = true
             8 -> PreferencesManager.setSoftKeyNavEnabled(context, !softKeyNav)
             9 -> stepToggleKey(1)
             10 -> PreferencesManager.setDpadWrapAround(context, !dpadWrapAround)
@@ -376,6 +382,18 @@ internal fun CursorHardwareSettingsScreen(
                 }
             }
         }
+    }
+
+    if (showKeypadRemapper) {
+        val appOptions = remember(installedApps) {
+            installedApps().map { AppInfo(it.packageName, it.name) }
+        }
+        MochibunKeyGuideDialog(
+            initialTab = KeyGuideTab.REMAP,
+            installedApps = appOptions,
+            onNestedBackHandlerChanged = onNestedBackHandlerChanged,
+            onDismiss = { showKeypadRemapper = false }
+        )
     }
 }
 

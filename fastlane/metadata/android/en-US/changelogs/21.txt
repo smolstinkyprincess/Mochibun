@@ -1,0 +1,4 @@
+Mochibun v2.5.0 ♡
+- Web Theme Workshop & Catalog: Updated the community Workshop and theme catalog so edited .mochibundle packs preserve custom fonts, outline/text colors, and multi-row mascot atlases.
+- Expanded Mascot Atlas Support: Added support for 8-row mascot_atlas.png sprite sheets with up to 16 frames per row.
+- Settings & Navigation Polish: Refined Virtual Cursor, Backup & Restore theme export paths, and root options across docs and settings.

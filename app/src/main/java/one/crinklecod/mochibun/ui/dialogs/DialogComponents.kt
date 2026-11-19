@@ -1,9 +1,7 @@
 package one.crinklecod.mochibun.ui.dialogs
 
 import android.graphics.BitmapFactory
-import android.util.SparseArray
 import android.view.KeyEvent
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,9 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -41,14 +37,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.R
+import one.crinklecod.mochibun.ui.components.DocomoPictogram
 import one.crinklecod.mochibun.ui.components.JumpNumberBadge
 import one.crinklecod.mochibun.ui.components.KawaiiClosePill
 import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
+import one.crinklecod.mochibun.ui.components.clearDocomoAtlasCache
 import one.crinklecod.mochibun.ui.components.mochibunCardBorder
 import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
-import one.crinklecod.mochibun.ui.theme.accentDeep
 import one.crinklecod.mochibun.ui.theme.destructiveBgColor
 import one.crinklecod.mochibun.ui.theme.destructiveColor
 import one.crinklecod.mochibun.ui.theme.selectedContainerColor
@@ -199,27 +196,13 @@ fun KeitaiLaceDialogWithClose(
  */
 private val FLOATING_PILL_CLEARANCE = 30.dp
 
-private val cachedDialogIconBitmaps = SparseArray<ImageBitmap>()
-
-@Composable
-private fun rememberDialogIconBitmap(@DrawableRes iconResId: Int): ImageBitmap {
-    val context = LocalContext.current
-    return remember(iconResId) {
-        cachedDialogIconBitmaps.get(iconResId) ?: BitmapFactory.decodeResource(
-            context.resources,
-            iconResId
-        ).asImageBitmap().also {
-            cachedDialogIconBitmaps.put(iconResId, it)
-        }
-    }
-}
-
 @Composable
 fun KawaiiDialogItem(
     text: String,
     isFocused: Boolean,
     modifier: Modifier = Modifier,
-    @DrawableRes iconResId: Int? = null,
+    docomoIndex: Int? = null,
+    icon: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
     isDestructive: Boolean = false,
     textAlign: TextAlign = TextAlign.Start,
@@ -268,17 +251,19 @@ fun KawaiiDialogItem(
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (iconResId != null) {
-            val iconBitmap = rememberDialogIconBitmap(iconResId)
-            val iconTint = remember(theme.accentDeep) {
-                ColorFilter.tint(theme.accentDeep, BlendMode.SrcAtop)
+        if (icon != null) {
+            icon()
+            Spacer(modifier = Modifier.width(8.dp))
+        } else if (docomoIndex != null) {
+            val iconTint = when {
+                !enabled -> theme.fgTextColor.copy(alpha = 0.38f)
+                isDestructive -> destructiveColor.copy(alpha = 0.85f)
+                else -> null
             }
-            Image(
-                bitmap = iconBitmap,
-                contentDescription = null,
-                filterQuality = FilterQuality.None,
-                colorFilter = iconTint,
-                modifier = Modifier.size(15.dp)
+            DocomoPictogram(
+                index = docomoIndex,
+                tint = iconTint,
+                size = 16.dp
             )
             Spacer(modifier = Modifier.width(8.dp))
         }
@@ -398,8 +383,8 @@ fun rememberBowBitmap(): ImageBitmap {
 
 /** Drops cached dialog icon and bow bitmaps on critical memory trim; re-decodes on demand. */
 fun clearDialogBitmapCaches() {
-    cachedDialogIconBitmaps.clear()
     cachedBowBitmap = null
+    clearDocomoAtlasCache()
 }
 
 @Composable

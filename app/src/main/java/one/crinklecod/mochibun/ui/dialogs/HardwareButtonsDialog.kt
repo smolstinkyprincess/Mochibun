@@ -658,7 +658,7 @@ private fun RemapButtonRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppPickerDialog(
+internal fun AppPickerDialog(
     installedApps: List<AppInfo>,
     onAppSelected: (AppInfo) -> Unit,
     onDismiss: () -> Unit
@@ -670,8 +670,10 @@ private fun AppPickerDialog(
     var selectedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    LaunchedEffect(selectedIndex) {
-        listState.animateScrollToItem(selectedIndex)
+    LaunchedEffect(selectedIndex, sortedApps.size) {
+        if (sortedApps.isNotEmpty()) {
+            listState.animateScrollToItem(selectedIndex.coerceIn(0, sortedApps.lastIndex))
+        }
     }
 
     requestFocusSafely(focusRequester)
@@ -706,7 +708,7 @@ private fun AppPickerDialog(
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (event.type == KeyEventType.KeyDown) {
+                if (event.type == KeyEventType.KeyDown && sortedApps.isNotEmpty()) {
                     when (native.keyCode) {
                         KeyEvent.KEYCODE_DPAD_UP -> {
                             selectedIndex = if (selectedIndex > 0) selectedIndex - 1 else sortedApps.size - 1

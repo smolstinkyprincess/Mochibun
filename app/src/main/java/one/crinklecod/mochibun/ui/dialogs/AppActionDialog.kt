@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import one.crinklecod.mochibun.R
 import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
@@ -73,7 +72,7 @@ fun AppActionDialog(
 
     data class AppMenuAction(
         val label: String,
-        val iconResId: Int? = null,
+        val docomoIndex: Int? = null,
         val onClick: () -> Unit
     )
 
@@ -86,42 +85,42 @@ fun AppActionDialog(
             add(
                 AppMenuAction(
                     label = if (isFav) "Remove from favorites" else "Add to favorites",
-                    iconResId = if (isFav) R.drawable.rem_favorite else R.drawable.add_favorite,
+                    docomoIndex = if (isFav) 1 else 0,
                     onClick = onToggleFavorite
                 )
             )
             add(
                 AppMenuAction(
                     label = "Make folder",
-                    iconResId = R.drawable.add_folder,
+                    docomoIndex = 102,
                     onClick = onCreateFolder
                 )
             )
             add(
                 AppMenuAction(
                     label = "Change app icon",
-                    iconResId = R.drawable.customize,
+                    docomoIndex = 13,
                     onClick = onChangeIcon
                 )
             )
             add(
                 AppMenuAction(
                     label = "Reset icon to default",
-                    iconResId = R.drawable.reset,
+                    docomoIndex = 40,
                     onClick = onResetIcon
                 )
             )
             add(
                 AppMenuAction(
                     label = "App info",
-                    iconResId = R.drawable.app_info,
+                    docomoIndex = 14,
                     onClick = onAppInfo
                 )
             )
             add(
                 AppMenuAction(
                     label = "Hide app",
-                    iconResId = R.drawable.hide_app,
+                    docomoIndex = 19,
                     onClick = onHideApp
                 )
             )
@@ -129,12 +128,12 @@ fun AppActionDialog(
                 add(
                     AppMenuAction(
                         label = "Launcher options",
-                        iconResId = R.drawable.options,
+                        docomoIndex = 144,
                         onClick = onOpenLauncherOptions
                     )
                 )
             }
-            add(AppMenuAction("♥ Close ♥", onClick = onDismiss))
+            add(AppMenuAction("Close", onClick = onDismiss))
         }
     }
 
@@ -322,7 +321,7 @@ fun AppActionDialog(
                     KawaiiDialogItem(
                         text = item.label,
                         isFocused = selectedIndex == idx,
-                        iconResId = item.iconResId,
+                        docomoIndex = item.docomoIndex,
                         modifier = Modifier.fillMaxWidth(),
                         jumpNumber = if (idx + 1 <= 9) idx + 1 else null,
                         onClick = {

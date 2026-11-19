@@ -1,0 +1,5 @@
+Mochibun v2.6.0 ♡
+- Bundled Fonts & Sound Packs: Pack custom .ttf/.otf fonts and .ogg keypad sound effects inside shareable .mochibun theme bundles.
+- Redesigned Key Guide & Remapper: Refreshed keypad guide overlay and physical key remapping flow.
+- Folder UI Overhaul: Redesigned folder modal layout for cleaner D-pad browsing and app management.
+- Settings Hub Docomo Icons: Replaced remaining category icons with crisp 1-bit keitai Docomo pixel glyphs.

@@ -6,9 +6,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -25,9 +22,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.core.system.RootShell
+import one.crinklecod.mochibun.data.model.AppInfo
+import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.service.MochibunImeStatus
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
+import one.crinklecod.mochibun.ui.dialogs.KeyGuideTab
+import one.crinklecod.mochibun.ui.dialogs.MochibunKeyGuideDialog
 import one.crinklecod.mochibun.ui.dialogs.QuickSnippetsDialog
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
@@ -82,6 +83,8 @@ internal fun activateMochibunKeyboard(
 @Composable
 internal fun KeyboardSettingsScreen(
     onBack: () -> Unit,
+    installedApps: () -> List<LauncherApp> = { emptyList() },
+    onNestedBackHandlerChanged: ((() -> Unit)?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -361,29 +364,14 @@ internal fun KeyboardSettingsScreen(
     }
 
     if (showKeyGuide) {
-        AlertDialog(
-            onDismissRequest = { showKeyGuide = false },
-            title = { Text("Mochibun Key Guide") },
-            text = {
-                Text(
-                    "LSK — Left soft key action\n" +
-                        "RSK — Right soft key / Back action\n" +
-                        "F4 side key — Toggle the virtual cursor\n" +
-                        "Hold # — Open the Kaomoji Wheel\n" +
-                        "Wheel: ✱ / 0 — Clips & Snippets · 1–8 — Insert\n\n" +
-                        "Tap 2–9 — Cycle letters\n" +
-                        "Tap 1 — Symbols\n" +
-                        "Tap 0 / # — Space\n" +
-                        "Tap * — Cycle letter case\n" +
-                        "Hold 0–9 / * — Type the key value\n" +
-                        "◀ / ▶ — Choose a candidate · OK — Commit · DEL — Delete"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showKeyGuide = false }) {
-                    Text("Close")
-                }
-            }
+        val appOptions = remember(installedApps) {
+            installedApps().map { AppInfo(it.packageName, it.name) }
+        }
+        MochibunKeyGuideDialog(
+            initialTab = KeyGuideTab.LAUNCHER,
+            installedApps = appOptions,
+            onNestedBackHandlerChanged = onNestedBackHandlerChanged,
+            onDismiss = { showKeyGuide = false }
         )
     }
 }

@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -48,11 +49,13 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
 import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import one.crinklecod.mochibun.data.repository.CustomMascotManager
+import one.crinklecod.mochibun.data.repository.SystemFontSyncManager
 import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.ui.components.MascotSpriteSource
 import one.crinklecod.mochibun.ui.components.MascotSpriteStore
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.components.mochibunCardBorder
+import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
@@ -67,6 +70,44 @@ internal fun openCommunityGallery(context: android.content.Context) {
     }.onFailure {
         Toast.makeText(context, "Visit crinklecod.one/Mochibun/community/", Toast.LENGTH_SHORT).show()
     }
+}
+
+internal fun appearanceRowIds(
+    hasBundleFont: Boolean,
+    showRootOptions: Boolean,
+    isSystemFontInstalled: Boolean,
+    hasCustomWallpaper: Boolean,
+    hasCustomMascot: Boolean,
+    hasCustomBorder: Boolean,
+    isSystemMonitorEnabled: Boolean,
+    isSubDisplayTickerEnabled: Boolean
+): List<String> = buildList {
+    add("theme")
+    add("typography")
+    if (hasBundleFont) {
+        add("reset_font")
+        if (showRootOptions) {
+            add("apply_system_font")
+            if (isSystemFontInstalled) add("reset_system_font")
+        }
+    }
+    add("community_gallery")
+    add("border_style")
+    add("pick_border")
+    if (hasCustomBorder) add("reset_border")
+    add("name")
+    add("sub_display_ticker")
+    if (isSubDisplayTickerEnabled) add("sub_display_style")
+    add("pick_wallpaper")
+    if (hasCustomWallpaper) add("reset_wallpaper")
+    add("pick_mascot")
+    if (hasCustomMascot) add("reset_mascot")
+    add("mascot_size")
+    add("icon_pack")
+    add("wallpaper_stickers")
+    add("system_monitor")
+    if (isSystemMonitorEnabled) add("monitor_interval")
+    add("photo_frame")
 }
 
 /**
@@ -103,6 +144,13 @@ internal fun AppearanceSettingsScreen(
     val fontId by PreferencesManager.themeFontFamily.collectAsState()
     val fontOptions by TypographyManager.options.collectAsState()
     val hasBundleFont = fontOptions.any { it.id == TypographyManager.BUNDLE_FONT_ID }
+    val showRootOptions by PreferencesManager.showRootOptions.collectAsState()
+    val showSystemFontRootActions = hasBundleFont && showRootOptions
+    var isSystemFontInstalled by remember { mutableStateOf(false) }
+    var isSystemFontBusy by remember { mutableStateOf(false) }
+    var systemFontStatusMessage by remember { mutableStateOf<String?>(null) }
+    var showRebootConfirmDialog by remember { mutableStateOf(false) }
+    var rebootDialogMessage by remember { mutableStateOf("") }
     val mascotSource by MascotSpriteStore.source.collectAsState()
     val hasCustomMascot = mascotSource is MascotSpriteSource.Custom
     val activeBorderStyle by CustomCardBorderManager.activeBorderStyle.collectAsState()
@@ -145,48 +193,41 @@ internal fun AppearanceSettingsScreen(
         }
     }
 
-    // Dynamic item list based on custom wallpaper, mascot, and border state
+    // Dynamic item list based on custom font, root, wallpaper, mascot, and border state
     val items = remember(
         hasBundleFont,
+        showRootOptions,
+        isSystemFontInstalled,
         hasCustomWallpaper,
         hasCustomMascot,
         hasCustomBorder,
         isSystemMonitorEnabled,
         isSubDisplayTickerEnabled
     ) {
-        buildList {
-            add("theme")
-            add("typography")
-            if (hasBundleFont) add("reset_font")
-            add("community_gallery")
-            add("border_style")
-            add("pick_border")
-            if (hasCustomBorder) add("reset_border")
-            add("name")
-            add("sub_display_ticker")
-            if (isSubDisplayTickerEnabled) add("sub_display_style")
-            add("pick_wallpaper")
-            if (hasCustomWallpaper) {
-                add("reset_wallpaper")
-            }
-            add("pick_mascot")
-            if (hasCustomMascot) add("reset_mascot")
-            add("mascot_size")
-            add("icon_pack")
-            add("wallpaper_stickers")
-            add("system_monitor")
-            if (isSystemMonitorEnabled) add("monitor_interval")
-            add("photo_frame")
-        }
+        appearanceRowIds(
+            hasBundleFont = hasBundleFont,
+            showRootOptions = showRootOptions,
+            isSystemFontInstalled = isSystemFontInstalled,
+            hasCustomWallpaper = hasCustomWallpaper,
+            hasCustomMascot = hasCustomMascot,
+            hasCustomBorder = hasCustomBorder,
+            isSystemMonitorEnabled = isSystemMonitorEnabled,
+            isSubDisplayTickerEnabled = isSubDisplayTickerEnabled
+        )
     }
 
     val totalItems = items.size
 
+    // Keep focus within bounds when dynamic rows appear or disappear
+    LaunchedEffect(totalItems) {
+        focusedIndex = focusedIndex.coerceIn(0, (totalItems - 1).coerceAtLeast(0))
+    }
+
     // Card that holds the focused row; read lazily by ScrollToFocusedItem (not in composition).
     fun targetCardIndex(): Int =
         when (items.getOrNull(focusedIndex)) {
-            "theme", "typography", "reset_font", "community_gallery", "border_style", "pick_border",
-            "reset_border" -> 0
+            "theme", "typography", "reset_font", "apply_system_font", "reset_system_font",
+            "community_gallery", "border_style", "pick_border", "reset_border" -> 0
             "name", "sub_display_ticker", "sub_display_style" -> 1
             "icon_pack", "pick_wallpaper", "reset_wallpaper", "pick_mascot", "reset_mascot",
             "mascot_size", "wallpaper_stickers" -> 2
@@ -196,6 +237,14 @@ internal fun AppearanceSettingsScreen(
 
     LaunchedEffect(Unit) {
         TypographyManager.scanFontsAsync(context)
+    }
+
+    LaunchedEffect(showSystemFontRootActions) {
+        isSystemFontInstalled = if (showSystemFontRootActions) {
+            SystemFontSyncManager.isModuleInstalled()
+        } else {
+            false
+        }
     }
 
     ScrollToFocusedItem(listState) { targetCardIndex() }
@@ -220,6 +269,59 @@ internal fun AppearanceSettingsScreen(
                 scope.launch {
                     withContext(Dispatchers.IO) { TypographyManager.resetBundleFont(context) }
                     Toast.makeText(context, "♡ Bundle font removed", Toast.LENGTH_SHORT).show()
+                }
+            }
+            "apply_system_font" -> {
+                if (isSystemFontBusy) return
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                isSystemFontBusy = true
+                systemFontStatusMessage = "Installing Magisk system font module…"
+                scope.launch {
+                    val result = SystemFontSyncManager.applyBundleFontSystemWide(context)
+                    isSystemFontBusy = false
+                    result.fold(
+                        onSuccess = {
+                            isSystemFontInstalled = true
+                            val note = "♡ Magisk font staged — reboot to apply system-wide"
+                            systemFontStatusMessage = note
+                            rebootDialogMessage =
+                                "Staged custom font in ${SystemFontSyncManager.MODULE_DIR}.\n\nReboot now so Android loads it system-wide?"
+                            showRebootConfirmDialog = true
+                            Toast.makeText(context, note, Toast.LENGTH_LONG).show()
+                        },
+                        onFailure = { error ->
+                            val msg = "System font not applied: ${error.message ?: "Root error"}"
+                            systemFontStatusMessage = msg
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                    )
+                }
+            }
+            "reset_system_font" -> {
+                if (isSystemFontBusy) return
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+                isSystemFontBusy = true
+                systemFontStatusMessage = "Removing Magisk system font module…"
+                focusedIndex = items.indexOf("apply_system_font").coerceAtLeast(0)
+                scope.launch {
+                    val result = SystemFontSyncManager.removeSystemFontModule()
+                    isSystemFontBusy = false
+                    result.fold(
+                        onSuccess = {
+                            isSystemFontInstalled = false
+                            val note = "♡ System font module removed — reboot to restore default"
+                            systemFontStatusMessage = note
+                            rebootDialogMessage =
+                                "Removed ${SystemFontSyncManager.MODULE_DIR}.\n\nReboot now to restore the default system font?"
+                            showRebootConfirmDialog = true
+                            Toast.makeText(context, note, Toast.LENGTH_LONG).show()
+                        },
+                        onFailure = { error ->
+                            val msg = "Reset failed: ${error.message ?: "Root error"}"
+                            systemFontStatusMessage = msg
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                    )
                 }
             }
             "community_gallery" -> {
@@ -447,6 +549,47 @@ internal fun AppearanceSettingsScreen(
                             jumpNumber = (items.indexOf("reset_font") + 1).takeIf { it <= 9 },
                             onClick = { activateAppearanceItem(items.indexOf("reset_font")) }
                         )
+                        if (showRootOptions) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            SettingsActionRow(
+                                title = if (isSystemFontBusy) "Applying System Font…" else "Apply Font System-Wide (Root)",
+                                isFocused = items.getOrNull(focusedIndex) == "apply_system_font",
+                                jumpNumber = (items.indexOf("apply_system_font") + 1).takeIf { it <= 9 },
+                                onClick = { activateAppearanceItem(items.indexOf("apply_system_font")) }
+                            )
+                            if (isSystemFontInstalled) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                SettingsActionRow(
+                                    title = "Reset System Font",
+                                    isFocused = items.getOrNull(focusedIndex) == "reset_system_font",
+                                    isDestructive = true,
+                                    jumpNumber = (items.indexOf("reset_system_font") + 1).takeIf { it <= 9 },
+                                    onClick = { activateAppearanceItem(items.indexOf("reset_system_font")) }
+                                )
+                            }
+                            val bannerText = systemFontStatusMessage
+                                ?: if (isSystemFontInstalled) {
+                                    "✓ Magisk system font active/staged • reboot after changes"
+                                } else null
+                            if (bannerText != null) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(ActiveTheme.surfaceTint.copy(alpha = 0.35f))
+                                        .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = bannerText,
+                                        color = ActiveTheme.accentDeep,
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
@@ -747,6 +890,117 @@ internal fun AppearanceSettingsScreen(
                             isFocused = false,
                             modifier = Modifier.weight(1f),
                             onClick = { isEditingName = false }
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showRebootConfirmDialog) {
+            val rebootDialogRequester = remember { FocusRequester() }
+            var rebootButtonIndex by remember { mutableIntStateOf(1) } // Default to "Later" for safety
+            var sawDialogCenterDown by remember { mutableStateOf(false) }
+
+            fun confirmRebootSelection(index: Int) {
+                if (index == 0) {
+                    showRebootConfirmDialog = false
+                    scope.launch {
+                        val res = SystemFontSyncManager.rebootDevice()
+                        res.onFailure { err ->
+                            Toast.makeText(
+                                context,
+                                "Please reboot manually: ${err.message ?: "Reboot failed"}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                } else {
+                    showRebootConfirmDialog = false
+                }
+            }
+
+            requestFocusSafely(rebootDialogRequester)
+
+            BasicAlertDialog(
+                onDismissRequest = { showRebootConfirmDialog = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .mochibunCardBorder(
+                            cornerRadius = 22.dp,
+                            borderColor = ActiveTheme.cardBorder,
+                            borderWidth = 1.5.dp
+                        )
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(ActiveTheme.container)
+                        .padding(16.dp)
+                        .focusRequester(rebootDialogRequester)
+                        .focusable()
+                        .onPreviewKeyEvent { event ->
+                            val native = event.nativeKeyEvent
+                            if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_SOFT_RIGHT) {
+                                if (event.type == KeyEventType.KeyUp) {
+                                    SoundEffectManager.play(context, SoundEffect.BACK)
+                                    showRebootConfirmDialog = false
+                                }
+                                return@onPreviewKeyEvent true
+                            }
+                            if (isCenterActivateKey(native.keyCode)) {
+                                if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                                    sawDialogCenterDown = true
+                                    SoundEffectManager.play(context, SoundEffect.CLICK)
+                                } else if (event.type == KeyEventType.KeyUp && sawDialogCenterDown) {
+                                    sawDialogCenterDown = false
+                                    SoundEffectManager.play(context, SoundEffect.SELECT)
+                                    confirmRebootSelection(rebootButtonIndex)
+                                }
+                                return@onPreviewKeyEvent true
+                            }
+                            if (event.type == KeyEventType.KeyDown &&
+                                (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                                    native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                                    native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                                    native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+                            ) {
+                                rebootButtonIndex = if (rebootButtonIndex == 0) 1 else 0
+                                SoundEffectManager.play(context, SoundEffect.NAV)
+                                return@onPreviewKeyEvent true
+                            }
+                            false
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "— ♡ Reboot Required ♡ —",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = rebootDialogMessage,
+                        color = ActiveTheme.textPrimary,
+                        fontSize = 11.5.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SettingsActionRow(
+                            title = "Reboot Now",
+                            isFocused = rebootButtonIndex == 0,
+                            modifier = Modifier.weight(1f),
+                            onClick = { confirmRebootSelection(0) }
+                        )
+                        SettingsActionRow(
+                            title = "Later",
+                            isFocused = rebootButtonIndex == 1,
+                            modifier = Modifier.weight(1f),
+                            onClick = { confirmRebootSelection(1) }
                         )
                     }
                 }
