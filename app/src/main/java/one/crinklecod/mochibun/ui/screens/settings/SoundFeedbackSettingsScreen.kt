@@ -119,6 +119,7 @@ internal fun SoundFeedbackSettingsScreen(
         title = "Sound & Feedback",
         showBack = true,
         onBack = onBack,
+        isLastItemFocused = { focusedIndex == totalItems - 1 },
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -172,7 +173,7 @@ internal fun SoundFeedbackSettingsScreen(
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
+            contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "sound_routing_card") {

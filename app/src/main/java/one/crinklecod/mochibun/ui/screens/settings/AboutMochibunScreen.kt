@@ -98,6 +98,7 @@ internal fun AboutMochibunScreen(
         title = "About Mochibun",
         showBack = true,
         onBack = onBack,
+        isLastItemFocused = { true }, // no focusable rows: DOWN goes straight to Back
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -115,7 +116,7 @@ internal fun AboutMochibunScreen(
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
+            contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "about_hero") {

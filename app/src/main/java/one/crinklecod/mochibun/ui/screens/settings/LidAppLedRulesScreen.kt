@@ -120,6 +120,7 @@ internal fun LidAppLedRulesScreen(
         title = "Per-App LED Rules",
         showBack = true,
         onBack = onBack,
+        isLastItemFocused = { targets.isEmpty() || focusedIndex == targets.size - 1 },
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -167,7 +168,7 @@ internal fun LidAppLedRulesScreen(
         } else {
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(top = 48.dp, bottom = 64.dp, start = 14.dp, end = 14.dp),
+                contentPadding = PaddingValues(top = 48.dp, bottom = 72.dp, start = 14.dp, end = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
                     .fillMaxSize()
@@ -227,6 +228,7 @@ private fun AppRuleRow(
     isFocused: Boolean,
     onClick: () -> Unit
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(14.dp)
     val mode = rule?.mode ?: AppLedRuleMode.DEFAULT
     val detail = when (mode) {
@@ -241,7 +243,7 @@ private fun AppRuleRow(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
+            .softGlowFocus(isSelected = focused, cornerRadius = 14.dp)
             .clip(shape)
             .background(ActiveTheme.container, shape)
             .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.45f), shape)

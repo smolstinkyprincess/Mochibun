@@ -256,6 +256,7 @@ private fun SettingsHubRootScreen(
         title = "Settings Hub",
         showBack = true,
         onBack = onClose,
+        isLastItemFocused = { focusedIndex() == totalItems - 1 },
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -311,7 +312,7 @@ private fun SettingsHubRootScreen(
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
+            contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "settings_hub_nav_card") {

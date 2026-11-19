@@ -271,10 +271,13 @@ stress_phase_bursts() {
                 keys KEYCODE_3 || return 1
                 burst KEYCODE_DPAD_RIGHT 8 || return 1
                 keys KEYCODE_3 || return 1 ;;
-            4)  # Sound & Feedback: row 3 = Keypad Sound Profile stepper (cyclic) -> RIGHT/LEFT pairs.
+            4)  # Sound & Feedback: `4` jumps to row 3 = Keypad Sound Profile stepper (cyclic) and
+                # steps it +1; RIGHT/LEFT pairs, then one LEFT -> net zero. (A jump key, not DOWN x3:
+                # the DOWN burst can park focus on the floating Back pill, which swallows LEFT/RIGHT.)
                 expect_screen "Sound & Feedback" || return 1
-                keys KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN || return 1
-                for _ in 1 2 3 4; do keys KEYCODE_DPAD_RIGHT KEYCODE_DPAD_LEFT || return 1; done ;;
+                keys KEYCODE_4 || return 1
+                for _ in 1 2 3 4; do keys KEYCODE_DPAD_RIGHT KEYCODE_DPAD_LEFT || return 1; done
+                keys KEYCODE_DPAD_LEFT || return 1 ;;
         esac
         sleep 0.3
         expect_screen "$(dest_title "$d")" || return 1

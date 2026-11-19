@@ -364,6 +364,7 @@ private fun LidLedLibrary(
         title = "Lid LED Studio",
         showBack = true,
         onBack = onBack,
+        isLastItemFocused = { focusedRow == rowCount - 1 },
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -405,7 +406,7 @@ private fun LidLedLibrary(
             }
     ) {
         LazyColumn(
-            contentPadding = PaddingValues(top = 48.dp, bottom = 64.dp, start = 14.dp, end = 14.dp),
+            contentPadding = PaddingValues(top = 48.dp, bottom = 72.dp, start = 14.dp, end = 14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize()
         ) {
@@ -512,12 +513,13 @@ private fun AnimationCard(
     armedDelete: Boolean,
     onAction: (Int) -> Unit
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(16.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 16.dp)
+            .softGlowFocus(isSelected = focused, cornerRadius = 16.dp)
             .clip(shape)
             .background(ActiveTheme.container, shape)
             .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.45f), shape)
@@ -741,6 +743,7 @@ private fun LidLedStepMaker(
         title = "Step Maker",
         showBack = true,
         onBack = onClose,
+        isLastItemFocused = { row == EditorRow.BOTTOM },
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -784,7 +787,7 @@ private fun LidLedStepMaker(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 48.dp, start = 14.dp, end = 14.dp, bottom = 56.dp),
+                .padding(top = 48.dp, start = 14.dp, end = 14.dp, bottom = 72.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Name
@@ -989,14 +992,15 @@ private fun StudioChip(
     compact: Boolean = false,
     onClick: () -> Unit
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(12.dp)
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 12.dp)
+            .softGlowFocus(isSelected = focused, cornerRadius = 12.dp)
             .clip(shape)
             .background(
-                if (isFocused) ActiveTheme.primary.copy(alpha = 0.55f) else ActiveTheme.surfaceTint.copy(alpha = 0.35f),
+                if (focused) ActiveTheme.primary.copy(alpha = 0.55f) else ActiveTheme.surfaceTint.copy(alpha = 0.35f),
                 shape
             )
             .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.5f), shape)
@@ -1023,13 +1027,14 @@ private fun WindowBox(
     isTarget: Boolean,
     onClick: () -> Unit
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(10.dp)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
                 .size(44.dp)
                 .graphicsLayer { clip = false }
-                .softGlowFocus(isSelected = isFocused, cornerRadius = 10.dp)
+                .softGlowFocus(isSelected = focused, cornerRadius = 10.dp)
                 .clip(shape)
                 .background(windowColor(hex), shape)
                 .border(
@@ -1051,12 +1056,13 @@ private fun WindowBox(
 
 @Composable
 private fun SwatchChip(swatch: LidLedSwatch, isFocused: Boolean, onClick: () -> Unit) {
+    val focused = isFocused.unlessBackPillFocused()
     Box(
         modifier = Modifier
             .width(32.dp)
             .height(32.dp)
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 16.dp)
+            .softGlowFocus(isSelected = focused, cornerRadius = 16.dp)
             .clip(CircleShape)
             .background(windowColor(swatch.hex), CircleShape)
             .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.6f), CircleShape)

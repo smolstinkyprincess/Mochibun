@@ -292,6 +292,7 @@ internal fun AppearanceSettingsScreen(
         title = "Appearance",
         showBack = true,
         onBack = onBack,
+        isLastItemFocused = { focusedIndex == totalItems - 1 },
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -387,7 +388,7 @@ internal fun AppearanceSettingsScreen(
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
+            contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "appearance_theme_card") {

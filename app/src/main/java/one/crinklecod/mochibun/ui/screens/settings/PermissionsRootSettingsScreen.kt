@@ -553,6 +553,7 @@ internal fun PermissionsRootSettingsScreen(
         title = "Setup & Diagnostics",
         showBack = true,
         onBack = onBack,
+        isLastItemFocused = { focusedIndex == totalItems - 1 },
         modifier = modifier
             .graphicsLayer { clip = false }
             .focusRequester(focusRequester)
@@ -613,7 +614,7 @@ internal fun PermissionsRootSettingsScreen(
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
+            contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             if (showBanner) {

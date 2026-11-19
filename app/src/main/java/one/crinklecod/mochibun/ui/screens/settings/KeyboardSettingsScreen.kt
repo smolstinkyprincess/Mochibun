@@ -187,6 +187,7 @@ internal fun KeyboardSettingsScreen(
         title = "Typing",
         showBack = true,
         onBack = onBack,
+        isLastItemFocused = { focusedIndex == totalItems - 1 },
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -252,7 +253,7 @@ internal fun KeyboardSettingsScreen(
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 44.dp, bottom = 64.dp),
+            contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "keyboard_ime_card") {

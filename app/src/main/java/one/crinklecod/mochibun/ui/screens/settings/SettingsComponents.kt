@@ -1,5 +1,21 @@
 package one.crinklecod.mochibun.ui.screens.settings
 
+import android.view.KeyEvent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
+import one.crinklecod.mochibun.core.sound.SoundEffect
+import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
+import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.components.KawaiiClosePill
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -49,8 +65,32 @@ import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import kotlinx.coroutines.flow.collectLatest
 
 /**
+ * True while the scaffold's floating Back pill holds D-pad focus. The screen's own focus index is
+ * left untouched (so jump keys and per-screen indices keep working), so rows hide their focus
+ * styling through [unlessBackPillFocused] instead. A static local holding a stable [State]: only
+ * readers of `.value` recompose when it flips.
+ */
+internal val LocalSettingsBackPillFocused = staticCompositionLocalOf<State<Boolean>> { mutableStateOf(false) }
+
+/**
+ * Row focus with the floating Back pill taken into account. Short-circuits on `false`, so only the
+ * one focused row reads the pill state and recomposes when focus moves onto/off the pill.
+ */
+@Composable
+@ReadOnlyComposable
+internal fun Boolean.unlessBackPillFocused(): Boolean =
+    this && !LocalSettingsBackPillFocused.current.value
+
+/**
  * Standardized Settings Screen Scaffold for the Chinoe AT-M120 (480x800).
- * Features vector Bézier scalloped cloud framing, centered kawaii title, and back navigation pill.
+ * Features vector Bézier scalloped cloud framing, a centered kawaii title, and a Back pill floating
+ * bottom-centre over the clouds (like [one.crinklecod.mochibun.ui.components.KawaiiReturnHomePill]
+ * on Widgets / Notifications). Content lists need ~72dp bottom padding to scroll clear of it.
+ *
+ * D-pad: when [isLastItemFocused] reports the screen's last row is focused, DPAD_DOWN moves focus
+ * onto the pill; DPAD_UP returns it, CENTER/ENTER triggers [onBack]. This layer sits ahead of the
+ * screen's own key handler (earlier in the modifier chain = earlier preview dispatch), so screens
+ * keep their focus indices unchanged. A null [isLastItemFocused] leaves the pill touch-only.
  */
 @Composable
 fun SettingsScaffold(
@@ -58,65 +98,132 @@ fun SettingsScaffold(
     modifier: Modifier = Modifier,
     showBack: Boolean = true,
     onBack: () -> Unit = {},
+    isLastItemFocused: (() -> Boolean)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val theme = LocalLauncherTheme.current
+    val context = LocalContext.current
+    val backPillFocused = remember { mutableStateOf(false) }
+    var sawPillCenterDown by remember { mutableStateOf(false) }
+    val currentOnBack by rememberUpdatedState(onBack)
+    val currentIsLastItemFocused by rememberUpdatedState(isLastItemFocused)
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(ActiveTheme.background)
-    ) {
-        // Content container
-        content()
+    val backPillKeys = if (showBack) {
+        Modifier.onPreviewKeyEvent { event ->
+            val native = event.nativeKeyEvent
+            val keyCode = native.keyCode
+            if (!backPillFocused.value) {
+                val lastFocused = currentIsLastItemFocused ?: return@onPreviewKeyEvent false
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && lastFocused()) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        backPillFocused.value = true
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                return@onPreviewKeyEvent false
+            }
+            when {
+                keyCode == KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (event.type == KeyEventType.KeyDown) {
+                        backPillFocused.value = false
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                    }
+                    true
+                }
+                isCenterActivateKey(keyCode) -> {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawPillCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
+                    } else if (event.type == KeyEventType.KeyUp && sawPillCenterDown) {
+                        sawPillCenterDown = false
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        currentOnBack()
+                    }
+                    true
+                }
+                // The pill is a dead end sideways/downwards; swallow so the hidden row isn't edited
+                keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    keyCode == KeyEvent.KEYCODE_DPAD_RIGHT -> true
+                // Back / Escape / RSK: let the screen handle it (pill stays focused for the exit)
+                isBackDismissKey(keyCode) || keyCode == KeyEvent.KEYCODE_SOFT_RIGHT -> false
+                // Anything else (jump digits, etc.) hands focus back to the rows first
+                else -> {
+                    backPillFocused.value = false
+                    false
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
 
-        // 1. Top Decorative Scalloped Clouds
-        TopLavenderClouds(
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
-
-        // 2. Bottom Decorative Scalloped Clouds
-        BottomLavenderClouds(
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
-
-        // 3. Top Header Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 10.dp, start = 14.dp, end = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+    CompositionLocalProvider(LocalSettingsBackPillFocused provides backPillFocused) {
+        Box(
+            modifier = backPillKeys
+                .then(modifier)
+                .fillMaxSize()
+                .background(ActiveTheme.background)
         ) {
-            if (showBack) {
-                KawaiiClosePill(
-                    isFocused = false,
-                    onClick = onBack,
-                    label = "Back",
-                    modifier = Modifier.height(28.dp)
-                )
-            } else {
+            // Content container
+            content()
+
+            // 1. Top Decorative Scalloped Clouds
+            TopLavenderClouds(
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+
+            // 2. Bottom Decorative Scalloped Clouds
+            BottomLavenderClouds(
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+
+            // 3. Top Header Bar: title gets the full width between two ribbon bows
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, start = 14.dp, end = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 PixelRibbonBow(
-                    width = 28.dp,
-                    height = 23.dp
+                    width = 26.dp,
+                    height = 21.dp
+                )
+
+                // Centered Title
+                Text(
+                    text = "— ♡ $title ♡ —",
+                    color = ActiveTheme.accentDeep,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Right decorative ribbon balance
+                PixelRibbonBow(
+                    width = 26.dp,
+                    height = 21.dp
                 )
             }
 
-            // Centered Title
-            Text(
-                text = "— ♡ $title ♡ —",
-                color = ActiveTheme.accentDeep,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
-
-            // Right decorative ribbon balance
-            PixelRibbonBow(
-                width = 26.dp,
-                height = 21.dp
-            )
+            // 4. Floating Back pill, bottom-centre over the clouds
+            if (showBack) {
+                KawaiiClosePill(
+                    isFocused = backPillFocused.value,
+                    onClick = {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onBack()
+                    },
+                    label = "Back",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp)
+                )
+            }
         }
     }
 }
@@ -226,14 +333,15 @@ fun SettingsNavigationRow(
     jumpNumber: Int? = null,
     onClick: () -> Unit
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(14.dp)
-    val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
+    val bg = if (focused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
+            .softGlowFocus(isSelected = focused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
             .clickable { onClick() }
@@ -261,9 +369,9 @@ fun SettingsNavigationRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                color = if (focused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
                 fontSize = 13.sp,
-                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
                 modifier = Modifier.basicMarquee()
@@ -288,13 +396,13 @@ fun SettingsNavigationRow(
             if (jumpNumber != null) {
                 JumpNumberBadge(
                     digit = jumpNumber,
-                    isFocused = isFocused,
+                    isFocused = focused,
                     modifier = Modifier.padding(end = 6.dp)
                 )
             }
             Text(
                 text = "›",
-                color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.cardBorder,
+                color = if (focused) ActiveTheme.accentDeep else ActiveTheme.cardBorder,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -315,14 +423,15 @@ fun SettingsToggleRow(
     jumpNumber: Int? = null,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(14.dp)
-    val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
+    val bg = if (focused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
+            .softGlowFocus(isSelected = focused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
             .clickable { onCheckedChange(!checked) }
@@ -332,9 +441,9 @@ fun SettingsToggleRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                color = if (focused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
                 fontSize = 13.sp,
-                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
                 modifier = Modifier.basicMarquee()
@@ -357,7 +466,7 @@ fun SettingsToggleRow(
             if (jumpNumber != null) {
                 JumpNumberBadge(
                     digit = jumpNumber,
-                    isFocused = isFocused,
+                    isFocused = focused,
                     modifier = Modifier.padding(end = 6.dp)
                 )
             }
@@ -401,14 +510,15 @@ fun SettingsStepperRow(
     onDecrement: () -> Unit,
     onIncrement: () -> Unit
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(14.dp)
-    val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
+    val bg = if (focused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
+            .softGlowFocus(isSelected = focused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
             .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -421,9 +531,9 @@ fun SettingsStepperRow(
         ) {
             Text(
                 text = title,
-                color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                color = if (focused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
                 fontSize = 13.sp,
-                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
                 modifier = Modifier.basicMarquee()
@@ -447,7 +557,7 @@ fun SettingsStepperRow(
             if (jumpNumber != null) {
                 JumpNumberBadge(
                     digit = jumpNumber,
-                    isFocused = isFocused,
+                    isFocused = focused,
                     modifier = Modifier.padding(end = 6.dp)
                 )
             }
@@ -529,14 +639,15 @@ fun SettingsTextInputRow(
     jumpNumber: Int? = null,
     onClick: () -> Unit
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(14.dp)
-    val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
+    val bg = if (focused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 14.dp)
+            .softGlowFocus(isSelected = focused, cornerRadius = 14.dp)
             .clip(shape)
             .background(bg, shape)
             .clickable { onClick() }
@@ -546,9 +657,9 @@ fun SettingsTextInputRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = if (isFocused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
+                color = if (focused) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
                 fontSize = 13.sp,
-                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
                 modifier = Modifier.basicMarquee()
@@ -571,7 +682,7 @@ fun SettingsTextInputRow(
             if (jumpNumber != null) {
                 JumpNumberBadge(
                     digit = jumpNumber,
-                    isFocused = isFocused,
+                    isFocused = focused,
                     modifier = Modifier.padding(end = 6.dp)
                 )
             }
@@ -609,8 +720,9 @@ fun SettingsInfoRow(
     modifier: Modifier = Modifier,
     isFocused: Boolean = false
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(14.dp)
-    val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
+    val bg = if (focused) ActiveTheme.surfaceTint.copy(alpha = 0.35f) else Color.Transparent
 
     Row(
         modifier = modifier
@@ -658,15 +770,16 @@ fun SettingsActionRow(
     jumpNumber: Int? = null,
     onClick: () -> Unit
 ) {
+    val focused = isFocused.unlessBackPillFocused()
     val shape = RoundedCornerShape(12.dp)
     val bg = when {
-        isFocused && isDestructive -> Color(0xFFFFEBEE)
-        isFocused -> ActiveTheme.surfaceTint.copy(alpha = 0.45f)
+        focused && isDestructive -> Color(0xFFFFEBEE)
+        focused -> ActiveTheme.surfaceTint.copy(alpha = 0.45f)
         else -> Color.Transparent
     }
     val contentColor = when {
         isDestructive -> Color(0xFFD32F2F)
-        isFocused -> ActiveTheme.accentDeep
+        focused -> ActiveTheme.accentDeep
         else -> ActiveTheme.textPrimary
     }
 
@@ -674,12 +787,12 @@ fun SettingsActionRow(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer { clip = false }
-            .softGlowFocus(isSelected = isFocused, cornerRadius = 12.dp)
+            .softGlowFocus(isSelected = focused, cornerRadius = 12.dp)
             .clip(shape)
             .background(bg, shape)
             .border(
                 width = 1.dp,
-                color = if (isFocused) Color.Transparent else ActiveTheme.cardBorder.copy(alpha = 0.6f),
+                color = if (focused) Color.Transparent else ActiveTheme.cardBorder.copy(alpha = 0.6f),
                 shape = shape
             )
             .clickable { onClick() }
@@ -700,7 +813,7 @@ fun SettingsActionRow(
         if (jumpNumber != null) {
             JumpNumberBadge(
                 digit = jumpNumber,
-                isFocused = isFocused,
+                isFocused = focused,
                 modifier = Modifier.align(Alignment.CenterEnd)
             )
         }
