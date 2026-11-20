@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.BuildConfig
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.ui.components.DocomoPictogram
 import one.crinklecod.mochibun.ui.components.currentMoodSlot
 import one.crinklecod.mochibun.ui.components.MochibunMascot
 import one.crinklecod.mochibun.ui.components.mascotTintColor
@@ -99,6 +100,7 @@ internal fun AboutMochibunScreen(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { true }, // no focusable rows: DOWN goes straight to Back
+        headerDocomoIndex = 132,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -157,12 +159,12 @@ internal fun AboutMochibunScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    text = "🌸",
-                                    fontSize = 11.5.sp
+                                DocomoPictogram(
+                                    index = 132,
+                                    size = 12.dp
                                 )
                                 Text(
-                                    text = "Home sweet home! Running on native M120 hardware ✨",
+                                    text = "Home sweet home! Running on native M120 hardware ✦",
                                     color = ActiveTheme.accentDeep,
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.SemiBold

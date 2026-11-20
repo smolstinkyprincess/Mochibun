@@ -121,6 +121,7 @@ internal fun LidAppLedRulesScreen(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { targets.isEmpty() || focusedIndex == targets.size - 1 },
+        headerDocomoIndex = 14,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()

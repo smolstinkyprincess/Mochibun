@@ -557,7 +557,7 @@ fun ThemeStudioDialog(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        "Live Preview ✨",
+                        "Live Preview ✦",
                         fontWeight = FontWeight.Bold,
                         color = draft.fgTextColor,
                         fontSize = 13.sp
@@ -602,7 +602,7 @@ fun ThemeStudioDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "Battery: 100% 🔋",
+                                    "Battery: 100% ♥",
                                     color = draft.cardTextColor,
                                     fontSize = 12.sp
                                 )
@@ -629,15 +629,21 @@ fun ThemeStudioDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "Pastel Presets 🌸",
-                            fontWeight = FontWeight.Bold,
-                            color = draft.fgTextColor,
-                            fontSize = 13.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            DocomoPictogram(index = 95, size = 14.dp)
+                            Text(
+                                "Pastel Presets",
+                                fontWeight = FontWeight.Bold,
+                                color = draft.fgTextColor,
+                                fontSize = 13.sp
+                            )
+                        }
 
                         KawaiiDialogPillButton(
-                            text = "💾 Save Preset",
+                            text = "Save Preset ♡",
                             isFocused = focusRow == 0 && editingColorField == null,
                             onClick = {
                                 focusRow = 0
@@ -717,13 +723,19 @@ fun ThemeStudioDialog(
 
                     // External YAML Themes section
                     if (externalThemes.isNotEmpty()) {
-                        Text(
-                            "External Themes 📂",
-                            fontWeight = FontWeight.Bold,
-                            color = draft.fgTextColor,
-                            fontSize = 13.sp,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 2.dp)
-                        )
+                        ) {
+                            DocomoPictogram(index = 102, size = 14.dp)
+                            Text(
+                                "External Themes",
+                                fontWeight = FontWeight.Bold,
+                                color = draft.fgTextColor,
+                                fontSize = 13.sp
+                            )
+                        }
 
                         externalThemes.forEachIndexed { idx, extTheme ->
                             val isRowFocused = editingColorField == null && focusRow == 3 && externalThemeIndex == idx
@@ -1083,12 +1095,18 @@ fun ThemeStudioDialog(
                         }
                     }
 
-                    Text(
-                        "Individual Colors 🎨",
-                        fontWeight = FontWeight.Bold,
-                        color = draft.fgTextColor,
-                        fontSize = 13.sp
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        DocomoPictogram(index = 104, size = 14.dp)
+                        Text(
+                            "Individual Colors",
+                            fontWeight = FontWeight.Bold,
+                            color = draft.fgTextColor,
+                            fontSize = 13.sp
+                        )
+                    }
 
                     COLOR_FIELD_DEFS.forEachIndexed { idx, (key, label) ->
                         val colorVal = when (key) {

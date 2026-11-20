@@ -127,6 +127,7 @@ internal fun SoundFeedbackSettingsScreen(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
+        headerDocomoIndex = 9,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()

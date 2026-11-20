@@ -409,6 +409,7 @@ internal fun AppearanceSettingsScreen(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
+        headerDocomoIndex = 104,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -512,7 +513,7 @@ internal fun AppearanceSettingsScreen(
                     SettingsNavigationRow(
                         title = "Theme Studio",
                         subtitle = "Active: ${ActiveTheme.palette.name}",
-                        icon = "🎨",
+                        docomoIndex = 95,
                         isFocused = items.getOrNull(focusedIndex) == "theme",
                         jumpNumber = (items.indexOf("theme") + 1).takeIf { it <= 9 },
                         onClick = { onOpenThemeStudio?.invoke() }
@@ -595,7 +596,7 @@ internal fun AppearanceSettingsScreen(
                     SettingsNavigationRow(
                         title = "Community Gallery",
                         subtitle = "Browse community themes & LEDs • crinklecod.one/Mochibun ♡",
-                        icon = "✨",
+                        docomoIndex = 13,
                         isFocused = items.getOrNull(focusedIndex) == "community_gallery",
                         jumpNumber = (items.indexOf("community_gallery") + 1).takeIf { it <= 9 },
                         onClick = { activateAppearanceItem(items.indexOf("community_gallery")) }
@@ -633,7 +634,7 @@ internal fun AppearanceSettingsScreen(
                     SettingsNavigationRow(
                         title = "Custom Border Frame",
                         subtitle = customBorderSubtitle,
-                        icon = "🎀",
+                        docomoIndex = 104,
                         isFocused = items.getOrNull(focusedIndex) == "pick_border",
                         jumpNumber = (items.indexOf("pick_border") + 1).takeIf { it <= 9 },
                         onClick = { activateAppearanceItem(items.indexOf("pick_border")) }
@@ -693,7 +694,7 @@ internal fun AppearanceSettingsScreen(
                     SettingsNavigationRow(
                         title = "Pick Wallpaper",
                         subtitle = "Choose a cute background from your gallery",
-                        icon = "🖼",
+                        docomoIndex = 109,
                         isFocused = items.getOrNull(focusedIndex) == "pick_wallpaper",
                         jumpNumber = (items.indexOf("pick_wallpaper") + 1).takeIf { it <= 9 },
                         onClick = { onPickWallpaperClick?.invoke() }
@@ -712,7 +713,7 @@ internal fun AppearanceSettingsScreen(
                     SettingsNavigationRow(
                         title = "Custom Mascot",
                         subtitle = "Upload an 8-row PNG sprite sheet (max 1.5 MB)",
-                        icon = "🐰",
+                        docomoIndex = 132,
                         isFocused = items.getOrNull(focusedIndex) == "pick_mascot",
                         jumpNumber = (items.indexOf("pick_mascot") + 1).takeIf { it <= 9 },
                         onClick = { activateAppearanceItem(items.indexOf("pick_mascot")) }
@@ -747,7 +748,7 @@ internal fun AppearanceSettingsScreen(
                     SettingsNavigationRow(
                         title = "Icon Packs",
                         subtitle = "Dress up your apps with installed icon packs",
-                        icon = "🌸",
+                        docomoIndex = 105,
                         isFocused = items.getOrNull(focusedIndex) == "icon_pack",
                         jumpNumber = (items.indexOf("icon_pack") + 1).takeIf { it <= 9 },
                         onClick = { onOpenIconPackDialog?.invoke() }

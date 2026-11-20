@@ -243,6 +243,7 @@ internal fun BackupRestoreSettingsScreen(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
+        headerDocomoIndex = 105,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -309,7 +310,7 @@ internal fun BackupRestoreSettingsScreen(
                     SettingsNavigationRow(
                         title = "Export Theme Pack",
                         subtitle = "Pack up your theme, colors, greeting & cursor (.mochibundle) ♡",
-                        icon = "🎀",
+                        docomoIndex = 105,
                         isFocused = focusedIndex == 0,
                         jumpNumber = 1,
                         onClick = {
@@ -320,7 +321,7 @@ internal fun BackupRestoreSettingsScreen(
                     SettingsNavigationRow(
                         title = "Import Theme Pack",
                         subtitle = "Preview and try on a shared .mochibundle preset",
-                        icon = "✨",
+                        docomoIndex = 136,
                         isFocused = focusedIndex == 1,
                         jumpNumber = 2,
                         onClick = {
@@ -335,7 +336,7 @@ internal fun BackupRestoreSettingsScreen(
                     SettingsNavigationRow(
                         title = "Export Full Backup",
                         subtitle = "Save layout, folders, themes & key remaps to a .json file",
-                        icon = "📤",
+                        docomoIndex = 140,
                         isFocused = focusedIndex == 2,
                         jumpNumber = 3,
                         onClick = {
@@ -346,7 +347,7 @@ internal fun BackupRestoreSettingsScreen(
                     SettingsNavigationRow(
                         title = "Restore Full Backup",
                         subtitle = "Load a complete Mochibun .json backup file",
-                        icon = "📥",
+                        docomoIndex = 40,
                         isFocused = focusedIndex == 3,
                         jumpNumber = 4,
                         onClick = {
@@ -361,7 +362,7 @@ internal fun BackupRestoreSettingsScreen(
                     SettingsNavigationRow(
                         title = "Factory Reset",
                         subtitle = "Reset launcher layout, folders, remaps & preferences",
-                        icon = "🔄",
+                        docomoIndex = 17,
                         isFocused = focusedIndex == 4,
                         jumpNumber = 5,
                         onClick = {

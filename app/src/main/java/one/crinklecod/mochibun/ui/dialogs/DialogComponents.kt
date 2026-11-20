@@ -180,6 +180,7 @@ fun KeitaiLaceDialogWithClose(
                 label = closeLabel,
                 isFocused = isCloseFocused,
                 onClick = onClose,
+                docomoIndex = if (closeLabel.equals("back", ignoreCase = true)) 40 else 5,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .offset(y = 2.dp)

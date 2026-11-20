@@ -35,6 +35,7 @@ import androidx.compose.ui.window.DialogProperties
 import one.crinklecod.mochibun.core.system.LidLedManager
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.ui.components.DocomoPictogram
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 
 /**
@@ -202,10 +203,7 @@ fun LidLedColorPickerDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "🎨",
-                            fontSize = 16.sp
-                        )
+                        DocomoPictogram(index = 95, size = 16.dp)
                         Text(
                             text = "Lid LED Palette",
                             fontSize = 15.sp,

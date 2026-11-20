@@ -253,7 +253,7 @@ Mochibun stays tiny, breezy, and cute thanks to these awesome projects:
 - **[libsu](https://github.com/topjohnwu/libsu)** by [@topjohnwu](https://github.com/topjohnwu): Handles fast background root clicks and clean recents switching. (•̀ᴗ•́)و
 - **[kaml](https://github.com/charleskorn/kaml)**: Friendly, human-readable YAML parsing for custom themes and lid light animations. ♡
 - **[MaruMinya (マルミーニャ)](https://www.freejapanesefont.com/maruminya-cute-free-font/)**: The darling rounded dot-matrix font powering Mochibun's nostalgic keitai typography! ♡
-
+- **[og-emoji-font](https://github.com/nicoleexpress/og-emoji-font)** — For preserving the iconic 12×12 NTT Docomo i-mode pixel pictograms that give Mochibun's menus and settings that genuine mid-2000s keitai charm! ♡  
 ---
 
 ## 📄 License

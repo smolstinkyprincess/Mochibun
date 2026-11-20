@@ -365,6 +365,7 @@ private fun LidLedLibrary(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedRow == rowCount - 1 },
+        headerDocomoIndex = 14,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -744,6 +745,7 @@ private fun LidLedStepMaker(
         showBack = true,
         onBack = onClose,
         isLastItemFocused = { row == EditorRow.BOTTOM },
+        headerDocomoIndex = 14,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()

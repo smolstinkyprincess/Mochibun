@@ -181,6 +181,7 @@ internal fun CursorHardwareSettingsScreen(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
+        headerDocomoIndex = 108,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -303,7 +304,7 @@ internal fun CursorHardwareSettingsScreen(
                     SettingsNavigationRow(
                         title = "Cursor Graphic",
                         subtitle = if (customUri != null) "Custom sprite active • choose a .png or .gif" else "Default paw • choose a .png or .gif",
-                        icon = "🐾",
+                        docomoIndex = 121,
                         isFocused = focusedIndex == 5,
                         jumpNumber = 6,
                         onClick = { activate(5) }
@@ -324,7 +325,7 @@ internal fun CursorHardwareSettingsScreen(
                     SettingsNavigationRow(
                         title = "Keypad Remapper",
                         subtitle = "Bind custom actions to your physical buttons",
-                        icon = "🎮",
+                        docomoIndex = 153,
                         isFocused = focusedIndex == 7,
                         jumpNumber = 8,
                         onClick = { activate(7) }

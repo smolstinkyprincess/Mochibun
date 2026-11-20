@@ -49,6 +49,7 @@ import one.crinklecod.mochibun.data.model.ButtonActionConfig
 import one.crinklecod.mochibun.data.model.PhysicalKey
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.HardwareRemapManager
+import one.crinklecod.mochibun.ui.components.DocomoPictogram
 import one.crinklecod.mochibun.ui.components.MascotAnimSlot
 import one.crinklecod.mochibun.ui.components.MochibunMascot
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
@@ -59,16 +60,17 @@ import one.crinklecod.mochibun.ui.theme.destructiveColor
  */
 data class KeyBadgeData(
     val badgeLabel: String,
-    val iconGlyph: String
+    val iconGlyph: String,
+    val docomoIndex: Int? = null
 )
 
 fun PhysicalKey.toBadgeData(): KeyBadgeData = when (this) {
     PhysicalKey.F1 -> KeyBadgeData("F1", "★")
-    PhysicalKey.CAMERA -> KeyBadgeData("CAM", "📷")
+    PhysicalKey.CAMERA -> KeyBadgeData("CAM", "◎", docomoIndex = 109)
     PhysicalKey.KEY_ENTER -> KeyBadgeData("OK", "◉")
     PhysicalKey.F2 -> KeyBadgeData("F2", "✦")
     PhysicalKey.F3 -> KeyBadgeData("F3", "✧")
-    PhysicalKey.CALL -> KeyBadgeData("CALL", "📞")
+    PhysicalKey.CALL -> KeyBadgeData("CALL", "✆")
     PhysicalKey.APP_SWITCH -> KeyBadgeData("RECENTS", "⧉")
     PhysicalKey.F4 -> KeyBadgeData("SIDE / F4", "⏵")
     PhysicalKey.STAR -> KeyBadgeData("STAR (*)", "✱")
@@ -85,6 +87,7 @@ fun RetroKeyBadge(
     RetroKeyBadge(
         label = data.badgeLabel,
         icon = data.iconGlyph,
+        docomoIndex = data.docomoIndex,
         isFocused = isFocused,
         modifier = modifier
     )
@@ -93,7 +96,8 @@ fun RetroKeyBadge(
 @Composable
 fun RetroKeyBadge(
     label: String,
-    icon: String = "⌨",
+    icon: String = "#",
+    docomoIndex: Int? = null,
     isFocused: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -111,11 +115,19 @@ fun RetroKeyBadge(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text(
-            text = icon,
-            fontSize = 11.sp,
-            color = textCol
-        )
+        if (docomoIndex != null) {
+            DocomoPictogram(
+                index = docomoIndex,
+                tint = textCol,
+                size = 11.dp
+            )
+        } else {
+            Text(
+                text = icon,
+                fontSize = 11.sp,
+                color = textCol
+            )
+        }
         Text(
             text = label,
             fontSize = 10.5.sp,
@@ -777,9 +789,9 @@ internal fun AppPickerDialog(
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "🌸",
-                                fontSize = 12.sp,
+                            DocomoPictogram(
+                                index = 105,
+                                size = 12.dp,
                                 modifier = Modifier.padding(end = 8.dp)
                             )
                             Text(

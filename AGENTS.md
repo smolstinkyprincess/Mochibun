@@ -5,7 +5,7 @@
 **Mochibun (もちぶん)** is a lightweight, offline-first, pastel retro-kawaii Android launcher and physical-keypad utility suite engineered specifically for the **ALT Mive Style Folder (Chinoe AT-M120)** Android flip phone.
 
 - **Package / Application ID:** `one.crinklecod.mochibun` (historically `com.tnyemii.mochibun` in v1.0.0, then `com.crinklecodone.mochibun`, finalized to `one.crinklecod.mochibun` for v2.x and F-Droid inclusion).
-- **Author & License:** Created by emii (`smolstinkyprincess`), licensed under **Apache 2.0**.
+- **Author & License:** Created by emii (`smolstinkyprincess/crinklecodone`), licensed under **Apache 2.0**.
 - **Core Philosophy:** Stock Android flip-phone setups typically require juggling 3–4 separate third-party accessibility daemons (e.g., C9 for a virtual cursor, Key Mapper for side buttons, TT9 for keypad input, plus a standalone launcher), which constantly contend for input focus and trigger Android's Low Memory Killer (LMK) on ~2 GB RAM devices. Mochibun unifies the entire physical-keypad experience—launcher, D-pad spatial engine, T9 app search, system-wide Keitai IME, virtual mouse cursor, Kaomoji wheel, outer lid LEDs, and SystemUI theming—into a single cohesive, low-RAM master process.
 - **Privacy & Network Posture:** 100% offline (`allowBackup="false"`). Zero internet permissions, zero telemetry, zero camera capture access. CI verifies on every build that the merged release manifest contains neither `INTERNET` nor `CAMERA` (see `PRIVACY.md`).
 

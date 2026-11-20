@@ -111,6 +111,7 @@ fun SettingsScaffold(
     showBack: Boolean = true,
     onBack: () -> Unit = {},
     isLastItemFocused: (() -> Boolean)? = null,
+    headerDocomoIndex: Int? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val context = LocalContext.current
@@ -203,17 +204,30 @@ fun SettingsScaffold(
                     height = 21.dp
                 )
 
-                // Centered Title
-                Text(
-                    text = "— ♡ $title ♡ —",
-                    color = ActiveTheme.accentDeep,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+                // Centered Title (+ optional 14.dp Docomo pictogram)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    if (headerDocomoIndex != null) {
+                        DocomoPictogram(
+                            index = headerDocomoIndex,
+                            size = 14.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text(
+                        text = "— ♡ $title ♡ —",
+                        color = ActiveTheme.accentDeep,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
 
                 // Right decorative ribbon balance
                 PixelRibbonBow(
@@ -231,6 +245,7 @@ fun SettingsScaffold(
                         onBack()
                     },
                     label = "Back",
+                    docomoIndex = 40,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 12.dp)

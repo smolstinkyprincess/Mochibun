@@ -191,6 +191,7 @@ internal fun KeyboardSettingsScreen(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
+        headerDocomoIndex = 153,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -264,7 +265,8 @@ internal fun KeyboardSettingsScreen(
                     SettingsNavigationRow(
                         title = "Keitai Keyboard",
                         subtitle = keyboardStatusSubtitle(imeState),
-                        icon = if (imeState == MochibunImeStatus.State.DEFAULT) "✓" else "⌨",
+                        icon = "✓",
+                        docomoIndex = if (imeState == MochibunImeStatus.State.DEFAULT) null else 153,
                         isFocused = focusedIndex == 0,
                         jumpNumber = 1,
                         onClick = { activate(0) }

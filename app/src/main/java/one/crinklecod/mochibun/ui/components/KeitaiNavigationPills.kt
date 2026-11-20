@@ -43,7 +43,8 @@ private fun KeitaiNavPill(
     isFocused: Boolean,
     animate: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier
+    modifier: Modifier,
+    docomoIndex: Int? = null
 ) {
     val step = rememberKeitaiStep(animate)
     val heart by remember { derivedStateOf { if (step.intValue >= 4) "♥" else "♡" } }
@@ -83,16 +84,22 @@ private fun KeitaiNavPill(
                 shape = shape
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             // Fixed-width heart slots so the ♡/♥ flip never shifts the label
             Box(Modifier.width(12.dp), contentAlignment = Alignment.Center) { Glyph(heart) }
             Glyph(chevron, bobModifier)
+            if (docomoIndex != null) {
+                DocomoPictogram(
+                    index = docomoIndex,
+                    size = 12.dp
+                )
+            }
             Glyph(label)
             Glyph(chevron, bobModifier)
             Box(Modifier.width(12.dp), contentAlignment = Alignment.Center) { Glyph(heart) }
@@ -110,7 +117,8 @@ fun KawaiiClosePill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     label: String = "close",
-    animateAlways: Boolean = false
+    animateAlways: Boolean = false,
+    docomoIndex: Int? = 5
 ) {
     KeitaiNavPill(
         label = label,
@@ -119,7 +127,8 @@ fun KawaiiClosePill(
         isFocused = isFocused,
         animate = isFocused || animateAlways,
         onClick = onClick,
-        modifier = modifier
+        modifier = modifier,
+        docomoIndex = docomoIndex
     )
 }
 
@@ -140,7 +149,8 @@ fun KawaiiReturnHomePill(
     modifier: Modifier = Modifier,
     label: String = "home",
     direction: HomePillDirection = HomePillDirection.UP,
-    animateAlways: Boolean = false
+    animateAlways: Boolean = false,
+    docomoIndex: Int? = 72
 ) {
     val chevron = when (direction) {
         HomePillDirection.UP -> "▲"
@@ -159,6 +169,7 @@ fun KawaiiReturnHomePill(
         isFocused = isFocused,
         animate = isFocused || animateAlways,
         onClick = onClick,
-        modifier = modifier
+        modifier = modifier,
+        docomoIndex = docomoIndex
     )
 }

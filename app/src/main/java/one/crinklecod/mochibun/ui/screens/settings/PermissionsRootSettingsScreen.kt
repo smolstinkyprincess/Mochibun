@@ -554,6 +554,7 @@ internal fun PermissionsRootSettingsScreen(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
+        headerDocomoIndex = 146,
         modifier = modifier
             .graphicsLayer { clip = false }
             .focusRequester(focusRequester)
@@ -705,7 +706,8 @@ internal fun PermissionsRootSettingsScreen(
                         SettingsNavigationRow(
                             title = "Magisk Root",
                             subtitle = rootLabel,
-                            icon = if (rootStatus is RootStatus.Granted) "✓" else "⚡",
+                            icon = "✓",
+                            docomoIndex = if (rootStatus is RootStatus.Granted) null else 146,
                             isFocused = isFocused("root"),
                             jumpNumber = jump("root"),
                             onClick = { activatePermissionItem(rowIds.indexOf("root")) }
@@ -779,7 +781,8 @@ internal fun PermissionsRootSettingsScreen(
                             } else {
                                 "Grant overlay access and restart cursor service with root"
                             },
-                            icon = if (healing) "⏳" else "♡",
+                            icon = "♡",
+                            docomoIndex = if (healing) 40 else null,
                             isFocused = isFocused("self_heal"),
                             jumpNumber = jump("self_heal"),
                             onClick = { selfHeal() }

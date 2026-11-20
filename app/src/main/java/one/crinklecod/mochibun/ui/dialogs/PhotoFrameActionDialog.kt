@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import one.crinklecod.mochibun.ui.components.DocomoPictogram
 import one.crinklecod.mochibun.ui.components.KeitaiLaceContainer
 import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
@@ -53,6 +55,7 @@ private const val MAX_LABEL_LENGTH = 32
 
 private class PhotoFrameAction(
     val label: String,
+    val docomoIndex: Int? = null,
     val isDestructive: Boolean = false,
     val run: () -> Unit
 )
@@ -76,10 +79,10 @@ fun PhotoFrameActionDialog(
 
     val actions = remember(hasPhoto, styleDisplayName, label) {
         buildList {
-            add(PhotoFrameAction(if (hasPhoto) "📷 Change Photo" else "📷 Pick Photo", run = onPickPhoto))
-            add(PhotoFrameAction("🎀 Style: $styleDisplayName", run = onCycleStyle))
-            add(PhotoFrameAction("✏️ Label: $label", run = onEditLabel))
-            if (hasPhoto) add(PhotoFrameAction("🗑️ Remove Photo", isDestructive = true, run = onRemovePhoto))
+            add(PhotoFrameAction(if (hasPhoto) "Change Photo" else "Pick Photo", docomoIndex = 109, run = onPickPhoto))
+            add(PhotoFrameAction("Style: $styleDisplayName", docomoIndex = 104, run = onCycleStyle))
+            add(PhotoFrameAction("Label: $label", docomoIndex = 108, run = onEditLabel))
+            if (hasPhoto) add(PhotoFrameAction("Remove Photo", docomoIndex = 17, isDestructive = true, run = onRemovePhoto))
             add(PhotoFrameAction("♥ Close ♥", run = onDismiss))
         }
     }
@@ -157,13 +160,19 @@ fun PhotoFrameActionDialog(
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Text(
-                    text = "📸 Photo Frame",
-                    color = theme.fgTextColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(bottom = 8.dp)
-                )
+                ) {
+                    DocomoPictogram(index = 109, size = 16.dp)
+                    Text(
+                        text = "Photo Frame",
+                        color = theme.fgTextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
 
                 HorizontalDivider(color = theme.appActionColor.copy(alpha = 0.22f))
 
@@ -174,6 +183,7 @@ fun PhotoFrameActionDialog(
                         KawaiiDialogItem(
                             text = action.label,
                             isFocused = selectedIndex == idx,
+                            docomoIndex = action.docomoIndex,
                             isDestructive = action.isDestructive,
                             modifier = Modifier.fillMaxWidth(),
                             jumpNumber = idx + 1,

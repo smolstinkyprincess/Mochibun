@@ -178,6 +178,7 @@ internal fun BehaviorSettingsScreen(
         showBack = true,
         onBack = onBack,
         isLastItemFocused = { focusedIndex == totalItems - 1 },
+        headerDocomoIndex = 72,
         modifier = modifier
             .focusRequester(focusRequester)
             .focusable()
@@ -241,7 +242,7 @@ internal fun BehaviorSettingsScreen(
                         SettingsNavigationRow(
                             title = "Create Folder",
                             subtitle = "Bundle favorite apps into a cozy folder ♡",
-                            icon = "📁",
+                            docomoIndex = 102,
                             isFocused = items.getOrNull(focusedIndex) == "create_folder",
                             jumpNumber = jumpNumber("create_folder"),
                             onClick = { activate(items.indexOf("create_folder")) }
@@ -263,7 +264,7 @@ internal fun BehaviorSettingsScreen(
                     SettingsNavigationRow(
                         title = "Hidden Apps",
                         subtitle = "Tuck away apps you don't want in your drawer",
-                        icon = "🙈",
+                        docomoIndex = 19,
                         isFocused = items.getOrNull(focusedIndex) == "hidden_apps",
                         jumpNumber = jumpNumber("hidden_apps"),
                         onClick = { onOpenHiddenApps?.invoke() }
@@ -324,7 +325,7 @@ internal fun BehaviorSettingsScreen(
                         SettingsNavigationRow(
                             title = "Lid LED Studio",
                             subtitle = "Custom light shows, .mochibunled import & step maker",
-                            icon = "✨",
+                            docomoIndex = 14,
                             isFocused = items.getOrNull(focusedIndex) == "led_studio",
                             jumpNumber = jumpNumber("led_studio"),
                             onClick = onOpenLidLedStudio

@@ -307,16 +307,23 @@ fun WidgetOptionsDialog(
     var sawCenterDown by remember { mutableStateOf(false) }
     var confirmingRemove by remember { mutableStateOf(false) }
 
-    class Action(val label: String, val enabled: Boolean, val destructive: Boolean = false, val run: () -> Unit)
+    class Action(
+        val label: String,
+        val enabled: Boolean,
+        val docomoIndex: Int? = null,
+        val destructive: Boolean = false,
+        val run: () -> Unit
+    )
 
     val actions = listOf(
-        Action("👆 Use widget buttons", canUseControls, run = onUseControls),
+        Action("Use widget buttons", canUseControls, docomoIndex = 121, run = onUseControls),
         Action("▲ Move up", canMoveUp, run = onMoveUp),
         Action("▼ Move down", canMoveDown, run = onMoveDown),
-        Action("⚙ Configure widget", canConfigure, run = onConfigure),
+        Action("Configure widget", canConfigure, docomoIndex = 144, run = onConfigure),
         Action(
-            if (confirmingRemove) "🗑 Press OK again to remove" else "🗑 Remove widget",
+            if (confirmingRemove) "Press OK again to remove" else "Remove widget",
             enabled = true,
+            docomoIndex = 17,
             destructive = true,
             run = { if (confirmingRemove) onRemove() else confirmingRemove = true }
         ),
@@ -437,6 +444,7 @@ fun WidgetOptionsDialog(
                     KawaiiDialogItem(
                         text = action.label,
                         isFocused = selectedIndex == idx,
+                        docomoIndex = action.docomoIndex,
                         enabled = action.enabled,
                         isDestructive = action.destructive,
                         modifier = Modifier.fillMaxWidth(),

@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import one.crinklecod.mochibun.ui.components.DocomoPictogram
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -720,12 +721,22 @@ fun FavoriteFolderDialog(
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text(
-                                    text = "🗑 Delete '${folder.name}'?",
-                                    color = destructiveColor,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    DocomoPictogram(
+                                        index = 17,
+                                        tint = destructiveColor.copy(alpha = 0.85f),
+                                        size = 16.dp
+                                    )
+                                    Text(
+                                        text = "Delete '${folder.name}'?",
+                                        color = destructiveColor,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 17.sp
+                                    )
+                                }
 
                                 Text(
                                     text = "This folder will be removed from favorites. Apps inside remain in your app drawer ♡",
@@ -874,7 +885,7 @@ fun FavoriteFolderDialog(
                                 }
 
                                 KawaiiDialogPillButton(
-                                    text = "✨ Suggest cute name",
+                                    text = "✦ Suggest cute name",
                                     isFocused = renameFocusZone == 1,
                                     modifier = Modifier.fillMaxWidth(),
                                     onClick = {

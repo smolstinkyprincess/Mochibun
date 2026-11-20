@@ -41,6 +41,7 @@ import one.crinklecod.mochibun.data.repository.BundlePreviewData
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
 import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.core.sound.SoundEffect
+import one.crinklecod.mochibun.ui.components.DocomoPictogram
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -599,13 +600,19 @@ fun PresetPreviewDialog(
                 }
 
                 if (previewData.hasCursorAsset) {
-                    Text(
-                        text = "🖱️ Custom cursor included",
-                        fontSize = 11.sp,
-                        color = theme.greetingColor,
-                        fontWeight = FontWeight.SemiBold,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(vertical = 2.dp)
-                    )
+                    ) {
+                        DocomoPictogram(index = 121, size = 12.dp)
+                        Text(
+                            text = "Custom cursor included",
+                            fontSize = 11.sp,
+                            color = theme.greetingColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
 
                 previewFontBadgeText(previewData)?.let { fontBadge ->
@@ -631,12 +638,18 @@ fun PresetPreviewDialog(
                 manifest.palette.fontFamilyId?.takeIf {
                     it.isNotBlank() && it != "default" && it != TypographyManager.BUNDLE_FONT_ID
                 }?.let { fontId ->
-                    Text(
-                        text = "🔤 Font: $fontId",
-                        fontSize = 10.5.sp,
-                        color = theme.cardTextColor,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(vertical = 2.dp)
-                    )
+                    ) {
+                        DocomoPictogram(index = 153, size = 12.dp)
+                        Text(
+                            text = "Font: $fontId",
+                            fontSize = 10.5.sp,
+                            color = theme.cardTextColor
+                        )
+                    }
                 }
 
                 if (manifest.greeting.userName.isNotBlank() && manifest.greeting.userName != "Mochi User") {

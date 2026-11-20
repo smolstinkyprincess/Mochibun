@@ -351,7 +351,7 @@ fun CreateFavoriteFolderDialog(
                 Spacer(Modifier.height(6.dp))
 
                 KawaiiDialogPillButton(
-                    text = "✨ Suggest cute name",
+                    text = "✦ Suggest cute name",
                     isFocused = focusZone == 1,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
