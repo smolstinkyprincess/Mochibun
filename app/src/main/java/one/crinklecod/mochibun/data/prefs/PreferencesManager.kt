@@ -209,7 +209,7 @@ object PreferencesManager {
     const val DEFAULT_IME_T9_USER_WORDS = ""
     const val KEY_IME_T9_LEARNED_EPOCH = "pref_ime_t9_learned_epoch"
     const val DEFAULT_IME_T9_LEARNED_EPOCH = 0
-    // T9 multi-tap auto-commit delay (Keyboard → Keypad Feel → Auto-Commit Delay)
+    // T9 multi-tap auto-commit delay (Keyboard → Auto-Commit Delay)
     const val KEY_IME_IDLE_COMMIT_MS = "pref_ime_idle_commit_ms"
     const val DEFAULT_IME_IDLE_COMMIT_MS = 700
     const val MIN_IME_IDLE_COMMIT_MS = 300

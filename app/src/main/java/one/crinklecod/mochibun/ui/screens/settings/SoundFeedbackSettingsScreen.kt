@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,15 +30,25 @@ import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 
+internal val SOUND_FEEDBACK_ROW_IDS = listOf(
+    "audio_stream",
+    "sound_volume",
+    "media_volume_lock",
+    "sound_profile",
+    "lid_snap_sound"
+)
+
 @Composable
 internal fun SoundFeedbackSettingsScreen(
     onBack: () -> Unit,
+    initialFocusedIndex: Int = 0,
+    onFocusedIndexChange: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
-    var focusedIndex by remember { mutableIntStateOf(0) }
+    var focusedIndex by rememberSettingsFocusIndex(initialFocusedIndex, onFocusedIndexChange)
     var sawCenterDown by remember { mutableStateOf(false) }
 
     val audioStream by PreferencesManager.launcherAudioStream.collectAsState()
@@ -49,7 +58,7 @@ internal fun SoundFeedbackSettingsScreen(
     val lidSnapSound by PreferencesManager.isLidCloseSnapSoundEnabled.collectAsState()
     // Non-null while a .mochibundle sound pack is installed (refreshed off-thread by preloadAllThemes)
     val bundleSoundPackName by SoundEffectManager.bundleSoundPackName.collectAsState()
-    val totalItems = 5
+    val totalItems = SOUND_FEEDBACK_ROW_IDS.size
 
     LaunchedEffect(Unit) {
         SoundEffectManager.preloadAllThemes(context)

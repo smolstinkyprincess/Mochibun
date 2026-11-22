@@ -24,8 +24,8 @@
 #     A. Sub-screen navigation: jump keys 1-8 open every Settings Hub destination, BACK returns.
 #     B. D-pad bursts + toggles: 16x DOWN / UP bursts on the Hub and 12x in every sub-screen,
 #        plus switch / stepper flips (Keyboard "Hold for digit" toggle, Sound profile
-#        stepper, Appearance "Photo Frame Card" toggle). Every setting is flipped an EVEN number
-#        of times so it ends where it started.
+#        stepper, Appearance > Widgets & Cards "System Monitor" toggle). Every setting is flipped
+#        an EVEN number of times so it ends where it started.
 #   then dumps meminfo. The Hub is opened with a short `#` tap on Home (Launcher Menu).
 #   Fail-safe: before every key batch the Settings dialog window must still be focused, and every
 #   screen change / setting flip is verified against the on-screen title (`uiautomator dump`,
@@ -275,12 +275,18 @@ stress_phase_bursts() {
         burst KEYCODE_DPAD_UP 12 || return 1
         # Flips run only on a re-verified screen, always an even number of times.
         case $d in
-            1)  # Appearance: UP from row 0 wraps to the last row (Photo Frame Card); flip it twice.
+            1)  # Appearance: `6` opens Widgets & Cards; `1` jumps to + flips "System Monitor"
+                # twice (even -> restored), then BACK returns to Appearance.
                 expect_screen "Appearance" || return 1
-                keys KEYCODE_DPAD_UP || return 1
-                keys KEYCODE_DPAD_CENTER || return 1
+                keys KEYCODE_6 || return 1
+                sleep 0.5
+                expect_screen "Widgets & Cards" || return 1
+                keys KEYCODE_1 || return 1
                 sleep 0.3
-                keys KEYCODE_DPAD_CENTER || return 1 ;;
+                keys KEYCODE_1 || return 1
+                sleep 0.3
+                keys KEYCODE_BACK || return 1
+                sleep 0.5 ;;
             2)  # Keyboard: `3` jumps to + flips "Hold for digit"; RIGHT x8 flips it 8 more times;
                 # `3` again -> 10 flips total.
                 expect_screen "Keyboard" || return 1

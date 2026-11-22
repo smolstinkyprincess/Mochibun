@@ -6,7 +6,7 @@ import one.crinklecod.mochibun.core.shell.RootResult
 import one.crinklecod.mochibun.core.shell.RootStatus
 import one.crinklecod.mochibun.data.repository.SystemFontSyncManager
 import one.crinklecod.mochibun.data.repository.TypographyManager
-import one.crinklecod.mochibun.ui.screens.settings.appearanceRowIds
+import one.crinklecod.mochibun.ui.screens.settings.appearanceTypographyBordersRowIds
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -247,55 +247,39 @@ class SystemFontSyncManagerTest {
     }
 
     @Test
-    fun appearanceRowIds_onlyShowsSystemFontRowsWhenBothBundleFontAndRootOptionsEnabled() {
-        val noFont = appearanceRowIds(
+    fun appearanceTypographyBordersRowIds_onlyShowsSystemFontRowsWhenBothBundleFontAndRootOptionsEnabled() {
+        val noFont = appearanceTypographyBordersRowIds(
             hasBundleFont = false,
             showRootOptions = true,
             isSystemFontInstalled = true,
-            hasCustomWallpaper = false,
-            hasCustomMascot = false,
-            hasCustomBorder = false,
-            isSystemMonitorEnabled = false,
-            isSubDisplayTickerEnabled = false
+            hasCustomBorder = false
         )
         assertFalse(noFont.contains("apply_system_font"))
         assertFalse(noFont.contains("reset_system_font"))
 
-        val noRoot = appearanceRowIds(
+        val noRoot = appearanceTypographyBordersRowIds(
             hasBundleFont = true,
             showRootOptions = false,
             isSystemFontInstalled = true,
-            hasCustomWallpaper = false,
-            hasCustomMascot = false,
-            hasCustomBorder = false,
-            isSystemMonitorEnabled = false,
-            isSubDisplayTickerEnabled = false
+            hasCustomBorder = false
         )
         assertFalse(noRoot.contains("apply_system_font"))
         assertFalse(noRoot.contains("reset_system_font"))
 
-        val rootNotInstalled = appearanceRowIds(
+        val rootNotInstalled = appearanceTypographyBordersRowIds(
             hasBundleFont = true,
             showRootOptions = true,
             isSystemFontInstalled = false,
-            hasCustomWallpaper = false,
-            hasCustomMascot = false,
-            hasCustomBorder = false,
-            isSystemMonitorEnabled = false,
-            isSubDisplayTickerEnabled = false
+            hasCustomBorder = false
         )
         assertTrue(rootNotInstalled.contains("apply_system_font"))
         assertFalse(rootNotInstalled.contains("reset_system_font"))
 
-        val rootInstalled = appearanceRowIds(
+        val rootInstalled = appearanceTypographyBordersRowIds(
             hasBundleFont = true,
             showRootOptions = true,
             isSystemFontInstalled = true,
-            hasCustomWallpaper = false,
-            hasCustomMascot = false,
-            hasCustomBorder = false,
-            isSystemMonitorEnabled = false,
-            isSubDisplayTickerEnabled = false
+            hasCustomBorder = false
         )
         assertTrue(rootInstalled.contains("apply_system_font"))
         assertTrue(rootInstalled.contains("reset_system_font"))

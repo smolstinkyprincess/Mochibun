@@ -22,7 +22,7 @@ enum class HotspotAlignment(val label: String, val description: String) {
     CENTER("Center", "Pointer clicks at the center of the cursor (ideal for crosshairs/paws)")
 }
 
-/** One choice in the Cursor & Hardware "Cursor Toggle Key" picker. */
+/** One choice in the Virtual Cursor "Cursor Toggle Key" picker. */
 data class CursorToggleKeyOption(val keyCode: Int, val label: String)
 
 object CursorPreferences {

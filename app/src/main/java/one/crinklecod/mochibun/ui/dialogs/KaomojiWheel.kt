@@ -672,7 +672,7 @@ fun KaomojiWheelCard(
                 ) {
                     Text(
                         text = currentClip?.text
-                            ?: "Copy some text, or add Quick Snippets in Settings → Typing ♡",
+                            ?: "Copy some text, or add Quick Snippets in Settings → Keyboard ♡",
                         fontSize = 10.sp,
                         fontWeight = if (currentClip != null) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (currentClip != null) activeKaomojiPlum else deepPlumText,

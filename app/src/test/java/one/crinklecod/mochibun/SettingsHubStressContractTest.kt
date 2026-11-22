@@ -9,11 +9,32 @@ import one.crinklecod.mochibun.data.prefs.LidOpenAction
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.ui.screens.SETTINGS_HUB_DESTINATIONS
 import one.crinklecod.mochibun.ui.screens.SettingsDestination
+import one.crinklecod.mochibun.ui.screens.SettingsNavigationState
+import one.crinklecod.mochibun.ui.screens.buildInitialSettingsStack
 import one.crinklecod.mochibun.ui.screens.settingsBackTarget
+import one.crinklecod.mochibun.ui.screens.settings.APPEARANCE_ROW_IDS
+import one.crinklecod.mochibun.ui.screens.settings.AppearanceRowId
+import one.crinklecod.mochibun.ui.screens.settings.BehaviorRowId
+import one.crinklecod.mochibun.ui.screens.settings.CURSOR_HARDWARE_ROW_IDS
+import one.crinklecod.mochibun.ui.screens.settings.CURSOR_MOTION_ROW_IDS
+import one.crinklecod.mochibun.ui.screens.settings.ClamshellLidRowId
+import one.crinklecod.mochibun.ui.screens.settings.CursorHardwareRowId
+import one.crinklecod.mochibun.ui.screens.settings.KEYBOARD_PREDICTIVE_ROW_IDS
+import one.crinklecod.mochibun.ui.screens.settings.KEYBOARD_ROW_IDS
+import one.crinklecod.mochibun.ui.screens.settings.KeyboardRowId
+import one.crinklecod.mochibun.ui.screens.settings.MAGISK_ROOT_LSPOSED_ROW_IDS
+import one.crinklecod.mochibun.ui.screens.settings.PermissionsRootRowId
+import one.crinklecod.mochibun.ui.screens.settings.appearanceGreetingTickerRowIds
+import one.crinklecod.mochibun.ui.screens.settings.appearanceTypographyBordersRowIds
+import one.crinklecod.mochibun.ui.screens.settings.appearanceWallpaperDecoRowIds
+import one.crinklecod.mochibun.ui.screens.settings.appearanceWidgetsCardsRowIds
+import one.crinklecod.mochibun.ui.screens.settings.permissionsRowIds
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -152,18 +173,30 @@ class SettingsHubStressContractTest {
             assertSame(SettingsDestination.Hub, settingsBackTarget(destination))
         }
         assertNull("Back on the Hub closes it", settingsBackTarget(SettingsDestination.Hub))
-        assertSame(SettingsDestination.Behavior, settingsBackTarget(SettingsDestination.LidLedStudio))
+        assertSame(SettingsDestination.CursorHardware, settingsBackTarget(SettingsDestination.CursorMotion))
+        assertSame(SettingsDestination.Behavior, settingsBackTarget(SettingsDestination.ClamshellLid))
+        assertSame(SettingsDestination.ClamshellLid, settingsBackTarget(SettingsDestination.LidLedStudio))
+        assertSame(SettingsDestination.Keyboard, settingsBackTarget(SettingsDestination.KeyboardPredictiveText))
+        assertSame(SettingsDestination.PermissionsRoot, settingsBackTarget(SettingsDestination.MagiskRootLsposed))
+        assertSame(SettingsDestination.Appearance, settingsBackTarget(SettingsDestination.AppearanceTypographyBorders))
+        assertSame(SettingsDestination.Appearance, settingsBackTarget(SettingsDestination.AppearanceGreetingTicker))
+        assertSame(SettingsDestination.Appearance, settingsBackTarget(SettingsDestination.AppearanceWallpaperDeco))
+        assertSame(SettingsDestination.Appearance, settingsBackTarget(SettingsDestination.AppearanceWidgetsCards))
     }
 
     @Test
     fun rapidDestinationSwitchingTakesOneStepPerBack() {
-        // Jump 1..8 then Back, many times over, including the Lid LED Studio detour.
+        // Jump 1..8 then Back, many times over, including the Clamshell -> Lid LED Studio detour.
         var destination: SettingsDestination? = SettingsDestination.Hub
         repeat(50) { round ->
             val target = SETTINGS_HUB_DESTINATIONS[round % SETTINGS_HUB_DESTINATIONS.size]
             destination = target
             if (target == SettingsDestination.Behavior && round % 2 == 0) {
+                destination = SettingsDestination.ClamshellLid
+                assertSame(SettingsDestination.Behavior, settingsBackTarget(destination))
                 destination = SettingsDestination.LidLedStudio
+                destination = settingsBackTarget(destination)
+                assertSame(SettingsDestination.ClamshellLid, destination)
                 destination = settingsBackTarget(destination!!)
                 assertSame(SettingsDestination.Behavior, destination)
             }
@@ -217,5 +250,221 @@ class SettingsHubStressContractTest {
         // in the stress harness leave the value unchanged.
         HomeMascotSize.entries.forEach { assertEquals(it, it.next().previous()) }
         LidOpenAction.entries.forEach { assertEquals(it, it.next().previous()) }
+    }
+
+    @Test
+    fun buildInitialSettingsStackFollowsBackTargets() {
+        assertEquals(listOf(SettingsDestination.Hub), buildInitialSettingsStack(SettingsDestination.Hub))
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.Appearance),
+            buildInitialSettingsStack(SettingsDestination.Appearance)
+        )
+        assertEquals(
+            listOf(
+                SettingsDestination.Hub,
+                SettingsDestination.Behavior,
+                SettingsDestination.ClamshellLid,
+                SettingsDestination.LidLedStudio
+            ),
+            buildInitialSettingsStack(SettingsDestination.LidLedStudio)
+        )
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.Behavior, SettingsDestination.ClamshellLid),
+            buildInitialSettingsStack(SettingsDestination.ClamshellLid)
+        )
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.Keyboard, SettingsDestination.KeyboardPredictiveText),
+            buildInitialSettingsStack(SettingsDestination.KeyboardPredictiveText)
+        )
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.CursorHardware, SettingsDestination.CursorMotion),
+            buildInitialSettingsStack(SettingsDestination.CursorMotion)
+        )
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.PermissionsRoot, SettingsDestination.MagiskRootLsposed),
+            buildInitialSettingsStack(SettingsDestination.MagiskRootLsposed)
+        )
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.Appearance, SettingsDestination.AppearanceTypographyBorders),
+            buildInitialSettingsStack(SettingsDestination.AppearanceTypographyBorders)
+        )
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.Appearance, SettingsDestination.AppearanceGreetingTicker),
+            buildInitialSettingsStack(SettingsDestination.AppearanceGreetingTicker)
+        )
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.Appearance, SettingsDestination.AppearanceWallpaperDeco),
+            buildInitialSettingsStack(SettingsDestination.AppearanceWallpaperDeco)
+        )
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.Appearance, SettingsDestination.AppearanceWidgetsCards),
+            buildInitialSettingsStack(SettingsDestination.AppearanceWidgetsCards)
+        )
+    }
+
+    @Test
+    fun settingsNavigationStateRestoresParentFocusAndPopsModalsFirst() {
+        val nav = SettingsNavigationState(SettingsDestination.Hub)
+        var closed = false
+
+        // Navigate Hub(row 4) -> Behavior(row 3: Clamshell & Lid) -> ClamshellLid(row 4: Lid LED Studio) -> LidLedStudio
+        val clamshellRowIndex = BehaviorRowId.CLAMSHELL_LID.ordinal
+        val ledStudioRowIndex = ClamshellLidRowId.LED_STUDIO.ordinal
+
+        nav.navigateTo(SettingsDestination.Behavior, fromFocusIndex = 4)
+        assertSame(SettingsDestination.Behavior, nav.currentDestination)
+        assertEquals(0, nav.initialFocusFor(SettingsDestination.Behavior))
+
+        nav.saveFocusIfActive(SettingsDestination.Behavior, clamshellRowIndex)
+        nav.navigateTo(SettingsDestination.ClamshellLid)
+        assertSame(SettingsDestination.ClamshellLid, nav.currentDestination)
+        assertEquals(0, nav.initialFocusFor(SettingsDestination.ClamshellLid))
+
+        nav.saveFocusIfActive(SettingsDestination.ClamshellLid, ledStudioRowIndex)
+        nav.navigateTo(SettingsDestination.LidLedStudio)
+        assertSame(SettingsDestination.LidLedStudio, nav.currentDestination)
+        assertEquals(4, nav.stackDepth)
+
+        // Nested modal stack invokes topmost handler before popping destinations
+        val dismissed = mutableListOf<String>()
+        nav.setNestedBackHandler("lid_studio") { dismissed += "studio"; nav.setNestedBackHandler("lid_studio", null) }
+        nav.setNestedBackHandler("picker") { dismissed += "picker"; nav.setNestedBackHandler("picker", null) }
+
+        assertTrue(nav.handleBack { closed = true })
+        assertEquals(listOf("picker"), dismissed)
+        assertSame(SettingsDestination.LidLedStudio, nav.currentDestination)
+
+        assertTrue(nav.handleBack { closed = true })
+        assertEquals(listOf("picker", "studio"), dismissed)
+        assertSame(SettingsDestination.LidLedStudio, nav.currentDestination)
+
+        // Back pops LidLedStudio -> ClamshellLid with focus restored on Lid LED Studio
+        assertTrue(nav.handleBack { closed = true })
+        assertSame(SettingsDestination.ClamshellLid, nav.currentDestination)
+        assertEquals(ledStudioRowIndex, nav.initialFocusFor(SettingsDestination.ClamshellLid))
+
+        // Late dispose from popped LidLedStudio must not overwrite saved focus
+        nav.saveFocusIfActive(SettingsDestination.LidLedStudio, 2)
+        assertEquals(0, nav.initialFocusFor(SettingsDestination.LidLedStudio))
+
+        // Back pops ClamshellLid -> Behavior with focus restored on Clamshell & Lid
+        assertTrue(nav.handleBack { closed = true })
+        assertSame(SettingsDestination.Behavior, nav.currentDestination)
+        assertEquals(clamshellRowIndex, nav.initialFocusFor(SettingsDestination.Behavior))
+
+        // Re-entering ClamshellLid starts at 0; popping Behavior -> Hub restores 4; last Back closes
+        nav.navigateTo(SettingsDestination.ClamshellLid)
+        assertEquals(0, nav.initialFocusFor(SettingsDestination.ClamshellLid))
+        assertTrue(nav.popDestination { closed = true })
+        assertTrue(nav.popDestination { closed = true })
+        assertSame(SettingsDestination.Hub, nav.currentDestination)
+        assertEquals(4, nav.initialFocusFor(SettingsDestination.Hub))
+        assertFalse(closed)
+
+        assertFalse(nav.handleBack { closed = true })
+        assertTrue(closed)
+    }
+
+    @Test
+    fun keyboardPredictiveTextSubScreenRestoresPredictiveTextRowFocus() {
+        assertEquals(9, KEYBOARD_ROW_IDS.size)
+        assertEquals(4, KEYBOARD_PREDICTIVE_ROW_IDS.size)
+        val predictiveRowIndex = KeyboardRowId.PREDICTIVE_TEXT.ordinal
+        assertEquals(6, predictiveRowIndex) // 7th row (jump key 7)
+
+        val nav = SettingsNavigationState(SettingsDestination.Hub)
+        nav.navigateTo(SettingsDestination.Keyboard, fromFocusIndex = 1)
+        nav.saveFocusIfActive(SettingsDestination.Keyboard, predictiveRowIndex)
+        nav.navigateTo(SettingsDestination.KeyboardPredictiveText)
+        assertSame(SettingsDestination.KeyboardPredictiveText, nav.currentDestination)
+        assertEquals(0, nav.initialFocusFor(SettingsDestination.KeyboardPredictiveText))
+
+        var closed = false
+        assertTrue(nav.handleBack { closed = true })
+        assertSame(SettingsDestination.Keyboard, nav.currentDestination)
+        assertEquals(predictiveRowIndex, nav.initialFocusFor(SettingsDestination.Keyboard))
+        assertFalse(closed)
+    }
+
+    @Test
+    fun cursorMotionSubScreenRestoresCursorMotionRowFocus() {
+        assertEquals(8, CURSOR_HARDWARE_ROW_IDS.size)
+        assertEquals(5, CURSOR_MOTION_ROW_IDS.size)
+        val cursorMotionRowIndex = CursorHardwareRowId.CURSOR_MOTION.ordinal
+        assertEquals(0, cursorMotionRowIndex) // 1st row (jump key 1)
+
+        val nav = SettingsNavigationState(SettingsDestination.Hub)
+        nav.navigateTo(SettingsDestination.CursorHardware, fromFocusIndex = 2)
+        nav.saveFocusIfActive(SettingsDestination.CursorHardware, cursorMotionRowIndex)
+        nav.navigateTo(SettingsDestination.CursorMotion)
+        assertSame(SettingsDestination.CursorMotion, nav.currentDestination)
+        assertEquals(0, nav.initialFocusFor(SettingsDestination.CursorMotion))
+
+        var closed = false
+        assertTrue(nav.handleBack { closed = true })
+        assertSame(SettingsDestination.CursorHardware, nav.currentDestination)
+        assertEquals(cursorMotionRowIndex, nav.initialFocusFor(SettingsDestination.CursorHardware))
+        assertFalse(closed)
+    }
+
+    @Test
+    fun magiskRootLsposedSubScreenRestoresParentRowFocus() {
+        assertEquals(7, permissionsRowIds(showRootOptions = false).size)
+        assertEquals(8, permissionsRowIds(showRootOptions = true).size)
+        assertEquals(7, MAGISK_ROOT_LSPOSED_ROW_IDS.size)
+        val magiskRowIndex = PermissionsRootRowId.MAGISK_ROOT_LSPOSED.ordinal
+        assertEquals(7, magiskRowIndex) // 8th row (jump key 8)
+
+        val nav = SettingsNavigationState(SettingsDestination.Hub)
+        nav.navigateTo(SettingsDestination.PermissionsRoot, fromFocusIndex = 5)
+        nav.saveFocusIfActive(SettingsDestination.PermissionsRoot, magiskRowIndex)
+        nav.navigateTo(SettingsDestination.MagiskRootLsposed)
+        assertSame(SettingsDestination.MagiskRootLsposed, nav.currentDestination)
+        assertEquals(0, nav.initialFocusFor(SettingsDestination.MagiskRootLsposed))
+
+        var closed = false
+        assertTrue(nav.handleBack { closed = true })
+        assertSame(SettingsDestination.PermissionsRoot, nav.currentDestination)
+        assertEquals(magiskRowIndex, nav.initialFocusFor(SettingsDestination.PermissionsRoot))
+        assertFalse(closed)
+    }
+
+    @Test
+    fun appearanceSubScreensRestoreParentRowFocus() {
+        assertEquals(6, APPEARANCE_ROW_IDS.size)
+        assertEquals(
+            7,
+            appearanceTypographyBordersRowIds(
+                hasBundleFont = true,
+                showRootOptions = true,
+                isSystemFontInstalled = true,
+                hasCustomBorder = true
+            ).size
+        )
+        assertEquals(3, appearanceGreetingTickerRowIds(isSubDisplayTickerEnabled = true).size)
+        assertEquals(7, appearanceWallpaperDecoRowIds(hasCustomWallpaper = true, hasCustomMascot = true).size)
+        assertEquals(3, appearanceWidgetsCardsRowIds(isSystemMonitorEnabled = true).size)
+
+        val nav = SettingsNavigationState(SettingsDestination.Hub)
+        nav.navigateTo(SettingsDestination.Appearance, fromFocusIndex = 0)
+
+        val routes = listOf(
+            AppearanceRowId.TYPOGRAPHY_BORDERS to SettingsDestination.AppearanceTypographyBorders,
+            AppearanceRowId.GREETING_TICKER to SettingsDestination.AppearanceGreetingTicker,
+            AppearanceRowId.WALLPAPER_DECO to SettingsDestination.AppearanceWallpaperDeco,
+            AppearanceRowId.WIDGETS_CARDS to SettingsDestination.AppearanceWidgetsCards
+        )
+        var closed = false
+        for ((row, target) in routes) {
+            nav.saveFocusIfActive(SettingsDestination.Appearance, row.ordinal)
+            nav.navigateTo(target)
+            assertSame(target, nav.currentDestination)
+            assertEquals(0, nav.initialFocusFor(target))
+
+            assertTrue(nav.handleBack { closed = true })
+            assertSame(SettingsDestination.Appearance, nav.currentDestination)
+            assertEquals(row.ordinal, nav.initialFocusFor(SettingsDestination.Appearance))
+            assertFalse(closed)
+        }
     }
 }

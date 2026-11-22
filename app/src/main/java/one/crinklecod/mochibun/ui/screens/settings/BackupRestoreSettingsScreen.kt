@@ -49,6 +49,14 @@ import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
+internal val BACKUP_RESTORE_ROW_IDS = listOf(
+    "export_bundle",
+    "import_bundle",
+    "export",
+    "restore",
+    "reset"
+)
+
 /**
  * Tier 1: Backup & Restore Sub-Screen
  */
@@ -57,12 +65,14 @@ internal fun BackupRestoreSettingsScreen(
     onBack: () -> Unit,
     onSettingsRestored: (() -> Unit)?,
     onPreviewDialogBackHandlerChanged: (( (() -> Unit)? ) -> Unit),
+    initialFocusedIndex: Int = 0,
+    onFocusedIndexChange: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
-    var focusedIndex by remember { mutableIntStateOf(0) }
+    var focusedIndex by rememberSettingsFocusIndex(initialFocusedIndex, onFocusedIndexChange)
     var sawCenterDown by remember { mutableStateOf(false) }
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
@@ -195,7 +205,7 @@ internal fun BackupRestoreSettingsScreen(
         }
     }
 
-    val items = listOf("export_bundle", "import_bundle", "export", "restore", "reset")
+    val items = BACKUP_RESTORE_ROW_IDS
     val totalItems = items.size
 
     // Card that holds the focused row; read lazily by ScrollToFocusedItem (not in composition).

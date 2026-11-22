@@ -42,14 +42,14 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ### Root / LSPosed extras
 - **Key remapping**: Remap extra physical buttons right from the visual AT-M120 keypad diagram in the refreshed **Keypad Remapper**—works in every app with no accessibility service running.
-- **System-wide font sync**: Optionally apply a `.mochibundle`'s custom font across the whole phone through a safe Magisk overlay module (*Settings > Appearance*).
+- **System-wide font sync**: Optionally apply a `.mochibundle`'s custom font across the whole phone through a safe Magisk overlay module (*Settings > Appearance > Typography & Borders*).
 - **QuickSwitch recents**: Make Mochibun's keypad recents switcher your system Recents provider.
 - **In-place toggles**: Wi-Fi and Bluetooth flip right inside the Quick Settings card (without root, they open the Android settings panel instead).
 - **Speedy root clicks**: The cursor taps through a tiny native helper, even on screens that ignore normal taps.
 - **Media volume lock**: The volume rocker always changes *media* volume, even in Silent Mode.
 - **Pastel SystemUI**: Your palette also colors Quick Settings, the volume dialog, notification cards, and the status and nav bars.
 - **Lid LED pulses**: Notification shimmers and a charging glow on the outer lid lights, in the color you pick.
-- **Lid LED Studio ✨**: Draw your own little light shows for the five windows on the outer lid! Build them step by step (500 ms per step, up to 16 steps) with 7 vivid keitai swatches, preview them on screen, then hit **Test Lid ♡** to watch them play for real. Pick one animation for **notifications** and another for **charging**: each loops for about a minute, then rests on its last frame. Comes with 5 cute presets (*Sakura Chase ♡*, *Keitai Rainbow*, *Mint Heartbeat*, *Berry Sparkle*, *Lemon Ping-Pong*), and you can share them as `.mochibunled` files  to trade with friends. Find it in *Settings > Behavior*.
+- **Lid LED Studio ✨**: Draw your own little light shows for the five windows on the outer lid! Build them step by step (500 ms per step, up to 16 steps) with 7 vivid keitai swatches, preview them on screen, then hit **Test Lid ♡** to watch them play for real. Pick one animation for **notifications** and another for **charging**: each loops for about a minute, then rests on its last frame. Comes with 5 cute presets (*Sakura Chase ♡*, *Keitai Rainbow*, *Mint Heartbeat*, *Berry Sparkle*, *Lemon Ping-Pong*), and you can share them as `.mochibunled` files  to trade with friends. Find it in *Settings > Behavior > Clamshell & Lid > Lid LED Studio*.
 
 ---
 
@@ -111,14 +111,14 @@ Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai
 | **Back / Delete** | Undo T9 digit / cancel candidate, or delete | Repeat backspace |
 
 - The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` / `T9` badge.
-- **Offline T9 prediction & learned words:** Press `*` to switch into `T9` mode using the bundled 30k+ English dictionary (contractions included). Words you commit twice automatically rank higher for you, stored strictly offline on your device. Want another language or custom wordlist? Drop any `.tsv` or `.txt` wordlist into `Android/data/one.crinklecod.mochibun/files/dictionaries` and switch under **Settings > Keyboard > T9 Dictionary**.
+- **Offline T9 prediction & learned words:** Press `*` to switch into `T9` mode using the bundled 30k+ English dictionary (contractions included). Words you commit twice automatically rank higher for you, stored strictly offline on your device. Want another language or custom wordlist? Drop any `.tsv` or `.txt` wordlist into `Android/data/one.crinklecod.mochibun/files/dictionaries` and switch under **Settings > Keyboard > Predictive Text > T9 Dictionary**.
 - **It dodges your text box.** If the box you're typing in is down at the bottom of the screen (hi, Discord), the pill hops to the top so you can see your words, then hops back down when the coast is clear. Some apps don't tell Android where the cursor is, and in those the pill just stays at the bottom.
 - **It fades when you pause.** After a moment with no key presses the pill turns soft and see-through, then comes back to full strength on your next press.
 - A pending multi-tap letter commits on its own after a short pause (**Auto-Commit Delay**: 0.7 s by default, adjustable from 0.3 to 1.5 s), while T9 words wait for Space / Center / navigation so you have time to pick the right word.
 - Sentences auto-capitalize in both multi-tap and T9.
 - Number, phone, and date fields get plain digits, so dialing works the way you'd expect.
 - Works in terminals like **Termux** too. Delete and Enter go straight to the terminal as plain keys.
-- Tune **Predictive Text (T9)**, **T9 Dictionary**, **Learn New Words** / **Clear Learned Words** (new words you type appear in T9 after typing them twice), **hold delay** (250–800 ms), **letter auto-commit**, and **hold vibration** under **Settings > Keyboard**. All of them (plus your learned words) are saved in your `.json` backups.
+- Tune **Predictive Text (T9)**, **T9 Dictionary**, and **Learn New Words** / **Clear Learned Words** (new words you type appear in T9 after typing them twice) under **Settings > Keyboard > Predictive Text**, and tune **hold delay** (250–800 ms), **letter auto-commit**, and **hold vibration** under **Settings > Keyboard**. All of them (plus your learned words) are saved in your `.json` backups.
 
 **Setup**: Open **Settings > Keyboard** and follow the steps there, or go to *Settings > System > Languages & input > On-screen keyboard* and enable **Mochibun Keitai IME**.
 
@@ -145,7 +145,7 @@ Never wrestle with tiny touch keyboards just to send a cute face:
 Export or build an all-in-one `.mochibundle` bundle to pack your colors, typography (`font.ttf` / `font.otf`, ≤ 4 MB), keypad sound pack (`sounds/<cue>.ogg`, ≤ 256 KB per cue), greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), 9-slice card border, and 8-row `mascot_atlas.png` + dialogue. Opening a `.mochibundle` (or legacy `.mochibun`) on your phone shows a live swatch and asset preview before applying in one tap—and rooted users can also sync the pack's font system-wide via Magisk.
 
 ### 🐰 Custom Mascots, YAML Themes & Lid Animations
-- **Custom Mochibunny (`mascot_atlas.png`)**: Swap the pocket pet with an 8-row pixel-art sprite sheet in *Settings > Appearance > Custom Mascot*, plus optional mood dialogue pools inside `.mochibundle` packs.
+- **Custom Mochibunny (`mascot_atlas.png`)**: Swap the pocket pet with an 8-row pixel-art sprite sheet in *Settings > Appearance > Wallpaper & Deco > Custom Mascot*, plus optional mood dialogue pools inside `.mochibundle` packs.
 - **YAML Themes (`kaml`)**: Drop `.yaml` palettes into `/sdcard/Android/data/one.crinklecod.mochibun/files/themes/`.
 - **Lid LED Animations (`.mochibunled`)**: Share and import 5-window light shows into **Lid LED Studio**, or create and edit full `.mochibundle` theme packs—including custom fonts, keypad sound packs, 9-slice borders, and 8-row mascots—right in your browser with the **[Mascot & Bundle Workshop](https://crinklecod.one/Mochibun/community/workshop.html)**.
 
@@ -167,7 +167,7 @@ My daily driver, and the phone every pixel of Mochibun is fitted to:
 | **RAM** | ~1.8 GB |
 | **Network** | 100% offline: no internet or camera permissions ([`PRIVACY.md`](PRIVACY.md)) |
 
-> **Other flip phones**: Since v2.2.1 Mochibun installs on Android 8.1+ (`minSdk 27`) devices that support `armeabi-v7a` (32-bit or dual-ABI 64-bit ARM), e.g. Kyocera DIGNO Keitai 3 (`902KC` / `903KC`) or `KYF42`. Note that `arm64`-only phones and x86 emulators cannot install the `armeabi-v7a` APK. These phones are community-untested: AT-M120-only extras (outer lid LEDs, pastel SystemUI hooks) hide or quietly do nothing, and 1 GB RAM phones get a smaller image cache with still GIFs. Pick a **Cursor Toggle Key** in *Settings > Cursor & Hardware* if your phone has no F4 side key.
+> **Other flip phones**: Since v2.2.1 Mochibun installs on Android 8.1+ (`minSdk 27`) devices that support `armeabi-v7a` (32-bit or dual-ABI 64-bit ARM), e.g. Kyocera DIGNO Keitai 3 (`902KC` / `903KC`) or `KYF42`. Note that `arm64`-only phones and x86 emulators cannot install the `armeabi-v7a` APK. These phones are community-untested: AT-M120-only extras (outer lid LEDs, pastel SystemUI hooks) hide or quietly do nothing, and 1 GB RAM phones get a smaller image cache with still GIFs. Pick a **Cursor Toggle Key** in *Settings > Virtual Cursor* if your phone has no F4 side key.
 
 > **Measured Performance on AT-M120 (`v2.4.2` release APK)**:
 > Heavy GPU runtime blurs (`Modifier.blur()`) are strictly avoided, opaque icons compact to `RGB_565`, and background/IME work pauses when hidden. Measured on an actual **ALT Mive Style Folder (AT-M120)** (`1.82 GiB` RAM, Android 12, `MochibunImeService` active as default keyboard):
@@ -201,11 +201,11 @@ This is the default, and it's how most flip phones will run Mochibun. Root-only 
 
 The checklist also has rows for the **Mochibun Keitai IME** (see [Mochibun Keitai Keyboard](#-mochibun-keitai-keyboard)) and the virtual cursor, which shows whether it's ready to go. The cursor only runs (with its little status-bar notification) while it's actually on screen, so your notification shade stays quiet the rest of the time.
 
-> 🌙 **Flip Reset on Sleep**: Without root, Android can't see the flip's hall sensor, so Mochibun treats "screen off" as "flip shut": it closes menus and the drawer, hides the cursor, and puts focus back on Home. It's on by default for unrooted phones; toggle it in *Settings > Behavior*.
+> 🌙 **Flip Reset on Sleep**: Without root, Android can't see the flip's hall sensor, so Mochibun treats "screen off" as "flip shut": it closes menus and the drawer, hides the cursor, and puts focus back on Home. It's on by default for unrooted phones; toggle it in *Settings > Behavior > Clamshell & Lid*.
 
 ### 🔮 Optional Root & LSPosed Perks
 
-Rooted with Magisk and LSPosed? Flip on **Show Root Options** at the bottom of *Settings > Permissions & Root* (it starts on automatically when Mochibun spots `su`). That unlocks system-wide key remapping without Accessibility, QuickSwitch recents, in-place Wi-Fi/Bluetooth toggles, outer lid LED alerts with a charging LED and custom color, the Lid LED Studio, real hall-sensor lid detection, and pastel SystemUI theming. The **[AT-M120 Root, Magisk & Tuning Guide](docs/m120_root_setup.md)** covers bootloader, Magisk, and microG.
+Rooted with Magisk and LSPosed? Flip on **Show Root Options** at the bottom of *Settings > Permissions & Root* (it starts on automatically when Mochibun spots `su`). That unlocks **Magisk Root & LSPosed** (*Settings > Permissions & Root > Magisk Root & LSPosed*), system-wide key remapping without Accessibility, QuickSwitch recents, in-place Wi-Fi/Bluetooth toggles, outer lid LED alerts with a charging LED and custom color plus the Lid LED Studio and real hall-sensor lid detection (*Settings > Behavior > Clamshell & Lid*), system-wide font sync (*Settings > Appearance > Typography & Borders*), and pastel SystemUI theming. The **[AT-M120 Root, Magisk & Tuning Guide](docs/m120_root_setup.md)** covers bootloader, Magisk, and microG.
 
 > **Boot animation bonus 🎀**: Got root now? Grab the optional `mochibun-bootanimation.zip` from [Releases](https://github.com/smolstinkyprincess/Mochibun/releases/latest) for a matching pastel boot screen!
 

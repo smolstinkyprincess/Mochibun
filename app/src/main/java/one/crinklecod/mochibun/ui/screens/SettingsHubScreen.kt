@@ -35,13 +35,21 @@ import one.crinklecod.mochibun.ui.screens.settings.*
 sealed class SettingsDestination {
     object Hub : SettingsDestination()
     object Appearance : SettingsDestination()
+    object AppearanceTypographyBorders : SettingsDestination()
+    object AppearanceGreetingTicker : SettingsDestination()
+    object AppearanceWallpaperDeco : SettingsDestination()
+    object AppearanceWidgetsCards : SettingsDestination()
     object CursorHardware : SettingsDestination()
+    object CursorMotion : SettingsDestination()
     object SoundFeedback : SettingsDestination()
     object Behavior : SettingsDestination()
+    object ClamshellLid : SettingsDestination()
     object PermissionsRoot : SettingsDestination()
+    object MagiskRootLsposed : SettingsDestination()
     object BackupRestore : SettingsDestination()
     object About : SettingsDestination()
     object Keyboard : SettingsDestination()
+    object KeyboardPredictiveText : SettingsDestination()
     object LidLedStudio : SettingsDestination()
 }
 
@@ -65,13 +73,94 @@ internal val SETTINGS_HUB_DESTINATIONS: List<SettingsDestination> = listOf(
 internal fun settingsBackTarget(destination: SettingsDestination): SettingsDestination? =
     when (destination) {
         SettingsDestination.Hub -> null
-        SettingsDestination.LidLedStudio -> SettingsDestination.Behavior
+        SettingsDestination.AppearanceTypographyBorders,
+        SettingsDestination.AppearanceGreetingTicker,
+        SettingsDestination.AppearanceWallpaperDeco,
+        SettingsDestination.AppearanceWidgetsCards -> SettingsDestination.Appearance
+        SettingsDestination.CursorMotion -> SettingsDestination.CursorHardware
+        SettingsDestination.KeyboardPredictiveText -> SettingsDestination.Keyboard
+        SettingsDestination.ClamshellLid -> SettingsDestination.Behavior
+        SettingsDestination.LidLedStudio -> SettingsDestination.ClamshellLid
+        SettingsDestination.MagiskRootLsposed -> SettingsDestination.PermissionsRoot
         else -> SettingsDestination.Hub
     }
 
+internal fun buildInitialSettingsStack(destination: SettingsDestination): List<SettingsDestination> =
+    generateSequence(destination) { settingsBackTarget(it) }
+        .toList()
+        .asReversed()
+
+/**
+ * Navigation and focus stack for [SettingsHubScreen].
+ *
+ * - Keeps an explicit stack of [SettingsDestination]s so nested routes (e.g.
+ *   `Behavior -> Clamshell & Lid -> Lid LED Studio`) pop one step at a time.
+ * - Tracks `savedFocusByDestination` in a plain map (not snapshot-observed) so returning to a
+ *   parent restores the exact row that opened the sub-screen without recomposing on D-pad steps.
+ * - Maintains an ordered stack of active nested modal/editor back handlers so `handleBack`
+ *   always dismisses the topmost open dialog/editor before popping a [SettingsDestination].
+ */
+internal class SettingsNavigationState(
+    initialDestination: SettingsDestination = SettingsDestination.Hub,
+    private val backStack: MutableList<SettingsDestination> =
+        buildInitialSettingsStack(initialDestination).toMutableList()
+) {
+    val savedFocusByDestination: MutableMap<SettingsDestination, Int> = mutableMapOf()
+    private val nestedBackHandlers: MutableList<Pair<Any, () -> Unit>> = mutableListOf()
+
+    val currentDestination: SettingsDestination
+        get() = backStack.last()
+
+    val stackDepth: Int
+        get() = backStack.size
+
+    fun initialFocusFor(destination: SettingsDestination): Int =
+        savedFocusByDestination[destination] ?: 0
+
+    fun saveFocusIfActive(destination: SettingsDestination, index: Int) {
+        if (destination in backStack) {
+            savedFocusByDestination[destination] = index
+        }
+    }
+
+    fun navigateTo(target: SettingsDestination, fromFocusIndex: Int? = null) {
+        if (fromFocusIndex != null) {
+            savedFocusByDestination[currentDestination] = fromFocusIndex
+        }
+        savedFocusByDestination.remove(target)
+        backStack.add(target)
+    }
+
+    fun setNestedBackHandler(owner: Any, handler: (() -> Unit)?) {
+        nestedBackHandlers.removeAll { it.first == owner }
+        if (handler != null) {
+            nestedBackHandlers.add(owner to handler)
+        }
+    }
+
+    fun handleBack(onClose: () -> Unit): Boolean {
+        val topModal = nestedBackHandlers.lastOrNull()
+        if (topModal != null) {
+            topModal.second.invoke()
+            return true
+        }
+        return popDestination(onClose)
+    }
+
+    fun popDestination(onClose: () -> Unit): Boolean {
+        if (backStack.size > 1) {
+            val popped = backStack.removeAt(backStack.lastIndex)
+            savedFocusByDestination.remove(popped)
+            return true
+        }
+        onClose()
+        return false
+    }
+}
+
 /**
  * Unified Mochibun Settings Screen.
- * Implements a clean, two-tier settings architecture optimized for D-pad spatial navigation
+ * Implements a clean settings hub architecture optimized for D-pad spatial navigation
  * and 480 × 800 resolution on the ALT Mive Style Folder AT-M120.
  */
 @Composable
@@ -91,29 +180,23 @@ fun SettingsHubScreen(
     /** Launchable apps for Lid LED Studio → Per-App LED Rules. */
     installedApps: () -> List<LauncherApp> = { emptyList() }
 ) {
-    var currentDestination by remember { mutableStateOf(initialDestination) }
-    var rootFocusedIndex by remember { mutableIntStateOf(0) }
-    var backupPreviewBackHandler by remember { mutableStateOf<(() -> Unit)?>(null) }
-    var lidStudioBackHandler by remember { mutableStateOf<(() -> Unit)?>(null) }
-    var keyGuideBackHandler by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val navState = remember(initialDestination) {
+        SettingsNavigationState(
+            initialDestination = initialDestination,
+            backStack = mutableStateListOf<SettingsDestination>().apply {
+                addAll(buildInitialSettingsStack(initialDestination))
+            }
+        )
+    }
+    var rootFocusedIndex by remember(initialDestination) {
+        mutableIntStateOf(navState.initialFocusFor(SettingsDestination.Hub))
+    }
     val rootListState = rememberLazyListState()
     val context = LocalContext.current
 
     fun handleBack() {
         SoundEffectManager.play(context, SoundEffect.BACK)
-        val dismissKeyGuide = keyGuideBackHandler
-        val dismissBackupPreview = backupPreviewBackHandler
-        val closeLidStudioEditor = lidStudioBackHandler
-        if (dismissKeyGuide != null) {
-            dismissKeyGuide()
-        } else if (dismissBackupPreview != null) {
-            dismissBackupPreview()
-        } else if (closeLidStudioEditor != null) {
-            closeLidStudioEditor()
-        } else {
-            val target = settingsBackTarget(currentDestination)
-            if (target == null) onClose() else currentDestination = target
-        }
+        navState.handleBack(onClose)
     }
 
     DisposableEffect(Unit) {
@@ -146,10 +229,12 @@ fun SettingsHubScreen(
         handleBack()
     }
 
-    when (currentDestination) {
+    when (val destination = navState.currentDestination) {
         SettingsDestination.Hub -> {
             SettingsHubRootScreen(
-                onNavigate = { currentDestination = it },
+                onNavigate = { target ->
+                    navState.navigateTo(target, fromFocusIndex = rootFocusedIndex)
+                },
                 onClose = onClose,
                 // Deferred read: passing the Int would recompose SettingsHubScreen (and rebuild the
                 // whole root screen) on every D-pad step; the lambda defers the read to the rows.
@@ -161,72 +246,160 @@ fun SettingsHubScreen(
         }
         SettingsDestination.Appearance -> {
             AppearanceSettingsScreen(
-                onBack = { currentDestination = SettingsDestination.Hub },
+                onBack = { navState.popDestination(onClose) },
                 onOpenThemeStudio = onOpenThemeStudio,
+                onOpenTypographyBorders = { navState.navigateTo(SettingsDestination.AppearanceTypographyBorders) },
+                onOpenGreetingTicker = { navState.navigateTo(SettingsDestination.AppearanceGreetingTicker) },
+                onOpenWallpaperDeco = { navState.navigateTo(SettingsDestination.AppearanceWallpaperDeco) },
+                onOpenWidgetsCards = { navState.navigateTo(SettingsDestination.AppearanceWidgetsCards) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.AppearanceTypographyBorders -> {
+            AppearanceTypographyBordersSettingsScreen(
+                onBack = { navState.popDestination(onClose) },
+                onNestedBackHandlerChanged = { navState.setNestedBackHandler("appearance_reboot", it) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.AppearanceGreetingTicker -> {
+            AppearanceGreetingTickerSettingsScreen(
+                onBack = { navState.popDestination(onClose) },
+                onNestedBackHandlerChanged = { navState.setNestedBackHandler("greeting_name", it) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.AppearanceWallpaperDeco -> {
+            AppearanceWallpaperDecoSettingsScreen(
+                onBack = { navState.popDestination(onClose) },
                 onOpenIconPackDialog = onOpenIconPackDialog,
                 onPickWallpaperClick = onPickWallpaperClick,
                 onResetWallpaperClick = onResetWallpaperClick,
                 hasCustomWallpaper = hasCustomWallpaper,
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.AppearanceWidgetsCards -> {
+            AppearanceWidgetsCardsSettingsScreen(
+                onBack = { navState.popDestination(onClose) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.CursorHardware -> {
             CursorHardwareSettingsScreen(
-                onBack = { currentDestination = SettingsDestination.Hub },
+                onBack = { navState.popDestination(onClose) },
+                onOpenCursorMotion = { navState.navigateTo(SettingsDestination.CursorMotion) },
                 onOpenHardwareButtons = onOpenHardwareButtons,
                 installedApps = installedApps,
-                onNestedBackHandlerChanged = { keyGuideBackHandler = it },
+                onNestedBackHandlerChanged = { navState.setNestedBackHandler("key_guide", it) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.CursorMotion -> {
+            CursorMotionSettingsScreen(
+                onBack = { navState.popDestination(onClose) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.SoundFeedback -> {
             SoundFeedbackSettingsScreen(
-                onBack = { currentDestination = SettingsDestination.Hub },
+                onBack = { navState.popDestination(onClose) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.Behavior -> {
             BehaviorSettingsScreen(
-                onBack = { currentDestination = SettingsDestination.Hub },
+                onBack = { navState.popDestination(onClose) },
                 onOpenHiddenApps = onOpenHiddenApps,
                 onCreateFolderClick = onCreateFolderClick,
-                onOpenLidLedStudio = { currentDestination = SettingsDestination.LidLedStudio },
+                onOpenClamshellLid = { navState.navigateTo(SettingsDestination.ClamshellLid) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.ClamshellLid -> {
+            ClamshellLidSettingsScreen(
+                onBack = { navState.popDestination(onClose) },
+                onOpenLidLedStudio = { navState.navigateTo(SettingsDestination.LidLedStudio) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.LidLedStudio -> {
             LidLedStudioScreen(
-                onBack = { currentDestination = SettingsDestination.Behavior },
-                onNestedBackHandlerChanged = { lidStudioBackHandler = it },
+                onBack = { navState.popDestination(onClose) },
+                onNestedBackHandlerChanged = { navState.setNestedBackHandler("lid_studio", it) },
                 modifier = settingsModifier,
                 installedApps = installedApps
             )
         }
         SettingsDestination.PermissionsRoot -> {
             PermissionsRootSettingsScreen(
-                onBack = { currentDestination = SettingsDestination.Hub },
+                onBack = { navState.popDestination(onClose) },
+                onOpenMagiskRootLsposed = { navState.navigateTo(SettingsDestination.MagiskRootLsposed) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.MagiskRootLsposed -> {
+            MagiskRootLsposedSettingsScreen(
+                onBack = { navState.popDestination(onClose) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.BackupRestore -> {
             BackupRestoreSettingsScreen(
-                onBack = { currentDestination = SettingsDestination.Hub },
+                onBack = { navState.popDestination(onClose) },
                 onSettingsRestored = onSettingsRestored,
-                onPreviewDialogBackHandlerChanged = { backupPreviewBackHandler = it },
+                onPreviewDialogBackHandlerChanged = { navState.setNestedBackHandler("backup_preview", it) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.About -> {
             AboutMochibunScreen(
-                onBack = { currentDestination = SettingsDestination.Hub },
+                onBack = { navState.popDestination(onClose) },
                 modifier = settingsModifier
             )
         }
         SettingsDestination.Keyboard -> {
             KeyboardSettingsScreen(
-                onBack = { currentDestination = SettingsDestination.Hub },
+                onBack = { navState.popDestination(onClose) },
+                onOpenPredictiveText = { navState.navigateTo(SettingsDestination.KeyboardPredictiveText) },
                 installedApps = installedApps,
-                onNestedBackHandlerChanged = { keyGuideBackHandler = it },
+                onNestedBackHandlerChanged = { navState.setNestedBackHandler("key_guide", it) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.KeyboardPredictiveText -> {
+            KeyboardPredictiveTextSettingsScreen(
+                onBack = { navState.popDestination(onClose) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
                 modifier = settingsModifier
             )
         }

@@ -21,7 +21,7 @@ All elevated or sensitive capabilities are **opt-in** and run strictly on-device
 
 2. **Mochibun Keitai IME (`MochibunImeService`)**
    - **Purpose:** Offline multi-tap and T9 predictive hardware-keypad keyboard and Kaomoji Wheel text input.
-   - **Privacy:** Dictionary lookups run 100% offline in memory. Dictionary-word boosts and words you type that are not in the dictionary are stored strictly on the device (never in password/email/URI/terminal fields; fields that request `IME_FLAG_NO_PERSONALIZED_LEARNING` are respected), are included in local `.json` backups when you export one, and can be cleared anytime in *Settings > Keyboard*. Nothing you type is ever logged or transmitted.
+   - **Privacy:** Dictionary lookups run 100% offline in memory. Dictionary-word boosts and words you type that are not in the dictionary are stored strictly on the device (never in password/email/URI/terminal fields; fields that request `IME_FLAG_NO_PERSONALIZED_LEARNING` are respected), are included in local `.json` backups when you export one, and can be cleared anytime in *Settings > Keyboard > Predictive Text > Clear Learned Words*. Nothing you type is ever logged or transmitted.
 
 3. **Notification Access (`MochibunNotificationListenerService`)**
    - **Purpose:** Powers the in-launcher Notifications page and Now Playing media controls.

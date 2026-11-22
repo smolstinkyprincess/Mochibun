@@ -9,8 +9,11 @@ import one.crinklecod.mochibun.data.repository.BackupRestoreManager
 import one.crinklecod.mochibun.service.MochibunAccessibilityService
 import one.crinklecod.mochibun.service.MochibunAccessibilityService.KeyRouting
 import one.crinklecod.mochibun.service.MochibunAccessibilityService.KeyRouting.Route
+import one.crinklecod.mochibun.ui.screens.settings.MAGISK_ROOT_LSPOSED_ROW_IDS
+import one.crinklecod.mochibun.ui.screens.settings.MAX_JUMP_ROWS
 import one.crinklecod.mochibun.ui.screens.settings.ROOT_PERMISSION_ROWS
 import one.crinklecod.mochibun.ui.screens.settings.behaviorRowIds
+import one.crinklecod.mochibun.ui.screens.settings.clamshellLidRowIds
 import one.crinklecod.mochibun.ui.screens.settings.permissionsRowIds
 import one.crinklecod.mochibun.ui.screens.settings.settingsJumpNumber
 import one.crinklecod.mochibun.ui.screens.settings.showScreenOffResetRow
@@ -101,12 +104,13 @@ class NonRootModeTest {
 
     private fun assertContiguous(rows: List<String>) {
         assertEquals("row ids must be unique", rows.size, rows.toSet().size)
+        assertTrue("row count ${rows.size} exceeds MAX_JUMP_ROWS ($MAX_JUMP_ROWS)", rows.size <= MAX_JUMP_ROWS)
         rows.forEachIndexed { index, id ->
-            val expectedJump = (index + 1).takeIf { it <= 10 }
+            val expectedJump = index + 1
             assertEquals("jump for $id", expectedJump, settingsJumpNumber(rows, id))
         }
         // Every 1-9 key in range lands on a visible row
-        (1..rows.size.coerceAtMost(9)).forEach { digit -> assertTrue(rows.getOrNull(digit - 1) != null) }
+        (1..rows.size).forEach { digit -> assertTrue(rows.getOrNull(digit - 1) != null) }
     }
 
     @Test
@@ -117,49 +121,72 @@ class NonRootModeTest {
             nonRoot
         )
         assertTrue(ROOT_PERMISSION_ROWS.none { it in nonRoot })
+        assertFalse("magisk_root_lsposed" in nonRoot)
         assertContiguous(nonRoot)
         assertEquals(7, settingsJumpNumber(nonRoot, "show_root"))
 
         val rooted = permissionsRowIds(showRootOptions = true)
-        assertTrue(rooted.containsAll(ROOT_PERMISSION_ROWS))
-        assertEquals("show_root", rooted.last())
-        assertContiguous(rooted)
-        // Rows past the tenth have no keypad jump
-        assertNull(settingsJumpNumber(rooted, "show_root"))
-        assertNull(settingsJumpNumber(rooted, "missing"))
-    }
-
-    @Test
-    fun behaviorRowsHideLedRowsAndStayContiguous() {
-        val nonRoot = behaviorRowIds(hasCreateFolder = true, showRootOptions = false, showScreenOffReset = true)
-        assertEquals(
-            listOf("create_folder", "folder_scatter", "hidden_apps", "lid_open", "screen_off_reset"),
-            nonRoot
-        )
-        assertContiguous(nonRoot)
-
-        val rooted = behaviorRowIds(hasCreateFolder = false, showRootOptions = true, showScreenOffReset = false)
         assertEquals(
             listOf(
-                "folder_scatter", "hidden_apps", "lid_open",
-                "lid_led", "led_color", "led_studio", "led_charging"
+                "home",
+                "ime",
+                "overlay",
+                "a11y",
+                "notifications",
+                "cursor",
+                "show_root",
+                "magisk_root_lsposed"
             ),
             rooted
         )
+        assertTrue(ROOT_PERMISSION_ROWS.none { it in rooted })
         assertContiguous(rooted)
+        assertEquals(7, settingsJumpNumber(rooted, "show_root"))
+        assertEquals(8, settingsJumpNumber(rooted, "magisk_root_lsposed"))
+        assertNull(settingsJumpNumber(rooted, "missing"))
 
-        val both = behaviorRowIds(hasCreateFolder = true, showRootOptions = true, showScreenOffReset = true)
-        assertEquals(9, both.size) // every row keeps a 1..9 keypad jump
-        assertContiguous(both)
+        assertEquals(ROOT_PERMISSION_ROWS, MAGISK_ROOT_LSPOSED_ROW_IDS)
+        assertContiguous(MAGISK_ROOT_LSPOSED_ROW_IDS)
+    }
+
+    @Test
+    fun behaviorAndClamshellRowsHideLedRowsAndStayContiguous() {
+        val withFolder = behaviorRowIds(hasCreateFolder = true)
+        assertEquals(
+            listOf("create_folder", "folder_scatter", "hidden_apps", "clamshell_lid"),
+            withFolder
+        )
+        assertContiguous(withFolder)
+
+        val withoutFolder = behaviorRowIds(hasCreateFolder = false)
+        assertEquals(
+            listOf("folder_scatter", "hidden_apps", "clamshell_lid"),
+            withoutFolder
+        )
+        assertContiguous(withoutFolder)
+
+        val nonRootClamshell = clamshellLidRowIds(showRootOptions = false, showScreenOffReset = true)
+        assertEquals(listOf("lid_open", "screen_off_reset"), nonRootClamshell)
+        assertContiguous(nonRootClamshell)
+
+        val rootedClamshell = clamshellLidRowIds(showRootOptions = true, showScreenOffReset = false)
+        assertEquals(
+            listOf("lid_open", "lid_led", "led_color", "led_studio", "led_charging"),
+            rootedClamshell
+        )
+        assertContiguous(rootedClamshell)
+
+        val bothClamshell = clamshellLidRowIds(showRootOptions = true, showScreenOffReset = true)
+        assertEquals(6, bothClamshell.size) // every row keeps a 1..9 keypad jump
+        assertContiguous(bothClamshell)
 
         // Rooted phone without the AW22xxx lid LED (e.g. Kyocera keitai): no LED rows at all
-        val noLedChip = behaviorRowIds(
-            hasCreateFolder = false,
+        val noLedChip = clamshellLidRowIds(
             showRootOptions = true,
             showScreenOffReset = false,
             showLidLedRows = false
         )
-        assertEquals(listOf("folder_scatter", "hidden_apps", "lid_open"), noLedChip)
+        assertEquals(listOf("lid_open"), noLedChip)
         assertContiguous(noLedChip)
     }
 

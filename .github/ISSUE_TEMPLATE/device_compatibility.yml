@@ -64,7 +64,7 @@ body:
     attributes:
       label: "Hardware Key Codes (Optional)"
       description: |
-        If any physical button (side key, soft keys, call/back/clear) isn't recognized, open **Settings › Cursor & Hardware**, press the button, and copy the **Last Key Pressed (`keyCode` / `scanCode`)** readout here!
+        If any physical button (side key, soft keys, call/back/clear) isn't recognized, open **Settings › Virtual Cursor**, press the button, and copy the **Last Key Pressed (`keyCode` / `scanCode`)** readout here!
       placeholder: "e.g., Side key shows keyCode=27 (KEYCODE_CAMERA), scanCode=212"
 
   - type: textarea

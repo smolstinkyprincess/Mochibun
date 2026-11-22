@@ -60,4 +60,4 @@ body:
     id: logs_or_screenshots
     attributes:
       label: "Screenshots, Key Codes, or Logs (Optional)"
-      description: "If related to a physical key, you can check **Settings › Cursor & Hardware › Last Key Pressed** for its `keyCode` and `scanCode`."
+      description: "If related to a physical key, you can check **Settings › Virtual Cursor › Last Key Pressed** for its `keyCode` and `scanCode`."

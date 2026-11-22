@@ -6,10 +6,20 @@ import android.view.KeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -33,28 +43,62 @@ import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 import java.util.Locale
 
+internal enum class CursorHardwareRowId(val id: String) {
+    CURSOR_MOTION("cursor_motion"),
+    CURSOR_GRAPHIC("cursor_graphic"),
+    RESET_CURSOR("reset_cursor"),
+    KEYPAD_REMAPPER("keypad_remapper"),
+    SOFT_KEY_NAV("soft_key_nav"),
+    CURSOR_TOGGLE_KEY("cursor_toggle_key"),
+    DPAD_WRAP("dpad_wrap"),
+    BOUNDARY_HAPTICS("boundary_haptics")
+}
+
+internal val CURSOR_HARDWARE_ROW_IDS: List<String> = CursorHardwareRowId.entries.map { it.id }
+
+internal enum class CursorMotionRowId(val id: String) {
+    BASE_SPEED("base_speed"),
+    MAX_SPEED("max_speed"),
+    ACCELERATION("acceleration"),
+    CURSOR_SIZE("cursor_size"),
+    SCROLL_STEP("scroll_step")
+}
+
+internal val CURSOR_MOTION_ROW_IDS: List<String> = CursorMotionRowId.entries.map { it.id }
+
+internal fun cursorMotionSummarySubtitle(
+    tapStepPx: Int,
+    maxSpeed: Int,
+    cursorSizeDp: Int
+): String = "$tapStepPx–$maxSpeed px/s · ${cursorSizeDp}dp"
+
 /**
  * Tier 2: Virtual Cursor Sub-Screen
  */
 @Composable
 internal fun CursorHardwareSettingsScreen(
     onBack: () -> Unit,
+    onOpenCursorMotion: () -> Unit = {},
     onOpenHardwareButtons: (() -> Unit)? = null,
     installedApps: () -> List<LauncherApp> = { emptyList() },
     onNestedBackHandlerChanged: ((() -> Unit)?) -> Unit = {},
+    initialFocusedIndex: Int = 0,
+    onFocusedIndexChange: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
-    var focusedIndex by remember { mutableIntStateOf(0) }
+    val rows = CursorHardwareRowId.entries
+    var focusedIndex by rememberSettingsFocusIndex(
+        initialFocusedIndex.coerceIn(0, rows.lastIndex),
+        onFocusedIndexChange
+    )
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    var tapStepPx by remember { mutableIntStateOf(CursorPreferences.getTapStepPx(context)) }
-    var maxSpeed by remember { mutableIntStateOf(CursorPreferences.getMaxSpeed(context)) }
-    var accelRampMs by remember { mutableIntStateOf(CursorPreferences.getAccelRampMs(context)) }
-    var cursorSizeDp by remember { mutableIntStateOf(CursorPreferences.getCursorSizeDp(context)) }
-    var scrollStepPx by remember { mutableIntStateOf(CursorPreferences.getScrollStepPx(context)) }
+    val tapStepPx = remember { CursorPreferences.getTapStepPx(context) }
+    val maxSpeed = remember { CursorPreferences.getMaxSpeed(context) }
+    val cursorSizeDp = remember { CursorPreferences.getCursorSizeDp(context) }
     var customUri by remember { mutableStateOf(CursorPreferences.getCustomCursorUri(context)) }
     var toggleKeyCode by remember { mutableIntStateOf(CursorPreferences.getToggleKeyCode(context)) }
     val softKeyNav by PreferencesManager.isSoftKeyNavEnabled.collectAsState()
@@ -90,17 +134,22 @@ internal fun CursorHardwareSettingsScreen(
         }
     }
 
-    // Keep every row's focus index stable even when the default cursor sprite is active.
-    val totalItems = 12
+    fun isRowFocused(row: CursorHardwareRowId): Boolean = rows.getOrNull(focusedIndex) == row
+    fun jumpNumber(row: CursorHardwareRowId): Int? =
+        (rows.indexOf(row) + 1).takeIf { it in 1..MAX_JUMP_ROWS }
 
     // Card that holds the focused row; read lazily by ScrollToFocusedItem (not in composition).
     fun targetCardIndex(): Int =
-        when (focusedIndex) {
-            in 0..4 -> 0
-            5, 6 -> 1
-            7, 8, 9 -> 2
-            10, 11 -> 3
-            else -> 0
+        when (rows.getOrNull(focusedIndex)) {
+            CursorHardwareRowId.CURSOR_MOTION,
+            CursorHardwareRowId.CURSOR_GRAPHIC,
+            CursorHardwareRowId.RESET_CURSOR -> 0
+            CursorHardwareRowId.KEYPAD_REMAPPER,
+            CursorHardwareRowId.SOFT_KEY_NAV,
+            CursorHardwareRowId.CURSOR_TOGGLE_KEY -> 1
+            CursorHardwareRowId.DPAD_WRAP,
+            CursorHardwareRowId.BOUNDARY_HAPTICS -> 2
+            null -> 0
         }
 
     fun stepToggleKey(direction: Int) {
@@ -110,64 +159,35 @@ internal fun CursorHardwareSettingsScreen(
         if (toggleKeyCode == KeyEvent.KEYCODE_STAR) InputArbiter.pushInputActiveToKeyHook(context)
     }
 
-    // Moves the stepper at [index] one notch; [direction] is -1 (left) or +1 (right).
-    // Returns false when [index] is not a stepper row.
-    fun adjustSetting(index: Int, direction: Int): Boolean {
-        when (index) {
-            0 -> {
-                tapStepPx = (tapStepPx + direction)
-                    .coerceIn(CursorPreferences.MIN_TAP_STEP_PX, CursorPreferences.MAX_TAP_STEP_PX)
-                CursorPreferences.setTapStepPx(context, tapStepPx)
-            }
-
-            1 -> {
-                maxSpeed = (maxSpeed + direction * CursorPreferences.MAX_SPEED_INCREMENT)
-                    .coerceIn(CursorPreferences.MIN_MAX_SPEED, CursorPreferences.MAX_MAX_SPEED)
-                CursorPreferences.setMaxSpeed(context, maxSpeed)
-            }
-            2 -> {
-                accelRampMs = (accelRampMs + direction * CursorPreferences.ACCEL_RAMP_INCREMENT_MS)
-                    .coerceIn(CursorPreferences.MIN_ACCEL_RAMP_MS, CursorPreferences.MAX_ACCEL_RAMP_MS)
-                CursorPreferences.setAccelRampMs(context, accelRampMs)
-            }
-            3 -> {
-                cursorSizeDp = (cursorSizeDp + direction * 4).coerceIn(20, 52)
-                CursorPreferences.setCursorSizeDp(context, cursorSizeDp)
-            }
-            4 -> {
-                scrollStepPx = (scrollStepPx + direction * CursorPreferences.SCROLL_STEP_INCREMENT_PX)
-                    .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
-                CursorPreferences.setScrollStepPx(context, scrollStepPx)
-            }
-            9 -> stepToggleKey(direction)
-            else -> return false
-        }
+    fun adjustRow(row: CursorHardwareRowId?, direction: Int): Boolean {
+        if (row != CursorHardwareRowId.CURSOR_TOGGLE_KEY) return false
+        stepToggleKey(direction)
         return true
     }
 
-    fun activate(index: Int) {
-        when (index) {
-            in 0..4 -> adjustSetting(index, 1)
-            5 -> filePicker.launch(arrayOf("image/gif", "image/png"))
-            6 -> {
+    fun activateRow(row: CursorHardwareRowId) {
+        when (row) {
+            CursorHardwareRowId.CURSOR_MOTION -> onOpenCursorMotion()
+            CursorHardwareRowId.CURSOR_GRAPHIC -> filePicker.launch(arrayOf("image/gif", "image/png"))
+            CursorHardwareRowId.RESET_CURSOR -> {
                 CursorPreferences.setCustomCursorUri(context, null)
                 customUri = null
-                focusedIndex = 5
+                focusedIndex = rows.indexOf(CursorHardwareRowId.CURSOR_GRAPHIC)
             }
-            7 -> showKeypadRemapper = true
-            8 -> PreferencesManager.setSoftKeyNavEnabled(context, !softKeyNav)
-            9 -> stepToggleKey(1)
-            10 -> PreferencesManager.setDpadWrapAround(context, !dpadWrapAround)
-            11 -> PreferencesManager.setDpadBoundaryHaptics(context, !boundaryHaptics)
+            CursorHardwareRowId.KEYPAD_REMAPPER -> showKeypadRemapper = true
+            CursorHardwareRowId.SOFT_KEY_NAV -> PreferencesManager.setSoftKeyNavEnabled(context, !softKeyNav)
+            CursorHardwareRowId.CURSOR_TOGGLE_KEY -> stepToggleKey(1)
+            CursorHardwareRowId.DPAD_WRAP -> PreferencesManager.setDpadWrapAround(context, !dpadWrapAround)
+            CursorHardwareRowId.BOUNDARY_HAPTICS -> PreferencesManager.setDpadBoundaryHaptics(context, !boundaryHaptics)
         }
     }
 
     fun stepIndex(direction: Int) {
         val next = focusedIndex + direction
         focusedIndex = if (dpadWrapAround) {
-            (next + totalItems) % totalItems
+            (next + rows.size) % rows.size
         } else {
-            next.coerceIn(0, totalItems - 1)
+            next.coerceIn(0, rows.lastIndex)
         }
         SoundEffectManager.play(context, SoundEffect.NAV)
     }
@@ -180,7 +200,7 @@ internal fun CursorHardwareSettingsScreen(
         title = "Virtual Cursor",
         showBack = true,
         onBack = onBack,
-        isLastItemFocused = { focusedIndex == totalItems - 1 },
+        isLastItemFocused = { focusedIndex == rows.lastIndex },
         headerDocomoIndex = 108,
         modifier = modifier
             .focusRequester(focusRequester)
@@ -204,17 +224,17 @@ internal fun CursorHardwareSettingsScreen(
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        activate(focusedIndex)
+                        rows.getOrNull(focusedIndex)?.let(::activateRow)
                     }
                     return@onPreviewKeyEvent true
                 }
                 val digit = getDigitFromKeyCode(native.keyCode)
-                if (digit != null && digit in 1..totalItems) {
+                if (digit != null && digit in 1..rows.size.coerceAtMost(MAX_JUMP_ROWS)) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
                         val targetIndex = digit - 1
                         focusedIndex = targetIndex
                         SoundEffectManager.play(context, SoundEffect.SELECT)
-                        activate(targetIndex)
+                        activateRow(rows[targetIndex])
                     }
                     return@onPreviewKeyEvent true
                 }
@@ -227,7 +247,7 @@ internal fun CursorHardwareSettingsScreen(
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     if (event.type == KeyEventType.KeyDown) {
                         val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
-                        val handled = adjustSetting(focusedIndex, direction)
+                        val handled = adjustRow(rows.getOrNull(focusedIndex), direction)
                         if (handled) {
                             SoundEffectManager.play(context, SoundEffect.NAV)
                         } else {
@@ -245,77 +265,32 @@ internal fun CursorHardwareSettingsScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item(contentType = "cursor_physics_card") {
-                SettingsCard(categoryTitle = "Pointer Movement") {
-                    SettingsStepperRow(
-                        title = "Base Speed",
-                        subtitle = "Fine pointer step on each tap",
-                        valueDisplay = "$tapStepPx px",
-                        isFocused = focusedIndex == 0,
-                        jumpNumber = 1,
-                        onDecrement = { adjustSetting(0, -1) },
-                        onIncrement = { adjustSetting(0, 1) }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsStepperRow(
-                        title = "Max Speed",
-                        subtitle = "Top pointer glide speed when holding a direction",
-                        valueDisplay = "$maxSpeed px/s",
-                        isFocused = focusedIndex == 1,
-                        jumpNumber = 2,
-                        onDecrement = { adjustSetting(1, -1) },
-                        onIncrement = { adjustSetting(1, 1) }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsStepperRow(
-                        title = "Acceleration",
-                        subtitle = "Ramp-up time to top speed (shorter = snappier)",
-                        valueDisplay = String.format(Locale.US, "%.2f s", accelRampMs / 1000f),
-                        isFocused = focusedIndex == 2,
-                        jumpNumber = 3,
-                        onDecrement = { adjustSetting(2, -1) },
-                        onIncrement = { adjustSetting(2, 1) }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsStepperRow(
-                        title = "Cursor Size",
-                        subtitle = "Size of your on-screen pointer sprite",
-                        valueDisplay = "$cursorSizeDp dp",
-                        isFocused = focusedIndex == 3,
-                        jumpNumber = 4,
-                        onDecrement = { adjustSetting(3, -1) },
-                        onIncrement = { adjustSetting(3, 1) }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsStepperRow(
-                        title = "Scroll Step",
-                        subtitle = "Keys 2 (Up) & 8 (Down) page scroll distance",
-                        valueDisplay = "$scrollStepPx px",
-                        isFocused = focusedIndex == 4,
-                        jumpNumber = 5,
-                        onDecrement = { adjustSetting(4, -1) },
-                        onIncrement = { adjustSetting(4, 1) }
-                    )
-                }
-            }
-
             item(contentType = "cursor_sprite_card") {
-                SettingsCard(categoryTitle = "Cursor Sprite") {
+                SettingsCard(categoryTitle = "Pointer & Sprite") {
+                    SettingsNavigationRow(
+                        title = "Cursor Motion",
+                        subtitle = cursorMotionSummarySubtitle(tapStepPx, maxSpeed, cursorSizeDp),
+                        docomoIndex = 121,
+                        isFocused = isRowFocused(CursorHardwareRowId.CURSOR_MOTION),
+                        jumpNumber = jumpNumber(CursorHardwareRowId.CURSOR_MOTION),
+                        onClick = { activateRow(CursorHardwareRowId.CURSOR_MOTION) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Cursor Graphic",
                         subtitle = if (customUri != null) "Custom sprite active • choose a .png or .gif" else "Default paw • choose a .png or .gif",
                         docomoIndex = 121,
-                        isFocused = focusedIndex == 5,
-                        jumpNumber = 6,
-                        onClick = { activate(5) }
+                        isFocused = isRowFocused(CursorHardwareRowId.CURSOR_GRAPHIC),
+                        jumpNumber = jumpNumber(CursorHardwareRowId.CURSOR_GRAPHIC),
+                        onClick = { activateRow(CursorHardwareRowId.CURSOR_GRAPHIC) }
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     SettingsActionRow(
                         title = "Reset Cursor Sprite",
-                        isFocused = focusedIndex == 6,
+                        isFocused = isRowFocused(CursorHardwareRowId.RESET_CURSOR),
                         isDestructive = true,
-                        jumpNumber = 7,
-                        onClick = { activate(6) }
+                        jumpNumber = jumpNumber(CursorHardwareRowId.RESET_CURSOR),
+                        onClick = { activateRow(CursorHardwareRowId.RESET_CURSOR) }
                     )
                 }
             }
@@ -326,17 +301,17 @@ internal fun CursorHardwareSettingsScreen(
                         title = "Keypad Remapper",
                         subtitle = "Bind custom actions to your physical buttons",
                         docomoIndex = 153,
-                        isFocused = focusedIndex == 7,
-                        jumpNumber = 8,
-                        onClick = { activate(7) }
+                        isFocused = isRowFocused(CursorHardwareRowId.KEYPAD_REMAPPER),
+                        jumpNumber = jumpNumber(CursorHardwareRowId.KEYPAD_REMAPPER),
+                        onClick = { activateRow(CursorHardwareRowId.KEYPAD_REMAPPER) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "Soft-Key Navigation",
                         subtitle = "Use Recents & Back as LSK / RSK on Home and Drawer",
                         checked = softKeyNav,
-                        isFocused = focusedIndex == 8,
-                        jumpNumber = 9,
+                        isFocused = isRowFocused(CursorHardwareRowId.SOFT_KEY_NAV),
+                        jumpNumber = jumpNumber(CursorHardwareRowId.SOFT_KEY_NAV),
                         onCheckedChange = { PreferencesManager.setSoftKeyNavEnabled(context, it) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -348,8 +323,8 @@ internal fun CursorHardwareSettingsScreen(
                             "Shows / hides the cursor (the F4 side key always works)"
                         },
                         valueDisplay = CursorPreferences.toggleKeyLabel(toggleKeyCode),
-                        isFocused = focusedIndex == 9,
-                        jumpNumber = null,
+                        isFocused = isRowFocused(CursorHardwareRowId.CURSOR_TOGGLE_KEY),
+                        jumpNumber = jumpNumber(CursorHardwareRowId.CURSOR_TOGGLE_KEY),
                         onDecrement = { stepToggleKey(-1) },
                         onIncrement = { stepToggleKey(1) }
                     )
@@ -367,8 +342,8 @@ internal fun CursorHardwareSettingsScreen(
                         title = "D-Pad Wrap Around",
                         subtitle = "Loop selection smoothly around menu edges",
                         checked = dpadWrapAround,
-                        isFocused = focusedIndex == 10,
-                        jumpNumber = null,
+                        isFocused = isRowFocused(CursorHardwareRowId.DPAD_WRAP),
+                        jumpNumber = jumpNumber(CursorHardwareRowId.DPAD_WRAP),
                         onCheckedChange = { PreferencesManager.setDpadWrapAround(context, it) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -376,8 +351,8 @@ internal fun CursorHardwareSettingsScreen(
                         title = "Boundary Haptics",
                         subtitle = "Tiny tactile tick when focus hits an edge",
                         checked = boundaryHaptics,
-                        isFocused = focusedIndex == 11,
-                        jumpNumber = null,
+                        isFocused = isRowFocused(CursorHardwareRowId.BOUNDARY_HAPTICS),
+                        jumpNumber = jumpNumber(CursorHardwareRowId.BOUNDARY_HAPTICS),
                         onCheckedChange = { PreferencesManager.setDpadBoundaryHaptics(context, it) }
                     )
                 }
@@ -395,6 +370,198 @@ internal fun CursorHardwareSettingsScreen(
             onNestedBackHandlerChanged = onNestedBackHandlerChanged,
             onDismiss = { showKeypadRemapper = false }
         )
+    }
+}
+
+/**
+ * Virtual Cursor → Cursor Motion sub-screen: speed, acceleration, cursor size, and scroll step.
+ */
+@Composable
+internal fun CursorMotionSettingsScreen(
+    onBack: () -> Unit,
+    initialFocusedIndex: Int = 0,
+    onFocusedIndexChange: (Int) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val listState = rememberLazyListState()
+    val focusRequester = remember { FocusRequester() }
+    val rows = CursorMotionRowId.entries
+    var focusedIndex by rememberSettingsFocusIndex(
+        initialFocusedIndex.coerceIn(0, rows.lastIndex),
+        onFocusedIndexChange
+    )
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    var tapStepPx by remember { mutableIntStateOf(CursorPreferences.getTapStepPx(context)) }
+    var maxSpeed by remember { mutableIntStateOf(CursorPreferences.getMaxSpeed(context)) }
+    var accelRampMs by remember { mutableIntStateOf(CursorPreferences.getAccelRampMs(context)) }
+    var cursorSizeDp by remember { mutableIntStateOf(CursorPreferences.getCursorSizeDp(context)) }
+    var scrollStepPx by remember { mutableIntStateOf(CursorPreferences.getScrollStepPx(context)) }
+    val dpadWrapAround by PreferencesManager.isDpadWrapAround.collectAsState()
+
+    fun isRowFocused(row: CursorMotionRowId): Boolean = rows.getOrNull(focusedIndex) == row
+    fun jumpNumber(row: CursorMotionRowId): Int? =
+        (rows.indexOf(row) + 1).takeIf { it in 1..MAX_JUMP_ROWS }
+
+    fun adjustRow(row: CursorMotionRowId, direction: Int) {
+        when (row) {
+            CursorMotionRowId.BASE_SPEED -> {
+                tapStepPx = (tapStepPx + direction)
+                    .coerceIn(CursorPreferences.MIN_TAP_STEP_PX, CursorPreferences.MAX_TAP_STEP_PX)
+                CursorPreferences.setTapStepPx(context, tapStepPx)
+            }
+            CursorMotionRowId.MAX_SPEED -> {
+                maxSpeed = (maxSpeed + direction * CursorPreferences.MAX_SPEED_INCREMENT)
+                    .coerceIn(CursorPreferences.MIN_MAX_SPEED, CursorPreferences.MAX_MAX_SPEED)
+                CursorPreferences.setMaxSpeed(context, maxSpeed)
+            }
+            CursorMotionRowId.ACCELERATION -> {
+                accelRampMs = (accelRampMs + direction * CursorPreferences.ACCEL_RAMP_INCREMENT_MS)
+                    .coerceIn(CursorPreferences.MIN_ACCEL_RAMP_MS, CursorPreferences.MAX_ACCEL_RAMP_MS)
+                CursorPreferences.setAccelRampMs(context, accelRampMs)
+            }
+            CursorMotionRowId.CURSOR_SIZE -> {
+                cursorSizeDp = (cursorSizeDp + direction * 4).coerceIn(20, 52)
+                CursorPreferences.setCursorSizeDp(context, cursorSizeDp)
+            }
+            CursorMotionRowId.SCROLL_STEP -> {
+                scrollStepPx = (scrollStepPx + direction * CursorPreferences.SCROLL_STEP_INCREMENT_PX)
+                    .coerceIn(CursorPreferences.MIN_SCROLL_STEP_PX, CursorPreferences.MAX_SCROLL_STEP_PX)
+                CursorPreferences.setScrollStepPx(context, scrollStepPx)
+            }
+        }
+    }
+
+    fun stepIndex(direction: Int) {
+        val next = focusedIndex + direction
+        focusedIndex = if (dpadWrapAround) {
+            (next + rows.size) % rows.size
+        } else {
+            next.coerceIn(0, rows.lastIndex)
+        }
+        SoundEffectManager.play(context, SoundEffect.NAV)
+    }
+
+    ScrollToFocusedItem(listState) { 0 }
+
+    requestFocusSafely(focusRequester)
+
+    SettingsScaffold(
+        title = "Cursor Motion",
+        showBack = true,
+        onBack = onBack,
+        isLastItemFocused = { focusedIndex == rows.lastIndex },
+        headerDocomoIndex = 121,
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onBack()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        rows.getOrNull(focusedIndex)?.let { adjustRow(it, 1) }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null && digit in 1..rows.size.coerceAtMost(MAX_JUMP_ROWS)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        val targetIndex = digit - 1
+                        focusedIndex = targetIndex
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        adjustRow(rows[targetIndex], 1)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        stepIndex(if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) -1 else 1)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                        rows.getOrNull(focusedIndex)?.let { adjustRow(it, direction) }
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                false
+            }
+    ) {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            item(contentType = "cursor_physics_card") {
+                SettingsCard(categoryTitle = "Pointer Movement") {
+                    SettingsStepperRow(
+                        title = "Base Speed",
+                        subtitle = "Fine pointer step on each tap",
+                        valueDisplay = "$tapStepPx px",
+                        isFocused = isRowFocused(CursorMotionRowId.BASE_SPEED),
+                        jumpNumber = jumpNumber(CursorMotionRowId.BASE_SPEED),
+                        onDecrement = { adjustRow(CursorMotionRowId.BASE_SPEED, -1) },
+                        onIncrement = { adjustRow(CursorMotionRowId.BASE_SPEED, 1) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Max Speed",
+                        subtitle = "Top pointer glide speed when holding a direction",
+                        valueDisplay = "$maxSpeed px/s",
+                        isFocused = isRowFocused(CursorMotionRowId.MAX_SPEED),
+                        jumpNumber = jumpNumber(CursorMotionRowId.MAX_SPEED),
+                        onDecrement = { adjustRow(CursorMotionRowId.MAX_SPEED, -1) },
+                        onIncrement = { adjustRow(CursorMotionRowId.MAX_SPEED, 1) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Acceleration",
+                        subtitle = "Ramp-up time to top speed (shorter = snappier)",
+                        valueDisplay = String.format(Locale.US, "%.2f s", accelRampMs / 1000f),
+                        isFocused = isRowFocused(CursorMotionRowId.ACCELERATION),
+                        jumpNumber = jumpNumber(CursorMotionRowId.ACCELERATION),
+                        onDecrement = { adjustRow(CursorMotionRowId.ACCELERATION, -1) },
+                        onIncrement = { adjustRow(CursorMotionRowId.ACCELERATION, 1) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Cursor Size",
+                        subtitle = "Size of your on-screen pointer sprite",
+                        valueDisplay = "$cursorSizeDp dp",
+                        isFocused = isRowFocused(CursorMotionRowId.CURSOR_SIZE),
+                        jumpNumber = jumpNumber(CursorMotionRowId.CURSOR_SIZE),
+                        onDecrement = { adjustRow(CursorMotionRowId.CURSOR_SIZE, -1) },
+                        onIncrement = { adjustRow(CursorMotionRowId.CURSOR_SIZE, 1) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsStepperRow(
+                        title = "Scroll Step",
+                        subtitle = "Keys 2 (Up) & 8 (Down) page scroll distance",
+                        valueDisplay = "$scrollStepPx px",
+                        isFocused = isRowFocused(CursorMotionRowId.SCROLL_STEP),
+                        jumpNumber = jumpNumber(CursorMotionRowId.SCROLL_STEP),
+                        onDecrement = { adjustRow(CursorMotionRowId.SCROLL_STEP, -1) },
+                        onIncrement = { adjustRow(CursorMotionRowId.SCROLL_STEP, 1) }
+                    )
+                }
+            }
+        }
     }
 }
 

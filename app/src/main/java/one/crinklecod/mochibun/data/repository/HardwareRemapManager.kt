@@ -55,7 +55,7 @@ object HardwareRemapManager {
     var keyCaptureListener: ((KeyEvent) -> Boolean)? = null
 
     /**
-     * Passive read-only observer for hardware key diagnostics (e.g. in Cursor & Hardware settings).
+     * Passive read-only observer for hardware key diagnostics (e.g. in Virtual Cursor settings).
      * Never consumes events.
      */
     @Volatile

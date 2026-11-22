@@ -41,7 +41,10 @@ import androidx.compose.material3.Text
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -64,6 +67,10 @@ import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+
+/** Maximum number of focusable rows per settings screen so every row maps to keypad keys 1–9. */
+internal const val MAX_JUMP_ROWS = 9
 
 /**
  * True while the scaffold's floating Back pill holds D-pad focus. The screen's own focus index is
@@ -255,6 +262,19 @@ fun SettingsScaffold(
     }
 }
 
+@Composable
+internal fun rememberSettingsFocusIndex(
+    initialFocusedIndex: Int,
+    onFocusedIndexChange: (Int) -> Unit
+): MutableIntState {
+    val state = remember(initialFocusedIndex) { mutableIntStateOf(initialFocusedIndex) }
+    val currentOnChange by rememberUpdatedState(onFocusedIndexChange)
+    DisposableEffect(Unit) {
+        onDispose { currentOnChange(state.intValue) }
+    }
+    return state
+}
+
 /**
  * Scrolls [listState] to the LazyColumn item [targetItem] returns (null = leave it) whenever
  * that target changes.
@@ -285,8 +305,11 @@ internal fun ScrollToFocusedItem(
         snapshotFlow { currentTargetItem() to currentRetriggerKey?.invoke() }.collectLatest { (target, _) ->
             if (target == null) return@collectLatest
             if (onlyIfHidden) {
+                if (listState.layoutInfo.visibleItemsInfo.isEmpty()) {
+                    snapshotFlow { listState.layoutInfo.visibleItemsInfo.isNotEmpty() }.first { it }
+                }
                 val visible = listState.layoutInfo.visibleItemsInfo
-                if (visible.isEmpty() || visible.any { it.index == target }) return@collectLatest
+                if (visible.any { it.index == target }) return@collectLatest
             }
             listState.animateScrollToItem(target)
         }

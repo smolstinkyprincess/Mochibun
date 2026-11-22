@@ -71,7 +71,7 @@ object MochibunSystemActions {
      * Does this key toggle the virtual cursor? Shared by MochibunKeyHook (system_server) and the
      * non-root accessibility key filter so both agree.
      * - The F4 side key (scan 62) always toggles, so the AT-M120 keeps working whatever is chosen.
-     * - [toggleKeyCode] (user's choice in Cursor & Hardware) toggles too, except `*` while
+     * - [toggleKeyCode] (user's choice in Virtual Cursor) toggles too, except `*` while
      *   [inputActive]: there it types into the focused text field instead.
      */
     fun isCursorToggleKey(keyCode: Int, scanCode: Int, toggleKeyCode: Int, inputActive: Boolean): Boolean {
