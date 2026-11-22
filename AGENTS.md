@@ -163,9 +163,10 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
 │   ├── docomo_overlay/            # Generator for 480x800 pixel wallpaper overlays
 │   └── mochibun_bootanim/         # Custom bootanimation.zip generator
 └── app/src/main/
-    ├── assets/xposed_init         # LSPosed entrypoints (MochibunKeyHook, MochibunSystemUiHook)
+    ├── assets/
+    │   ├── t9/en.tsv              # Bundled 30k+ English offline T9 frequency wordlist (SCOWL-filtered)
+    │   └── xposed_init            # LSPosed entrypoints (MochibunKeyHook, MochibunSystemUiHook)
     ├── baseline-prof.txt          # Bundled ART Baseline Profile
-    ├── aidl/com/android/systemui/shared/ # Quickstep IOverviewProxy AIDL contract
     ├── cpp/
     │   ├── evinject/evinject.c    # Native root evdev daemon (libevinject.so) for <1ms touch/key/paste
     │   └── lidled/lidled.c        # Native AW22xxx LED register & deadline-timed frame loop daemon
@@ -187,6 +188,7 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
             │   ├── util/          # BitmapUtils, ContextUtils, CursorPhysics, MochibunSystemActions
             │   └── widget/        # MochibunWidgetHost, WidgetFrame (D-pad widget traversal), WidgetLayoutMath
             ├── data/
+            │   ├── ime/           # T9Keymap, T9DictionaryEngine, UserWordStats, UserWordStore, LearnedWordExtractor
             │   ├── model/         # LauncherModels, FavoriteFolder, FavoriteSlotItem, CardBorderStyle,
             │   │                  # HardwareRemapModels, LidLedAnimation, MascotAtlasValidator,
             │   │                  # MochibunBundleManifest, MochibunNotificationItem, YamlTheme
@@ -205,8 +207,10 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
             │   └── ChargerPlugTracker.kt # Ignores initial sticky power broadcast for treat granting
             ├── service/
             │   ├── InputArbiter.kt        # Coordinates typing vs raw-key layers & IME input-active state
+            │   ├── ImeInputMode.kt        # Pure Kotlin ShiftMode, '*' mode cycling & predictive field gate
+            │   ├── PredictiveInput.kt     # Pure Kotlin T9 digit buffer, one-shot auto-cap & case application
             │   ├── MochibunImeStatus.kt   # Tracks enabled/default IME state
-            │   ├── MochibunImeService.kt  # System-wide Keitai multi-tap IME + floating pill + # Kaomoji Wheel
+            │   ├── MochibunImeService.kt  # System-wide Keitai multi-tap + T9 IME + floating pill + # Kaomoji Wheel
             │   ├── VirtualCursorService.kt # TYPE_APPLICATION_OVERLAY cursor + Choreographer loop
             │   ├── MochibunAccessibilityService.kt # Optional zero-event non-root gesture/key fallback
             │   └── MochibunNotificationListenerService.kt # Feeds NotificationTracker & MediaSessionTracker
@@ -272,10 +276,11 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
   - **`F4` / Cursor Toggle Key:** `F4` (scan code 62) always toggles `VirtualCursorService`. An optional secondary **Cursor Toggle Key** (`F4` / `Menu` / `Search` / `Camera` / `*` in `CursorPreferences.TOGGLE_KEY_OPTIONS`) is mirrored to `Settings.Global` `mochibun_cursor_toggle_keycode` (2 s cache in hook) and matched via `MochibunSystemActions.isCursorToggleKey`. `*` never toggles the cursor while the IME is actively typing (`InputArbiter.updateInputActive` pushes `ACTION_INPUT_ACTIVE_CHANGED` to the hook only when `*` is selected as the toggle key).
 
 ### B. Built-in Keitai IME (`MochibunImeService` & `KeitaiCandidateStrip`)
-- **System-Wide Multi-Tap Keyboard:** Replaces third-party T9 IMEs across all apps (standard editors and `TYPE_NULL` terminals like Termux, coordinated via `InputArbiter`). Includes `ImeSettingsActivity` (`activity-alias` to `MainActivity`) to jump directly into keyboard settings.
+- **System-Wide Multi-Tap & Offline T9 Predictive Keyboard:** Replaces third-party T9 IMEs across all apps (standard editors and `TYPE_NULL` terminals like Termux, coordinated via `InputArbiter`). Includes `ImeSettingsActivity` (`activity-alias` to `MainActivity`) to jump directly into keyboard settings.
+- **Offline T9 Engine (`T9DictionaryEngine`, `T9Keymap`, `PredictiveInput`, `ImeInputMode`, `LearnedWordExtractor`, `UserWordStore`):** Tapping `*` acts on key release (`resolvePendingTap()`) to cycle `abc -> Abc -> ABC -> T9 -> abc` (skipping `T9` in password/PIN/URI/email/number fields or when `pref_ime_predictive_t9_enabled` is off), while holding `*` still types `*` without altering mode. `T9DictionaryEngine` loads `assets/t9/en.tsv` (generated via `tools/gen_t9_dict.py`) or user `.tsv`/`.txt` dictionaries from `getExternalFilesDir(null)/dictionaries` (and `/sdcard/Mochibun/dictionaries` only if `listFiles()` succeeds) asynchronously on `Dispatchers.IO`, keeping `ready = false` (falling back cleanly to multi-tap) until loaded and falling back to `"en"` if a custom file is missing. `UserWordStats` promotes dictionary words committed 2+ times per dictionary (`pref_ime_t9_learned_words`), while `UserWordStore` learns non-dictionary words typed before `#` in eligible fields without `IME_FLAG_NO_PERSONALIZED_LEARNING` (`pref_ime_t9_user_words`, shown once count `>= 2` and promoted above dictionary words at `>= 3`), both capped at 500 entries/dict and guarded by `pref_ime_t9_learned_epoch` across **Clear Learned Words** and `.json` backup restore.
 - **Zero-Resize Full-Height Window:** Uses a transparent, full-height IME input view while reporting full-height content/visible insets so underlying apps never pan or resize. Declares an empty touchable region so screen taps pass straight through to the foreground app; all typing happens via physical keys.
 - **Smart Caret Docking:** Monitors `CursorAnchorInfo`. When a valid caret enters the bottom pill zone, the floating `KeitaiCandidateStrip` docks to the top (regardless of horizontal X) and returns to the bottom with hysteresis (`DOCK_ENTER_MARGIN_DP = 12dp`, `DOCK_EXIT_MARGIN_DP = 28dp`). If the anchor is missing/invalid or top docking would overlap the caret, it stays at the bottom.
-- **Idle Fade & Manual Selection:** Top/bottom docking animates only the pill view (zero per-frame window/inset relayout). After `1,500 ms` without key-down, pill alpha fades to `0.35f` using `graphicsLayer(compositingStrategy = CompositingStrategy.ModulateAlpha)` (avoiding an offscreen layer) and restores on next key-down. Pressing D-pad Left/Right to manually pick a candidate disables the auto-commit timer until committed or cleared.
+- **Idle Fade & Manual Selection:** Top/bottom docking animates only the pill view (zero per-frame window/inset relayout). After `1,500 ms` without key-down, pill alpha fades to `0.35f` using `graphicsLayer(compositingStrategy = CompositingStrategy.ModulateAlpha)` (avoiding an offscreen layer) and restores on next key-down. Pressing D-pad Left/Right to manually pick a candidate disables the auto-commit timer until committed or cleared; active T9 words wait for Space / Center / navigation rather than auto-committing on idle.
 - **Symbol Pools & Global Kaomoji:** `1` cycles conversational punctuation, `0` cycles programming/shell symbols, and holding `#` opens the radial Kaomoji Wheel (`KaomojiWheelCard`) to commit kaomoji directly via `currentInputConnection`.
 - **Clips & Snippets Wheel Mode (`WheelMode`, `ClipboardRingRepository`, `QuickSnippetPrefs`):** `*` / `0` (or tapping the header) flips the `#` wheel to `CLIPBOARD_SNIPPETS`: up to 8 petals = pinned Quick Snippets (`★`, max 6 × 240 chars, `pref_quick_snippets` JSON array, backed up as `quick_snippets`) then recent clips. D-pad steps, Center or `1`–`8` commits the full text (IME) or copies it (launcher dialog, digits act on release). Recent clips are in-memory only (8 × 240 chars, deduped, never backed up), captured by the IME's `OnPrimaryClipChangedListener` (the default IME may read the clipboard in the background) plus `MainActivity` resume/focus sync gated on `ClipDescription.timestamp`; blank and `IS_SENSITIVE` clips are skipped before the content is read. Snippets are edited in *Settings → Typing → Quick Snippets* (`QuickSnippetsDialog`).
 

@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * [candidatesFor] execute synchronously with zero file I/O.
  */
 class T9DictionaryEngine(
-    val userStats: UserWordStats = UserWordStats()
+    val userStats: UserWordStats = UserWordStats(),
+    val userWords: UserWordStore = UserWordStore()
 ) {
     data class Match(
         val word: String,
@@ -52,12 +53,32 @@ class T9DictionaryEngine(
         var freq: Int
     )
 
+    private class UserWordEntry(
+        val digits: String,
+        val word: String,
+        val count: Int
+    )
+
+    private class UserWordIndex(
+        val dictId: String,
+        val version: Int,
+        val byDigits: Map<String, List<UserWordEntry>>,
+        val allEntries: List<UserWordEntry>
+    ) {
+        companion object {
+            val EMPTY = UserWordIndex("", -1, emptyMap(), emptyList())
+        }
+    }
+
     @Volatile
     var ready: Boolean = false
         private set
 
     @Volatile
     private var snapshot: DictionaryData? = null
+
+    @Volatile
+    private var userWordIndex: UserWordIndex = UserWordIndex.EMPTY
 
     private val loadGeneration = AtomicInteger(0)
 
@@ -67,11 +88,20 @@ class T9DictionaryEngine(
     /**
      * Loads [dictId] asynchronously on [Dispatchers.IO]. While loading (or if switching to a new
      * dictionary), [ready] becomes `false` until the new snapshot is published. Unknown or broken
-     * `"file:<name>"` dictionaries fall back to built-in `"en"`.
+     * `"file:<name>"` dictionaries fall back to built-in `"en"`. Calls [onLoaded] with the
+     * resolved dictionary id once published.
      */
-    fun loadAsync(context: Context, dictId: String) {
+    fun loadAsync(
+        context: Context,
+        dictId: String,
+        onLoaded: ((loadedId: String) -> Unit)? = null
+    ) {
         val current = snapshot
-        if (ready && current != null && current.id == dictId) return
+        if (ready && current != null && current.id == dictId) {
+            ensureUserWordIndex(current.id)
+            onLoaded?.invoke(current.id)
+            return
+        }
 
         val appContext = context.applicationContext
         val generation = loadGeneration.incrementAndGet()
@@ -83,7 +113,9 @@ class T9DictionaryEngine(
             if (loadGeneration.get() != generation) return@launch
             if (loaded != null) {
                 snapshot = loaded
+                rebuildUserWordIndex(loaded.id)
                 ready = true
+                onLoaded?.invoke(loaded.id)
             }
         }
     }
@@ -93,45 +125,134 @@ class T9DictionaryEngine(
         val parsed = parseReader(dictId, reader)
         loadGeneration.incrementAndGet()
         snapshot = parsed
+        rebuildUserWordIndex(parsed.id)
         ready = true
     }
 
-    /** Exact digit-sequence matches ordered by learned promotion, static frequency, and tie-break. */
+    /** Replaces both learned stores from preferences and rebuilds the active user-word index. */
+    fun reloadLearnedData(statsJson: String?, userWordsJson: String?) {
+        userStats.loadFromJsonString(statsJson)
+        userWords.loadFromJsonString(userWordsJson)
+        snapshot?.id?.let(::rebuildUserWordIndex) ?: run { userWordIndex = UserWordIndex.EMPTY }
+    }
+
+    /** Records a sighting of a non-dictionary word for the active dictionary and updates the index. */
+    fun recordUserWordSighting(word: String): Int {
+        val dictId = activeDictionaryId
+        val nextCount = userWords.recordSighting(dictId, word)
+        if (nextCount >= UserWordStore.SUGGESTION_THRESHOLD) {
+            rebuildUserWordIndex(dictId)
+        }
+        return nextCount
+    }
+
+    /** True if [word] exists verbatim (lowercase) in the active built-in or custom dictionary. */
+    fun hasDictionaryWord(word: String): Boolean {
+        val data = snapshot
+        if (!ready || data == null) return false
+        val clean = word.lowercase(Locale.ROOT)
+        val sig = T9Keymap.signature(clean) ?: return false
+        val start = lowerBound(data.digits, sig)
+        var i = start
+        while (i < data.digits.size && data.digits[i] == sig) {
+            if (data.words[i] == clean) return true
+            i++
+        }
+        return false
+    }
+
+    /** True if [word] is tracked in [userWords] for the active dictionary. */
+    fun isUserWord(word: String): Boolean =
+        userWords.countFor(activeDictionaryId, word) > 0
+
+    /** Exact matches: user words >= 3 (by count), dictionary order, then user words == 2 (by count). */
     fun exact(seq: String): List<Match> {
         val data = snapshot
         if (!ready || data == null || seq.isEmpty()) return emptyList()
 
-        val start = lowerBound(data.digits, seq)
-        if (start >= data.digits.size || data.digits[start] != seq) return emptyList()
+        val index = ensureUserWordIndex(data.id)
+        val userMatches = index.byDigits[seq].orEmpty()
 
-        val hasLearned = userStats.hasAnyFor(data.id)
-        val matches = ArrayList<Match>(8)
-        var i = start
-        while (i < data.digits.size && data.digits[i] == seq) {
-            val w = data.words[i]
-            val learned = if (hasLearned) userStats.countFor(data.id, w) else 0
-            matches.add(Match(word = w, freq = data.freqs[i], learnedCount = learned))
-            i++
+        val start = lowerBound(data.digits, seq)
+        val hasDict = start < data.digits.size && data.digits[start] == seq
+        if (!hasDict && userMatches.isEmpty()) return emptyList()
+
+        val dictMatches = if (hasDict) {
+            val hasLearned = userStats.hasAnyFor(data.id)
+            val list = ArrayList<Match>(8)
+            var i = start
+            while (i < data.digits.size && data.digits[i] == seq) {
+                val w = data.words[i]
+                val learned = if (hasLearned) userStats.countFor(data.id, w) else 0
+                list.add(Match(word = w, freq = data.freqs[i], learnedCount = learned))
+                i++
+            }
+            if (hasLearned && list.size > 1) {
+                list.sortWith(MATCH_COMPARATOR)
+            }
+            list
+        } else {
+            emptyList()
         }
-        if (hasLearned && matches.size > 1) {
-            matches.sortWith(MATCH_COMPARATOR)
+
+        if (userMatches.isEmpty()) return dictMatches
+
+        val dictWords = if (dictMatches.isNotEmpty()) {
+            HashSet<String>(dictMatches.size).apply {
+                for (i in 0 until dictMatches.size) add(dictMatches[i].word)
+            }
+        } else {
+            emptySet()
         }
-        return matches
+        val topUser = ArrayList<Match>()
+        val midUser = ArrayList<Match>()
+        for (i in 0 until userMatches.size) {
+            val entry = userMatches[i]
+            if (entry.word in dictWords) continue
+            val match = Match(word = entry.word, freq = 0, learnedCount = entry.count)
+            if (entry.count >= UserWordStore.PROMOTED_THRESHOLD) {
+                topUser.add(match)
+            } else {
+                midUser.add(match)
+            }
+        }
+        if (topUser.isEmpty() && midUser.isEmpty()) return dictMatches
+
+        val merged = ArrayList<Match>(topUser.size + dictMatches.size + midUser.size)
+        merged.addAll(topUser)
+        merged.addAll(dictMatches)
+        merged.addAll(midUser)
+        return merged
     }
 
     /**
-     * Prefix completions for [prefix] (strictly longer words only), scanning at most [SCAN_CAP]
-     * entries from the lower bound and returning the top [limit] ranked matches.
+     * Prefix completions for [prefix] (strictly longer words only): promoted user words first
+     * (by count), then dictionary completions up to [limit].
      */
     fun completions(prefix: String, limit: Int): List<Match> {
         val data = snapshot
         if (!ready || data == null || prefix.isEmpty() || limit <= 0) return emptyList()
 
-        val start = lowerBound(data.digits, prefix)
-        if (start >= data.digits.size || !data.digits[start].startsWith(prefix)) return emptyList()
+        val index = ensureUserWordIndex(data.id)
+        val userComps = collectUserCompletions(index, prefix, limit)
+        val out = ArrayList<Match>(limit)
+        out.addAll(userComps)
 
+        val remaining = limit - out.size
+        if (remaining <= 0) return out
+
+        val start = lowerBound(data.digits, prefix)
+        if (start >= data.digits.size || !data.digits[start].startsWith(prefix)) return out
+
+        val seenUserWords = if (userComps.isNotEmpty()) {
+            HashSet<String>(userComps.size).apply {
+                for (i in 0 until userComps.size) add(userComps[i].word)
+            }
+        } else {
+            emptySet()
+        }
         val hasLearned = userStats.hasAnyFor(data.id)
-        val best = ArrayList<Match>(limit + 1)
+        val dictBest = ArrayList<Match>(remaining + 1)
         var i = start
         var scanned = 0
         while (i < data.digits.size && scanned < SCAN_CAP) {
@@ -140,15 +261,69 @@ class T9DictionaryEngine(
             scanned++
             if (d.length > prefix.length) {
                 val w = data.words[i]
-                val freq = data.freqs[i]
-                val learned = if (hasLearned) userStats.countFor(data.id, w) else 0
-                if (best.size < limit || isBetterThan(w, freq, learned, best[best.size - 1])) {
-                    insertSortedBounded(best, Match(w, freq, learned), limit)
+                if (w !in seenUserWords) {
+                    val freq = data.freqs[i]
+                    val learned = if (hasLearned) userStats.countFor(data.id, w) else 0
+                    if (dictBest.size < remaining || isBetterThan(w, freq, learned, dictBest[dictBest.size - 1])) {
+                        insertSortedBounded(dictBest, Match(w, freq, learned), remaining)
+                    }
                 }
             }
             i++
         }
-        return best
+        out.addAll(dictBest)
+        return out
+    }
+
+    private fun ensureUserWordIndex(dictId: String): UserWordIndex {
+        val current = userWordIndex
+        if (current.dictId == dictId && current.version == userWords.version) {
+            return current
+        }
+        return rebuildUserWordIndex(dictId)
+    }
+
+    private fun rebuildUserWordIndex(dictId: String): UserWordIndex {
+        val ver = userWords.version
+        val visible = userWords.visibleWordsFor(dictId)
+        if (visible.isEmpty()) {
+            val empty = UserWordIndex(dictId, ver, emptyMap(), emptyList())
+            userWordIndex = empty
+            return empty
+        }
+        val byDigits = HashMap<String, MutableList<UserWordEntry>>(visible.size)
+        val all = ArrayList<UserWordEntry>(visible.size)
+        for ((word, count) in visible) {
+            val sig = T9Keymap.signature(word) ?: continue
+            val entry = UserWordEntry(digits = sig, word = word, count = count)
+            byDigits.getOrPut(sig) { ArrayList(2) }.add(entry)
+            all.add(entry)
+        }
+        val order = compareByDescending<UserWordEntry> { it.count }.thenBy { it.word }
+        for (bucket in byDigits.values) {
+            if (bucket.size > 1) bucket.sortWith(order)
+        }
+        all.sortWith(order)
+        val built = UserWordIndex(dictId, ver, byDigits, all)
+        userWordIndex = built
+        return built
+    }
+
+    private fun collectUserCompletions(
+        index: UserWordIndex,
+        prefix: String,
+        limit: Int
+    ): List<Match> {
+        if (index.allEntries.isEmpty() || limit <= 0) return emptyList()
+        val matches = ArrayList<Match>(minOf(limit, 8))
+        for (i in 0 until index.allEntries.size) {
+            val entry = index.allEntries[i]
+            if (entry.digits.length > prefix.length && entry.digits.startsWith(prefix)) {
+                matches.add(Match(word = entry.word, freq = 0, learnedCount = entry.count))
+                if (matches.size == limit) break
+            }
+        }
+        return matches
     }
 
     /**
@@ -510,6 +685,21 @@ class UserWordStats {
 
     fun snapshotFor(dictId: String): Map<String, Int> = synchronized(lock) {
         byDict[dictId]?.toMap() ?: emptyMap()
+    }
+
+    fun totalEntryCount(): Int = synchronized(lock) {
+        var total = 0
+        for (map in byDict.values) {
+            total += map.size
+        }
+        total
+    }
+
+    fun clearAll() {
+        synchronized(lock) {
+            byDict.clear()
+            dirty = false
+        }
     }
 
     fun loadFromJsonString(json: String?) {

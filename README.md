@@ -98,26 +98,27 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ## 🔤 Mochibun Keitai Keyboard
 
-Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai, in any app on the phone:
+Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai—with **offline T9 predictive text** or classic multi-tap—in any app on the phone:
 
 | Key | Tap | Hold |
 | :--- | :--- | :--- |
-| **`2`–`9`** | Cycle through the key's letters | Type the digit |
-| **`*`** | Shift: `abc` → `Abc` → `ABC` | — |
-| **`#`** | Space | **Kaomoji Wheel 🌸** |
-| **Left / Right** | Pick a different letter in the candidate strip | — |
-| **Center** | Commit the current letter (or send / go when nothing is pending) | — |
-| **Up / Down** | Commit the letter and move on | — |
-| **Back / Delete** | Cancel the pending letter, or delete | — |
+| **`2`–`9`** | Cycle letters (multi-tap) or type predicted word (`T9` mode) | Type the digit |
+| **`*`** | Cycle mode: `abc` → `Abc` → `ABC` → `T9` → `abc` | Type literal `*` |
+| **`#`** | Commit word & insert Space | **Kaomoji Wheel 🌸** |
+| **Left / Right** | Pick another candidate / word in the strip | Fast-scroll candidates |
+| **Center** | Commit the current letter/word (or send / go when nothing is pending) | — |
+| **Up / Down** | Commit the letter/word and move on | — |
+| **Back / Delete** | Undo T9 digit / cancel candidate, or delete | Repeat backspace |
 
-- The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` badge.
+- The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` / `T9` badge.
+- **Offline T9 prediction & learned words:** Press `*` to switch into `T9` mode using the bundled 30k+ English dictionary (contractions included). Words you commit twice automatically rank higher for you, stored strictly offline on your device. Want another language or custom wordlist? Drop any `.tsv` or `.txt` wordlist into `Android/data/one.crinklecod.mochibun/files/dictionaries` and switch under **Settings > Keyboard > T9 Dictionary**.
 - **It dodges your text box.** If the box you're typing in is down at the bottom of the screen (hi, Discord), the pill hops to the top so you can see your words, then hops back down when the coast is clear. Some apps don't tell Android where the cursor is, and in those the pill just stays at the bottom.
 - **It fades when you pause.** After a moment with no key presses the pill turns soft and see-through, then comes back to full strength on your next press.
-- A pending letter commits on its own after a short pause (**Auto-Commit Delay**: 0.7 s by default, adjustable from 0.3 to 1.5 s), so you can just keep typing.
-- Sentences auto-capitalize.
+- A pending multi-tap letter commits on its own after a short pause (**Auto-Commit Delay**: 0.7 s by default, adjustable from 0.3 to 1.5 s), while T9 words wait for Space / Center / navigation so you have time to pick the right word.
+- Sentences auto-capitalize in both multi-tap and T9.
 - Number, phone, and date fields get plain digits, so dialing works the way you'd expect.
 - Works in terminals like **Termux** too. Delete and Enter go straight to the terminal as plain keys.
-- Tune the **hold delay** (250–800 ms), **letter auto-commit** timer, and **hold vibration** under **Settings > Keyboard**. Both are saved in your backups.
+- Tune **Predictive Text (T9)**, **T9 Dictionary**, **Learn New Words** / **Clear Learned Words** (new words you type appear in T9 after typing them twice), **hold delay** (250–800 ms), **letter auto-commit**, and **hold vibration** under **Settings > Keyboard**. All of them (plus your learned words) are saved in your `.json` backups.
 
 **Setup**: Open **Settings > Keyboard** and follow the steps there, or go to *Settings > System > Languages & input > On-screen keyboard* and enable **Mochibun Keitai IME**.
 

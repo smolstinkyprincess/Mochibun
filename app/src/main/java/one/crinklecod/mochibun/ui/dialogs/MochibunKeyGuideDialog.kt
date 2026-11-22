@@ -136,7 +136,7 @@ internal enum class KeyGuideKey(
         displayName = "RSK (◁)",
         launcherTap = "Jump right to Notifications · Cycle Sort in Drawer",
         launcherHold = "Return Home from side pages",
-        typingTap = "Cancel pending letter · Back",
+        typingTap = "Cancel T9 / pending letter · Back",
         typingHold = "Standard Back navigation"
     ),
     CONTACTS(
@@ -192,7 +192,7 @@ internal enum class KeyGuideKey(
         displayName = "DEL / Clear",
         launcherTap = "Delete / Back in search & dialogs",
         launcherHold = "Clear input",
-        typingTap = "Cancel T9 candidate or delete character",
+        typingTap = "Remove T9 digit / cancel or delete character",
         typingHold = "Repeat backspace"
     ),
     END(
@@ -220,63 +220,63 @@ internal enum class KeyGuideKey(
         displayName = "2 · ABC",
         launcherTap = "T9 App Search (A B C) in Drawer",
         launcherHold = "Speed Dial #2 · Cursor scroll up",
-        typingTap = "Multi-tap letters (a b c · 2)",
+        typingTap = "T9 predictive or multi-tap (a b c)",
         typingHold = "Type digit 2"
     ),
     KEY_3(
         displayName = "3 · DEF",
         launcherTap = "T9 App Search (D E F) in Drawer",
         launcherHold = "Speed Dial #3",
-        typingTap = "Multi-tap letters (d e f · 3)",
+        typingTap = "T9 predictive or multi-tap (d e f)",
         typingHold = "Type digit 3"
     ),
     KEY_4(
         displayName = "4 · GHI",
         launcherTap = "T9 App Search (G H I) in Drawer",
         launcherHold = "Speed Dial #4",
-        typingTap = "Multi-tap letters (g h i · 4)",
+        typingTap = "T9 predictive or multi-tap (g h i)",
         typingHold = "Type digit 4"
     ),
     KEY_5(
         displayName = "5 · JKL",
         launcherTap = "T9 App Search (J K L) in Drawer",
         launcherHold = "Speed Dial #5",
-        typingTap = "Multi-tap letters (j k l · 5)",
+        typingTap = "T9 predictive or multi-tap (j k l)",
         typingHold = "Type digit 5"
     ),
     KEY_6(
         displayName = "6 · MNO",
         launcherTap = "T9 App Search (M N O) in Drawer",
         launcherHold = "Speed Dial #6",
-        typingTap = "Multi-tap letters (m n o · 6)",
+        typingTap = "T9 predictive or multi-tap (m n o)",
         typingHold = "Type digit 6"
     ),
     KEY_7(
         displayName = "7 · PQRS",
         launcherTap = "T9 App Search (P Q R S) in Drawer",
         launcherHold = "Speed Dial #7",
-        typingTap = "Multi-tap letters (p q r s · 7)",
+        typingTap = "T9 predictive or multi-tap (p q r s)",
         typingHold = "Type digit 7"
     ),
     KEY_8(
         displayName = "8 · TUV",
         launcherTap = "T9 App Search (T U V) in Drawer",
         launcherHold = "Speed Dial #8 · Cursor scroll down",
-        typingTap = "Multi-tap letters (t u v · 8)",
+        typingTap = "T9 predictive or multi-tap (t u v)",
         typingHold = "Type digit 8"
     ),
     KEY_9(
         displayName = "9 · WXYZ",
         launcherTap = "T9 App Search (W X Y Z) in Drawer",
         launcherHold = "Speed Dial #9",
-        typingTap = "Multi-tap letters (w x y z · 9)",
+        typingTap = "T9 predictive or multi-tap (w x y z)",
         typingHold = "Type digit 9"
     ),
     KEY_STAR(
         displayName = "* · shift",
         launcherTap = "Context actions · Dismiss notification",
         launcherHold = "Toggle Manner Mode (Normal / Vibrate)",
-        typingTap = "Cycle letter case (abc / Abc / ABC)",
+        typingTap = "Cycle mode (abc / Abc / ABC / T9)",
         typingHold = "Type literal *"
     ),
     KEY_0(
@@ -290,7 +290,7 @@ internal enum class KeyGuideKey(
         displayName = "# · wheel",
         launcherTap = "Open Launcher Menu",
         launcherHold = "Open Quick Memo",
-        typingTap = "Insert Space",
+        typingTap = "Commit word & insert Space",
         typingHold = "Open Kaomoji Wheel (* / 0 = Clips)"
     );
 

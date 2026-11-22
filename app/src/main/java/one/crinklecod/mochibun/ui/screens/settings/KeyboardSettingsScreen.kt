@@ -22,6 +22,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.core.system.RootShell
+import one.crinklecod.mochibun.data.ime.T9DictionaryEngine
+import one.crinklecod.mochibun.data.ime.UserWordStats
+import one.crinklecod.mochibun.data.ime.UserWordStore
 import one.crinklecod.mochibun.data.model.AppInfo
 import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
@@ -77,8 +80,8 @@ internal fun activateMochibunKeyboard(
 }
 
 /**
- * Keyboard (MochibunImeService) settings: default-keyboard setup, hold-for-digit delay and a key
- * guide.
+ * Keyboard (MochibunImeService) settings: default-keyboard setup, hold-for-digit delay, T9
+ * prediction and dictionary selection, and a key guide.
  */
 @Composable
 internal fun KeyboardSettingsScreen(
@@ -103,9 +106,40 @@ internal fun KeyboardSettingsScreen(
     var autoCommit by remember { mutableStateOf(PreferencesManager.isImeAutoCommitEnabled(context)) }
     var autoCommitMs by remember { mutableIntStateOf(PreferencesManager.getImeIdleCommitMs(context)) }
     var holdVibration by remember { mutableStateOf(PreferencesManager.isImeHoldVibrationEnabled(context)) }
+    var predictiveT9 by remember { mutableStateOf(PreferencesManager.isImePredictiveT9Enabled(context)) }
+    var learnNewWords by remember { mutableStateOf(PreferencesManager.isImeT9LearnNewWordsEnabled(context)) }
+    var learnedCount by remember { mutableIntStateOf(0) }
+    var learnedRefreshTick by remember { mutableIntStateOf(0) }
+    var clearArmed by remember { mutableStateOf(false) }
+    var dictionaryLang by remember { mutableStateOf(PreferencesManager.getImeT9DictionaryLang(context)) }
+    var dictionaries by remember {
+        mutableStateOf(
+            listOf(
+                T9DictionaryEngine.DictionaryDescriptor(
+                    id = T9DictionaryEngine.BUILT_IN_EN_ID,
+                    displayName = T9DictionaryEngine.BUILT_IN_EN_DISPLAY_NAME
+                )
+            )
+        )
+    }
     var showKeyGuide by remember { mutableStateOf(false) }
     var showSnippets by remember { mutableStateOf(false) }
     val snippets by PreferencesManager.quickSnippets.collectAsState()
+
+    LaunchedEffect(learnedRefreshTick) {
+        learnedCount = withContext(Dispatchers.IO) { countLearnedWordsForSettings(context) }
+    }
+
+    fun cycleDictionary(direction: Int): Boolean {
+        if (dictionaries.size <= 1) return false
+        val currentIdx = dictionaries.indexOfFirst { it.id == dictionaryLang }.coerceAtLeast(0)
+        val nextIdx = (currentIdx + direction + dictionaries.size) % dictionaries.size
+        val next = dictionaries[nextIdx]
+        if (next.id == dictionaryLang) return false
+        dictionaryLang = next.id
+        PreferencesManager.setImeT9DictionaryLang(context, next.id)
+        return true
+    }
 
     fun toggleSetting(index: Int) {
         when (index) {
@@ -121,12 +155,21 @@ internal fun KeyboardSettingsScreen(
                 holdVibration = !holdVibration
                 PreferencesManager.setImeHoldVibrationEnabled(context, holdVibration)
             }
-            6 -> showKeyGuide = true
-            7 -> showSnippets = true
+            6 -> {
+                predictiveT9 = !predictiveT9
+                PreferencesManager.setImePredictiveT9Enabled(context, predictiveT9)
+            }
+            7 -> cycleDictionary(1)
+            8 -> showKeyGuide = true
+            9 -> showSnippets = true
+            10 -> {
+                learnNewWords = !learnNewWords
+                PreferencesManager.setImeT9LearnNewWordsEnabled(context, learnNewWords)
+            }
         }
     }
 
-    // T9 Auto-Commit Delay stepper; inert while Letter Auto-commit is off. Returns true if it moved.
+    // Multi-tap Auto-Commit Delay stepper; inert while Auto-Commit Letters is off. Returns true if moved.
     fun stepAutoCommitMs(direction: Int, wrap: Boolean = false): Boolean {
         if (!autoCommit) return false
         val next = if (wrap && direction > 0 && autoCommitMs >= PreferencesManager.MAX_IME_IDLE_COMMIT_MS) {
@@ -140,10 +183,20 @@ internal fun KeyboardSettingsScreen(
         return true
     }
 
-    // Runs on every resume / window-focus regain (incl. twice on open): keep the IPC off the UI thread.
+    // Runs on every resume / window-focus regain (incl. twice on open): keep IPC and disk scan off UI thread.
     fun refresh() {
+        clearArmed = false
+        learnedRefreshTick++
         scope.launch {
-            imeState = withContext(Dispatchers.IO) { MochibunImeStatus.state(context) }
+            val (nextImeState, nextDicts) = withContext(Dispatchers.IO) {
+                MochibunImeStatus.state(context) to T9DictionaryEngine.availableDictionaries(context)
+            }
+            imeState = nextImeState
+            dictionaries = nextDicts
+            if (nextDicts.none { it.id == dictionaryLang }) {
+                dictionaryLang = T9DictionaryEngine.BUILT_IN_EN_ID
+                PreferencesManager.setImeT9DictionaryLang(context, dictionaryLang)
+            }
         }
     }
 
@@ -164,22 +217,35 @@ internal fun KeyboardSettingsScreen(
     }
 
     // 0-1 keyboard setup, 2 hold for digit, 3 auto-commit, 4 auto-commit delay, 5 haptic,
-    // 6 key guide, 7 quick snippets
-    val totalItems = 8
+    // 6 predictive T9, 7 T9 dictionary, 8 key guide, 9 quick snippets, 10 learn new words,
+    // 11 clear learned words
+    val totalItems = 12
 
     ScrollToFocusedItem(listState) {
         when {
             focusedIndex <= 1 -> 0
-            focusedIndex <= 6 -> 1
-            else -> 2
+            focusedIndex <= 8 -> 1
+            focusedIndex == 9 -> 2
+            else -> 3
         }
     }
 
     fun activate(index: Int) {
+        if (index != 11) clearArmed = false
         when (index) {
             0 -> activateMochibunKeyboard(context, scope, imeState, ::refresh)
             1 -> MochibunImeStatus.showPicker(context)
             4 -> stepAutoCommitMs(1, wrap = true)
+            11 -> {
+                if (!clearArmed) {
+                    clearArmed = true
+                } else {
+                    clearAllLearnedWords(context)
+                    clearArmed = false
+                    learnedCount = 0
+                    learnedRefreshTick++
+                }
+            }
             else -> toggleSetting(index)
         }
     }
@@ -199,6 +265,7 @@ internal fun KeyboardSettingsScreen(
                 val native = event.nativeKeyEvent
                 if (native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
                     if (event.type == KeyEventType.KeyUp) {
+                        clearArmed = false
                         SoundEffectManager.play(context, SoundEffect.BACK)
                         onBack()
                     }
@@ -218,6 +285,7 @@ internal fun KeyboardSettingsScreen(
                 val digit = getDigitFromKeyCode(native.keyCode)
                 if (digit != null && digit in 1..totalItems) {
                     if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        clearArmed = false
                         focusedIndex = digit - 1
                         SoundEffectManager.play(context, SoundEffect.SELECT)
                         activate(focusedIndex)
@@ -226,6 +294,7 @@ internal fun KeyboardSettingsScreen(
                 }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP || native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                     if (event.type == KeyEventType.KeyDown) {
+                        clearArmed = false
                         focusedIndex = if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                             if (focusedIndex > 0) focusedIndex - 1 else totalItems - 1
                         } else {
@@ -237,9 +306,10 @@ internal fun KeyboardSettingsScreen(
                 }
                 if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     if (event.type == KeyEventType.KeyDown) {
+                        clearArmed = false
                         val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
                         when (focusedIndex) {
-                            2, 3, 5 -> {
+                            2, 3, 5, 6, 10 -> {
                                 toggleSetting(focusedIndex)
                                 SoundEffectManager.play(context, SoundEffect.NAV)
                             }
@@ -247,6 +317,11 @@ internal fun KeyboardSettingsScreen(
                                 context,
                                 if (stepAutoCommitMs(direction)) SoundEffect.NAV else SoundEffect.BOUNDARY
                             )
+                            7 -> SoundEffectManager.play(
+                                context,
+                                if (cycleDictionary(direction)) SoundEffect.NAV else SoundEffect.BOUNDARY
+                            )
+                            11 -> Unit
                             else -> focusedIndex = (focusedIndex + direction + totalItems) % totalItems
                         }
                     }
@@ -255,6 +330,15 @@ internal fun KeyboardSettingsScreen(
                 false
             }
     ) {
+        val activeDictIndex = dictionaries.indexOfFirst { it.id == dictionaryLang }.coerceAtLeast(0)
+        val activeDictName = dictionaries.getOrNull(activeDictIndex)?.displayName
+            ?: T9DictionaryEngine.BUILT_IN_EN_DISPLAY_NAME
+        val dictSubtitle = if (dictionaries.size <= 1) {
+            "$activeDictName • add .tsv/.txt to Android/data/one.crinklecod.mochibun/files/dictionaries"
+        } else {
+            "$activeDictName (${activeDictIndex + 1}/${dictionaries.size}) • ◀/▶ to switch"
+        }
+
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
@@ -335,12 +419,33 @@ internal fun KeyboardSettingsScreen(
                         }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    SettingsToggleRow(
+                        title = "Predictive Text (T9)",
+                        subtitle = "Cycle into offline T9 word prediction with *",
+                        checked = predictiveT9,
+                        isFocused = focusedIndex == 6,
+                        jumpNumber = 7,
+                        onCheckedChange = {
+                            predictiveT9 = it
+                            PreferencesManager.setImePredictiveT9Enabled(context, it)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "T9 Dictionary",
+                        subtitle = dictSubtitle,
+                        docomoIndex = 108,
+                        isFocused = focusedIndex == 7,
+                        jumpNumber = 8,
+                        onClick = { activate(7) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
                         title = "Key Guide",
                         subtitle = "Cheatsheet for physical keypad & button shortcuts",
                         icon = "ⓘ",
-                        isFocused = focusedIndex == 6,
-                        jumpNumber = 7,
+                        isFocused = focusedIndex == 8,
+                        jumpNumber = 9,
                         onClick = { showKeyGuide = true }
                     )
                 }
@@ -352,11 +457,30 @@ internal fun KeyboardSettingsScreen(
                         title = "Quick Snippets",
                         subtitle = "${snippets.size}/${PreferencesManager.QUICK_SNIPPET_MAX_COUNT} pinned • hold #, then ✱ or 0",
                         icon = "★",
-                        isFocused = focusedIndex == 7,
-                        jumpNumber = 8,
-                        onClick = { showSnippets = true }
+                        isFocused = focusedIndex == 9,
+                        jumpNumber = null,
+                        onClick = {
+                            clearArmed = false
+                            showSnippets = true
+                        }
                     )
                 }
+            }
+
+            item(contentType = "keyboard_learned_card") {
+                LearnedWordsSettingsCard(
+                    learnNewWords = learnNewWords,
+                    learnedCount = learnedCount,
+                    clearArmed = clearArmed,
+                    isLearnFocused = focusedIndex == 10,
+                    isClearFocused = focusedIndex == 11,
+                    onLearnCheckedChange = { enabled ->
+                        clearArmed = false
+                        learnNewWords = enabled
+                        PreferencesManager.setImeT9LearnNewWordsEnabled(context, enabled)
+                    },
+                    onClearClick = { activate(11) }
+                )
             }
         }
     }
@@ -374,6 +498,61 @@ internal fun KeyboardSettingsScreen(
             installedApps = appOptions,
             onNestedBackHandlerChanged = onNestedBackHandlerChanged,
             onDismiss = { showKeyGuide = false }
+        )
+    }
+}
+
+private fun countLearnedWordsForSettings(context: android.content.Context): Int {
+    val stats = UserWordStats().apply {
+        loadFromJsonString(PreferencesManager.getImeT9LearnedWordsJson(context))
+    }
+    val userWords = UserWordStore().apply {
+        loadFromJsonString(PreferencesManager.getImeT9UserWordsJson(context))
+    }
+    return stats.totalEntryCount() + userWords.visibleWordCount()
+}
+
+private fun clearAllLearnedWords(context: android.content.Context) {
+    PreferencesManager.setImeT9LearnedWordsJson(context, PreferencesManager.DEFAULT_IME_T9_LEARNED_WORDS)
+    PreferencesManager.setImeT9UserWordsJson(context, PreferencesManager.DEFAULT_IME_T9_USER_WORDS)
+    PreferencesManager.bumpImeT9LearnedEpoch(context)
+    Toast.makeText(context, "Learned words cleared ♡", Toast.LENGTH_SHORT).show()
+}
+
+internal fun learnedWordsClearSubtitle(count: Int, armed: Boolean): String = when {
+    armed -> "Press again to clear"
+    count <= 0 -> "Nothing learned yet"
+    count == 1 -> "1 learned word"
+    else -> "$count learned words"
+}
+
+@Composable
+private fun LearnedWordsSettingsCard(
+    learnNewWords: Boolean,
+    learnedCount: Int,
+    clearArmed: Boolean,
+    isLearnFocused: Boolean,
+    isClearFocused: Boolean,
+    onLearnCheckedChange: (Boolean) -> Unit,
+    onClearClick: () -> Unit
+) {
+    SettingsCard(categoryTitle = "Learned Words") {
+        SettingsToggleRow(
+            title = "Learn New Words",
+            subtitle = "Remember words you type so T9 can suggest them",
+            checked = learnNewWords,
+            isFocused = isLearnFocused,
+            jumpNumber = null,
+            onCheckedChange = onLearnCheckedChange
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        SettingsNavigationRow(
+            title = "Clear Learned Words",
+            subtitle = learnedWordsClearSubtitle(learnedCount, clearArmed),
+            docomoIndex = 17,
+            isFocused = isClearFocused,
+            jumpNumber = null,
+            onClick = onClearClick
         )
     }
 }

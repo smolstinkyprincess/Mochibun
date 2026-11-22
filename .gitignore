@@ -147,3 +147,4 @@ mtksystemui/MtkSystemUI.apk
 .idea/
 tools/sound_gen/
 tools/input/
+tools/__pycache__/

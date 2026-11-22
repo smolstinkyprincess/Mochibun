@@ -12,6 +12,11 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_HOLD_FO
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_HOLD_VIBRATION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_IDLE_COMMIT_MS
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_PREDICTIVE_T9_ENABLED
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_T9_DICTIONARY_LANG
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_T9_LEARNED_EPOCH
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_T9_LEARNED_WORDS
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_T9_LEARN_NEW_WORDS
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_T9_USER_WORDS
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_LID_OPEN_ACTION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_SOFT_KEY_NAV_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.GLOBAL_SOFT_KEY_NAV_ENABLED
@@ -23,6 +28,11 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_HOLD_FOR_DI
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_HOLD_VIBRATION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_IDLE_COMMIT_MS
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_PREDICTIVE_T9_ENABLED
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_T9_DICTIONARY_LANG
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_T9_LEARNED_EPOCH
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_T9_LEARNED_WORDS
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_T9_LEARN_NEW_WORDS
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_T9_USER_WORDS
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_LAST_LAUNCHED_PACKAGE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_LID_OPEN_ACTION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_SOFT_KEY_NAV_ENABLED
@@ -259,6 +269,49 @@ internal object HardwareInputPrefs {
 
     fun setImePredictiveT9Enabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_IME_PREDICTIVE_T9_ENABLED, enabled).apply()
+    }
+
+    fun getImeT9DictionaryLang(context: Context): String =
+        getPrefs(context).getString(KEY_IME_T9_DICTIONARY_LANG, DEFAULT_IME_T9_DICTIONARY_LANG)
+            ?.takeIf { it.isNotBlank() }
+            ?: DEFAULT_IME_T9_DICTIONARY_LANG
+
+    fun setImeT9DictionaryLang(context: Context, lang: String) {
+        val clean = lang.takeIf { it.isNotBlank() } ?: DEFAULT_IME_T9_DICTIONARY_LANG
+        getPrefs(context).edit().putString(KEY_IME_T9_DICTIONARY_LANG, clean).apply()
+    }
+
+    fun getImeT9LearnedWordsJson(context: Context): String =
+        getPrefs(context).getString(KEY_IME_T9_LEARNED_WORDS, DEFAULT_IME_T9_LEARNED_WORDS)
+            ?: DEFAULT_IME_T9_LEARNED_WORDS
+
+    fun setImeT9LearnedWordsJson(context: Context, json: String) {
+        getPrefs(context).edit().putString(KEY_IME_T9_LEARNED_WORDS, json).apply()
+    }
+
+    fun isImeT9LearnNewWordsEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_IME_T9_LEARN_NEW_WORDS, DEFAULT_IME_T9_LEARN_NEW_WORDS)
+
+    fun setImeT9LearnNewWordsEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_IME_T9_LEARN_NEW_WORDS, enabled).apply()
+    }
+
+    fun getImeT9UserWordsJson(context: Context): String =
+        getPrefs(context).getString(KEY_IME_T9_USER_WORDS, DEFAULT_IME_T9_USER_WORDS)
+            ?: DEFAULT_IME_T9_USER_WORDS
+
+    fun setImeT9UserWordsJson(context: Context, json: String) {
+        getPrefs(context).edit().putString(KEY_IME_T9_USER_WORDS, json).apply()
+    }
+
+    fun getImeT9LearnedEpoch(context: Context): Int =
+        getPrefs(context).getInt(KEY_IME_T9_LEARNED_EPOCH, DEFAULT_IME_T9_LEARNED_EPOCH)
+
+    fun bumpImeT9LearnedEpoch(context: Context): Int {
+        val prefs = getPrefs(context)
+        val next = prefs.getInt(KEY_IME_T9_LEARNED_EPOCH, DEFAULT_IME_T9_LEARNED_EPOCH) + 1
+        prefs.edit().putInt(KEY_IME_T9_LEARNED_EPOCH, next).apply()
+        return next
     }
 
     fun isSoftKeyNavEnabled(context: Context): Boolean =

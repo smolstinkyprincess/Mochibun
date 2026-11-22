@@ -57,8 +57,11 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import one.crinklecod.mochibun.core.haptic.HapticManager
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.data.ime.LearnedEpochAction
+import one.crinklecod.mochibun.data.ime.LearnedWordExtractor
 import one.crinklecod.mochibun.data.ime.T9DictionaryEngine
 import one.crinklecod.mochibun.data.ime.T9Keymap
+import one.crinklecod.mochibun.data.ime.decideLearnedEpochAction
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.ClipboardRingRepository
 import one.crinklecod.mochibun.data.repository.LocalCardBorderState
@@ -120,7 +123,13 @@ class MochibunImeService : InputMethodService() {
     private var shiftMode by mutableStateOf(ShiftMode.LOWER)
     private var predictiveInUse by mutableStateOf(false)
     private var predictiveEnabled = PreferencesManager.DEFAULT_IME_PREDICTIVE_T9_ENABLED
+    private var learnNewWordsEnabled = PreferencesManager.DEFAULT_IME_T9_LEARN_NEW_WORDS
     private var predictiveAllowedForField by mutableStateOf(false)
+    private var engineReadyState by mutableStateOf(false)
+    private var requestedDictId = PreferencesManager.DEFAULT_IME_T9_DICTIONARY_LANG
+    private var loadedLearnedEpoch = PreferencesManager.DEFAULT_IME_T9_LEARNED_EPOCH
+    private var lastLoadedOrFlushedLearnedJson = PreferencesManager.DEFAULT_IME_T9_LEARNED_WORDS
+    private var lastLoadedOrFlushedUserWordsJson = PreferencesManager.DEFAULT_IME_T9_USER_WORDS
     private var autoCapNext by mutableStateOf(false)
     private var autoCapSuppressed by mutableStateOf(false)
     private var isNumericField by mutableStateOf(false)
@@ -172,9 +181,15 @@ class MochibunImeService : InputMethodService() {
     // A TYPE_NULL editor (terminal) that asked for the keyboard: it gets multi-tap like any field
     private var nullEditorEngaged = false
 
-    // Idle timeout: keeps the typed letter and clears the strip
+    // Idle timeout: keeps the typed letter and clears the strip (never runs for T9 words)
     private val idleCommitRunnable = Runnable {
-        if (manualSelection || holdKeyCode != KeyEvent.KEYCODE_UNKNOWN || !candidateState.isActive) return@Runnable
+        if (manualSelection ||
+            holdKeyCode != KeyEvent.KEYCODE_UNKNOWN ||
+            !candidateState.isActive ||
+            !predictiveInput.isEmpty
+        ) {
+            return@Runnable
+        }
         batchEdit {
             candidateState.commitActive(commit)
             syncComposing()
@@ -199,14 +214,15 @@ class MochibunImeService : InputMethodService() {
         owner.create()
         refreshTheme()
         PreferencesManager.getPrefs(this).registerOnSharedPreferenceChangeListener(themePrefListener)
-        // TODO(Step 4): load UserWordStats JSON and active dictionary id from PreferencesManager
-        dictionaryEngine.loadAsync(this, T9DictionaryEngine.BUILT_IN_EN_ID)
+        reloadLearnedDataFromPrefs()
+        loadDictionaryAsync(PreferencesManager.getImeT9DictionaryLang(this))
         // As the default keyboard we may read the clipboard in the background (Android 10+),
         // so this is where copies from other apps reach the Clips & Snippets wheel.
         ClipboardRingRepository.register(this)
     }
 
     override fun onDestroy() {
+        flushLearnedWordsIfDirty()
         cancelHold()
         manualSelection = false
         handler.removeCallbacks(pillIdleFadeRunnable)
@@ -420,6 +436,28 @@ class MochibunImeService : InputMethodService() {
         autoCommitEnabled = PreferencesManager.isImeAutoCommitEnabled(this)
         idleCommitMs = PreferencesManager.getImeIdleCommitMs(this).toLong()
         predictiveEnabled = PreferencesManager.isImePredictiveT9Enabled(this)
+        learnNewWordsEnabled = PreferencesManager.isImeT9LearnNewWordsEnabled(this)
+        val prefEpoch = PreferencesManager.getImeT9LearnedEpoch(this)
+        if (decideLearnedEpochAction(loadedLearnedEpoch, prefEpoch) == LearnedEpochAction.RELOAD_FROM_PREFS) {
+            reloadLearnedDataFromPrefs()
+        } else if (!dictionaryEngine.userStats.dirty && !dictionaryEngine.userWords.dirty) {
+            val savedLearnedJson = PreferencesManager.getImeT9LearnedWordsJson(this)
+            val savedUserWordsJson = PreferencesManager.getImeT9UserWordsJson(this)
+            if (savedLearnedJson != lastLoadedOrFlushedLearnedJson ||
+                savedUserWordsJson != lastLoadedOrFlushedUserWordsJson
+            ) {
+                dictionaryEngine.reloadLearnedData(savedLearnedJson, savedUserWordsJson)
+                lastLoadedOrFlushedLearnedJson = savedLearnedJson
+                lastLoadedOrFlushedUserWordsJson = savedUserWordsJson
+            }
+        }
+        val desiredDictId = PreferencesManager.getImeT9DictionaryLang(this)
+        if (desiredDictId != requestedDictId || (!dictionaryEngine.ready && engineReadyState)) {
+            flushLearnedWordsIfDirty()
+            loadDictionaryAsync(desiredDictId)
+        } else {
+            engineReadyState = dictionaryEngine.ready
+        }
         isNumericField = when ((info?.inputType ?: 0) and InputType.TYPE_MASK_CLASS) {
             InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> true
             else -> false
@@ -451,7 +489,7 @@ class MochibunImeService : InputMethodService() {
         manualSelection = false
         resolvePendingTap(applyTap = false)
         commitPending()
-        // TODO(Step 4): flush dictionaryEngine.userStats when dirty
+        flushLearnedWordsIfDirty()
         InputArbiter.updateInputActive(this, false)
         owner.pause()
         super.onFinishInputView(finishingInput)
@@ -572,6 +610,7 @@ class MochibunImeService : InputMethodService() {
                     batchEdit {
                         manualSelection = false
                         commitPending()
+                        maybeLearnWordBeforeCursor()
                         commit(" ")
                         syncComposing()
                     }
@@ -883,14 +922,75 @@ class MochibunImeService : InputMethodService() {
         nullEditorEngaged = isNullEditor() || nullEditorEngaged
     )
 
+    private fun loadDictionaryAsync(dictId: String) {
+        requestedDictId = dictId
+        engineReadyState = dictionaryEngine.ready && dictionaryEngine.activeDictionaryId == dictId
+        dictionaryEngine.loadAsync(this, dictId) { loadedId ->
+            handler.post {
+                if (requestedDictId != dictId) return@post
+                engineReadyState = dictionaryEngine.ready
+                if (loadedId != dictId && dictId != T9DictionaryEngine.BUILT_IN_EN_ID) {
+                    requestedDictId = loadedId
+                    PreferencesManager.setImeT9DictionaryLang(this, loadedId)
+                }
+            }
+        }
+    }
+
+    private fun reloadLearnedDataFromPrefs() {
+        val epoch = PreferencesManager.getImeT9LearnedEpoch(this)
+        val statsJson = PreferencesManager.getImeT9LearnedWordsJson(this)
+        val userWordsJson = PreferencesManager.getImeT9UserWordsJson(this)
+        dictionaryEngine.reloadLearnedData(statsJson, userWordsJson)
+        loadedLearnedEpoch = epoch
+        lastLoadedOrFlushedLearnedJson = statsJson
+        lastLoadedOrFlushedUserWordsJson = userWordsJson
+    }
+
+    private fun flushLearnedWordsIfDirty() {
+        val prefEpoch = PreferencesManager.getImeT9LearnedEpoch(this)
+        if (decideLearnedEpochAction(loadedLearnedEpoch, prefEpoch) == LearnedEpochAction.RELOAD_FROM_PREFS) {
+            reloadLearnedDataFromPrefs()
+            return
+        }
+        if (dictionaryEngine.userStats.dirty) {
+            val json = dictionaryEngine.userStats.toJsonString()
+            PreferencesManager.setImeT9LearnedWordsJson(this, json)
+            lastLoadedOrFlushedLearnedJson = json
+            dictionaryEngine.userStats.markClean()
+        }
+        if (dictionaryEngine.userWords.dirty) {
+            val json = dictionaryEngine.userWords.toJsonString()
+            PreferencesManager.setImeT9UserWordsJson(this, json)
+            lastLoadedOrFlushedUserWordsJson = json
+            dictionaryEngine.userWords.markClean()
+        }
+    }
+
+    private fun isPersonalizedLearningAllowed(): Boolean {
+        if (!predictiveAllowedForField) return false
+        val imeOptions = currentInputEditorInfo?.imeOptions ?: 0
+        return (imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) == 0
+    }
+
+    private fun maybeLearnWordBeforeCursor() {
+        if (!learnNewWordsEnabled || !isPersonalizedLearningAllowed() || !dictionaryEngine.ready) return
+        val ic = currentInputConnection ?: return
+        if (!selectionKnownEmpty && !ic.getSelectedText(0).isNullOrEmpty()) return
+        val before = ic.getTextBeforeCursor(LEARN_WORD_LOOKBACK_CHARS, 0)
+        val word = LearnedWordExtractor.lastWord(before) ?: return
+        if (dictionaryEngine.hasDictionaryWord(word)) return
+        dictionaryEngine.recordUserWordSighting(word)
+    }
+
     private fun t9Active(): Boolean =
-        predictiveInUse && predictiveEnabled && predictiveAllowedForField && dictionaryEngine.ready
+        predictiveInUse && predictiveEnabled && predictiveAllowedForField && engineReadyState && dictionaryEngine.ready
 
     private fun commitPending() {
         val selectedIdx = candidateState.selectedIndex
         val learnedWord = if (
             candidateState.isActive &&
-            predictiveAllowedForField &&
+            isPersonalizedLearningAllowed() &&
             !predictiveInput.isEmpty &&
             !predictiveInput.rawDigitFallback
         ) {
@@ -900,8 +1000,8 @@ class MochibunImeService : InputMethodService() {
         }
         candidateState.commitActive(commit)
         predictiveInput.clear()
-        if (learnedWord != null) {
-            dictionaryEngine.userStats.recordCommit(T9DictionaryEngine.BUILT_IN_EN_ID, learnedWord)
+        if (learnedWord != null && !dictionaryEngine.isUserWord(learnedWord)) {
+            dictionaryEngine.userStats.recordCommit(dictionaryEngine.activeDictionaryId, learnedWord)
         }
     }
 
@@ -1110,6 +1210,7 @@ class MochibunImeService : InputMethodService() {
         const val DOCK_ENTER_MARGIN_DP = 12f
         const val DOCK_EXIT_MARGIN_DP = 28f
         const val TOP_SAFE_MARGIN_DP = 32f
+        const val LEARN_WORD_LOOKBACK_CHARS = 48
 
         const val CAP_FLAGS = InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
             InputType.TYPE_TEXT_FLAG_CAP_WORDS or

@@ -200,6 +200,154 @@ class BackupRestoreManagerTest {
         assertEquals(now, s.lastUpdatedMs)
     }
 
+    @Test
+    fun t9PredictiveSettingsAndLearnedWordsRoundTripAndOldBackupsRestoreCleanly() {
+        val context = RuntimeEnvironment.getApplication()
+        PreferencesManager.init(context)
+        val learned = """{"en":{"hello":4,"world":2},"file:fr.tsv":{"bonjour":3}}"""
+        PreferencesManager.setImePredictiveT9Enabled(context, false)
+        PreferencesManager.setImeT9DictionaryLang(context, "file:fr.tsv")
+        PreferencesManager.setImeT9LearnedWordsJson(context, learned)
+
+        val backupJson = BackupRestoreManager.createBackupJson(context)
+        val parsedBehavior = JSONObject(backupJson).getJSONObject("behavior")
+        assertFalse(parsedBehavior.getBoolean("ime_predictive_t9_enabled"))
+        assertEquals("file:fr.tsv", parsedBehavior.getString("ime_t9_dictionary_lang"))
+        assertEquals(learned, parsedBehavior.getString("ime_t9_learned_words"))
+
+        // Mutate before restore
+        PreferencesManager.setImePredictiveT9Enabled(context, true)
+        PreferencesManager.setImeT9DictionaryLang(context, "en")
+        PreferencesManager.setImeT9LearnedWordsJson(context, "")
+
+        BackupRestoreManager.restoreBackupJson(context, backupJson).getOrThrow()
+        assertFalse(PreferencesManager.isImePredictiveT9Enabled(context))
+        assertEquals("file:fr.tsv", PreferencesManager.getImeT9DictionaryLang(context))
+        assertEquals(learned, PreferencesManager.getImeT9LearnedWordsJson(context))
+
+        // Legacy backup without any of the three new T9 keys must still validate & restore cleanly
+        // without clobbering current values.
+        val legacy = validBackupJson()
+        assertFalse(legacy.getJSONObject("behavior").has("ime_predictive_t9_enabled"))
+        BackupRestoreManager.restoreBackupJson(context, legacy.toString()).getOrThrow()
+        assertFalse(PreferencesManager.isImePredictiveT9Enabled(context))
+        assertEquals("file:fr.tsv", PreferencesManager.getImeT9DictionaryLang(context))
+        assertEquals(learned, PreferencesManager.getImeT9LearnedWordsJson(context))
+    }
+
+    @Test
+    fun t9BehaviorFieldsEnforceValidationBounds() {
+        fun withBehaviorField(key: String, value: Any): String = validBackupJson().apply {
+            getJSONObject("behavior").put(key, value)
+        }.toString()
+
+        // Invalid types / path traversal / blank dictionary lang
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_predictive_t9_enabled", "yes")).isSuccess)
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_dictionary_lang", "")).isSuccess)
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_dictionary_lang", "../etc/passwd")).isSuccess)
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_dictionary_lang", "a".repeat(256))).isSuccess)
+
+        // Malformed learned words JSON
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_learned_words", "{not-json")).isSuccess)
+
+        // Too many dictionaries (> 32)
+        val tooManyDicts = JSONObject().apply {
+            for (i in 1..33) put("d$i", JSONObject().put("word", 1))
+        }.toString()
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_learned_words", tooManyDicts)).isSuccess)
+
+        // Too many words (> 500) in one dictionary
+        val tooManyWords = JSONObject().apply {
+            val words = JSONObject()
+            for (i in 1..501) words.put("w$i", 1)
+            put("en", words)
+        }.toString()
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_learned_words", tooManyWords)).isSuccess)
+
+        // Count outside 1..100_000
+        val badCountZero = JSONObject().put("en", JSONObject().put("hello", 0)).toString()
+        val badCountHuge = JSONObject().put("en", JSONObject().put("hello", 100_001)).toString()
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_learned_words", badCountZero)).isSuccess)
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_learned_words", badCountHuge)).isSuccess)
+
+        // Word length > 64
+        val longWord = JSONObject().put("en", JSONObject().put("a".repeat(65), 1)).toString()
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_learned_words", longWord)).isSuccess)
+    }
+
+    @Test
+    fun userWordsAndLearnNewWordsBackupRoundTripValidationAndEpochBump() {
+        val context = RuntimeEnvironment.getApplication()
+        PreferencesManager.init(context)
+        val userWordsObj = JSONObject()
+            .put("en", JSONObject().put("emii", 3).put("mochibun", 2))
+            .put("file:fr.tsv", JSONObject().put("coucou", 4))
+        PreferencesManager.setImeT9LearnNewWordsEnabled(context, false)
+        PreferencesManager.setImeT9UserWordsJson(context, userWordsObj.toString())
+        val epochBeforeBackup = PreferencesManager.getImeT9LearnedEpoch(context)
+
+        val backupJson = BackupRestoreManager.createBackupJson(context)
+        val parsedBehavior = JSONObject(backupJson).getJSONObject("behavior")
+        assertFalse(parsedBehavior.getBoolean("ime_t9_learn_new_words"))
+        assertFalse(parsedBehavior.has("ime_t9_learned_epoch"))
+        val exportedUserWords = parsedBehavior.getJSONObject("ime_t9_user_words")
+        assertEquals(3, exportedUserWords.getJSONObject("en").getInt("emii"))
+        assertEquals(4, exportedUserWords.getJSONObject("file:fr.tsv").getInt("coucou"))
+
+        // Mutate prefs before restore
+        PreferencesManager.setImeT9LearnNewWordsEnabled(context, true)
+        PreferencesManager.setImeT9UserWordsJson(context, "")
+
+        BackupRestoreManager.restoreBackupJson(context, backupJson).getOrThrow()
+        assertFalse(PreferencesManager.isImeT9LearnNewWordsEnabled(context))
+        val restoredObj = JSONObject(PreferencesManager.getImeT9UserWordsJson(context))
+        assertEquals(3, restoredObj.getJSONObject("en").getInt("emii"))
+        assertEquals(2, restoredObj.getJSONObject("en").getInt("mochibun"))
+        assertEquals(4, restoredObj.getJSONObject("file:fr.tsv").getInt("coucou"))
+        assertEquals(epochBeforeBackup + 1, PreferencesManager.getImeT9LearnedEpoch(context))
+
+        // Old backup without the new Step 5 keys must still restore cleanly
+        val legacy = validBackupJson()
+        assertFalse(legacy.getJSONObject("behavior").has("ime_t9_learn_new_words"))
+        assertFalse(legacy.getJSONObject("behavior").has("ime_t9_user_words"))
+        BackupRestoreManager.restoreBackupJson(context, legacy.toString()).getOrThrow()
+        assertFalse(PreferencesManager.isImeT9LearnNewWordsEnabled(context))
+        assertEquals(3, JSONObject(PreferencesManager.getImeT9UserWordsJson(context)).getJSONObject("en").getInt("emii"))
+
+        // Validation bounds for ime_t9_learn_new_words & ime_t9_user_words
+        fun withBehaviorField(key: String, value: Any): String = validBackupJson().apply {
+            getJSONObject("behavior").put(key, value)
+        }.toString()
+
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_learn_new_words", "no")).isSuccess)
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", "not-an-object")).isSuccess)
+
+        val tooManyDicts = JSONObject().apply {
+            for (i in 1..9) put("d$i", JSONObject().put("emii", 2))
+        }
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", tooManyDicts)).isSuccess)
+
+        val tooManyWords = JSONObject().apply {
+            val words = JSONObject()
+            for (i in 0 until 501) {
+                words.put("w${'a' + (i / 26)}${'a' + (i % 26)}word", 2)
+            }
+            put("en", words)
+        }
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", tooManyWords)).isSuccess)
+
+        val badWordChars = JSONObject().put("en", JSONObject().put("user@host", 2))
+        val badWordShort = JSONObject().put("en", JSONObject().put("ab", 2))
+        val badWordLong = JSONObject().put("en", JSONObject().put("a".repeat(33), 2))
+        val badCountZero = JSONObject().put("en", JSONObject().put("emii", 0))
+        val badCountHuge = JSONObject().put("en", JSONObject().put("emii", 100_001))
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", badWordChars)).isSuccess)
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", badWordShort)).isSuccess)
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", badWordLong)).isSuccess)
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", badCountZero)).isSuccess)
+        assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", badCountHuge)).isSuccess)
+    }
+
     private fun validBackupJson(): JSONObject = JSONObject()
         .put("version", BackupRestoreManager.CURRENT_BACKUP_VERSION)
         .put("timestamp", 1_700_000_000_000L)

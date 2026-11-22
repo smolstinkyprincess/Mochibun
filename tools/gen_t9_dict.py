@@ -24,7 +24,7 @@ COMMITTED_EXTRA_WORDS_PATH = ROOT / "tools" / "t9_extra_words.txt"
 LOCAL_EXTRA_WORDS_PATH = INPUT_DIR / "extra_words.txt"
 OUTPUT_PATH = ROOT / "app" / "src" / "main" / "assets" / "t9" / "en.tsv"
 
-TOP_WORD_LIMIT = 15_000
+MAX_WORDS = 30_000
 MAX_WORD_LEN = 32
 TOKEN_RE = re.compile(r"^[a-z']+$")
 
@@ -209,7 +209,7 @@ def main() -> None:
         if word not in scowl and word not in CONTRACTION_SET:
             dropped_not_in_scowl.append(word)
             continue
-        if len(kept) < TOP_WORD_LIMIT:
+        if len(kept) < MAX_WORDS:
             kept[word] = freq
 
     lowest_kept_freq = min(kept.values()) if kept else 1

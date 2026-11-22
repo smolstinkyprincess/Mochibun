@@ -3,6 +3,9 @@ package one.crinklecod.mochibun.data.repository
 import android.content.Context
 import android.net.Uri
 import one.crinklecod.mochibun.BuildConfig
+import one.crinklecod.mochibun.data.ime.LearnedWordExtractor
+import one.crinklecod.mochibun.data.ime.UserWordStats
+import one.crinklecod.mochibun.data.ime.UserWordStore
 import one.crinklecod.mochibun.data.model.ActionType
 import one.crinklecod.mochibun.data.model.AppLedRuleMode
 import one.crinklecod.mochibun.data.model.LidAppLedRule
@@ -64,6 +67,9 @@ object BackupRestoreManager {
     private const val MAX_APPS_PER_FOLDER = 200
     private const val MAX_ICON_ENTRIES = 200
     private const val MAX_REMAP_ENTRIES = 32
+    private const val MAX_T9_LEARNED_DICTS = 32
+    private const val MAX_T9_USER_WORD_DICTS = 8
+    private const val MAX_T9_LEARNED_WORDS_JSON_CHARS = 256 * 1024
     private const val MAX_BACKUP_SIZE_BYTES = 2 * 1024 * 1024
 
     private data class ValidatedBackup(
@@ -202,6 +208,17 @@ object BackupRestoreManager {
         behaviorObj.put("ime_hold_vibration", PreferencesManager.isImeHoldVibrationEnabled(context))
         behaviorObj.put("ime_idle_commit_ms", PreferencesManager.getImeIdleCommitMs(context))
         behaviorObj.put("ime_auto_commit_enabled", PreferencesManager.isImeAutoCommitEnabled(context))
+        behaviorObj.put("ime_predictive_t9_enabled", PreferencesManager.isImePredictiveT9Enabled(context))
+        behaviorObj.put("ime_t9_dictionary_lang", PreferencesManager.getImeT9DictionaryLang(context))
+        behaviorObj.put("ime_t9_learned_words", PreferencesManager.getImeT9LearnedWordsJson(context))
+        behaviorObj.put("ime_t9_learn_new_words", PreferencesManager.isImeT9LearnNewWordsEnabled(context))
+        val userWordsJson = PreferencesManager.getImeT9UserWordsJson(context)
+        val userWordsObj = if (userWordsJson.isNotBlank()) {
+            runCatching { JSONObject(userWordsJson) }.getOrElse { JSONObject() }
+        } else {
+            JSONObject()
+        }
+        behaviorObj.put("ime_t9_user_words", userWordsObj)
         behaviorObj.put("show_root_options", PreferencesManager.isShowRootOptions(context))
         behaviorObj.put("non_root_screen_off_reset", PreferencesManager.isNonRootScreenOffResetEnabled(context))
         root.put("behavior", behaviorObj)
@@ -462,12 +479,88 @@ object BackupRestoreManager {
         value.requiredIntInRange("ime_hold_delay_ms", 100..5000)
         value.requiredIntInRange("ime_idle_commit_ms", 100..10000)
         // Optional: legacy keys no longer exported (features now always on) and keys added in
-        // v2.1.0. Validate the type only when present, so old and new backups both restore.
+        // later versions. Validate the type only when present, so old and new backups both restore.
         listOf(
             "kaomoji_wheel_enabled", "t9_search_enabled",
-            "show_root_options", "non_root_screen_off_reset"
+            "show_root_options", "non_root_screen_off_reset",
+            "ime_predictive_t9_enabled", "ime_t9_learn_new_words"
         ).forEach {
             if (value.has(it)) value.requiredBoolean(it)
+        }
+        if (value.has("ime_t9_dictionary_lang")) {
+            val lang = value.requiredString("ime_t9_dictionary_lang", maxLength = 255)
+            require(!lang.contains('/') && !lang.contains('\\') && lang != "..") {
+                "Backup field 'ime_t9_dictionary_lang' is invalid."
+            }
+        }
+        if (value.has("ime_t9_learned_words")) {
+            val learnedJson = value.requiredString(
+                "ime_t9_learned_words",
+                maxLength = MAX_T9_LEARNED_WORDS_JSON_CHARS,
+                allowBlank = true
+            )
+            if (learnedJson.isNotBlank()) {
+                validateLearnedWordsJson(learnedJson)
+            }
+        }
+        if (value.has("ime_t9_user_words")) {
+            validateUserWordsObject(value.requiredObject("ime_t9_user_words"))
+        }
+    }
+
+    private fun validateUserWordsObject(root: JSONObject) {
+        require(root.length() <= MAX_T9_USER_WORD_DICTS) {
+            "Backup field 'ime_t9_user_words' contains too many dictionaries."
+        }
+        val dictKeys = root.keys()
+        while (dictKeys.hasNext()) {
+            val dictId = dictKeys.next()
+            require(dictId.isNotBlank() && dictId.length <= 128) {
+                "Backup field 'ime_t9_user_words' has an invalid dictionary id."
+            }
+            val wordsObj = root.requiredObject(dictId)
+            require(wordsObj.length() <= UserWordStore.MAX_WORDS_PER_DICT) {
+                "Backup field 'ime_t9_user_words' exceeds ${UserWordStore.MAX_WORDS_PER_DICT} words for '$dictId'."
+            }
+            val wordKeys = wordsObj.keys()
+            while (wordKeys.hasNext()) {
+                val word = wordKeys.next()
+                require(LearnedWordExtractor.isValidLearnedWord(word)) {
+                    "Backup field 'ime_t9_user_words' has an invalid word entry."
+                }
+                wordsObj.requiredIntInRange(word, 1..UserWordStore.MAX_COUNT)
+            }
+        }
+    }
+
+    private fun validateLearnedWordsJson(jsonString: String) {
+        val root = try {
+            JSONObject(jsonString)
+        } catch (_: Exception) {
+            throw IllegalArgumentException("Backup field 'ime_t9_learned_words' is not valid JSON.")
+        }
+        require(root.length() <= MAX_T9_LEARNED_DICTS) {
+            "Backup field 'ime_t9_learned_words' contains too many dictionaries."
+        }
+        val dictKeys = root.keys()
+        while (dictKeys.hasNext()) {
+            val dictId = dictKeys.next()
+            require(dictId.isNotBlank() && dictId.length <= 128) {
+                "Backup field 'ime_t9_learned_words' has an invalid dictionary id."
+            }
+            val wordsObj = root.optJSONObject(dictId)
+                ?: throw IllegalArgumentException("Backup field 'ime_t9_learned_words' entry '$dictId' is invalid.")
+            require(wordsObj.length() <= UserWordStats.MAX_WORDS_PER_DICT) {
+                "Backup field 'ime_t9_learned_words' exceeds ${UserWordStats.MAX_WORDS_PER_DICT} words for '$dictId'."
+            }
+            val wordKeys = wordsObj.keys()
+            while (wordKeys.hasNext()) {
+                val word = wordKeys.next()
+                require(word.isNotBlank() && word.length <= UserWordStats.MAX_WORD_LENGTH) {
+                    "Backup field 'ime_t9_learned_words' has an invalid word entry."
+                }
+                wordsObj.requiredIntInRange(word, 1..UserWordStats.MAX_COUNT)
+            }
         }
     }
 
@@ -861,6 +954,42 @@ object BackupRestoreManager {
                         context,
                         behaviorObj.optBoolean("ime_hold_vibration", PreferencesManager.DEFAULT_IME_HOLD_VIBRATION)
                     )
+                }
+                if (behaviorObj.has("ime_predictive_t9_enabled")) {
+                    PreferencesManager.setImePredictiveT9Enabled(
+                        context,
+                        behaviorObj.optBoolean("ime_predictive_t9_enabled", PreferencesManager.DEFAULT_IME_PREDICTIVE_T9_ENABLED)
+                    )
+                }
+                if (behaviorObj.has("ime_t9_dictionary_lang")) {
+                    PreferencesManager.setImeT9DictionaryLang(
+                        context,
+                        behaviorObj.optString("ime_t9_dictionary_lang", PreferencesManager.DEFAULT_IME_T9_DICTIONARY_LANG)
+                    )
+                }
+                var learnedRestored = false
+                if (behaviorObj.has("ime_t9_learned_words")) {
+                    PreferencesManager.setImeT9LearnedWordsJson(
+                        context,
+                        behaviorObj.optString("ime_t9_learned_words", PreferencesManager.DEFAULT_IME_T9_LEARNED_WORDS)
+                    )
+                    learnedRestored = true
+                }
+                if (behaviorObj.has("ime_t9_learn_new_words")) {
+                    PreferencesManager.setImeT9LearnNewWordsEnabled(
+                        context,
+                        behaviorObj.optBoolean("ime_t9_learn_new_words", PreferencesManager.DEFAULT_IME_T9_LEARN_NEW_WORDS)
+                    )
+                }
+                if (behaviorObj.has("ime_t9_user_words")) {
+                    val normalizedStore = UserWordStore().apply {
+                        loadFromJsonString(behaviorObj.optJSONObject("ime_t9_user_words")?.toString())
+                    }
+                    PreferencesManager.setImeT9UserWordsJson(context, normalizedStore.toJsonString())
+                    learnedRestored = true
+                }
+                if (learnedRestored) {
+                    PreferencesManager.bumpImeT9LearnedEpoch(context)
                 }
                 // Non-Root Mode switches (v2.1.0); absent from older backups
                 if (behaviorObj.has("show_root_options")) {

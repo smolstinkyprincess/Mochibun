@@ -3,6 +3,7 @@ package one.crinklecod.mochibun
 import one.crinklecod.mochibun.data.ime.T9DictionaryEngine
 import one.crinklecod.mochibun.data.ime.T9Keymap
 import one.crinklecod.mochibun.data.ime.UserWordStats
+import one.crinklecod.mochibun.data.ime.UserWordStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -116,9 +117,13 @@ class T9DictionaryEngineTest {
         engine.loadFromReader("file:custom.txt", StringReader(tsv))
         assertEquals(listOf("good", "gone", "home", "hood"), engine.exact("4663").map { it.word })
 
-        // JSON round-trip preserves counts
+        // JSON round-trip preserves counts and clears dirty flag
         val reloaded = UserWordStats()
+        assertTrue(stats.dirty)
+        stats.markClean()
+        assertFalse(stats.dirty)
         reloaded.loadFromJsonString(stats.toJsonString())
+        assertFalse(reloaded.dirty)
         assertEquals(3, reloaded.countFor("en", "gone"))
         assertEquals(2, reloaded.countFor("en", "hood"))
         assertEquals(1, reloaded.countFor("en", "home"))
@@ -135,6 +140,7 @@ class T9DictionaryEngineTest {
         assertEquals(500, capStats.snapshotFor("en").size)
         assertEquals(2, capStats.countFor("en", "keepme"))
         assertEquals(1, capStats.countFor("en", "extra"))
+        assertTrue(capStats.dirty)
     }
 
     @Test
@@ -249,7 +255,7 @@ class T9DictionaryEngineTest {
         }
 
         assertTrue("en.tsv should not be empty", count > 0)
-        assertTrue("en.tsv has $count lines, expected <= 20000", count <= 20_000)
+        assertTrue("en.tsv has $count lines, expected <= 45000", count <= 45_000)
 
         // Verify loading the real asset into the engine works for key probes
         val engine = T9DictionaryEngine()
@@ -257,7 +263,7 @@ class T9DictionaryEngineTest {
             engine.loadFromReader("en", reader)
         }
         assertEquals("hello", engine.exact("43556").firstOrNull()?.word)
-        assertEquals(listOf("good", "home", "gone", "hood"), engine.exact("4663").map { it.word })
+        assertEquals(listOf("good", "home", "gone", "hood"), engine.exact("4663").take(4).map { it.word })
     }
 
     @Test
@@ -278,5 +284,85 @@ class T9DictionaryEngineTest {
             val words = engine.exact(sig).map { it.word }
             assertTrue("Expected '$contraction' under $sig, got $words", contraction in words)
         }
+    }
+
+    @Test
+    fun userWordStoreJsonRoundTripAndClearReset() {
+        val store = UserWordStore()
+        store.recordSighting("en", "emii")
+        store.recordSighting("en", "emii")
+        store.recordSighting("en", "mochibun")
+        store.recordSighting("file:custom.tsv", "nyan")
+        store.recordSighting("file:custom.tsv", "nyan")
+
+        val json = store.toJsonString()
+        val reloaded = UserWordStore()
+        reloaded.loadFromJsonString(json)
+        assertFalse(reloaded.dirty)
+        assertEquals(2, reloaded.countFor("en", "emii"))
+        assertEquals(1, reloaded.countFor("en", "mochibun"))
+        assertEquals(2, reloaded.countFor("file:custom.tsv", "nyan"))
+        assertEquals(2, reloaded.visibleWordCount())
+
+        reloaded.clearAll()
+        assertFalse(reloaded.dirty)
+        assertEquals(0, reloaded.visibleWordCount())
+        assertTrue(reloaded.snapshotFor("en").isEmpty())
+    }
+
+    @Test
+    fun engineMergesUserWordsByThresholdInExactAndCompletions() {
+        val tsv = """
+            3644	emig	900
+            3644	emih	400
+            364422	emigaa	800
+            364433	emihdd	500
+        """.trimIndent()
+        val stats = UserWordStats()
+        val store = UserWordStore()
+        val engine = T9DictionaryEngine(stats, store)
+        engine.loadFromReader("en", StringReader(tsv))
+
+        // Count 1 is stored but hidden from exact() and completions()
+        engine.recordUserWordSighting("emii")
+        assertEquals(listOf("emig", "emih"), engine.exact("3644").map { it.word })
+        engine.recordUserWordSighting("emiiaa")
+        assertEquals(listOf("emigaa", "emihdd"), engine.completions("3644", 8).map { it.word })
+
+        // Count 2 appears AFTER dictionary exact matches, and FIRST in completions
+        engine.recordUserWordSighting("emii")
+        engine.recordUserWordSighting("emiiaa")
+        assertEquals(listOf("emig", "emih", "emii"), engine.exact("3644").map { it.word })
+        assertEquals(listOf("emiiaa", "emigaa", "emihdd"), engine.completions("3644", 8).map { it.word })
+
+        // Count 3+ promotes user word BEFORE dictionary exact matches
+        engine.recordUserWordSighting("emii")
+        assertEquals(listOf("emii", "emig", "emih"), engine.exact("3644").map { it.word })
+
+        // Secondary count >= 3 orders by count descending, while count == 2 stays after dict
+        repeat(4) { engine.recordUserWordSighting("foii") } // 3644
+        repeat(2) { engine.recordUserWordSighting("doii") } // 3644
+        assertEquals(
+            listOf("foii", "emii", "emig", "emih", "doii"),
+            engine.exact("3644").map { it.word }
+        )
+
+        // Completion ranking: higher count user words first, then dictionary completions
+        repeat(3) { engine.recordUserWordSighting("emiibb") }
+        assertEquals(
+            listOf("emiibb", "emiiaa", "emigaa", "emihdd"),
+            engine.completions("3644", 8).map { it.word }
+        )
+
+        // Dictionary vs user-word helpers prevent double counting
+        assertTrue(engine.hasDictionaryWord("emig"))
+        assertFalse(engine.hasDictionaryWord("emii"))
+        assertTrue(engine.isUserWord("emii"))
+        assertFalse(engine.isUserWord("emig"))
+
+        // Reloading learned data resets both stores and clears visibility
+        engine.reloadLearnedData("", "")
+        assertEquals(listOf("emig", "emih"), engine.exact("3644").map { it.word })
+        assertEquals(listOf("emigaa", "emihdd"), engine.completions("3644", 8).map { it.word })
     }
 }

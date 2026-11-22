@@ -199,6 +199,16 @@ object PreferencesManager {
     const val DEFAULT_IME_AUTO_COMMIT_ENABLED = true
     const val KEY_IME_PREDICTIVE_T9_ENABLED = "pref_ime_predictive_t9_enabled"
     const val DEFAULT_IME_PREDICTIVE_T9_ENABLED = true
+    const val KEY_IME_T9_DICTIONARY_LANG = "pref_ime_t9_dictionary_lang"
+    const val DEFAULT_IME_T9_DICTIONARY_LANG = "en"
+    const val KEY_IME_T9_LEARNED_WORDS = "pref_ime_t9_learned_words"
+    const val DEFAULT_IME_T9_LEARNED_WORDS = ""
+    const val KEY_IME_T9_LEARN_NEW_WORDS = "pref_ime_t9_learn_new_words"
+    const val DEFAULT_IME_T9_LEARN_NEW_WORDS = true
+    const val KEY_IME_T9_USER_WORDS = "pref_ime_t9_user_words"
+    const val DEFAULT_IME_T9_USER_WORDS = ""
+    const val KEY_IME_T9_LEARNED_EPOCH = "pref_ime_t9_learned_epoch"
+    const val DEFAULT_IME_T9_LEARNED_EPOCH = 0
     // T9 multi-tap auto-commit delay (Keyboard → Keypad Feel → Auto-Commit Delay)
     const val KEY_IME_IDLE_COMMIT_MS = "pref_ime_idle_commit_ms"
     const val DEFAULT_IME_IDLE_COMMIT_MS = 700
@@ -772,6 +782,36 @@ object PreferencesManager {
 
     fun setImePredictiveT9Enabled(context: Context, enabled: Boolean) =
         HardwareInputPrefs.setImePredictiveT9Enabled(context, enabled)
+
+    fun getImeT9DictionaryLang(context: Context): String =
+        HardwareInputPrefs.getImeT9DictionaryLang(context)
+
+    fun setImeT9DictionaryLang(context: Context, lang: String) =
+        HardwareInputPrefs.setImeT9DictionaryLang(context, lang)
+
+    fun getImeT9LearnedWordsJson(context: Context): String =
+        HardwareInputPrefs.getImeT9LearnedWordsJson(context)
+
+    fun setImeT9LearnedWordsJson(context: Context, json: String) =
+        HardwareInputPrefs.setImeT9LearnedWordsJson(context, json)
+
+    fun isImeT9LearnNewWordsEnabled(context: Context): Boolean =
+        HardwareInputPrefs.isImeT9LearnNewWordsEnabled(context)
+
+    fun setImeT9LearnNewWordsEnabled(context: Context, enabled: Boolean) =
+        HardwareInputPrefs.setImeT9LearnNewWordsEnabled(context, enabled)
+
+    fun getImeT9UserWordsJson(context: Context): String =
+        HardwareInputPrefs.getImeT9UserWordsJson(context)
+
+    fun setImeT9UserWordsJson(context: Context, json: String) =
+        HardwareInputPrefs.setImeT9UserWordsJson(context, json)
+
+    fun getImeT9LearnedEpoch(context: Context): Int =
+        HardwareInputPrefs.getImeT9LearnedEpoch(context)
+
+    fun bumpImeT9LearnedEpoch(context: Context): Int =
+        HardwareInputPrefs.bumpImeT9LearnedEpoch(context)
 
     fun isSoftKeyNavEnabled(context: Context): Boolean =
         HardwareInputPrefs.isSoftKeyNavEnabled(context)
