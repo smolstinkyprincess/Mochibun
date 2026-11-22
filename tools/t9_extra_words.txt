@@ -1,0 +1,31 @@
+# Everyday texting & conversational words included in en.tsv even if absent from SCOWL.
+# Frequency comes from tools/input/en_50k.txt when present, otherwise the lowest kept frequency.
+gonna
+wanna
+gotta
+kinda
+sorta
+lemme
+gimme
+dunno
+yeah
+yep
+nope
+ok
+okay
+hey
+hi
+hmm
+yay
+lol
+omg
+btw
+idk
+brb
+wifi
+email
+online
+app
+apps
+website
+texting

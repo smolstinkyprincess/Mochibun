@@ -11,6 +11,7 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_HOLD_DE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_HOLD_VIBRATION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_IDLE_COMMIT_MS
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_PREDICTIVE_T9_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_LID_OPEN_ACTION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_SOFT_KEY_NAV_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.GLOBAL_SOFT_KEY_NAV_ENABLED
@@ -21,6 +22,7 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_HOLD_DELAY_
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_HOLD_FOR_DIGIT_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_HOLD_VIBRATION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_IDLE_COMMIT_MS
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_PREDICTIVE_T9_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_LAST_LAUNCHED_PACKAGE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_LID_OPEN_ACTION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_SOFT_KEY_NAV_ENABLED
@@ -250,6 +252,13 @@ internal object HardwareInputPrefs {
 
     fun setImeHoldVibrationEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_IME_HOLD_VIBRATION, enabled).apply()
+    }
+
+    fun isImePredictiveT9Enabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_IME_PREDICTIVE_T9_ENABLED, DEFAULT_IME_PREDICTIVE_T9_ENABLED)
+
+    fun setImePredictiveT9Enabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_IME_PREDICTIVE_T9_ENABLED, enabled).apply()
     }
 
     fun isSoftKeyNavEnabled(context: Context): Boolean =

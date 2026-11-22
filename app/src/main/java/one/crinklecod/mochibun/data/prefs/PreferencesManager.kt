@@ -197,6 +197,8 @@ object PreferencesManager {
     const val KEY_IME_AUTO_COMMIT_ENABLED = "pref_ime_auto_commit_enabled"
     const val DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED = true
     const val DEFAULT_IME_AUTO_COMMIT_ENABLED = true
+    const val KEY_IME_PREDICTIVE_T9_ENABLED = "pref_ime_predictive_t9_enabled"
+    const val DEFAULT_IME_PREDICTIVE_T9_ENABLED = true
     // T9 multi-tap auto-commit delay (Keyboard → Keypad Feel → Auto-Commit Delay)
     const val KEY_IME_IDLE_COMMIT_MS = "pref_ime_idle_commit_ms"
     const val DEFAULT_IME_IDLE_COMMIT_MS = 700
@@ -764,6 +766,12 @@ object PreferencesManager {
 
     fun setImeHoldVibrationEnabled(context: Context, enabled: Boolean) =
         HardwareInputPrefs.setImeHoldVibrationEnabled(context, enabled)
+
+    fun isImePredictiveT9Enabled(context: Context): Boolean =
+        HardwareInputPrefs.isImePredictiveT9Enabled(context)
+
+    fun setImePredictiveT9Enabled(context: Context, enabled: Boolean) =
+        HardwareInputPrefs.setImePredictiveT9Enabled(context, enabled)
 
     fun isSoftKeyNavEnabled(context: Context): Boolean =
         HardwareInputPrefs.isSoftKeyNavEnabled(context)

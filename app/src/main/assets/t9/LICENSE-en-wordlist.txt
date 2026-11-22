@@ -1,0 +1,45 @@
+Mochibun Offline T9 English Wordlist (en.tsv) — Attribution & Licenses
+=======================================================================
+
+`en.tsv` is derived from two upstream wordlists (filtered by SCOWL membership
+and ranked by FrequencyWords counts, capped at 15,000 entries):
+
+1. FrequencyWords (en_50k)
+--------------------------
+Source: https://github.com/hermitdave/FrequencyWords
+Derived from: OpenSubtitles (https://www.opensubtitles.org/)
+License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+         https://creativecommons.org/licenses/by-sa/4.0/
+
+2. SCOWL (Spell Checker Oriented Word Lists) — american-english-large
+---------------------------------------------------------------------
+Maintained by: Kevin Atkinson <kevina@users.sourceforge.net>
+Project page: http://wordlist.sourceforge.net/
+Notice confirmed from `/usr/share/doc/wamerican-large/copyright`:
+
+  The collective work is Copyright 2000-2011 by Kevin Atkinson as well
+  as any of the copyrights mentioned below:
+
+    Copyright 2000-2011 by Kevin Atkinson
+
+    Permission to use, copy, modify, distribute and sell these word
+    lists, the associated scripts, the output created from the scripts,
+    and its documentation for any purpose is hereby granted without fee,
+    provided that the above copyright notice appears in all copies and
+    that both that copyright notice and this permission notice appear in
+    supporting documentation. Kevin Atkinson makes no representations
+    about the suitability of this array for any purpose. It is provided
+    "as is" without express or implied warranty.
+
+  Included SCOWL source notices (per `/usr/share/doc/wamerican-large/copyright`):
+  - Moby (TM) Words II [MWords] (Grady Ward): Public Domain.
+  - UK English Wordlist with Frequency Classification (Brian Kelk): Public Domain.
+  - 12Dicts / Supplement (Alan Beale): Public Domain.
+  - WordNet 1.6 (Copyright 1997 by Princeton University; permissive non-endorsement notice).
+  - Unofficial Jargon File Word Lists: Public Domain.
+  - ENABLE (M. Cooper): Public Domain.
+  - UK Advanced Cryptics Dictionary (Copyright (c) J Ross Beresford 1993-1999,
+    All Rights Reserved — requires prominent copyright notice and verbatim
+    text inclusion when redistributed; used only as a filter, not redistributed
+    as a raw UKACD list).
+  - Ispell / VARCON (Copyright 1993, Geoff Kuenning, BSD-style permissive notice).

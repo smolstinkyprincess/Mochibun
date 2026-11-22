@@ -143,6 +143,20 @@ class KeitaiCandidateState(
         candidates = pool
     }
 
+    /** Replaces the strip candidates with a predictive list (e.g. T9 words); empty resets. */
+    @JvmName("applyCandidates")
+    fun setCandidates(words: Array<String>) {
+        if (words.isEmpty()) {
+            reset()
+            return
+        }
+        candidates = words
+        selectedIndex = 0
+        isActive = true
+        lastKeyCode = KeyEvent.KEYCODE_UNKNOWN
+        lastPressTime = 0L
+    }
+
     fun commitActive(onCommit: (String) -> Unit) {
         if (!isActive) return
         onCommit(candidates[selectedIndex])
