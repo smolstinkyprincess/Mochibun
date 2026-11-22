@@ -2,6 +2,7 @@ package one.crinklecod.mochibun
 
 import one.crinklecod.mochibun.ui.screens.SETTINGS_HUB_DESTINATIONS
 import one.crinklecod.mochibun.ui.screens.settings.APPEARANCE_ROW_IDS
+import one.crinklecod.mochibun.ui.screens.settings.APPEARANCE_THEME_PACKS_ROW_IDS
 import one.crinklecod.mochibun.ui.screens.settings.BACKUP_RESTORE_ROW_IDS
 import one.crinklecod.mochibun.ui.screens.settings.CURSOR_HARDWARE_ROW_IDS
 import one.crinklecod.mochibun.ui.screens.settings.CURSOR_MOTION_ROW_IDS
@@ -51,6 +52,7 @@ class SettingsRowLimitsTest {
         "CursorHardwareSettingsScreen" to CURSOR_HARDWARE_ROW_IDS,
         "CursorMotionSettingsScreen" to CURSOR_MOTION_ROW_IDS,
         "AppearanceSettingsScreen" to APPEARANCE_ROW_IDS,
+        "AppearanceThemePacksSettingsScreen" to APPEARANCE_THEME_PACKS_ROW_IDS,
         "AppearanceTypographyBordersSettingsScreen" to appearanceTypographyBordersRowIds(
             hasBundleFont = true,
             showRootOptions = true,

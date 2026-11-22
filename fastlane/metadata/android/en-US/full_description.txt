@@ -2,9 +2,9 @@ Mochibun is a lightweight pastel launcher made for T9 keypad and D-pad Android f
 
 Features:
 
-- Physical Keypad Support & Interactive Key Guide: Move through apps, sticker-tray folders perched atop the clouds, and Settings Hub cards wearing 1-bit Docomo pixel icons using the physical arrow keys and number pad. Open the interactive AT-M120 Key Guide in Settings to see live key highlights across Launcher, Typing, and Remap tabs.
+- Physical Keypad Support & Interactive Key Guide: Move through apps, sticker-tray folders perched atop the clouds, and Settings Hub cards wearing 1-bit Docomo pixel icons using the physical arrow keys and number pad (with 1-9 jump keys in Settings). Open the interactive AT-M120 Key Guide in Settings to see live key highlights across Launcher, Typing, and Remap tabs.
 - T9 App Search: Type numbers on your keypad to quickly filter and find apps without tapping the screen.
-- Mochibun Keitai Keyboard: A built-in multi-tap T9 keyboard that works in every app, no extra keyboard app needed, with an adjustable T9 auto-commit delay. Hold # anywhere to pop open the Kaomoji Wheel.
+- Mochibun Keitai Keyboard: A built-in T9 keyboard that works in every app, no extra keyboard app needed. Tap * to cycle predictive T9 and multi-tap modes, import custom .tsv or .txt dictionaries, and let offline word learning adapt to words you type (with an adjustable auto-commit delay). Hold # anywhere to pop open the Kaomoji Wheel.
 - Virtual Mouse Cursor: Turn on a mouse pointer with the side key (or a Menu, Search, Camera or * key of your choice) so you can click and scroll in apps made only for touchscreens. Works without root through an optional Accessibility helper.
 - Keypad Sounds & Soft Keys: 7 built-in keypad sound profiles (including Muted) plus custom .ogg sound packs from .mochibundle themes, LSK / RSK soft-key navigation you can toggle, and hold 0 on Home for the flashlight.
 - Mochibunny Pocket Pet: Press Center on the bunny on Home (or tap her) for a Feed / Pet / Chat pill, with 1 / 2 / 3 keypad shortcuts. Treats come from steps, clearing notifications, and plugging in your charger, and her mood and speech bubbles change through the day.

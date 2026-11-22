@@ -186,6 +186,9 @@ internal fun AboutMochibunScreen(
                     SettingsInfoRow(label = "Image Loader", value = "Coil (GIF & Bitmap)")
                     SettingsInfoRow(label = "YAML Parser", value = "kaml")
                     SettingsInfoRow(label = "Typography", value = "MaruMinya (マルミーニャ)")
+                    SettingsInfoRow(label = "Pictograms", value = "og-emoji-font")
+                    SettingsInfoRow(label = "T9 Frequencies", value = "FrequencyWords (CC BY-SA 4.0)")
+                    SettingsInfoRow(label = "T9 Wordlist", value = "SCOWL")
                 }
             }
         }

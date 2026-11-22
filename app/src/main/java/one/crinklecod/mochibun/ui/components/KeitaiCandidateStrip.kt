@@ -25,20 +25,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
@@ -251,83 +250,252 @@ fun TextFieldValue.limitTextLength(maxLength: Int): TextFieldValue {
     return TextFieldValue(limitedText, clamp(selection), limitedComposition)
 }
 
-// Cloud strip geometry: puffs rise CLOUD_PUFF_DEPTH above the rounded body, so the strip is that
-// much taller than the old 38/36dp pill while its text row keeps the same body height.
-private val CLOUD_PUFF_DEPTH = 8.dp
+// Cloud strip geometry: compact strips (< 200 dp) draw a plump 5-lobe flat-bottomed cloud
+// with outward cheeks, while expanded strips (>= 200 dp) draw a 5-puff asymmetrical cloud.
+// Headroom reserves space for the peaks plus the up/right back-cloud layer (2 dp compact, 3 dp wide).
+private val CLOUD_HEADROOM_COMPACT = 15.dp
+private val CLOUD_HEADROOM_WIDE = 20.dp
 private val CLOUD_BODY_HEIGHT_ACTIVE = 38.dp
 private val CLOUD_BODY_HEIGHT_IDLE = 36.dp
-/** Target width of one scallop along the top edge; the count adapts to the strip's width. */
-private val CLOUD_PUFF_WIDTH = 22.dp
-private val CandidatePillShape = RoundedCornerShape(9.dp)
+private val CLOUD_WIDE_THRESHOLD = 200.dp
+private val CLOUD_BACK_OFFSET_COMPACT = 2.dp
+private val CLOUD_BACK_OFFSET_WIDE = 3.dp
+
+// Wide 5-puff asymmetrical cloud: soft outer puffs -> medium-tall flanking puffs -> tall central dome
+private val CLOUD_5_WEIGHTS = floatArrayOf(0.14f, 0.21f, 0.30f, 0.20f, 0.15f)
+private val CLOUD_5_RISES_DP = floatArrayOf(7.4f, 12.0f, 15.6f, 11.2f, 7.6f)
+
+private val CandidatePillShape = RoundedCornerShape(50)
+private val CANDIDATE_CHIP_HEIGHT = 28.dp
+private val CANDIDATE_CHIP_CORNER_RADIUS = 14.dp
 private val ModeTagShape = RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp, topEnd = 8.dp, bottomEnd = 8.dp)
 
-/**
- * Cached outline + accent paths for the cloud strip. [update] rebuilds them only when the strip's
- * pixel size changes (the strip grows/shrinks as the candidate pool changes), so draw passes,
- * including every frame of the idle fade, allocate nothing.
- */
-private class CloudStripPaths {
-    val outline = Path()
-    val sparkle = Path()
-    val heart = Path()
-    private var builtWidth = -1f
-    private var builtHeight = -1f
+private fun buildCompactCloudPaths(
+    width: Float,
+    height: Float,
+    bodyTop: Float,
+    density: Float,
+    outline: Path,
+    sparkle: Path,
+    heart: Path
+) {
+    val bodyH = (height - bodyTop).coerceAtLeast(1f)
+    val cheekW = (width * 0.13f).coerceIn(11f * density, 16f * density).coerceAtMost(width * 0.22f)
+    val bottomR = cheekW.coerceAtMost(bodyH * 0.42f)
+    val cheekApexY = bodyTop + bodyH * 0.56f
+    val cheekValleyY = bodyTop + 3.0f * density
+    val innerValleyY = bodyTop + 1.2f * density
 
-    fun update(width: Float, height: Float, density: Float) {
-        if (width == builtWidth && height == builtHeight) return
-        builtWidth = width
-        builtHeight = height
+    val xStart = cheekW
+    val xEnd = (width - cheekW).coerceAtLeast(xStart + 1f)
+    val topSpan = xEnd - xStart
 
-        val puff = CLOUD_PUFF_DEPTH.value * density
-        val bodyTop = puff
-        val capR = ((height - bodyTop) / 2f).coerceAtLeast(1f)
-        val span = (width - capR * 2f).coerceAtLeast(0f)
-        val count = (span / (CLOUD_PUFF_WIDTH.value * density)).toInt().coerceAtLeast(1)
-        val step = span / count
+    // 3 upper lobes across [xStart, xEnd]: left-upper -> big round center dome -> right-upper
+    val v2X = xStart + topSpan * 0.33f
+    val v3X = xStart + topSpan * 0.67f
+    val p1X = xStart + topSpan * 0.18f
+    val p2X = xStart + topSpan * 0.50f
+    val p3X = xStart + topSpan * 0.82f
 
-        outline.reset()
-        outline.moveTo(capR, height)
-        outline.lineTo(width - capR, height)
-        // Right end cap: bottom -> right -> top of the body
-        outline.arcTo(Rect(width - capR * 2f, bodyTop, width, height), 90f, -180f, false)
-        // Scallops along the top, right to left. Heights alternate for an organic silhouette;
-        // the two outermost puffs stay tall since they carry the accents.
-        for (i in 0 until count) {
-            val right = width - capR - i * step
-            val left = right - step
-            val tall = i == 0 || i == count - 1 || i % 2 == 0
-            val rise = if (tall) puff else puff * 0.62f
-            outline.arcTo(Rect(left, bodyTop - rise, right, bodyTop + rise), 0f, -180f, false)
+    val p1Y = bodyTop - 4.6f * density
+    val p2Y = bodyTop - 11.4f * density
+    val p3Y = bodyTop - 4.2f * density
+
+    outline.reset()
+    // Start at bottom-left of flat cloud base and trace clockwise around the 5 lobes
+    outline.moveTo(bottomR, height)
+    // 1. Left outer cheek puff: flat base -> outward bulge at x = 0 -> cheek valley V1
+    outline.cubicTo(
+        bottomR * 0.28f, height,
+        0f, height - (height - cheekApexY) * 0.42f,
+        0f, cheekApexY
+    )
+    outline.cubicTo(
+        0f, cheekApexY - (cheekApexY - cheekValleyY) * 0.62f,
+        xStart * 0.42f, cheekValleyY,
+        xStart, cheekValleyY
+    )
+
+    // 2. Left-upper lobe (V1 -> P1 -> V2, ~5.8 dp dip into V2)
+    outline.cubicTo(
+        xStart + (p1X - xStart) * 0.12f, cheekValleyY - (cheekValleyY - p1Y) * 0.66f,
+        p1X - (p1X - xStart) * 0.44f, p1Y,
+        p1X, p1Y
+    )
+    outline.cubicTo(
+        p1X + (v2X - p1X) * 0.44f, p1Y,
+        v2X - (v2X - p1X) * 0.10f, innerValleyY - (innerValleyY - p1Y) * 0.62f,
+        v2X, innerValleyY
+    )
+
+    // 3. Big round center dome (V2 -> P2 -> V3)
+    outline.cubicTo(
+        v2X + (p2X - v2X) * 0.10f, innerValleyY - (innerValleyY - p2Y) * 0.64f,
+        p2X - (p2X - v2X) * 0.48f, p2Y,
+        p2X, p2Y
+    )
+    outline.cubicTo(
+        p2X + (v3X - p2X) * 0.48f, p2Y,
+        v3X - (v3X - p2X) * 0.10f, innerValleyY - (innerValleyY - p2Y) * 0.64f,
+        v3X, innerValleyY
+    )
+
+    // 4. Right-upper lobe (V3 -> P3 -> V4, ~5.4 dp dip from P3)
+    outline.cubicTo(
+        v3X + (p3X - v3X) * 0.10f, innerValleyY - (innerValleyY - p3Y) * 0.62f,
+        p3X - (p3X - v3X) * 0.44f, p3Y,
+        p3X, p3Y
+    )
+    outline.cubicTo(
+        p3X + (xEnd - p3X) * 0.44f, p3Y,
+        xEnd - (xEnd - p3X) * 0.12f, cheekValleyY - (cheekValleyY - p3Y) * 0.66f,
+        xEnd, cheekValleyY
+    )
+
+    // 5. Right outer cheek puff: cheek valley V4 -> outward bulge at x = width -> flat base
+    outline.cubicTo(
+        width - xStart * 0.42f, cheekValleyY,
+        width, cheekApexY - (cheekApexY - cheekValleyY) * 0.62f,
+        width, cheekApexY
+    )
+    outline.cubicTo(
+        width, height - (height - cheekApexY) * 0.42f,
+        width - bottomR * 0.28f, height,
+        width - bottomR, height
+    )
+    // Soft flat bottom base
+    outline.lineTo(bottomR, height)
+    outline.close()
+
+    buildSparkle(sparkle, p1X, bodyTop - 0.6f * density, 4.2f * density)
+    buildHeart(heart, p3X, bodyTop - 0.4f * density, 4.0f * density)
+}
+
+private fun buildWideCloudPaths(
+    width: Float,
+    height: Float,
+    bodyTop: Float,
+    density: Float,
+    outline: Path,
+    sparkle: Path,
+    heart: Path
+) {
+    val capR = ((height - bodyTop) / 2f).coerceAtLeast(1f)
+    val span = (width - capR * 2f).coerceAtLeast(1f)
+    val inset = (span * 0.04f).coerceIn(2f * density, 6f * density).coerceAtMost(span * 0.2f)
+    val puffStart = capR + inset
+    val puffEnd = width - capR - inset
+    val puffSpan = (puffEnd - puffStart).coerceAtLeast(1f)
+
+    val weights = CLOUD_5_WEIGHTS
+    val risesDp = CLOUD_5_RISES_DP
+    val puffCount = weights.size
+
+    outline.reset()
+    outline.moveTo(capR, bodyTop)
+    if (puffStart > capR) {
+        outline.lineTo(puffStart, bodyTop)
+    }
+
+    var cursorX = puffStart
+    var sparkleCenterX = puffStart
+    var sparkleRisePx = 0f
+    var heartCenterX = puffEnd
+    var heartRisePx = 0f
+
+    val sparkleIndex = 1
+    val heartIndex = 3
+    val valleyRatio = 0.28f
+    val crownHandle = 0.46f
+    val outerPullX = 0.16f
+    val outerPullY = 0.58f
+    val innerPullX = 0.22f
+    val innerPullY = 0.48f
+
+    for (i in 0 until puffCount) {
+        val xL = cursorX
+        val puffW = puffSpan * weights[i]
+        val xR = if (i == puffCount - 1) puffEnd else xL + puffW
+        cursorX = xR
+
+        val risePx = risesDp[i] * density
+        val dipL = if (i == 0) 0f else minOf(risesDp[i - 1], risesDp[i]) * density * valleyRatio
+        val dipR = if (i == puffCount - 1) 0f else minOf(risesDp[i], risesDp[i + 1]) * density * valleyRatio
+
+        val peakBias = when (i) {
+            1 -> 0.52f
+            3 -> 0.48f
+            else -> 0.50f
         }
-        // Left end cap: top -> left -> bottom
-        outline.arcTo(Rect(0f, bodyTop, capR * 2f, height), 270f, -180f, false)
-        outline.close()
+        val peakX = xL + puffW * peakBias
+        val peakY = bodyTop - risePx
+        val yL = bodyTop - dipL
+        val yR = bodyTop - dipR
 
-        // ✦ in the leftmost puff, ♡ in the rightmost, both sitting in the puff above the body line
-        val accentY = bodyTop - puff * 0.38f
-        buildSparkle(sparkle, capR + step / 2f, accentY, 5.5f * density)
-        buildHeart(heart, width - capR - step / 2f, accentY, 5f * density)
+        if (i == sparkleIndex) {
+            sparkleCenterX = peakX
+            sparkleRisePx = risePx
+        }
+        if (i == heartIndex) {
+            heartCenterX = peakX
+            heartRisePx = risePx
+        }
+
+        val wL = (peakX - xL).coerceAtLeast(0f)
+        val hL = (yL - peakY).coerceAtLeast(0f)
+        val startPullX = if (i == 0) outerPullX else innerPullX
+        val startPullY = if (i == 0) outerPullY else innerPullY
+        outline.cubicTo(
+            xL + wL * startPullX, yL - hL * startPullY,
+            peakX - wL * crownHandle, peakY,
+            peakX, peakY
+        )
+
+        val wR = (xR - peakX).coerceAtLeast(0f)
+        val hR = (yR - peakY).coerceAtLeast(0f)
+        val endPullX = if (i == puffCount - 1) outerPullX else innerPullX
+        val endPullY = if (i == puffCount - 1) outerPullY else innerPullY
+        outline.cubicTo(
+            peakX + wR * crownHandle, peakY,
+            xR - wR * endPullX, yR - hR * endPullY,
+            xR, yR
+        )
     }
 
-    private fun buildSparkle(path: Path, cx: Float, cy: Float, s: Float) {
-        val h = s / 2f
-        path.reset()
-        path.moveTo(cx, cy - h)
-        path.quadraticTo(cx, cy, cx + h, cy)
-        path.quadraticTo(cx, cy, cx, cy + h)
-        path.quadraticTo(cx, cy, cx - h, cy)
-        path.quadraticTo(cx, cy, cx, cy - h)
-        path.close()
+    if (width - capR > puffEnd) {
+        outline.lineTo(width - capR, bodyTop)
     }
+    // Right rounded pill cap (top -> right -> bottom)
+    outline.arcTo(Rect(width - capR * 2f, bodyTop, width, height), -90f, 180f, false)
+    outline.lineTo(capR, height)
+    // Left rounded pill cap (bottom -> left -> top)
+    outline.arcTo(Rect(0f, bodyTop, capR * 2f, height), 90f, 180f, false)
+    outline.close()
 
-    private fun buildHeart(path: Path, cx: Float, cy: Float, s: Float) {
-        val h = s / 2f
-        path.reset()
-        path.moveTo(cx, cy + h)
-        path.cubicTo(cx - s * 0.9f, cy, cx - h, cy - h * 1.15f, cx, cy - h * 0.35f)
-        path.cubicTo(cx + h, cy - h * 1.15f, cx + s * 0.9f, cy, cx, cy + h)
-        path.close()
-    }
+    val sparkleScale = (puffSpan * weights[sparkleIndex] * 0.45f).coerceIn(3.5f * density, 5.4f * density)
+    val heartScale = (puffSpan * weights[heartIndex] * 0.42f).coerceIn(3.5f * density, 5.0f * density)
+    buildSparkle(sparkle, sparkleCenterX, bodyTop - sparkleRisePx * 0.52f, sparkleScale)
+    buildHeart(heart, heartCenterX, bodyTop - heartRisePx * 0.52f, heartScale)
+}
+
+private fun buildSparkle(path: Path, cx: Float, cy: Float, s: Float) {
+    val h = s / 2f
+    path.reset()
+    path.moveTo(cx, cy - h)
+    path.quadraticTo(cx, cy, cx + h, cy)
+    path.quadraticTo(cx, cy, cx, cy + h)
+    path.quadraticTo(cx, cy, cx - h, cy)
+    path.quadraticTo(cx, cy, cx, cy - h)
+    path.close()
+}
+
+private fun buildHeart(path: Path, cx: Float, cy: Float, s: Float) {
+    val h = s / 2f
+    path.reset()
+    path.moveTo(cx, cy + h)
+    path.cubicTo(cx - s * 0.9f, cy, cx - h, cy - h * 1.15f, cx, cy - h * 0.35f)
+    path.cubicTo(cx + h, cy - h * 1.15f, cx + s * 0.9f, cy, cx, cy + h)
+    path.close()
 }
 
 @Composable
@@ -348,44 +516,78 @@ fun KeitaiCandidateStrip(
         }
     }
 
-    val cloudPaths = remember { CloudStripPaths() }
-    val density = LocalDensity.current.density
-    val outlineStroke = remember(density) { Stroke(width = 1.5f * density) }
     val fill = ActiveTheme.surface.copy(alpha = 0.95f)
+    val backCloudFill = ActiveTheme.palette.cloudFront.copy(alpha = 0.78f)
     val outlineColor = ActiveTheme.cardBorder
     // Flat offset copy of the outline stands in for the old CircleShape elevation shadow:
-    // elevation outlines must be convex before API 30, and the scalloped path isn't.
+    // elevation outlines must be convex before API 30, and the cloud path isn't.
     val shadowColor = ActiveTheme.cardBorder.copy(alpha = 0.22f)
     val accentColor = ActiveTheme.accentDeep.copy(alpha = 0.55f)
     val heartColor = ActiveTheme.primary.copy(alpha = 0.85f)
 
+    val headroom = if (isActive) CLOUD_HEADROOM_WIDE else CLOUD_HEADROOM_COMPACT
     val bodyHeight = if (isActive) CLOUD_BODY_HEIGHT_ACTIVE else CLOUD_BODY_HEIGHT_IDLE
     val sizing = if (isActive) {
         Modifier
             .wrapContentWidth()
-            .widthIn(max = 440.dp)
-            .height(bodyHeight + CLOUD_PUFF_DEPTH)
+            .widthIn(min = 96.dp, max = 440.dp)
+            .height(bodyHeight + headroom)
     } else {
         Modifier
             .wrapContentWidth()
-            .height(bodyHeight + CLOUD_PUFF_DEPTH)
+            .widthIn(min = 104.dp)
+            .height(bodyHeight + headroom)
     }
 
     Row(
         modifier = modifier
             .then(sizing)
-            .drawBehind {
-                cloudPaths.update(size.width, size.height, density)
-                translate(top = 1.5f * density) { drawPath(cloudPaths.outline, shadowColor) }
-                drawPath(cloudPaths.outline, fill)
-                drawPath(cloudPaths.outline, outlineColor, style = outlineStroke)
-                drawPath(cloudPaths.sparkle, accentColor)
-                drawPath(cloudPaths.heart, heartColor)
+            .drawWithCache {
+                val d = density
+                val isWide = size.width >= CLOUD_WIDE_THRESHOLD.value * d
+                val backOffset = (if (isWide) CLOUD_BACK_OFFSET_WIDE else CLOUD_BACK_OFFSET_COMPACT).value * d
+                val outlineStroke = Stroke(width = 1.5f * d)
+                val backDx = backOffset
+                val backDy = -backOffset
+                val shadowDy = 1.5f * d
+                val outlinePath = Path()
+                val sparklePath = Path()
+                val heartPath = Path()
+                val bodyTop = headroom.toPx()
+                if (isWide) {
+                    buildWideCloudPaths(
+                        width = size.width,
+                        height = size.height,
+                        bodyTop = bodyTop,
+                        density = d,
+                        outline = outlinePath,
+                        sparkle = sparklePath,
+                        heart = heartPath
+                    )
+                } else {
+                    buildCompactCloudPaths(
+                        width = size.width,
+                        height = size.height,
+                        bodyTop = bodyTop,
+                        density = d,
+                        outline = outlinePath,
+                        sparkle = sparklePath,
+                        heart = heartPath
+                    )
+                }
+                onDrawBehind {
+                    translate(left = backDx, top = backDy) { drawPath(outlinePath, backCloudFill) }
+                    translate(top = shadowDy) { drawPath(outlinePath, shadowColor) }
+                    drawPath(outlinePath, fill)
+                    drawPath(outlinePath, outlineColor, style = outlineStroke)
+                    drawPath(sparklePath, accentColor)
+                    drawPath(heartPath, heartColor)
+                }
             }
             .padding(
-                top = CLOUD_PUFF_DEPTH,
-                start = if (isActive) 8.dp else 12.dp,
-                end = 12.dp
+                top = headroom,
+                start = if (isActive) 8.dp else 16.dp,
+                end = if (isActive) 12.dp else 16.dp
             ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
@@ -410,36 +612,52 @@ fun KeitaiCandidateStrip(
             ) {
                 itemsIndexed(candidates) { index, candidate ->
                     val isSelected = index == selected
-                    val chipModifier = if (isSelected) {
+                    val isSingleChar = candidate.length == 1
+                    val chipShape = if (isSingleChar) CircleShape else CandidatePillShape
+                    val sizeModifier = if (isSingleChar) {
+                        Modifier.size(CANDIDATE_CHIP_HEIGHT)
+                    } else {
                         Modifier
+                            .defaultMinSize(minWidth = CANDIDATE_CHIP_HEIGHT)
+                            .height(CANDIDATE_CHIP_HEIGHT)
+                    }
+                    val chipModifier = if (isSelected) {
+                        sizeModifier
                             .graphicsLayer { clip = false }
                             // No scale pop / bring-into-view: the strip repaints per keypress
                             // and already scrolls the selection itself.
                             .softGlowFocus(
                                 isSelected = true,
-                                cornerRadius = 9.dp,
+                                cornerRadius = CANDIDATE_CHIP_CORNER_RADIUS,
                                 borderColor = ActiveTheme.accentDeep,
                                 bringIntoView = false,
                                 animateScale = false
                             )
-                            .background(ActiveTheme.primary.copy(alpha = 0.35f), CandidatePillShape)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .background(ActiveTheme.primary.copy(alpha = 0.35f), chipShape)
+                            .let { mod ->
+                                if (isSingleChar) mod else mod.padding(horizontal = 8.dp)
+                            }
                     } else {
-                        Modifier
-                            .background(ActiveTheme.primary.copy(alpha = 0.12f), CandidatePillShape)
-                            .border(0.8.dp, ActiveTheme.primary.copy(alpha = 0.30f), CandidatePillShape)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                        sizeModifier
+                            .background(ActiveTheme.primary.copy(alpha = 0.12f), chipShape)
+                            .border(0.8.dp, ActiveTheme.primary.copy(alpha = 0.30f), chipShape)
+                            .let { mod ->
+                                if (isSingleChar) mod else mod.padding(horizontal = 6.dp)
+                            }
                     }
 
                     Box(
-                        modifier = chipModifier.defaultMinSize(minWidth = 24.dp),
+                        modifier = chipModifier,
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = if (candidate == " ") "␣" else candidate,
                             color = if (isSelected) ActiveTheme.accentDeep else ActiveTheme.textPrimary,
                             fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }

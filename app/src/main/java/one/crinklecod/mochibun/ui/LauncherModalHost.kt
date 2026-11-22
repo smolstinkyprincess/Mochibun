@@ -131,9 +131,6 @@ internal fun LauncherModalHost(
     val onOpenIconPackDialog = remember {
         { activeModal = ActiveModal.IconPackSelection }
     }
-    val onOpenHardwareButtons = remember {
-        { activeModal = ActiveModal.HardwareButtons() }
-    }
     val onOpenHiddenApps = remember {
         { activeModal = ActiveModal.HiddenApps }
     }
@@ -215,7 +212,6 @@ internal fun LauncherModalHost(
                 onDismiss = dismissActiveModal,
                 onOpenThemeStudio = onOpenThemeStudio,
                 onOpenIconPackDialog = onOpenIconPackDialog,
-                onOpenHardwareButtons = onOpenHardwareButtons,
                 onOpenHiddenApps = onOpenHiddenApps,
                 onCreateFolderClick = onCreateFolderClick,
                 onPickWallpaperClick = onPickWallpaperClick,

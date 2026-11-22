@@ -79,7 +79,6 @@ internal fun cursorMotionSummarySubtitle(
 internal fun CursorHardwareSettingsScreen(
     onBack: () -> Unit,
     onOpenCursorMotion: () -> Unit = {},
-    onOpenHardwareButtons: (() -> Unit)? = null,
     installedApps: () -> List<LauncherApp> = { emptyList() },
     onNestedBackHandlerChanged: ((() -> Unit)?) -> Unit = {},
     initialFocusedIndex: Int = 0,

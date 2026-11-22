@@ -1,0 +1,4 @@
+Mochibun v2.7.0 ♡
+- Offline Predictive Text (T9): Added built-in T9 word prediction to the Keitai keyboard (tap '*' to cycle into T9), multi-language dictionary loading, and automatic word-frequency learning.
+- 1–9 Jump-Key Settings Hub: Reorganized Settings into clean sub-screens so every option has a 1–9 keypad shortcut and restores focus on Back.
+- Full 1-Bit Docomo Icon Pass: Replaced remaining emojis across sub-screens, headers, and dialogs with crisp keitai pixel glyphs.

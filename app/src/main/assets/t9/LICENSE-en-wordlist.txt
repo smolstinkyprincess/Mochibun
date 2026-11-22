@@ -2,7 +2,7 @@ Mochibun Offline T9 English Wordlist (en.tsv) — Attribution & Licenses
 =======================================================================
 
 `en.tsv` is derived from two upstream wordlists (filtered by SCOWL membership
-and ranked by FrequencyWords counts, capped at 15,000 entries):
+and ranked by FrequencyWords counts, capped at 30,000 entries):
 
 1. FrequencyWords (en_50k)
 --------------------------

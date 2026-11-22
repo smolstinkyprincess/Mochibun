@@ -142,7 +142,7 @@ Never wrestle with tiny touch keyboards just to send a cute face:
 > Browse and download `.mochibundle` and `.mochibunled` packs from the **[Mochibun Community Gallery](https://crinklecod.one/Mochibun/community/)** — tap any downloaded file on your phone to preview and apply in one click ♡
 
 ### 🎀 Shareable Theme Packs (`.mochibundle`)
-Export or build an all-in-one `.mochibundle` bundle to pack your colors, typography (`font.ttf` / `font.otf`, ≤ 4 MB), keypad sound pack (`sounds/<cue>.ogg`, ≤ 256 KB per cue), greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), 9-slice card border, and 8-row `mascot_atlas.png` + dialogue. Opening a `.mochibundle` (or legacy `.mochibun`) on your phone shows a live swatch and asset preview before applying in one tap—and rooted users can also sync the pack's font system-wide via Magisk.
+Export or import an all-in-one `.mochibundle` bundle in **Settings > Appearance > Theme Packs** to pack your colors, typography (`font.ttf` / `font.otf`, ≤ 4 MB), keypad sound pack (`sounds/<cue>.ogg`, ≤ 256 KB per cue), greeting text, wallpaper, custom mouse cursor (`.gif`/`.png`), 9-slice card border, and 8-row `mascot_atlas.png` + dialogue. Opening a `.mochibundle` (or legacy `.mochibun`) on your phone shows a live swatch and asset preview before applying in one tap—and rooted users can also sync the pack's font system-wide via Magisk.
 
 ### 🐰 Custom Mascots, YAML Themes & Lid Animations
 - **Custom Mochibunny (`mascot_atlas.png`)**: Swap the pocket pet with an 8-row pixel-art sprite sheet in *Settings > Appearance > Wallpaper & Deco > Custom Mascot*, plus optional mood dialogue pools inside `.mochibundle` packs.
@@ -254,7 +254,8 @@ Mochibun stays tiny, breezy, and cute thanks to these awesome projects:
 - **[libsu](https://github.com/topjohnwu/libsu)** by [@topjohnwu](https://github.com/topjohnwu): Handles fast background root clicks and clean recents switching. (•̀ᴗ•́)و
 - **[kaml](https://github.com/charleskorn/kaml)**: Friendly, human-readable YAML parsing for custom themes and lid light animations. ♡
 - **[MaruMinya (マルミーニャ)](https://www.freejapanesefont.com/maruminya-cute-free-font/)**: The darling rounded dot-matrix font powering Mochibun's nostalgic keitai typography! ♡
-- **[og-emoji-font](https://github.com/nicoleexpress/og-emoji-font)** — For preserving the iconic 12×12 NTT Docomo i-mode pixel pictograms that give Mochibun's menus and settings that genuine mid-2000s keitai charm! ♡  
+- **[og-emoji-font](https://github.com/nicoleexpress/og-emoji-font)**: Preserves the iconic 12×12 NTT Docomo i-mode pixel pictograms that give Mochibun's menus and settings that genuine mid-2000s keitai charm! ♡
+- **[FrequencyWords](https://github.com/hermitdave/FrequencyWords)** ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)) & **[SCOWL](http://wordlist.sourceforge.net/)**: Powers Mochibun's offline predictive T9 English wordlist (`en.tsv`). ♡
 ---
 
 ## 📄 License

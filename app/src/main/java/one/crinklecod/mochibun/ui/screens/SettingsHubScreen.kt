@@ -35,6 +35,7 @@ import one.crinklecod.mochibun.ui.screens.settings.*
 sealed class SettingsDestination {
     object Hub : SettingsDestination()
     object Appearance : SettingsDestination()
+    object AppearanceThemePacks : SettingsDestination()
     object AppearanceTypographyBorders : SettingsDestination()
     object AppearanceGreetingTicker : SettingsDestination()
     object AppearanceWallpaperDeco : SettingsDestination()
@@ -73,6 +74,7 @@ internal val SETTINGS_HUB_DESTINATIONS: List<SettingsDestination> = listOf(
 internal fun settingsBackTarget(destination: SettingsDestination): SettingsDestination? =
     when (destination) {
         SettingsDestination.Hub -> null
+        SettingsDestination.AppearanceThemePacks,
         SettingsDestination.AppearanceTypographyBorders,
         SettingsDestination.AppearanceGreetingTicker,
         SettingsDestination.AppearanceWallpaperDeco,
@@ -169,7 +171,6 @@ fun SettingsHubScreen(
     modifier: Modifier = Modifier,
     onOpenThemeStudio: (() -> Unit)? = null,
     onOpenIconPackDialog: (() -> Unit)? = null,
-    onOpenHardwareButtons: (() -> Unit)? = null,
     onOpenHiddenApps: (() -> Unit)? = null,
     onCreateFolderClick: (() -> Unit)? = null,
     onPickWallpaperClick: (() -> Unit)? = null,
@@ -248,10 +249,21 @@ fun SettingsHubScreen(
             AppearanceSettingsScreen(
                 onBack = { navState.popDestination(onClose) },
                 onOpenThemeStudio = onOpenThemeStudio,
+                onOpenThemePacks = { navState.navigateTo(SettingsDestination.AppearanceThemePacks) },
                 onOpenTypographyBorders = { navState.navigateTo(SettingsDestination.AppearanceTypographyBorders) },
                 onOpenGreetingTicker = { navState.navigateTo(SettingsDestination.AppearanceGreetingTicker) },
                 onOpenWallpaperDeco = { navState.navigateTo(SettingsDestination.AppearanceWallpaperDeco) },
                 onOpenWidgetsCards = { navState.navigateTo(SettingsDestination.AppearanceWidgetsCards) },
+                initialFocusedIndex = navState.initialFocusFor(destination),
+                onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
+                modifier = settingsModifier
+            )
+        }
+        SettingsDestination.AppearanceThemePacks -> {
+            AppearanceThemePacksSettingsScreen(
+                onBack = { navState.popDestination(onClose) },
+                onSettingsRestored = onSettingsRestored,
+                onNestedBackHandlerChanged = { navState.setNestedBackHandler("appearance_theme_packs", it) },
                 initialFocusedIndex = navState.initialFocusFor(destination),
                 onFocusedIndexChange = { navState.saveFocusIfActive(destination, it) },
                 modifier = settingsModifier
@@ -299,7 +311,6 @@ fun SettingsHubScreen(
             CursorHardwareSettingsScreen(
                 onBack = { navState.popDestination(onClose) },
                 onOpenCursorMotion = { navState.navigateTo(SettingsDestination.CursorMotion) },
-                onOpenHardwareButtons = onOpenHardwareButtons,
                 installedApps = installedApps,
                 onNestedBackHandlerChanged = { navState.setNestedBackHandler("key_guide", it) },
                 initialFocusedIndex = navState.initialFocusFor(destination),
@@ -575,10 +586,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Saves & Bundles") {
+                SettingsCard(categoryTitle = "Saves & Reset") {
                     SettingsNavigationRow(
                         title = "Backup & Restore",
-                        subtitle = "Share theme packs or save a full backup",
+                        subtitle = "Save a full .json backup or reset to defaults",
                         docomoIndex = 105,
                         isFocused = focusedIndex() == 6,
                         jumpNumber = 7,
@@ -612,7 +623,6 @@ fun SettingsHubDialog(
     onDismiss: () -> Unit,
     onOpenThemeStudio: (() -> Unit)? = null,
     onOpenIconPackDialog: (() -> Unit)? = null,
-    onOpenHardwareButtons: (() -> Unit)? = null,
     onOpenHiddenApps: (() -> Unit)? = null,
     onCreateFolderClick: (() -> Unit)? = null,
     onPickWallpaperClick: (() -> Unit)? = null,
@@ -639,7 +649,6 @@ fun SettingsHubDialog(
             onClose = onDismiss,
             onOpenThemeStudio = onOpenThemeStudio,
             onOpenIconPackDialog = onOpenIconPackDialog,
-            onOpenHardwareButtons = onOpenHardwareButtons,
             onOpenHiddenApps = onOpenHiddenApps,
             onCreateFolderClick = onCreateFolderClick,
             onPickWallpaperClick = onPickWallpaperClick,

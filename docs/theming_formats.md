@@ -8,11 +8,13 @@ Reference guide for creating custom themes, pocket-pet sprite sheets, `.mochibun
 
 A `.mochibundle` file (or legacy `.mochibun`) is a standard ZIP archive containing `manifest.json` and optional assets:
 
-- `manifest.json` — bundle metadata, greeting config, palette tokens (including optional `outlineColorHex`, `textColorHex`, `fontFamilyId`, `cardRoundnessDp`, `borderStyle`, `cardBorderSlicePx`), cursor tuning, and optional `mascot` metadata / dialogue.
+- `manifest.json` — bundle metadata, greeting config, palette tokens (including optional `outlineColorHex`, `textColorHex`, `fontFamilyId`, `cardRoundnessDp`, `borderStyle`, `cardBorderSlicePx`), cursor tuning, optional `mascot` metadata / dialogue, and optional `hasFont` / `fontDisplayName` / `hasSoundPack` / `soundPackName` fields.
 - `wallpaper.png` — custom Home wallpaper.
 - `cursor.gif` or `cursor.png` — custom virtual pointer sprite.
 - `mascot_atlas.png` — custom pocket-pet sprite sheet (see below).
 - `card_border.png` — custom 9-slice card frame (`hasCustomCardBorder` + `cardBorderSlicePx`).
+- `font.ttf` or `font.otf` — optional bundled UI font (≤ 4 MB; paired with `hasFont` and `fontDisplayName` in `manifest.json`).
+- `sounds/<cue>.ogg` — optional Ogg Vorbis keypad sound cues (`nav`, `click`, `select`, `back`, `boundary`, `snap`, `feed`, `pet`, ≤ 256 KB per cue; paired with `hasSoundPack` and `soundPackName` in `manifest.json`).
 
 Opening a `.mochibundle` on your phone displays a live color/asset preview card and lets you choose whether to reset unbundled wallpaper/cursor/mascot assets on apply.
 

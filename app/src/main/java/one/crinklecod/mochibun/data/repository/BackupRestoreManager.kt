@@ -7,7 +7,9 @@ import one.crinklecod.mochibun.data.ime.LearnedWordExtractor
 import one.crinklecod.mochibun.data.ime.UserWordStats
 import one.crinklecod.mochibun.data.ime.UserWordStore
 import one.crinklecod.mochibun.data.model.ActionType
+import one.crinklecod.mochibun.data.model.AppDrawerSortMode
 import one.crinklecod.mochibun.data.model.AppLedRuleMode
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.data.model.LidAppLedRule
 import one.crinklecod.mochibun.data.model.LidAppLedRuleCodec
 import one.crinklecod.mochibun.data.model.CONTROLLED_STATIC_KEYCODES
@@ -17,9 +19,11 @@ import one.crinklecod.mochibun.data.prefs.ClickMethod
 import one.crinklecod.mochibun.data.prefs.CursorPreferences
 import one.crinklecod.mochibun.data.prefs.HomeMascotSize
 import one.crinklecod.mochibun.data.prefs.HotspotAlignment
+import one.crinklecod.mochibun.data.prefs.LidOpenAction
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.pet.PetBackupCodec
 import one.crinklecod.mochibun.pet.PetManager
+import one.crinklecod.mochibun.ui.components.PhotoFrameStyle
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -98,6 +102,31 @@ object BackupRestoreManager {
         themeObj.put("custom_user_name", PreferencesManager.getCustomUserName(context))
         themeObj.put("wallpaper_overlay_enabled", PreferencesManager.isWallpaperOverlayEnabled(context))
         themeObj.put("home_mascot_size", PreferencesManager.getHomeMascotSize(context).id)
+        themeObj.put("theme_font_family", PreferencesManager.getThemeFontFamily(context))
+        themeObj.put("theme_border_style", PreferencesManager.getThemeBorderStyle(context))
+        themeObj.put("sub_display_ticker_enabled", PreferencesManager.isSubDisplayTickerEnabled(context))
+        themeObj.put("sub_display_ticker_dark", PreferencesManager.isSubDisplayTickerDark(context))
+        themeObj.put(
+            "photo_frame_enabled",
+            launcherPrefs.getBoolean(
+                PreferencesManager.KEY_PHOTO_FRAME_ENABLED,
+                PreferencesManager.DEFAULT_PHOTO_FRAME_ENABLED
+            )
+        )
+        themeObj.put(
+            "photo_frame_style",
+            launcherPrefs.getString(
+                PreferencesManager.KEY_PHOTO_FRAME_STYLE,
+                PreferencesManager.DEFAULT_PHOTO_FRAME_STYLE
+            ) ?: PreferencesManager.DEFAULT_PHOTO_FRAME_STYLE
+        )
+        themeObj.put(
+            "photo_frame_label",
+            launcherPrefs.getString(
+                PreferencesManager.KEY_PHOTO_FRAME_LABEL,
+                PreferencesManager.DEFAULT_PHOTO_FRAME_LABEL
+            ) ?: PreferencesManager.DEFAULT_PHOTO_FRAME_LABEL
+        )
 
         val colorsObj = JSONObject()
         PreferencesManager.THEME_COLOR_KEYS.forEach { key ->
@@ -148,6 +177,7 @@ object BackupRestoreManager {
 
         layoutObj.put("hidden_apps", JSONArray(PreferencesManager.getHiddenPackages(context)))
         layoutObj.put("folder_scatter_layout", PreferencesManager.isFolderScatterLayout(context))
+        layoutObj.put("app_drawer_sort_mode", PreferencesManager.getAppDrawerSortMode(context).name)
 
         val speedDials = PreferencesManager.getAllSpeedDials(context)
         val speedDialsObj = JSONObject()
@@ -221,6 +251,12 @@ object BackupRestoreManager {
         behaviorObj.put("ime_t9_user_words", userWordsObj)
         behaviorObj.put("show_root_options", PreferencesManager.isShowRootOptions(context))
         behaviorObj.put("non_root_screen_off_reset", PreferencesManager.isNonRootScreenOffResetEnabled(context))
+        behaviorObj.put("lid_open_action", PreferencesManager.getLidOpenAction(context).id)
+        behaviorObj.put("lid_led_enabled", PreferencesManager.isLidLedEnabled(context))
+        behaviorObj.put("lid_led_charging", PreferencesManager.isLidLedChargingEnabled(context))
+        behaviorObj.put("lid_led_color", PreferencesManager.getLidLedColor(context))
+        behaviorObj.put("lid_led_notification_animation_id", PreferencesManager.getLidLedNotificationAnimationId(context))
+        behaviorObj.put("lid_led_charging_animation_id", PreferencesManager.getLidLedChargingAnimationId(context))
         root.put("behavior", behaviorObj)
 
         // ── 5. Virtual Cursor Physics & Pointer ──────────────────────
@@ -231,6 +267,7 @@ object BackupRestoreManager {
         cursorObj.put("tap_step_px", CursorPreferences.getTapStepPx(context))
         cursorObj.put("max_speed_px_per_sec", CursorPreferences.getMaxSpeed(context))
         cursorObj.put("accel_ramp_ms", CursorPreferences.getAccelRampMs(context))
+        cursorObj.put("scroll_step_px", CursorPreferences.getScrollStepPx(context))
         cursorObj.put("click_method", CursorPreferences.getClickMethod(context).name)
         cursorObj.put("hotspot_alignment", CursorPreferences.getHotspotAlignment(context).name)
         cursorObj.put("cursor_size_dp", CursorPreferences.getCursorSizeDp(context))
@@ -320,6 +357,39 @@ object BackupRestoreManager {
         if (theme.has("home_mascot_size")) {
             theme.requiredString("home_mascot_size", maxLength = 32)
         }
+        if (theme.has("theme_font_family")) {
+            val fontFamily = theme.requiredString("theme_font_family", maxLength = 128)
+            require(!fontFamily.contains('/') && !fontFamily.contains('\\') && fontFamily != "..") {
+                "Theme font family is invalid."
+            }
+        }
+        if (theme.has("theme_border_style")) {
+            val borderStyle = theme.requiredString("theme_border_style", maxLength = 32)
+            require(
+                CardBorderStyle.entries.any {
+                    it.id.equals(borderStyle.trim(), ignoreCase = true) ||
+                        it.name.equals(borderStyle.trim(), ignoreCase = true)
+                }
+            ) { "Theme border style is invalid." }
+        }
+        if (theme.has("sub_display_ticker_enabled")) {
+            theme.requiredBoolean("sub_display_ticker_enabled")
+        }
+        if (theme.has("sub_display_ticker_dark")) {
+            theme.requiredBoolean("sub_display_ticker_dark")
+        }
+        if (theme.has("photo_frame_enabled")) {
+            theme.requiredBoolean("photo_frame_enabled")
+        }
+        if (theme.has("photo_frame_style")) {
+            val frameStyle = theme.requiredString("photo_frame_style", maxLength = 32)
+            require(PhotoFrameStyle.entries.any { it.id == frameStyle }) {
+                "Photo frame style is invalid."
+            }
+        }
+        if (theme.has("photo_frame_label")) {
+            theme.requiredString("photo_frame_label", maxLength = 64, allowBlank = true)
+        }
         val colors = theme.requiredObject("colors")
         colors.keys().forEach { key ->
             val value = colors.get(key)
@@ -377,6 +447,12 @@ object BackupRestoreManager {
         if (layout.has("folder_grid_mode")) layout.requiredBoolean("folder_grid_mode")
         // Optional: backups made before the sticker-tray toggle existed don't carry it.
         if (layout.has("folder_scatter_layout")) layout.requiredBoolean("folder_scatter_layout")
+        if (layout.has("app_drawer_sort_mode")) {
+            val sortMode = layout.requiredString("app_drawer_sort_mode", maxLength = 32)
+            require(AppDrawerSortMode.entries.any { it.name == sortMode }) {
+                "App drawer sort mode '$sortMode' is not supported."
+            }
+        }
         val speedDials = layout.requiredObject("speed_dials")
         require(speedDials.length() <= 8) { "Backup contains too many speed dials." }
         speedDials.keys().forEach { digit ->
@@ -483,9 +559,27 @@ object BackupRestoreManager {
         listOf(
             "kaomoji_wheel_enabled", "t9_search_enabled",
             "show_root_options", "non_root_screen_off_reset",
-            "ime_predictive_t9_enabled", "ime_t9_learn_new_words"
+            "ime_predictive_t9_enabled", "ime_t9_learn_new_words",
+            "lid_led_enabled", "lid_led_charging"
         ).forEach {
             if (value.has(it)) value.requiredBoolean(it)
+        }
+        if (value.has("lid_open_action")) {
+            val action = value.requiredString("lid_open_action", maxLength = 32)
+            require(LidOpenAction.entries.any { it.id == action }) {
+                "Backup field 'lid_open_action' is invalid."
+            }
+        }
+        if (value.has("lid_led_color")) {
+            value.requiredString("lid_led_color", maxLength = 32)
+        }
+        listOf("lid_led_notification_animation_id", "lid_led_charging_animation_id").forEach { key ->
+            if (value.has(key)) {
+                val animId = value.requiredString(key, maxLength = 128, allowBlank = true)
+                require(!animId.contains('/') && !animId.contains('\\') && animId != "..") {
+                    "Backup field '$key' is invalid."
+                }
+            }
         }
         if (value.has("ime_t9_dictionary_lang")) {
             val lang = value.requiredString("ime_t9_dictionary_lang", maxLength = 255)
@@ -606,6 +700,12 @@ object BackupRestoreManager {
         value.requiredIntInRange("tap_step_px", 1..1000)
         value.requiredIntInRange("max_speed_px_per_sec", 1..10000)
         value.requiredIntInRange("accel_ramp_ms", 1..10000)
+        if (value.has("scroll_step_px")) {
+            value.requiredIntInRange(
+                "scroll_step_px",
+                CursorPreferences.MIN_SCROLL_STEP_PX..CursorPreferences.MAX_SCROLL_STEP_PX
+            )
+        }
         require(value.requiredString("click_method", maxLength = 32) in ClickMethod.entries.map { it.name }) {
             "Cursor click method is invalid."
         }
@@ -731,6 +831,50 @@ object BackupRestoreManager {
                     HomeMascotSize.fromId(themeObj.optString("home_mascot_size"))
                 )
             }
+            if (themeObj?.has("theme_font_family") == true) {
+                PreferencesManager.setThemeFontFamily(
+                    context,
+                    themeObj.optString("theme_font_family", PreferencesManager.DEFAULT_THEME_FONT_FAMILY)
+                )
+            }
+            if (themeObj?.has("theme_border_style") == true) {
+                PreferencesManager.setThemeBorderStyle(
+                    context,
+                    themeObj.optString("theme_border_style", PreferencesManager.DEFAULT_THEME_BORDER_STYLE)
+                )
+            }
+            if (themeObj?.has("sub_display_ticker_enabled") == true) {
+                PreferencesManager.setSubDisplayTickerEnabled(
+                    context,
+                    themeObj.optBoolean("sub_display_ticker_enabled", PreferencesManager.DEFAULT_SUB_DISPLAY_TICKER_ENABLED)
+                )
+            }
+            if (themeObj?.has("sub_display_ticker_dark") == true) {
+                PreferencesManager.setSubDisplayTickerDark(
+                    context,
+                    themeObj.optBoolean("sub_display_ticker_dark", PreferencesManager.DEFAULT_SUB_DISPLAY_TICKER_DARK)
+                )
+            }
+            if (themeObj?.has("photo_frame_enabled") == true) {
+                PreferencesManager.setPhotoFrameEnabled(
+                    context,
+                    themeObj.optBoolean("photo_frame_enabled", PreferencesManager.DEFAULT_PHOTO_FRAME_ENABLED)
+                )
+            }
+            if (themeObj?.has("photo_frame_style") == true) {
+                PreferencesManager.setPhotoFrameStyle(
+                    context,
+                    PhotoFrameStyle.fromId(
+                        themeObj.optString("photo_frame_style", PreferencesManager.DEFAULT_PHOTO_FRAME_STYLE)
+                    ).id
+                )
+            }
+            if (themeObj?.has("photo_frame_label") == true) {
+                PreferencesManager.setPhotoFrameLabel(
+                    context,
+                    themeObj.optString("photo_frame_label", PreferencesManager.DEFAULT_PHOTO_FRAME_LABEL)
+                )
+            }
 
             val colorsObj = themeObj?.optJSONObject("colors")
             if (colorsObj != null) {
@@ -826,6 +970,12 @@ object BackupRestoreManager {
                         context,
                         layoutObj.optBoolean("folder_scatter_layout", PreferencesManager.DEFAULT_FOLDER_SCATTER_LAYOUT)
                     )
+                }
+                if (layoutObj.has("app_drawer_sort_mode")) {
+                    val sortModeName = layoutObj.optString("app_drawer_sort_mode", PreferencesManager.DEFAULT_APP_DRAWER_SORT_MODE)
+                    val sortMode = AppDrawerSortMode.entries.firstOrNull { it.name == sortModeName }
+                        ?: AppDrawerSortMode.ALPHABETICAL
+                    PreferencesManager.setAppDrawerSortMode(context, sortMode)
                 }
 
                 // Speed dials
@@ -1004,6 +1154,42 @@ object BackupRestoreManager {
                         behaviorObj.optBoolean("non_root_screen_off_reset", true)
                     )
                 }
+                if (behaviorObj.has("lid_open_action")) {
+                    PreferencesManager.setLidOpenAction(
+                        context,
+                        LidOpenAction.fromId(behaviorObj.optString("lid_open_action", PreferencesManager.DEFAULT_LID_OPEN_ACTION))
+                    )
+                }
+                if (behaviorObj.has("lid_led_enabled")) {
+                    PreferencesManager.setLidLedEnabled(
+                        context,
+                        behaviorObj.optBoolean("lid_led_enabled", PreferencesManager.DEFAULT_LID_LED_ENABLED)
+                    )
+                }
+                if (behaviorObj.has("lid_led_charging")) {
+                    PreferencesManager.setLidLedChargingEnabled(
+                        context,
+                        behaviorObj.optBoolean("lid_led_charging", PreferencesManager.DEFAULT_LID_LED_CHARGING)
+                    )
+                }
+                if (behaviorObj.has("lid_led_color")) {
+                    PreferencesManager.setLidLedColor(
+                        context,
+                        behaviorObj.optString("lid_led_color", PreferencesManager.DEFAULT_LID_LED_COLOR)
+                    )
+                }
+                if (behaviorObj.has("lid_led_notification_animation_id")) {
+                    PreferencesManager.setLidLedNotificationAnimationId(
+                        context,
+                        behaviorObj.optString("lid_led_notification_animation_id", "")
+                    )
+                }
+                if (behaviorObj.has("lid_led_charging_animation_id")) {
+                    PreferencesManager.setLidLedChargingAnimationId(
+                        context,
+                        behaviorObj.optString("lid_led_charging_animation_id", "")
+                    )
+                }
                 if (behaviorObj.has("system_monitor_enabled")) {
                     PreferencesManager.setSystemMonitorEnabled(context, behaviorObj.optBoolean("system_monitor_enabled", true))
                 }
@@ -1032,6 +1218,9 @@ object BackupRestoreManager {
                 }
                 if (cursorObj.has("accel_ramp_ms")) {
                     CursorPreferences.setAccelRampMs(context, cursorObj.optInt("accel_ramp_ms", CursorPreferences.DEFAULT_ACCEL_RAMP_MS))
+                }
+                if (cursorObj.has("scroll_step_px")) {
+                    CursorPreferences.setScrollStepPx(context, cursorObj.optInt("scroll_step_px", CursorPreferences.DEFAULT_SCROLL_STEP_PX))
                 }
                 if (cursorObj.has("click_method")) {
                     try {

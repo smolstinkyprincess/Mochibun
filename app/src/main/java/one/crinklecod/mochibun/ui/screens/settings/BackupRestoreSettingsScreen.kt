@@ -31,15 +31,7 @@ import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.repository.BackupPreviewSummary
 import one.crinklecod.mochibun.data.repository.BackupRestoreManager
-import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
-import one.crinklecod.mochibun.data.repository.CustomMascotManager
-import one.crinklecod.mochibun.data.repository.BundlePreviewData
-import one.crinklecod.mochibun.data.repository.ThemeBundleManager
-import one.crinklecod.mochibun.data.repository.TypographyManager
-import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
-import one.crinklecod.mochibun.ui.dialogs.ExportBundleDialog
-import one.crinklecod.mochibun.ui.dialogs.PresetPreviewDialog
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
@@ -50,8 +42,6 @@ import java.text.DateFormat
 import java.util.Date
 
 internal val BACKUP_RESTORE_ROW_IDS = listOf(
-    "export_bundle",
-    "import_bundle",
     "export",
     "restore",
     "reset"
@@ -72,100 +62,17 @@ internal fun BackupRestoreSettingsScreen(
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
-    var focusedIndex by rememberSettingsFocusIndex(initialFocusedIndex, onFocusedIndexChange)
+    var focusedIndex by rememberSettingsFocusIndex(
+        initialFocusedIndex.coerceIn(0, BACKUP_RESTORE_ROW_IDS.lastIndex),
+        onFocusedIndexChange
+    )
     var sawCenterDown by remember { mutableStateOf(false) }
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var showResetConfirmDialog by remember { mutableStateOf(false) }
-    var showExportBundleDialog by remember { mutableStateOf(false) }
-    var pendingImportPreviewData by remember { mutableStateOf<BundlePreviewData?>(null) }
-    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
     var pendingBackupPreview by remember { mutableStateOf<BackupPreviewSummary?>(null) }
     var pendingBackupUri by remember { mutableStateOf<Uri?>(null) }
-
-    // State for pending export configuration awaiting file creation URI
-    var pendingBundleName by remember { mutableStateOf("Mochibun Setup") }
-    var pendingIncludeWallpaper by remember { mutableStateOf(true) }
-    var pendingIncludeCursor by remember { mutableStateOf(true) }
-    var pendingIncludeDisplayName by remember { mutableStateOf(true) }
-    var pendingIncludeMascot by remember { mutableStateOf(true) }
-    var pendingIncludeCardBorder by remember { mutableStateOf(true) }
-    var pendingIncludeFont by remember { mutableStateOf(false) }
-    var pendingIncludeSoundPack by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-
-    // Export dialog offers font / sound-pack rows only when there's something to pack
-    val fontId by PreferencesManager.themeFontFamily.collectAsState()
-    val fontOptions by TypographyManager.options.collectAsState()
-    val bundleSoundPackName by SoundEffectManager.bundleSoundPackName.collectAsState()
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) { SoundEffectManager.refreshBundleSoundPackState(context) }
-    }
-
-    // Setup Bundle (.mochibundle) Create launcher
-    val bundleCreateLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri ->
-        if (uri != null) {
-            // ZIP streaming (up to a 4 MB font + sound pack) stays off the main thread
-            scope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    try {
-                        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                            ThemeBundleManager.exportBundle(
-                                context = context,
-                                outputStream = outputStream,
-                                bundleName = pendingBundleName,
-                                includeWallpaper = pendingIncludeWallpaper,
-                                includeCustomCursor = pendingIncludeCursor,
-                                includeDisplayName = pendingIncludeDisplayName,
-                                includeCustomMascot = pendingIncludeMascot,
-                                includeCustomCardBorder = pendingIncludeCardBorder,
-                                includeFont = pendingIncludeFont,
-                                includeSoundPack = pendingIncludeSoundPack
-                            )
-                        }
-                    } catch (e: Exception) {
-                        Result.failure(e)
-                    }
-                }
-                if (result != null) {
-                    statusMessage = if (result.isSuccess) {
-                        "Theme bundle exported! ♡"
-                    } else {
-                        "Export failed: ${result.exceptionOrNull()?.message}"
-                    }
-                }
-            }
-        }
-    }
-
-    // Setup Bundle (.mochibun) Import launcher
-    val bundleImportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val previewRes = withContext(Dispatchers.IO) {
-                    try {
-                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                            ThemeBundleManager.readBundleManifest(inputStream)
-                        }
-                    } catch (e: Exception) {
-                        Result.failure(Exception("Failed to inspect bundle: ${e.message}", e))
-                    }
-                }
-                if (previewRes != null) {
-                    if (previewRes.isSuccess) {
-                        pendingImportPreviewData = previewRes.getOrThrow()
-                        pendingImportUri = uri
-                    } else {
-                        statusMessage = "Invalid bundle: ${previewRes.exceptionOrNull()?.message}"
-                    }
-                }
-            }
-        }
-    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -211,9 +118,8 @@ internal fun BackupRestoreSettingsScreen(
     // Card that holds the focused row; read lazily by ScrollToFocusedItem (not in composition).
     fun targetCardIndex(): Int =
         when (items.getOrNull(focusedIndex)) {
-            "export_bundle", "import_bundle" -> 0
-            "export", "restore" -> 1
-            "reset" -> 2
+            "export", "restore" -> 0
+            "reset" -> 1
             else -> 0
         }
 
@@ -221,8 +127,6 @@ internal fun BackupRestoreSettingsScreen(
 
     fun activateBackupItem(index: Int) {
         when (items.getOrNull(index)) {
-            "export_bundle" -> showExportBundleDialog = true
-            "import_bundle" -> bundleImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
             "export" -> exportLauncher.launch(BackupRestoreManager.generateBackupFileName())
             "restore" -> importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
             "reset" -> showResetConfirmDialog = true
@@ -315,40 +219,14 @@ internal fun BackupRestoreSettingsScreen(
             contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item(contentType = "backup_bundle_card") {
-                SettingsCard(categoryTitle = "Shareable Theme Packs") {
-                    SettingsNavigationRow(
-                        title = "Export Theme Pack",
-                        subtitle = "Pack up your theme, colors, greeting & cursor (.mochibundle) ♡",
-                        docomoIndex = 105,
-                        isFocused = focusedIndex == 0,
-                        jumpNumber = 1,
-                        onClick = {
-                            showExportBundleDialog = true
-                        }
-                    )
-
-                    SettingsNavigationRow(
-                        title = "Import Theme Pack",
-                        subtitle = "Preview and try on a shared .mochibundle preset",
-                        docomoIndex = 136,
-                        isFocused = focusedIndex == 1,
-                        jumpNumber = 2,
-                        onClick = {
-                            bundleImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
-                        }
-                    )
-                }
-            }
-
             item(contentType = "backup_full_card") {
                 SettingsCard(categoryTitle = "Full System Backup") {
                     SettingsNavigationRow(
                         title = "Export Full Backup",
                         subtitle = "Save layout, folders, themes & key remaps to a .json file",
                         docomoIndex = 140,
-                        isFocused = focusedIndex == 2,
-                        jumpNumber = 3,
+                        isFocused = focusedIndex == 0,
+                        jumpNumber = 1,
                         onClick = {
                             exportLauncher.launch(BackupRestoreManager.generateBackupFileName())
                         }
@@ -358,8 +236,8 @@ internal fun BackupRestoreSettingsScreen(
                         title = "Restore Full Backup",
                         subtitle = "Load a complete Mochibun .json backup file",
                         docomoIndex = 40,
-                        isFocused = focusedIndex == 3,
-                        jumpNumber = 4,
+                        isFocused = focusedIndex == 1,
+                        jumpNumber = 2,
                         onClick = {
                             importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
                         }
@@ -373,8 +251,8 @@ internal fun BackupRestoreSettingsScreen(
                         title = "Factory Reset",
                         subtitle = "Reset launcher layout, folders, remaps & preferences",
                         docomoIndex = 17,
-                        isFocused = focusedIndex == 4,
-                        jumpNumber = 5,
+                        isFocused = focusedIndex == 2,
+                        jumpNumber = 3,
                         onClick = {
                             showResetConfirmDialog = true
                         }
@@ -382,28 +260,6 @@ internal fun BackupRestoreSettingsScreen(
                 }
             }
         }
-    }
-
-    if (showExportBundleDialog) {
-        ExportBundleDialog(
-            hasCustomMascot = CustomMascotManager.isActive(),
-            hasCustomCardBorder = CustomCardBorderManager.isCustomBorderActive(),
-            hasCustomFont = TypographyManager.canExportFont(fontId, fontOptions),
-            hasCustomSoundPack = bundleSoundPackName != null,
-            onDismiss = { showExportBundleDialog = false },
-            onExport = { selection ->
-                pendingBundleName = selection.bundleName
-                pendingIncludeWallpaper = selection.includeWallpaper
-                pendingIncludeCursor = selection.includeCustomCursor
-                pendingIncludeMascot = selection.includeCustomMascot
-                pendingIncludeCardBorder = selection.includeCustomCardBorder
-                pendingIncludeDisplayName = selection.includeDisplayName
-                pendingIncludeFont = selection.includeFont
-                pendingIncludeSoundPack = selection.includeSoundPack
-                showExportBundleDialog = false
-                bundleCreateLauncher.launch(ThemeBundleManager.generateBundleFileName(selection.bundleName))
-            }
-        )
     }
 
     pendingBackupPreview?.let { preview ->
@@ -434,60 +290,6 @@ internal fun BackupRestoreSettingsScreen(
                 }
             },
             onDismiss = dismissBackupPreview
-        )
-    }
-
-    pendingImportPreviewData?.let { preview ->
-        PresetPreviewDialog(
-            previewData = preview,
-            onApply = { clearUnbundledAssets ->
-                val uri = pendingImportUri
-                if (uri != null) {
-                    val bundleName = preview.manifest.bundleName
-                    // Unzipping + Typeface validation of a bundled font must not block the UI thread
-                    scope.launch {
-                        var mascotNote: String? = null
-                        val applyRes = withContext(Dispatchers.IO) {
-                            try {
-                                context.contentResolver.openInputStream(uri)?.use { stream ->
-                                    ThemeBundleManager.applyBundle(
-                                        context = context,
-                                        inputStream = stream,
-                                        clearUnbundledAssets = clearUnbundledAssets
-                                    ) { mascotNote = it }
-                                }
-                            } catch (e: Exception) {
-                                Result.failure(e)
-                            }
-                        }
-                        if (applyRes != null) {
-                            if (applyRes.isSuccess) {
-                                onSettingsRestored?.invoke()
-                                statusMessage = "Preset '$bundleName' applied! ♡" +
-                                    (mascotNote?.let { " ($it)" } ?: "")
-                            } else {
-                                statusMessage = "Apply failed: ${applyRes.exceptionOrNull()?.message}"
-                            }
-                        }
-                    }
-                }
-                try {
-                    preview.wallpaperPreview?.recycle()
-                    preview.mascotPreview?.recycle()
-                    preview.cardBorderPreview?.recycle()
-                } catch (_: Exception) {}
-                pendingImportPreviewData = null
-                pendingImportUri = null
-            },
-            onDismiss = {
-                try {
-                    preview.wallpaperPreview?.recycle()
-                    preview.mascotPreview?.recycle()
-                    preview.cardBorderPreview?.recycle()
-                } catch (_: Exception) {}
-                pendingImportPreviewData = null
-                pendingImportUri = null
-            }
         )
     }
 

@@ -500,6 +500,7 @@ class MochibunImeService : InputMethodService() {
         manualSelection = false
         resolvePendingTap(applyTap = false)
         commitPending()
+        flushLearnedWordsIfDirty()
         super.onFinishInput()
     }
 

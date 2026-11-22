@@ -13,7 +13,9 @@ import one.crinklecod.mochibun.ui.screens.SettingsNavigationState
 import one.crinklecod.mochibun.ui.screens.buildInitialSettingsStack
 import one.crinklecod.mochibun.ui.screens.settingsBackTarget
 import one.crinklecod.mochibun.ui.screens.settings.APPEARANCE_ROW_IDS
+import one.crinklecod.mochibun.ui.screens.settings.APPEARANCE_THEME_PACKS_ROW_IDS
 import one.crinklecod.mochibun.ui.screens.settings.AppearanceRowId
+import one.crinklecod.mochibun.ui.screens.settings.BACKUP_RESTORE_ROW_IDS
 import one.crinklecod.mochibun.ui.screens.settings.BehaviorRowId
 import one.crinklecod.mochibun.ui.screens.settings.CURSOR_HARDWARE_ROW_IDS
 import one.crinklecod.mochibun.ui.screens.settings.CURSOR_MOTION_ROW_IDS
@@ -178,6 +180,7 @@ class SettingsHubStressContractTest {
         assertSame(SettingsDestination.ClamshellLid, settingsBackTarget(SettingsDestination.LidLedStudio))
         assertSame(SettingsDestination.Keyboard, settingsBackTarget(SettingsDestination.KeyboardPredictiveText))
         assertSame(SettingsDestination.PermissionsRoot, settingsBackTarget(SettingsDestination.MagiskRootLsposed))
+        assertSame(SettingsDestination.Appearance, settingsBackTarget(SettingsDestination.AppearanceThemePacks))
         assertSame(SettingsDestination.Appearance, settingsBackTarget(SettingsDestination.AppearanceTypographyBorders))
         assertSame(SettingsDestination.Appearance, settingsBackTarget(SettingsDestination.AppearanceGreetingTicker))
         assertSame(SettingsDestination.Appearance, settingsBackTarget(SettingsDestination.AppearanceWallpaperDeco))
@@ -283,6 +286,10 @@ class SettingsHubStressContractTest {
         assertEquals(
             listOf(SettingsDestination.Hub, SettingsDestination.PermissionsRoot, SettingsDestination.MagiskRootLsposed),
             buildInitialSettingsStack(SettingsDestination.MagiskRootLsposed)
+        )
+        assertEquals(
+            listOf(SettingsDestination.Hub, SettingsDestination.Appearance, SettingsDestination.AppearanceThemePacks),
+            buildInitialSettingsStack(SettingsDestination.AppearanceThemePacks)
         )
         assertEquals(
             listOf(SettingsDestination.Hub, SettingsDestination.Appearance, SettingsDestination.AppearanceTypographyBorders),
@@ -431,7 +438,10 @@ class SettingsHubStressContractTest {
 
     @Test
     fun appearanceSubScreensRestoreParentRowFocus() {
-        assertEquals(6, APPEARANCE_ROW_IDS.size)
+        assertEquals(7, APPEARANCE_ROW_IDS.size)
+        assertEquals(2, APPEARANCE_THEME_PACKS_ROW_IDS.size)
+        assertEquals(3, BACKUP_RESTORE_ROW_IDS.size)
+        assertEquals(2, AppearanceRowId.THEME_PACKS.ordinal) // 3rd row (jump key 3)
         assertEquals(
             7,
             appearanceTypographyBordersRowIds(
@@ -449,6 +459,7 @@ class SettingsHubStressContractTest {
         nav.navigateTo(SettingsDestination.Appearance, fromFocusIndex = 0)
 
         val routes = listOf(
+            AppearanceRowId.THEME_PACKS to SettingsDestination.AppearanceThemePacks,
             AppearanceRowId.TYPOGRAPHY_BORDERS to SettingsDestination.AppearanceTypographyBorders,
             AppearanceRowId.GREETING_TICKER to SettingsDestination.AppearanceGreetingTicker,
             AppearanceRowId.WALLPAPER_DECO to SettingsDestination.AppearanceWallpaperDeco,

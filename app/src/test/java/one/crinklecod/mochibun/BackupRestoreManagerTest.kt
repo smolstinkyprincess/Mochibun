@@ -1,7 +1,12 @@
 package one.crinklecod.mochibun
 
+import one.crinklecod.mochibun.data.model.AppDrawerSortMode
+import one.crinklecod.mochibun.data.model.CardBorderStyle
+import one.crinklecod.mochibun.data.prefs.CursorPreferences
+import one.crinklecod.mochibun.data.prefs.LidOpenAction
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.BackupRestoreManager
+import one.crinklecod.mochibun.ui.components.PhotoFrameStyle
 import kotlinx.coroutines.Dispatchers
 import one.crinklecod.mochibun.pet.PetManager
 import one.crinklecod.mochibun.pet.PetPrefsStore
@@ -346,6 +351,133 @@ class BackupRestoreManagerTest {
         assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", badWordLong)).isSuccess)
         assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", badCountZero)).isSuccess)
         assertFalse(BackupRestoreManager.previewBackupJson(withBehaviorField("ime_t9_user_words", badCountHuge)).isSuccess)
+    }
+
+    @Test
+    fun appearanceLayoutLidAndCursorScrollStepRoundTripAndKeepOldBackupsCompatible() {
+        val context = RuntimeEnvironment.getApplication()
+        PreferencesManager.init(context)
+
+        PreferencesManager.setThemeFontFamily(context, "m3x6")
+        PreferencesManager.setThemeBorderStyle(context, CardBorderStyle.LACE.id)
+        PreferencesManager.setSubDisplayTickerEnabled(context, false)
+        PreferencesManager.setSubDisplayTickerDark(context, true)
+        PreferencesManager.setPhotoFrameEnabled(context, false)
+        PreferencesManager.setPhotoFrameStyle(context, PhotoFrameStyle.PEARL_LACE.id)
+        PreferencesManager.setPhotoFrameLabel(context, "Kawaii Memories")
+        PreferencesManager.setAppDrawerSortMode(context, AppDrawerSortMode.MOST_USED)
+        PreferencesManager.setLidOpenAction(context, LidOpenAction.NOTIFICATIONS)
+        PreferencesManager.setLidLedEnabled(context, false)
+        PreferencesManager.setLidLedChargingEnabled(context, false)
+        PreferencesManager.setLidLedColor(context, "purple")
+        PreferencesManager.setLidLedNotificationAnimationId(context, "sakura_chase")
+        PreferencesManager.setLidLedChargingAnimationId(context, "moon_glow")
+        CursorPreferences.setScrollStepPx(context, 350)
+
+        val backupJson = BackupRestoreManager.createBackupJson(context)
+        val root = JSONObject(backupJson)
+        val themeObj = root.getJSONObject("theme")
+        assertEquals("m3x6", themeObj.getString("theme_font_family"))
+        assertEquals(CardBorderStyle.LACE.id, themeObj.getString("theme_border_style"))
+        assertFalse(themeObj.getBoolean("sub_display_ticker_enabled"))
+        assertTrue(themeObj.getBoolean("sub_display_ticker_dark"))
+        assertFalse(themeObj.getBoolean("photo_frame_enabled"))
+        assertEquals(PhotoFrameStyle.PEARL_LACE.id, themeObj.getString("photo_frame_style"))
+        assertEquals("Kawaii Memories", themeObj.getString("photo_frame_label"))
+        assertEquals(AppDrawerSortMode.MOST_USED.name, root.getJSONObject("layout").getString("app_drawer_sort_mode"))
+        val behaviorObj = root.getJSONObject("behavior")
+        assertEquals(LidOpenAction.NOTIFICATIONS.id, behaviorObj.getString("lid_open_action"))
+        assertFalse(behaviorObj.getBoolean("lid_led_enabled"))
+        assertFalse(behaviorObj.getBoolean("lid_led_charging"))
+        assertEquals("purple", behaviorObj.getString("lid_led_color"))
+        assertEquals("sakura_chase", behaviorObj.getString("lid_led_notification_animation_id"))
+        assertEquals("moon_glow", behaviorObj.getString("lid_led_charging_animation_id"))
+        assertEquals(350, root.getJSONObject("cursor").getInt("scroll_step_px"))
+
+        // Mutate everything before restore
+        PreferencesManager.setThemeFontFamily(context, "default")
+        PreferencesManager.setThemeBorderStyle(context, CardBorderStyle.SOLID.id)
+        PreferencesManager.setSubDisplayTickerEnabled(context, true)
+        PreferencesManager.setSubDisplayTickerDark(context, false)
+        PreferencesManager.setPhotoFrameEnabled(context, true)
+        PreferencesManager.setPhotoFrameStyle(context, PhotoFrameStyle.INSTAX.id)
+        PreferencesManager.setPhotoFrameLabel(context, "Mochi")
+        PreferencesManager.setAppDrawerSortMode(context, AppDrawerSortMode.ALPHABETICAL)
+        PreferencesManager.setLidOpenAction(context, LidOpenAction.HOME)
+        PreferencesManager.setLidLedEnabled(context, true)
+        PreferencesManager.setLidLedChargingEnabled(context, true)
+        PreferencesManager.setLidLedColor(context, "pink")
+        PreferencesManager.setLidLedNotificationAnimationId(context, "")
+        PreferencesManager.setLidLedChargingAnimationId(context, "")
+        CursorPreferences.setScrollStepPx(context, 200)
+
+        BackupRestoreManager.restoreBackupJson(context, backupJson).getOrThrow()
+        assertEquals("m3x6", PreferencesManager.themeFontFamily.value)
+        assertEquals(CardBorderStyle.LACE.id, PreferencesManager.themeBorderStyle.value)
+        assertFalse(PreferencesManager.isSubDisplayTickerEnabled.value)
+        assertTrue(PreferencesManager.isSubDisplayTickerDark.value)
+        assertFalse(PreferencesManager.isPhotoFrameEnabled.value)
+        assertEquals(PhotoFrameStyle.PEARL_LACE.id, PreferencesManager.photoFrameStyle.value)
+        assertEquals("Kawaii Memories", PreferencesManager.photoFrameLabel.value)
+        assertEquals(AppDrawerSortMode.MOST_USED, PreferencesManager.appDrawerSortMode.value)
+        assertEquals(LidOpenAction.NOTIFICATIONS, PreferencesManager.lidOpenAction.value)
+        assertFalse(PreferencesManager.isLidLedEnabled.value)
+        assertFalse(PreferencesManager.isLidLedChargingEnabled.value)
+        assertEquals("purple", PreferencesManager.lidLedColor.value)
+        assertEquals("sakura_chase", PreferencesManager.getLidLedNotificationAnimationId(context))
+        assertEquals("moon_glow", PreferencesManager.getLidLedChargingAnimationId(context))
+        assertEquals(350, CursorPreferences.getScrollStepPx(context))
+
+        // Legacy backup omitting all 14 keys still validates & restores without clobbering them
+        BackupRestoreManager.restoreBackupJson(context, validBackupJson().toString()).getOrThrow()
+        assertEquals("m3x6", PreferencesManager.themeFontFamily.value)
+        assertEquals(CardBorderStyle.LACE.id, PreferencesManager.themeBorderStyle.value)
+        assertFalse(PreferencesManager.isSubDisplayTickerEnabled.value)
+        assertEquals(AppDrawerSortMode.MOST_USED, PreferencesManager.appDrawerSortMode.value)
+        assertEquals(LidOpenAction.NOTIFICATIONS, PreferencesManager.lidOpenAction.value)
+        assertEquals("sakura_chase", PreferencesManager.getLidLedNotificationAnimationId(context))
+        assertEquals(350, CursorPreferences.getScrollStepPx(context))
+    }
+
+    @Test
+    fun addedBackupFieldsRejectInvalidValues() {
+        assertFalse(
+            BackupRestoreManager.previewBackupJson(
+                validBackupJson().apply { getJSONObject("theme").put("theme_border_style", "sparkle") }.toString()
+            ).isSuccess
+        )
+        assertFalse(
+            BackupRestoreManager.previewBackupJson(
+                validBackupJson().apply { getJSONObject("theme").put("theme_font_family", "../evil") }.toString()
+            ).isSuccess
+        )
+        assertFalse(
+            BackupRestoreManager.previewBackupJson(
+                validBackupJson().apply { getJSONObject("theme").put("photo_frame_style", "POLAROID") }.toString()
+            ).isSuccess
+        )
+        assertFalse(
+            BackupRestoreManager.previewBackupJson(
+                validBackupJson().apply { getJSONObject("layout").put("app_drawer_sort_mode", "RANDOM") }.toString()
+            ).isSuccess
+        )
+        assertFalse(
+            BackupRestoreManager.previewBackupJson(
+                validBackupJson().apply { getJSONObject("behavior").put("lid_open_action", "self_destruct") }.toString()
+            ).isSuccess
+        )
+        assertFalse(
+            BackupRestoreManager.previewBackupJson(
+                validBackupJson().apply {
+                    getJSONObject("behavior").put("lid_led_notification_animation_id", "../bad")
+                }.toString()
+            ).isSuccess
+        )
+        assertFalse(
+            BackupRestoreManager.previewBackupJson(
+                validBackupJson().apply { getJSONObject("cursor").put("scroll_step_px", 9999) }.toString()
+            ).isSuccess
+        )
     }
 
     private fun validBackupJson(): JSONObject = JSONObject()

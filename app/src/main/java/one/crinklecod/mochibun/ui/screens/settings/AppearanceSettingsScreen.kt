@@ -62,15 +62,19 @@ import kotlinx.coroutines.withContext
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.BundlePreviewData
 import one.crinklecod.mochibun.data.repository.CustomCardBorderManager
 import one.crinklecod.mochibun.data.repository.CustomCardBorderSource
 import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.SystemFontSyncManager
+import one.crinklecod.mochibun.data.repository.ThemeBundleManager
 import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.ui.components.MascotSpriteSource
 import one.crinklecod.mochibun.ui.components.MascotSpriteStore
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.components.mochibunCardBorder
+import one.crinklecod.mochibun.ui.dialogs.ExportBundleDialog
+import one.crinklecod.mochibun.ui.dialogs.PresetPreviewDialog
 import one.crinklecod.mochibun.ui.dialogs.ResizeWithKeyboard
 import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
@@ -92,6 +96,7 @@ internal fun openCommunityGallery(context: android.content.Context) {
 internal enum class AppearanceRowId(val id: String) {
     THEME("theme"),
     COMMUNITY_GALLERY("community_gallery"),
+    THEME_PACKS("theme_packs"),
     TYPOGRAPHY_BORDERS("typography_borders"),
     GREETING_TICKER("greeting_ticker"),
     WALLPAPER_DECO("wallpaper_deco"),
@@ -99,6 +104,14 @@ internal enum class AppearanceRowId(val id: String) {
 }
 
 internal val APPEARANCE_ROW_IDS: List<String> = AppearanceRowId.entries.map { it.id }
+
+internal enum class AppearanceThemePacksRowId(val id: String) {
+    EXPORT_BUNDLE("export_bundle"),
+    IMPORT_BUNDLE("import_bundle")
+}
+
+internal val APPEARANCE_THEME_PACKS_ROW_IDS: List<String> =
+    AppearanceThemePacksRowId.entries.map { it.id }
 
 internal enum class AppearanceTypographyBordersRowId(val id: String) {
     TYPOGRAPHY("typography"),
@@ -240,12 +253,13 @@ internal fun widgetsCardsSummarySubtitle(
 }
 
 /**
- * Tier 1: Look & Aesthetic Parent Screen (6 fixed rows + 4 sub-screens).
+ * Tier 1: Look & Aesthetic Parent Screen (7 fixed rows + 5 sub-screens).
  */
 @Composable
 internal fun AppearanceSettingsScreen(
     onBack: () -> Unit,
     onOpenThemeStudio: (() -> Unit)?,
+    onOpenThemePacks: () -> Unit = {},
     onOpenTypographyBorders: () -> Unit = {},
     onOpenGreetingTicker: () -> Unit = {},
     onOpenWallpaperDeco: () -> Unit = {},
@@ -288,6 +302,7 @@ internal fun AppearanceSettingsScreen(
     fun targetCardIndex(): Int = when (rows.getOrNull(focusedIndex)) {
         AppearanceRowId.THEME,
         AppearanceRowId.COMMUNITY_GALLERY,
+        AppearanceRowId.THEME_PACKS,
         AppearanceRowId.TYPOGRAPHY_BORDERS -> 0
         AppearanceRowId.GREETING_TICKER,
         AppearanceRowId.WALLPAPER_DECO,
@@ -307,6 +322,7 @@ internal fun AppearanceSettingsScreen(
         when (row) {
             AppearanceRowId.THEME -> onOpenThemeStudio?.invoke()
             AppearanceRowId.COMMUNITY_GALLERY -> openCommunityGallery(context)
+            AppearanceRowId.THEME_PACKS -> onOpenThemePacks()
             AppearanceRowId.TYPOGRAPHY_BORDERS -> onOpenTypographyBorders()
             AppearanceRowId.GREETING_TICKER -> onOpenGreetingTicker()
             AppearanceRowId.WALLPAPER_DECO -> onOpenWallpaperDeco()
@@ -400,6 +416,15 @@ internal fun AppearanceSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsNavigationRow(
+                        title = "Theme Packs",
+                        subtitle = "Export or import .mochibundle packs",
+                        docomoIndex = 105,
+                        isFocused = isRowFocused(AppearanceRowId.THEME_PACKS),
+                        jumpNumber = jumpNumber(AppearanceRowId.THEME_PACKS),
+                        onClick = { activateRow(AppearanceRowId.THEME_PACKS) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
                         title = "Typography & Borders",
                         subtitle = typographyBordersSummarySubtitle(
                             currentFont.name,
@@ -451,6 +476,311 @@ internal fun AppearanceSettingsScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Appearance → Theme Packs sub-screen: export and import shareable `.mochibundle` theme packs.
+ */
+@Composable
+internal fun AppearanceThemePacksSettingsScreen(
+    onBack: () -> Unit,
+    onSettingsRestored: (() -> Unit)? = null,
+    onNestedBackHandlerChanged: ((() -> Unit)?) -> Unit = {},
+    initialFocusedIndex: Int = 0,
+    onFocusedIndexChange: (Int) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    val focusRequester = remember { FocusRequester() }
+    val rows = AppearanceThemePacksRowId.entries
+    var focusedIndex by rememberSettingsFocusIndex(
+        initialFocusedIndex.coerceIn(0, rows.lastIndex),
+        onFocusedIndexChange
+    )
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+    var showExportBundleDialog by remember { mutableStateOf(false) }
+    var pendingImportPreviewData by remember { mutableStateOf<BundlePreviewData?>(null) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+
+    var pendingBundleName by remember { mutableStateOf("Mochibun Setup") }
+    var pendingIncludeWallpaper by remember { mutableStateOf(true) }
+    var pendingIncludeCursor by remember { mutableStateOf(true) }
+    var pendingIncludeDisplayName by remember { mutableStateOf(true) }
+    var pendingIncludeMascot by remember { mutableStateOf(true) }
+    var pendingIncludeCardBorder by remember { mutableStateOf(true) }
+    var pendingIncludeFont by remember { mutableStateOf(false) }
+    var pendingIncludeSoundPack by remember { mutableStateOf(false) }
+
+    val fontId by PreferencesManager.themeFontFamily.collectAsState()
+    val fontOptions by TypographyManager.options.collectAsState()
+    val bundleSoundPackName by SoundEffectManager.bundleSoundPackName.collectAsState()
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { SoundEffectManager.refreshBundleSoundPackState(context) }
+    }
+
+    fun dismissPendingImportPreview() {
+        pendingImportPreviewData?.let { preview ->
+            try {
+                preview.wallpaperPreview?.recycle()
+                preview.mascotPreview?.recycle()
+                preview.cardBorderPreview?.recycle()
+            } catch (_: Exception) {}
+        }
+        pendingImportPreviewData = null
+        pendingImportUri = null
+    }
+
+    DisposableEffect(showExportBundleDialog, pendingImportPreviewData) {
+        onNestedBackHandlerChanged(
+            when {
+                pendingImportPreviewData != null -> ::dismissPendingImportPreview
+                showExportBundleDialog -> {
+                    { showExportBundleDialog = false }
+                }
+                else -> null
+            }
+        )
+        onDispose { onNestedBackHandlerChanged(null) }
+    }
+
+    val bundleCreateLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                            ThemeBundleManager.exportBundle(
+                                context = context,
+                                outputStream = outputStream,
+                                bundleName = pendingBundleName,
+                                includeWallpaper = pendingIncludeWallpaper,
+                                includeCustomCursor = pendingIncludeCursor,
+                                includeDisplayName = pendingIncludeDisplayName,
+                                includeCustomMascot = pendingIncludeMascot,
+                                includeCustomCardBorder = pendingIncludeCardBorder,
+                                includeFont = pendingIncludeFont,
+                                includeSoundPack = pendingIncludeSoundPack
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                }
+                if (result != null) {
+                    statusMessage = if (result.isSuccess) {
+                        "Theme bundle exported! ♡"
+                    } else {
+                        "Export failed: ${result.exceptionOrNull()?.message}"
+                    }
+                }
+            }
+        }
+    }
+
+    val bundleImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val previewRes = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                            ThemeBundleManager.readBundleManifest(inputStream)
+                        }
+                    } catch (e: Exception) {
+                        Result.failure(Exception("Failed to inspect bundle: ${e.message}", e))
+                    }
+                }
+                if (previewRes != null) {
+                    if (previewRes.isSuccess) {
+                        pendingImportPreviewData = previewRes.getOrThrow()
+                        pendingImportUri = uri
+                    } else {
+                        statusMessage = "Invalid bundle: ${previewRes.exceptionOrNull()?.message}"
+                    }
+                }
+            }
+        }
+    }
+
+    fun isRowFocused(row: AppearanceThemePacksRowId): Boolean = rows.getOrNull(focusedIndex) == row
+    fun jumpNumber(row: AppearanceThemePacksRowId): Int? =
+        (rows.indexOf(row) + 1).takeIf { it in 1..MAX_JUMP_ROWS }
+
+    ScrollToFocusedItem(listState) { 0 }
+
+    fun stepIndex(direction: Int) {
+        focusedIndex = (focusedIndex + direction + rows.size) % rows.size
+        SoundEffectManager.play(context, SoundEffect.NAV)
+    }
+
+    fun activateRow(row: AppearanceThemePacksRowId) {
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+        when (row) {
+            AppearanceThemePacksRowId.EXPORT_BUNDLE -> showExportBundleDialog = true
+            AppearanceThemePacksRowId.IMPORT_BUNDLE ->
+                bundleImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+        }
+    }
+
+    requestFocusSafely(focusRequester)
+
+    SettingsScaffold(
+        title = "Theme Packs",
+        showBack = true,
+        onBack = onBack,
+        isLastItemFocused = { focusedIndex == rows.lastIndex },
+        headerDocomoIndex = 105,
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native.keyCode == KeyEvent.KEYCODE_ESCAPE) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onBack()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        rows.getOrNull(focusedIndex)?.let(::activateRow)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null && digit in 1..rows.size.coerceAtMost(MAX_JUMP_ROWS)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        val targetIndex = digit - 1
+                        focusedIndex = targetIndex
+                        activateRow(rows[targetIndex])
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                ) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        val direction = if (
+                            native.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                            native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                        ) -1 else 1
+                        stepIndex(direction)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                false
+            }
+    ) {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(top = 44.dp, bottom = 72.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            item(contentType = "appearance_theme_packs_card") {
+                SettingsCard(categoryTitle = "Shareable Theme Packs") {
+                    SettingsNavigationRow(
+                        title = "Export Theme Pack",
+                        subtitle = "Pack up your theme, colors, greeting & cursor (.mochibundle) ♡",
+                        docomoIndex = 105,
+                        isFocused = isRowFocused(AppearanceThemePacksRowId.EXPORT_BUNDLE),
+                        jumpNumber = jumpNumber(AppearanceThemePacksRowId.EXPORT_BUNDLE),
+                        onClick = { activateRow(AppearanceThemePacksRowId.EXPORT_BUNDLE) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "Import Theme Pack",
+                        subtitle = "Preview and try on a shared .mochibundle preset",
+                        docomoIndex = 136,
+                        isFocused = isRowFocused(AppearanceThemePacksRowId.IMPORT_BUNDLE),
+                        jumpNumber = jumpNumber(AppearanceThemePacksRowId.IMPORT_BUNDLE),
+                        onClick = { activateRow(AppearanceThemePacksRowId.IMPORT_BUNDLE) }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showExportBundleDialog) {
+        ExportBundleDialog(
+            hasCustomMascot = CustomMascotManager.isActive(),
+            hasCustomCardBorder = CustomCardBorderManager.isCustomBorderActive(),
+            hasCustomFont = TypographyManager.canExportFont(fontId, fontOptions),
+            hasCustomSoundPack = bundleSoundPackName != null,
+            onDismiss = { showExportBundleDialog = false },
+            onExport = { selection ->
+                pendingBundleName = selection.bundleName
+                pendingIncludeWallpaper = selection.includeWallpaper
+                pendingIncludeCursor = selection.includeCustomCursor
+                pendingIncludeMascot = selection.includeCustomMascot
+                pendingIncludeCardBorder = selection.includeCustomCardBorder
+                pendingIncludeDisplayName = selection.includeDisplayName
+                pendingIncludeFont = selection.includeFont
+                pendingIncludeSoundPack = selection.includeSoundPack
+                showExportBundleDialog = false
+                bundleCreateLauncher.launch(ThemeBundleManager.generateBundleFileName(selection.bundleName))
+            }
+        )
+    }
+
+    pendingImportPreviewData?.let { preview ->
+        PresetPreviewDialog(
+            previewData = preview,
+            onApply = { clearUnbundledAssets ->
+                val uri = pendingImportUri
+                if (uri != null) {
+                    val bundleName = preview.manifest.bundleName
+                    scope.launch {
+                        var mascotNote: String? = null
+                        val applyRes = withContext(Dispatchers.IO) {
+                            try {
+                                context.contentResolver.openInputStream(uri)?.use { stream ->
+                                    ThemeBundleManager.applyBundle(
+                                        context = context,
+                                        inputStream = stream,
+                                        clearUnbundledAssets = clearUnbundledAssets
+                                    ) { mascotNote = it }
+                                }
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
+                        }
+                        if (applyRes != null) {
+                            if (applyRes.isSuccess) {
+                                onSettingsRestored?.invoke()
+                                statusMessage = "Preset '$bundleName' applied! ♡" +
+                                    (mascotNote?.let { " ($it)" } ?: "")
+                            } else {
+                                statusMessage = "Apply failed: ${applyRes.exceptionOrNull()?.message}"
+                            }
+                        }
+                    }
+                }
+                dismissPendingImportPreview()
+            },
+            onDismiss = ::dismissPendingImportPreview
+        )
+    }
+
+    statusMessage?.let { msg ->
+        LaunchedEffect(msg) {
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            statusMessage = null
         }
     }
 }

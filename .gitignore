@@ -1,19 +1,9 @@
-# ==============================
-
 # Android Studio / IntelliJ
-
-# ==============================
-
 .idea/
 *.iml
 out/
 
-# ==============================
-
 # Gradle / Android build output
-
-# ==============================
-
 .gradle/
 build/
 **/build/
@@ -22,129 +12,59 @@ captures/
 .externalNativeBuild/
 .cxx/
 
-# ==============================
-
 # Android packages and build artifacts
-
-# ==============================
-
 *.apk
 *.aab
 *.ap_
 *.dex
 
-# ==============================
-
 # Signing keys and private credentials
-
-# ==============================
-
 *.jks
 *.keystore
 keystore.properties
 signing.properties
 secrets.properties
+m120-release
+mochibun-release
 .env
 .env.*
 
-# ==============================
-
-# Local AI model files
-
-# ==============================
-
+# Native build artifacts & local C++ trees
+*.o
+*.obj
+*.a
+*.so
 *.gguf
 *.ggml
 models/
-
-# Keep model files out of Git even if copied into the project.
-
 app/src/main/assets/*.gguf
 app/src/main/assets/*.ggml
+app/src/main/cpp/llama.cpp
 
-# ==============================
+# Python & tool build outputs / inputs
+__pycache__/
+*.py[cod]
+tools/**/output/
+tools/docomo_overlay/assets/
+tools/sound_gen/
+tools/input/
 
-# Logs and temporary files
-
-# ==============================
-
+# Logs, OS metadata & temporary backups
 *.log
 *.tmp
 *.temp
 .DS_Store
 Thumbs.db
 desktop.ini
-# AGENTS.md
-PROJECT_MEMORY.md
-
-# ==============================
-
-# Native build artifacts
-
-# ==============================
-
-*.o
-*.obj
-*.a
-*.so
-
-# ==============================
-# Internal tool build outputs
-# ==============================
-tools/**/output/
-
-# ==============================
-
-# Local editor / backup files
-
-# ==============================
-
 *~
 *.swp
 *.swo
 *.bak
 
-
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
-
-# reference folder for agents
+# Local AI agent notes & device dumps
+PROJECT_MEMORY.md
+CLAUDE.md
+.aider*
 reference/
 agent refs/
-
-*.jks
-keystore.properties
-
-
-# random
-agent refs/
-app/src/main/cpp/llama.cpp
-m120-release
-mochibun-release
-*.jks
-*.keystore
-tools/docomo_overlay/output/
-tools/docomo_overlay/assets/
-tools/mochibun_bootanim/output/
-CLAUDE.md
 mtksystemui/
-mtksystemui/mtksystemui-decomp/
-mtksystemui/MtkSystemUI.apk
-.aider*
-.idea/
-tools/sound_gen/
-tools/input/
-tools/__pycache__/
