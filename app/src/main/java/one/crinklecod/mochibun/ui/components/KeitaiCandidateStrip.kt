@@ -57,8 +57,7 @@ object KeitaiCandidatePools {
         "♡", "★", "♥", "♪"
     )
     val POOL_0 = arrayOf(
-        " ", "0",
-        "/", "\\", "_", "@", "#", "$", "%", "^", "&", "*", "+", "=", "~",
+        "*", "/", "\\", "_", "@", "#", "$", "%", "^", "&", "+", "=", "~",
         "|", "<", ">",
         "(", ")", "[", "]", "{", "}", "`"
     )
@@ -674,7 +673,7 @@ fun KeitaiCandidateStrip(
     }
 }
 
-/** Input-mode badge (`abc` / `ABC` / `123`) styled as a little pastel luggage tag. */
+/** Input-mode badge (`abc` / `ABC` / `T9` / `123`) styled as a little pastel luggage tag. */
 @Composable
 private fun ModeTag(label: String) {
     Row(

@@ -49,6 +49,12 @@ internal class PredictiveInput {
         this.rawDigitFallback = rawDigitFallback
     }
 
+    fun setCapitalizeFirst(capitalize: Boolean) {
+        if (!isEmpty) {
+            capitalizeFirst = capitalize
+        }
+    }
+
     fun lowercaseWordAt(index: Int): String? {
         if (isEmpty || rawDigitFallback) return null
         return lowercaseCandidates.getOrNull(index)

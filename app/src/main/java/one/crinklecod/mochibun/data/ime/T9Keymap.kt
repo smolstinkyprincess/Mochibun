@@ -56,6 +56,31 @@ object T9Keymap {
         else -> null
     }
 
+    /**
+     * Individual letters mapped to a T9 digit key (`2`–`9`), prioritizing common single-letter
+     * words (`"a"` on `2` and `"i"` on `4`).
+     */
+    fun lettersForDigit(digit: Char): List<String> = when (digit) {
+        '2' -> LETTERS_2
+        '3' -> LETTERS_3
+        '4' -> LETTERS_4
+        '5' -> LETTERS_5
+        '6' -> LETTERS_6
+        '7' -> LETTERS_7
+        '8' -> LETTERS_8
+        '9' -> LETTERS_9
+        else -> emptyList()
+    }
+
+    private val LETTERS_2 = listOf("a", "b", "c")
+    private val LETTERS_3 = listOf("d", "e", "f")
+    private val LETTERS_4 = listOf("i", "g", "h")
+    private val LETTERS_5 = listOf("j", "k", "l")
+    private val LETTERS_6 = listOf("m", "n", "o")
+    private val LETTERS_7 = listOf("p", "q", "r", "s")
+    private val LETTERS_8 = listOf("t", "u", "v")
+    private val LETTERS_9 = listOf("w", "x", "y", "z")
+
     private fun charToDigit(ch: Char): Char = when (ch) {
         'a', 'b', 'c' -> '2'
         'd', 'e', 'f' -> '3'

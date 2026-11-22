@@ -46,6 +46,20 @@ class PredictiveInputTest {
     }
 
     @Test
+    fun setCapitalizeFirstUpdatesMidWordOnlyWhenNonEmpty() {
+        val input = PredictiveInput()
+        input.setCapitalizeFirst(true)
+        assertFalse(input.capitalizeFirst)
+
+        input.push('4', autoCapActive = false)
+        assertFalse(input.capitalizeFirst)
+        input.setCapitalizeFirst(true)
+        assertTrue(input.capitalizeFirst)
+        input.setCapitalizeFirst(false)
+        assertFalse(input.capitalizeFirst)
+    }
+
+    @Test
     fun clearResetsDigitsCandidatesAndFlags() {
         val input = PredictiveInput()
         input.push('4', autoCapActive = true)

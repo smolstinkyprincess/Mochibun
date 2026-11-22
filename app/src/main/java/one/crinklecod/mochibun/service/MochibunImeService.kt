@@ -90,12 +90,11 @@ import one.crinklecod.mochibun.ui.theme.loadSavedTheme
  * show request), so windows without any text field still get raw keys. In those editors, DEL and
  * Enter with nothing pending go to the app as raw keys, since they handle text only via commits.
  *
- * Keypad keys `2–9` act on release: in multi-tap mode a tap cycles the key's pool, while in T9
- * mode it appends a digit to the active word; holding a key past the hold delay commits any
- * pending T9 word and types the key's own digit (or '*') straight into the editor. Tapping '*'
- * cycles the mode: abc -> Abc (next letter) -> ABC (caps lock) -> T9 (when predictive text is
- * enabled and allowed by the field) -> abc. Sentence starts are capitalised automatically in
- * fields that ask for it.
+ * Keypad keys `2–9` act on release in T9 mode (and cycle on tap in multi-tap); holding a digit key
+ * past the hold delay commits any pending T9 word and types the key's own digit straight into the
+ * editor. Short-tapping `*` cycles the input mode (`abc -> T9 -> 123 -> abc`, skipping `T9` when
+ * disabled or disallowed), while holding `*` cycles letter case (`Abc -> ABC -> abc -> Abc`).
+ * Sentence starts are capitalised automatically in fields that ask for it.
  */
 class MochibunImeService : InputMethodService() {
 
@@ -119,9 +118,10 @@ class MochibunImeService : InputMethodService() {
     private var moveAnimator: ValueAnimator? = null
     private val moveInterpolator = DecelerateInterpolator()
 
-    // Letter case & predictive mode. Read by the strip label, so Compose state.
+    // Letter case & input mode. Read by the strip label, so Compose state.
     private var shiftMode by mutableStateOf(ShiftMode.LOWER)
-    private var predictiveInUse by mutableStateOf(false)
+    private var inputMode by mutableStateOf(TextInputMode.MULTITAP)
+    private var lastTextMode = TextInputMode.MULTITAP
     private var predictiveEnabled = PreferencesManager.DEFAULT_IME_PREDICTIVE_T9_ENABLED
     private var learnNewWordsEnabled = PreferencesManager.DEFAULT_IME_T9_LEARN_NEW_WORDS
     private var predictiveAllowedForField by mutableStateOf(false)
@@ -163,7 +163,7 @@ class MochibunImeService : InputMethodService() {
         }
     }
 
-    // Keypad key currently held down, waiting to become a tap (on UP) or a digit (on timer)
+    // Keypad key currently held down, waiting to become a tap (on UP) or a digit / case cycle (on timer)
     private val handler = Handler(Looper.getMainLooper())
     private var holdKeyCode = KeyEvent.KEYCODE_UNKNOWN
     private var holdFired = false
@@ -466,9 +466,11 @@ class MochibunImeService : InputMethodService() {
         if (!restarting) {
             shiftMode = ShiftMode.LOWER
             autoCapSuppressed = false
-            predictiveInUse = false
+            inputMode = TextInputMode.MULTITAP
+            lastTextMode = TextInputMode.MULTITAP
         } else if (!predictiveEnabled || !predictiveAllowedForField) {
-            predictiveInUse = false
+            if (inputMode == TextInputMode.T9) inputMode = TextInputMode.MULTITAP
+            if (lastTextMode == TextInputMode.T9) lastTextMode = TextInputMode.MULTITAP
         }
         refreshAutoCap()
         if (hasTextEditor()) InputArbiter.updateInputActive(this, true)
@@ -701,11 +703,24 @@ class MochibunImeService : InputMethodService() {
         }
         // Number / phone / date fields take raw digit keys (and '*' for dialling) as they are
         val isMultiTapKey = keyCode == KeyEvent.KEYCODE_STAR || KeitaiCandidatePools.forKey(keyCode) != null
-        if (isMultiTapKey) manualSelection = false
+        if (isMultiTapKey && keyCode != KeyEvent.KEYCODE_STAR) manualSelection = false
         if (isNumericField) return false
         if (isMultiTapKey) {
             // Typing after the strip was hidden (e.g. BACK) would leave candidates invisible
             if (!isInputViewShown && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) requestShowSelf(0)
+            if (keyCode == KeyEvent.KEYCODE_STAR) {
+                // '*' cycles input mode on release (resolvePendingTap) and letter case on hold (fireHold)
+                handler.removeCallbacks(holdRunnable)
+                holdKeyCode = keyCode
+                holdFired = false
+                handler.postDelayed(holdRunnable, holdDelayMs)
+                return true
+            }
+            if (inputMode == TextInputMode.NUMBERS && keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) {
+                literalFor(keyCode)?.let(commit)
+                syncComposing()
+                return true
+            }
             handler.removeCallbacks(holdRunnable)
             holdKeyCode = keyCode
             holdFired = false
@@ -718,8 +733,7 @@ class MochibunImeService : InputMethodService() {
             if (t9 && (keyCode == KeyEvent.KEYCODE_1 || keyCode == KeyEvent.KEYCODE_0) && !predictiveInput.isEmpty) {
                 commitPending()
             }
-            // '*' cycles mode on release (resolvePendingTap) so holding '*' never flashes/alters mode
-            if (keyCode != KeyEvent.KEYCODE_STAR) candidateState.handleKey(keyCode, commit)
+            candidateState.handleKey(keyCode, commit)
             syncComposing()
             return true
         }
@@ -745,14 +759,28 @@ class MochibunImeService : InputMethodService() {
         }
     }
 
-    /** Hold timer: commit pending T9 word (or drop multi-tap letter) and type the literal digit / '*'. */
+    /**
+     * Hold timer:
+     * - On `*`: cycles letter casing (`Abc -> ABC -> abc -> Abc`), independent of `holdForDigitEnabled`.
+     * - On `0..9`: commits pending T9 word (or drops multi-tap letter) and types the literal digit.
+     */
     private fun fireHold() {
         val keyCode = holdKeyCode
-        if (keyCode == KeyEvent.KEYCODE_UNKNOWN || holdFired || !holdForDigitEnabled) return
+        if (keyCode == KeyEvent.KEYCODE_UNKNOWN || holdFired) return
+        if (keyCode == KeyEvent.KEYCODE_STAR) {
+            holdFired = true
+            batchEdit {
+                cycleShiftOnHold()
+                syncComposing()
+            }
+            HapticManager.vibrateTick(this)
+            return
+        }
+        if (!holdForDigitEnabled) return
         holdFired = true
         manualSelection = false
         batchEdit {
-            if (t9Active() && (keyCode == KeyEvent.KEYCODE_STAR || keyCode in KeyEvent.KEYCODE_2..KeyEvent.KEYCODE_9)) {
+            if (t9Active() && keyCode in KeyEvent.KEYCODE_2..KeyEvent.KEYCODE_9) {
                 commitPending()
             } else {
                 candidateState.reset()
@@ -830,7 +858,7 @@ class MochibunImeService : InputMethodService() {
         if (!applyTap) return
         if (starTap) {
             batchEdit {
-                cycleShift()
+                cycleInputMode()
                 syncComposing()
             }
         } else if (digitTap) {
@@ -839,7 +867,7 @@ class MochibunImeService : InputMethodService() {
                 if (candidateState.isActive && predictiveInput.isEmpty) {
                     commitPending()
                 }
-                predictiveInput.push(digit, autoCapActive = isAutoCapActive())
+                predictiveInput.push(digit, autoCapActive = isUpperCase())
                 updatePredictiveCandidates()
                 syncComposing()
             }
@@ -985,7 +1013,11 @@ class MochibunImeService : InputMethodService() {
     }
 
     private fun t9Active(): Boolean =
-        predictiveInUse && predictiveEnabled && predictiveAllowedForField && engineReadyState && dictionaryEngine.ready
+        inputMode == TextInputMode.T9 &&
+            predictiveEnabled &&
+            predictiveAllowedForField &&
+            engineReadyState &&
+            dictionaryEngine.ready
 
     private fun commitPending() {
         val selectedIdx = candidateState.selectedIndex
@@ -1006,7 +1038,7 @@ class MochibunImeService : InputMethodService() {
         }
     }
 
-    private fun updatePredictiveCandidates() {
+    private fun updatePredictiveCandidates(preserveSelection: Boolean = false) {
         val seq = predictiveInput.digits
         if (seq.isEmpty()) {
             predictiveInput.clear()
@@ -1026,33 +1058,52 @@ class MochibunImeService : InputMethodService() {
                 capitalizeFirst = predictiveInput.capitalizeFirst
             )
         }
-        candidateState.setCandidates(display)
+        if (preserveSelection && display.size == candidateState.candidates.size) {
+            candidateState.replaceCandidates(display)
+        } else {
+            candidateState.setCandidates(display)
+        }
     }
 
-    /** '*' tap: abc -> Abc -> ABC (-> T9 when predictive enabled and allowed) -> abc. */
-    private fun cycleShift() {
+    /** Short `*` tap: `abc -> T9 -> 123 -> abc` (or `abc -> 123 -> abc` when T9 is off/disallowed). */
+    private fun cycleInputMode() {
         autoCapFreshForComposing = false
+        manualSelection = false
+        commitPending()
         val allowed = predictiveEnabled && predictiveAllowedForField
-        val wasPredictive = predictiveInUse && predictiveAllowedForField
-        val next = nextStarMode(
+        val next = nextInputMode(
+            mode = inputMode,
             shift = shiftMode,
-            autoCapActive = isAutoCapActive(),
-            predictiveInUse = wasPredictive,
+            lastTextMode = lastTextMode,
             predictiveEnabled = allowed
         )
-        if (wasPredictive != next.predictiveInUse) {
-            commitPending()
-        }
+        inputMode = next.mode
         shiftMode = next.shift
-        predictiveInUse = next.predictiveInUse
-        // Entering T9 keeps autoCapNext active for the first word; choosing 'abc' suppresses it
-        autoCapSuppressed = if (!wasPredictive && next.predictiveInUse) {
-            false
-        } else {
-            next.shift == ShiftMode.LOWER
-        }
-        // Re-case the pending letter in place
-        if (candidateState.isActive) {
+        lastTextMode = next.lastTextMode
+    }
+
+    /** Long `*` hold: `Abc -> ABC -> abc -> Abc` (returning from `123` to `abc`/`T9` with `Abc`). */
+    private fun cycleShiftOnHold() {
+        autoCapFreshForComposing = false
+        val allowed = predictiveEnabled && predictiveAllowedForField
+        val wasT9 = t9Active()
+        val next = nextShiftOnHold(
+            mode = inputMode,
+            shift = shiftMode,
+            autoCapActive = isAutoCapActive(),
+            composingCapitalizeFirst = wasT9 && !predictiveInput.isEmpty && predictiveInput.capitalizeFirst,
+            lastTextMode = lastTextMode,
+            predictiveEnabled = allowed
+        )
+        inputMode = next.mode
+        shiftMode = next.shift
+        lastTextMode = next.lastTextMode
+        autoCapSuppressed = next.shift == ShiftMode.LOWER
+
+        if (t9Active() && !predictiveInput.isEmpty) {
+            predictiveInput.setCapitalizeFirst(next.shift == ShiftMode.ONCE)
+            updatePredictiveCandidates(preserveSelection = true)
+        } else if (candidateState.isActive) {
             poolFor(candidateState.lastKeyCode)?.let { candidateState.replaceCandidates(it) }
         }
     }
@@ -1063,8 +1114,12 @@ class MochibunImeService : InputMethodService() {
     private fun isUpperCase(): Boolean = shiftMode != ShiftMode.LOWER || isAutoCapActive()
 
     private fun modeLabel(): String = when {
-        isNumericField -> "123"
-        t9Active() -> "T9"
+        isNumericField || inputMode == TextInputMode.NUMBERS -> "123"
+        t9Active() -> when {
+            shiftMode == ShiftMode.CAPS -> "T9🔒"
+            shiftMode == ShiftMode.ONCE || isAutoCapActive() -> "T9↑"
+            else -> "T9"
+        }
         shiftMode == ShiftMode.CAPS -> "ABC"
         isUpperCase() -> "Abc"
         else -> "abc"
@@ -1157,7 +1212,6 @@ class MochibunImeService : InputMethodService() {
 
     private fun literalFor(keyCode: Int): String? = when (keyCode) {
         in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> ('0' + (keyCode - KeyEvent.KEYCODE_0)).toString()
-        KeyEvent.KEYCODE_STAR -> "*"
         else -> null
     }
 

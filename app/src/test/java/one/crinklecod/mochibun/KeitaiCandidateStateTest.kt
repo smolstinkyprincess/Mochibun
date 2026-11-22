@@ -85,14 +85,23 @@ class KeitaiCandidateStateTest {
     }
 
     @Test
+    fun zeroPoolStartsWithStarAndOmitsSpaceAndZero() {
+        assertEquals("*", KeitaiCandidatePools.POOL_0.first())
+        assertEquals(1, KeitaiCandidatePools.POOL_0.count { it == "*" })
+        assertFalse(" " in KeitaiCandidatePools.POOL_0)
+        assertFalse("0" in KeitaiCandidatePools.POOL_0)
+    }
+
+    @Test
     fun horizontalNavigationWrapsAtBoundaries() {
         press(KeyEvent.KEYCODE_0)
+        assertEquals("*", current)
         state.navigateLeft()
         assertEquals(KeitaiCandidatePools.POOL_0.last(), current)
         state.navigateRight()
-        assertEquals(" ", current)
+        assertEquals("*", current)
         state.navigateRight()
-        assertEquals("0", current)
+        assertEquals("/", current)
     }
 
     @Test

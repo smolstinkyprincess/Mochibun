@@ -24,7 +24,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ### Everyday
 - **Made for real buttons**: Everything works with the d-pad, and a soft pastel glow shows what's selected so you never lose your place.
-- **Keitai keyboard**: A system-wide multi-tap keypad keyboard in a little floating pill. Tap a number to cycle its letters, hold for the digit, `*` for shift, `#` for space. It hops out of the way of what you're typing in.
+- **Keitai keyboard**: A system-wide multi-tap & predictive T9 keypad keyboard in a little floating pill. Tap a number to cycle its letters, hold for the digit, tap `*` for mode (`abc` / `T9` / `123`), hold `*` for case, `#` for space. It hops out of the way of what you're typing in.
 - **Kaomoji wheel**: Long-press `#` in any app to pop up a wheel of text faces and paste one into your chat `( ˶ˆᗜˆ˵ ) ♡`
 - **Widgets & music deck**: A widget page with a Now Playing card that appears when music plays and hides when it stops. Third-party widgets work too.
 - **Virtual mouse pointer**: Press the side key (F4) for a little cursor in touch-only apps. Click with the center key, scroll with `2`/`8` and `4`/`6`, and use your own `.png` or `.gif` sprite. No root? Turn on the optional Accessibility helper and it taps and scrolls anyway.
@@ -103,15 +103,16 @@ Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai
 | Key | Tap | Hold |
 | :--- | :--- | :--- |
 | **`2`–`9`** | Cycle letters (multi-tap) or type predicted word (`T9` mode) | Type the digit |
-| **`*`** | Cycle mode: `abc` → `Abc` → `ABC` → `T9` → `abc` | Type literal `*` |
+| **`*`** | Cycle mode: `abc` → `T9` → `123` → `abc` (skips `T9` when off) | Cycle case: `Abc` → `ABC` → `abc` |
+| **`0`** | Code symbols (`* / \ _ @ # $ …`) or `0` (`123` mode) | Type digit `0` |
 | **`#`** | Commit word & insert Space | **Kaomoji Wheel 🌸** |
 | **Left / Right** | Pick another candidate / word in the strip | Fast-scroll candidates |
 | **Center** | Commit the current letter/word (or send / go when nothing is pending) | — |
 | **Up / Down** | Commit the letter/word and move on | — |
 | **Back / Delete** | Undo T9 digit / cancel candidate, or delete | Repeat backspace |
 
-- The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` / `T9` badge.
-- **Offline T9 prediction & learned words:** Press `*` to switch into `T9` mode using the bundled 30k+ English dictionary (contractions included). Words you commit twice automatically rank higher for you, stored strictly offline on your device. Want another language or custom wordlist? Drop any `.tsv` or `.txt` wordlist into `Android/data/one.crinklecod.mochibun/files/dictionaries` and switch under **Settings > Keyboard > Predictive Text > T9 Dictionary**.
+- The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` / `T9` / `T9↑` / `T9🔒` / `123` badge.
+- **Offline T9 prediction & learned words:** Tap `*` to switch into `T9` mode using the bundled 30k+ English dictionary (contractions included), and hold `*` at any time to cycle `Abc` → `ABC` → `abc` (even mid-word in T9). Words you commit twice automatically rank higher for you, stored strictly offline on your device. Want another language or custom wordlist? Drop any `.tsv` or `.txt` wordlist into `Android/data/one.crinklecod.mochibun/files/dictionaries` and switch under **Settings > Keyboard > Predictive Text > T9 Dictionary**.
 - **It dodges your text box.** If the box you're typing in is down at the bottom of the screen (hi, Discord), the pill hops to the top so you can see your words, then hops back down when the coast is clear. Some apps don't tell Android where the cursor is, and in those the pill just stays at the bottom.
 - **It fades when you pause.** After a moment with no key presses the pill turns soft and see-through, then comes back to full strength on your next press.
 - A pending multi-tap letter commits on its own after a short pause (**Auto-Commit Delay**: 0.7 s by default, adjustable from 0.3 to 1.5 s), while T9 words wait for Space / Center / navigation so you have time to pick the right word.

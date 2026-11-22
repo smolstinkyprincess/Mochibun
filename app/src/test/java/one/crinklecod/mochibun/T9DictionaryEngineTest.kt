@@ -4,6 +4,7 @@ import one.crinklecod.mochibun.data.ime.T9DictionaryEngine
 import one.crinklecod.mochibun.data.ime.T9Keymap
 import one.crinklecod.mochibun.data.ime.UserWordStats
 import one.crinklecod.mochibun.data.ime.UserWordStore
+import one.crinklecod.mochibun.service.PredictiveInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -81,6 +82,44 @@ class T9DictionaryEngineTest {
         val missing = engine.candidatesFor("999999")
         assertFalse(missing.hasDictionaryMatch)
         assertEquals(listOf("999999"), missing.words)
+    }
+
+    @Test
+    fun singleDigitT9AlwaysIncludesAllMappedLettersBeforeCompletions() {
+        val tsv = """
+            2\ta\t1000
+            26\tam\t900
+            36\tdo\t900
+            46\tin\t950
+            56\tlo\t800
+            66\tno\t850
+            76\tso\t850
+            86\tto\t950
+            96\tyo\t700
+        """.trimIndent()
+        val engine = T9DictionaryEngine()
+        engine.loadFromReader("test", StringReader(tsv))
+
+        // Key 2 has "a" in exact(), followed by "b", "c", then completion "am"
+        val key2 = engine.candidatesFor("2")
+        assertTrue(key2.hasDictionaryMatch)
+        assertEquals(listOf("a", "b", "c", "am"), key2.words)
+
+        // Key 4 has no exact 1-letter entry in this custom dict, yet prioritizes "i" before "g", "h"
+        val key4 = engine.candidatesFor("4")
+        assertTrue(key4.hasDictionaryMatch)
+        assertEquals(listOf("i", "g", "h", "in"), key4.words)
+
+        // Keys 3..9 each expose every mapped single letter before completions
+        for (digit in '2'..'9') {
+            val expectedLetters = T9Keymap.lettersForDigit(digit)
+            val result = engine.candidatesFor(digit.toString())
+            assertTrue("Expected match for digit $digit", result.hasDictionaryMatch)
+            for (letter in expectedLetters) {
+                assertTrue("Expected '$letter' in candidates for '$digit': ${result.words}", letter in result.words)
+            }
+            assertEquals(expectedLetters, result.words.take(expectedLetters.size))
+        }
     }
 
     @Test
@@ -264,6 +303,32 @@ class T9DictionaryEngineTest {
         }
         assertEquals("hello", engine.exact("43556").firstOrNull()?.word)
         assertEquals(listOf("good", "home", "gone", "hood"), engine.exact("4663").take(4).map { it.word })
+
+        // Verify single-letter selection in built-in English T9 for keys 2..9
+        assertEquals(listOf("a", "b", "c"), engine.candidatesFor("2").words.take(3))
+        assertEquals(listOf("i", "g", "h"), engine.candidatesFor("4").words.take(3))
+        for (digit in '2'..'9') {
+            val expected = T9Keymap.lettersForDigit(digit)
+            assertEquals(expected, engine.candidatesFor(digit.toString()).words.take(expected.size))
+        }
+        assertEquals(
+            listOf("I", "g", "h"),
+            engine.candidatesFor("4").words.take(3).map {
+                PredictiveInput.applyCase(it, upperAll = false, capitalizeFirst = false)
+            }
+        )
+        assertEquals(
+            listOf("I", "G", "H"),
+            engine.candidatesFor("4").words.take(3).map {
+                PredictiveInput.applyCase(it, upperAll = false, capitalizeFirst = true)
+            }
+        )
+        assertEquals(
+            listOf("D", "E", "F"),
+            engine.candidatesFor("3").words.take(3).map {
+                PredictiveInput.applyCase(it, upperAll = true, capitalizeFirst = false)
+            }
+        )
     }
 
     @Test

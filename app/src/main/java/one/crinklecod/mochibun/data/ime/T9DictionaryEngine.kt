@@ -327,9 +327,10 @@ class T9DictionaryEngine(
     }
 
     /**
-     * Builds the ordered candidate list for [seq]: exact matches first, then up to [maxCompletions]
-     * longer completions, capped at [maxTotal]. When nothing matches, returns [seq] itself with
-     * `hasDictionaryMatch = false`.
+     * Builds the ordered candidate list for [seq]: exact matches first, individual keypad letters
+     * when [seq] has length 1 (so any single letter can be chosen without leaving T9), then up to
+     * [maxCompletions] longer completions, capped at [maxTotal]. When nothing matches, returns
+     * [seq] itself with `hasDictionaryMatch = false`.
      */
     fun candidatesFor(
         seq: String,
@@ -343,6 +344,16 @@ class T9DictionaryEngine(
         val exactTake = minOf(exactMatches.size, maxTotal)
         for (i in 0 until exactTake) {
             wordsOut.add(exactMatches[i].word)
+        }
+        if (seq.length == 1 && seq[0] in '2'..'9' && wordsOut.size < maxTotal) {
+            val singleLetters = T9Keymap.lettersForDigit(seq[0])
+            for (i in 0 until singleLetters.size) {
+                if (wordsOut.size >= maxTotal) break
+                val letter = singleLetters[i]
+                if (letter !in wordsOut) {
+                    wordsOut.add(letter)
+                }
+            }
         }
         val remaining = minOf(maxCompletions, maxTotal - wordsOut.size)
         if (remaining > 0) {

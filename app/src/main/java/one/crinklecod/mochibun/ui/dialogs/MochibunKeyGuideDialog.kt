@@ -276,14 +276,14 @@ internal enum class KeyGuideKey(
         displayName = "* · shift",
         launcherTap = "Context actions · Dismiss notification",
         launcherHold = "Toggle Manner Mode (Normal / Vibrate)",
-        typingTap = "Cycle mode (abc / Abc / ABC / T9)",
-        typingHold = "Type literal *"
+        typingTap = "Cycle mode (abc / T9 / 123)",
+        typingHold = "Cycle case (Abc → ABC → abc)"
     ),
     KEY_0(
         displayName = "0 · space",
         launcherTap = "—",
         launcherHold = "Toggle Flashlight On / Off",
-        typingTap = "Space, 0 & code symbols (/ \\ _ @ # $ …)",
+        typingTap = "Code symbols (* / \\ _ @ # $ …)",
         typingHold = "Type digit 0"
     ),
     KEY_POUND(
