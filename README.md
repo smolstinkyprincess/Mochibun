@@ -261,8 +261,6 @@ Mochibun stays tiny, breezy, and cute thanks to these awesome projects:
 
 Distributed under the [Apache 2.0 License](LICENSE). Feel free to fork, customize, and adapt it for your own physical-key Android setups!
 
-*Mochibun was created with love, eepy late-night tinkering, and a little help from AI tools for code scaffolding and debugging.* ♡
-
 ---
 
 ## ♡ Support
@@ -273,6 +271,6 @@ Mochibun is free, offline, and open-source forever with zero paywalls or subscri
 
 <div align="center">
 
-made with stardust, ♡ & eepy magic
+*Mochibun was created with love, eepy late-night tinkering, and a little help from AI tools for code scaffolding and debugging.* ♡
 
 </div>
