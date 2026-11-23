@@ -1,0 +1,4 @@
+Mochibun v2.8.0 ♡
+- J2ME .jar Games in App Drawer: Pick a .jar folder to index MIDlet names and crisp pixel icons alongside Android apps, and launch into AbyssME or J2ME Loader.
+- J2ME Controls & Screen Template Sync: Capture keypad mappings, hidden touch overlay, and aspect-fit scaling from one game and auto-sync across your .jar library.
+- UI & Performance Polish: Added scalloped lace borders to Settings Hub cards and trimmed Kaomoji Wheel frame times on the AT-M120.

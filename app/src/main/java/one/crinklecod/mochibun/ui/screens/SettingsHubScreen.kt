@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.ui.MainActivity
 import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
@@ -507,7 +508,10 @@ private fun SettingsHubRootScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Look & Vibes") {
+                SettingsCard(
+                    categoryTitle = "Look & Vibes",
+                    borderStyleOverride = CardBorderStyle.LACE
+                ) {
                     SettingsNavigationRow(
                         title = "Appearance",
                         subtitle = "Pastel themes, greeting banner, icons & deco ♡",
@@ -520,7 +524,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Typing") {
+                SettingsCard(
+                    categoryTitle = "Typing",
+                    borderStyleOverride = CardBorderStyle.LACE
+                ) {
                     SettingsNavigationRow(
                         title = "Keyboard",
                         subtitle = "Keitai multi-tap typing, digit hold & key guide",
@@ -533,7 +540,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Cursor & Hardware") {
+                SettingsCard(
+                    categoryTitle = "Cursor & Hardware",
+                    borderStyleOverride = CardBorderStyle.LACE
+                ) {
                     SettingsNavigationRow(
                         title = "Virtual Cursor",
                         subtitle = "Pointer speed, scroll step, sprite & key remaps",
@@ -546,7 +556,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Sound & Clicks") {
+                SettingsCard(
+                    categoryTitle = "Sound & Clicks",
+                    borderStyleOverride = CardBorderStyle.LACE
+                ) {
                     SettingsNavigationRow(
                         title = "Sound & Feedback",
                         subtitle = "Audio routing, keypad volume & cute click themes",
@@ -559,7 +572,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Home & Clamshell") {
+                SettingsCard(
+                    categoryTitle = "Home & Clamshell",
+                    borderStyleOverride = CardBorderStyle.LACE
+                ) {
                     SettingsNavigationRow(
                         title = "Behavior",
                         subtitle = "Folders, hidden apps, lid actions & outer LEDs",
@@ -572,7 +588,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Setup & Root") {
+                SettingsCard(
+                    categoryTitle = "Setup & Root",
+                    borderStyleOverride = CardBorderStyle.LACE
+                ) {
                     SettingsNavigationRow(
                         title = "Permissions & Root",
                         subtitle = "Core permissions, Magisk root & LSPosed hooks",
@@ -585,7 +604,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "Saves & Reset") {
+                SettingsCard(
+                    categoryTitle = "Saves & Reset",
+                    borderStyleOverride = CardBorderStyle.LACE
+                ) {
                     SettingsNavigationRow(
                         title = "Backup & Restore",
                         subtitle = "Save a full .json backup or reset to defaults",
@@ -598,7 +620,10 @@ private fun SettingsHubRootScreen(
             }
 
             item(contentType = "settings_hub_nav_card") {
-                SettingsCard(categoryTitle = "System & Info") {
+                SettingsCard(
+                    categoryTitle = "System & Info",
+                    borderStyleOverride = CardBorderStyle.LACE
+                ) {
                     SettingsNavigationRow(
                         title = "About Mochibun",
                         subtitle = "App version, flip-phone specs & credits ♡",

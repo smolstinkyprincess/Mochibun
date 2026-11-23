@@ -12,6 +12,7 @@ Features:
 - Pastel SystemUI: With the optional LSPosed module, your palette also themes Quick Settings, the volume dialog, notification cards, and the status and navigation bars.
 - Media Volume Lock: The volume rocker always steps media volume, even in Silent Mode.
 - Widgets, Recents & Music: A widget page for your third-party widgets with a two-band Now Playing card, plus a keypad-friendly recents switcher.
+- J2ME .jar Games (AbyssME & J2ME Loader): Pick a .jar folder via Android's folder picker to list classic Java ME games (with extracted MIDlet icons) right in your App Drawer, Favorites, and Folders, and auto-sync your AT-M120 hardware key and aspect-fit config template across your games.
 - Clamshell Lid Actions: Choose what happens when you open the lid. Flip Reset on Sleep brings you back Home when the screen turns off, and with root you get notification pulses on the outer lid LEDs.
 - Lid LED Studio (root): Draw your own 5-window light shows for the outer lid, step by step with 7 vivid keitai swatches. Set one for notifications and one for charging, test it live on the lid, and share it as a .mochibunled file.
 - Offline & Private: No internet or camera permissions, no telemetry, and canRetrieveWindowContent="false" on the optional Accessibility service (it never reads screen text).

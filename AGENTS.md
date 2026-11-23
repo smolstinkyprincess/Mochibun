@@ -20,7 +20,7 @@ Every architectural and UI decision in Mochibun is governed by the physical and 
 - **System Memory (RAM):** ~1.8–2.0 GB physical RAM.
 - **Display:** Fixed **480 × 800** portrait viewport (3:5 aspect ratio, ~240 DPI).
 - **OS & Runtime:** Android 12 (API 31). Note that OEM/SELinux policies lock down user-space ART ahead-of-time compilation (`cmd package compile` fails with `kDex2oatExec` / exit code 72), meaning classes execute under runtime JIT—hot-path allocations and reflection overhead must be kept minimal. A bundled Baseline Profile (`app/src/main/baseline-prof.txt` + `androidx.profileinstaller`) pre-compiles critical launcher/IME/compose paths on install when permitted.
-- **Secondary Community Targets:** `minSdk = 27` (Android 8.1+, `compileSdk = 37`, `targetSdk = 31`, currently `versionCode = 24` / `versionName = "2.7.1"`) allows installation on older Japanese Keitai phones (e.g., Kyocera `902KC` / `KYF42`), though they remain community-untested. Always guard API 28+ calls with `Build.VERSION.SDK_INT` (keep `./gradlew lintDebug` at 0 `NewApi` errors) and keep Android 12-only theme attributes isolated in `res/values-v31/`.
+- **Secondary Community Targets:** `minSdk = 27` (Android 8.1+, `compileSdk = 37`, `targetSdk = 31`, currently `versionCode = 25` / `versionName = "2.8.0"`) allows installation on older Japanese Keitai phones (e.g., Kyocera `902KC` / `KYF42`), though they remain community-untested. Always guard API 28+ calls with `Build.VERSION.SDK_INT` (keep `./gradlew lintDebug` at 0 `NewApi` errors) and keep Android 12-only theme attributes isolated in `res/values-v31/`.
 - **Privilege Tiers:**
   - **Unrooted (Base):** Must function cleanly out of the box without root or LSPosed. Optional `MochibunAccessibilityService` (`canRetrieveWindowContent="false"`, zero event types requested) provides non-root virtual cursor gesture taps/scrolls, global actions, and soft-key/cursor key routing when enabled.
   - **Root (`libsu` via Magisk):** Unlocks zero-latency native `evdev` touch/key injection (`evinject`), hardware Hall-switch lid monitoring (`/dev/input/event0`), AW22xxx outer clamshell LED control, in-place Wi-Fi/Bluetooth quick toggles, QuickSwitch recents fallback (`dumpsys` + task snapshots), and root self-healing watchdogs.
@@ -60,6 +60,10 @@ Understanding how Mochibun evolved explains why specific patterns exist today:
   - Split IME `*` tap (`abc` → `T9` → `123` → `abc`) from `*` hold (live `Abc` → `ABC` → `abc` casing), moved `*` to the front of `0`'s symbol cycle, and ensured single-digit T9 queries (`length == 1`) always surface all mapped letters before dictionary completions.
   - Upgraded the `#`-hold Kaomoji Wheel (`KaomojiRepository`, `KaomojiWheel`) to an 8-slice compass (`4` cardinals + 2-tap perpendicular diagonal tilt + `1`–`8` direct slice jump) with Stage 2 `1`–`9`/`0` (`#10`) instant quick-pick and 3 Hz `rememberSteppedTickerText` marquee for wide kaomoji (`> 13` chars).
   - Polished `QuickMemoDialog` with faint `1.dp` ruled notebook lines, `1.dp` unselected slot pill borders with `•` saved-content dots, and contextual helper hints (`↑ slots` vs `Center: Pin ★ • Back: Close`).
+9. **v2.7.x – v2.8.0 (J2ME .jar Games, AbyssME Template Sync, Settings Lace & Perf Polish):**
+  - Added `J2meGameRepository` to index SAF `.jar` folders for classic Java ME games (`META-INF/MANIFEST.MF` MIDlet names and crisp pixel-art icons cached in a 2 MB `LruCache`), surface them alongside Android apps in App Drawer, Favorites, and Folders, and launch them via `ACTION_VIEW` (`application/java-archive`) into AbyssME or J2ME Loader.
+  - Added `J2meTemplateSyncDialog` and `TEMPLATE_SYNC_KEYS` selective `org.json` template merging (via SAF `configs` grant or `RootShell` fallback) to propagate AT-M120 keypad mappings, hidden touch overlays, and aspect-fit scaling across game `config.json` files.
+  - Added scalloped `CardBorderStyle.LACE` fallback borders to Settings Hub root cards and trimmed Kaomoji Wheel frame times on the AT-M120.
 
 ---
 
@@ -205,8 +209,8 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
             │   └── repository/    # ExternalThemeManager, ThemeBundleManager, BackupRestoreManager,
             │                      # IconPackManager, CustomMascotManager, CustomCardBorderManager,
             │                      # HardwareRemapManager, LidLedAnimationRepository, KaomojiRepository,
-            │                      # NotificationTracker, MediaSessionTracker, TypographyManager,
-            │                      # SystemFontSyncManager, WidgetRepository
+            │                      # J2meGameRepository, NotificationTracker, MediaSessionTracker,
+            │                      # TypographyManager, SystemFontSyncManager, WidgetRepository
             ├── pet/
             │   ├── PetLogic.kt         # Pure Kotlin rules, mood decay math, daily treat caps
             │   ├── PetManager.kt       # Atomic StateFlow<PetState> & serial IO persistence worker
@@ -243,7 +247,8 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
             │   │                          # LidLedColorPickerDialog, QuickSnippetsDialog, ResizeWithKeyboard
             │   ├── overlay/               # CursorOverlayView (hardware-translated cursor sprite view)
             │   ├── screens/               # HomeScreen, AppDrawerScreen, NotificationsScreen, ThemeStudioDialog,
-            │   │                          # SettingsHubScreen & settings/* (11 files incl. LidLedStudioScreen)
+            │   │                          # SettingsHubScreen & settings/* (11 files incl. LidLedStudioScreen,
+            │   │                          # J2meTemplateSyncDialog)
             │   └── theme/                 # LauncherTheme, Theme, Color, Type, ColorContrast, SystemUiThemeBridge
             └── xposed/
                 ├── MochibunKeyHook.kt       # system_server hook (PhoneWindowManager.interceptKeyBeforeQueueing)
@@ -344,6 +349,11 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
 3. **`MochibunAccessibilityService.kt` (Optional Non-Root Fallback):**
   - Declares `canRetrieveWindowContent="false"` and zero `accessibilityEventTypes` (`onAccessibilityEvent` is a no-op).
   - Steps aside automatically for key filtering whenever `KeyHookStatus.isActive(context)` is true; otherwise provides cursor toggle/routing, LSK/RSK forwarding on Mochibun Home/Drawer, global actions, and `dispatchGesture` taps/scrolls for `RootTouchInjector`.
+
+### H. J2ME `.jar` Games & Template Sync (`J2meGameRepository`, `J2meTemplateSyncDialog`)
+- **SAF `.jar` Indexing (`J2meGameRepository`):** Scans the persisted SAF folder (`PreferencesManager.getJ2meFolderUri`) on `Dispatchers.IO`, parses `META-INF/MANIFEST.MF` (`MIDlet-Name` / `MIDlet-1`) and PNG/image icons (using a bounded single-pass candidate map `<= 512 KB` with second-pass fallback, or a cached 24×24 pixel-art cartridge fallback bitmap), compacts decoded `<= 96 px` icons via `compactIfOpaque()`, and stores them in a `2 MB` byte-weighted `LruCache` (`JAR_CACHE_MAX_BYTES`). Games surface in App Drawer, Favorites, and Folders and launch via `ACTION_VIEW` (`application/java-archive`) with `FLAG_GRANT_READ_URI_PERMISSION` for AbyssME or J2ME Loader.
+- **Template Config Sync (`TEMPLATE_SYNC_KEYS`, `J2meTemplateSyncDialog`):** Accessed under *Settings → Behavior* (`BehaviorSettingsScreen.kt`). Captures a reference `config.json` from any detected game and selectively copies only `TEMPLATE_SYNC_KEYS` (controls, key mappings, touch overlay visibility, display/aspect-fit scaling) onto target `config.json` files via `org.json.JSONObject` (`mergeConfigTemplate`), preserving per-game resolution and compatibility keys (`detectedScreenWidth`, `detectedScreenHeight`, `CompatibilityProfile`, `compatibilityReasons`, `SystemProperties`). Operates over a persisted SAF `configs` tree grant (`ABYSSME_CONFIGS_DOCUMENT_ID`) or `RootShell` fallback (`/storage/emulated/0/Android/data/io.github.eriark.abyssme/files/configs/*/config.json`), and supports optional auto-sync before `.jar` launch (`launchGame`) and after folder scans.
+- **`J2meTemplateSyncDialog` UI:** Hosted in `KeitaiLaceDialogWithClose` with `[1]`–`[5]` jump badges, a pastel `SettingsTogglePill` on row 3 (`Auto-Sync on Launch`), permanently attached `basicMarquee` on focused row titles, and unclipped `softGlowFocus` halos for `480 × 800`.
 
 ---
 

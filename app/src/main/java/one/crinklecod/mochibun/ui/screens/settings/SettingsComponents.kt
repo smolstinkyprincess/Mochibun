@@ -14,6 +14,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.components.KawaiiClosePill
@@ -316,6 +317,8 @@ internal fun ScrollToFocusedItem(
     }
 }
 
+private val SettingsCardShape = RoundedCornerShape(22.dp)
+
 /**
  * Themed settings card container with rounded corners (22.dp) and category pill.
  */
@@ -323,6 +326,7 @@ internal fun ScrollToFocusedItem(
 fun SettingsCard(
     categoryTitle: String,
     modifier: Modifier = Modifier,
+    borderStyleOverride: CardBorderStyle? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
@@ -355,13 +359,31 @@ fun SettingsCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
-                .background(ActiveTheme.container)
-                .mochibunCardBorder(
-                    cornerRadius = 22.dp,
-                    borderColor = ActiveTheme.cardBorder,
-                    borderWidth = 1.5.dp,
-                    allowCustomNineSlice = false
+                .then(
+                    if (borderStyleOverride != null) {
+                        // Place border before background (with clip = false and no outer clip) so
+                        // outward lace scallops and inner softGlowFocus halos render unclipped.
+                        Modifier
+                            .graphicsLayer { clip = false }
+                            .mochibunCardBorder(
+                                cornerRadius = 22.dp,
+                                borderColor = ActiveTheme.cardBorder,
+                                borderWidth = 1.5.dp,
+                                allowCustomNineSlice = false,
+                                styleOverride = borderStyleOverride
+                            )
+                            .background(ActiveTheme.container, SettingsCardShape)
+                    } else {
+                        Modifier
+                            .clip(SettingsCardShape)
+                            .background(ActiveTheme.container)
+                            .mochibunCardBorder(
+                                cornerRadius = 22.dp,
+                                borderColor = ActiveTheme.cardBorder,
+                                borderWidth = 1.5.dp,
+                                allowCustomNineSlice = false
+                            )
+                    }
                 )
                 .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
@@ -527,27 +549,38 @@ fun SettingsToggleRow(
                 )
             }
 
-            // Pill-shaped kawaii switch
-            val switchBg = if (checked) ActiveTheme.primary else ActiveTheme.cardBorder.copy(alpha = 0.4f)
-            val switchText = if (checked) "ON ♡" else "OFF"
-            val switchTextColor = if (checked) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.6f)
-
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(switchBg, CircleShape)
-                    .border(1.dp, ActiveTheme.cardBorder, CircleShape)
-                    .padding(horizontal = 9.dp, vertical = 3.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = switchText,
-                    color = switchTextColor,
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            SettingsTogglePill(checked = checked)
         }
+    }
+}
+
+/**
+ * Standard pastel pill toggle switch (`ON ♡` / `OFF`) used in settings rows and dialogs.
+ */
+@Composable
+fun SettingsTogglePill(
+    checked: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val switchBg = if (checked) ActiveTheme.primary else ActiveTheme.cardBorder.copy(alpha = 0.4f)
+    val switchText = if (checked) "ON ♡" else "OFF"
+    val switchTextColor = if (checked) ActiveTheme.accentDeep else ActiveTheme.textPrimary.copy(alpha = 0.6f)
+
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(switchBg, CircleShape)
+            .border(1.dp, ActiveTheme.cardBorder, CircleShape)
+            .padding(horizontal = 9.dp, vertical = 3.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = switchText,
+            color = switchTextColor,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
     }
 }
 

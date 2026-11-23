@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import one.crinklecod.mochibun.R
@@ -207,12 +208,16 @@ fun KawaiiDialogItem(
     isFocused: Boolean,
     modifier: Modifier = Modifier,
     docomoIndex: Int? = null,
+    docomoSize: Dp = 16.dp,
     icon: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
     isDestructive: Boolean = false,
     textAlign: TextAlign = TextAlign.Start,
+    fontSize: TextUnit = 14.sp,
+    horizontalPadding: Dp = 10.dp,
     jumpNumber: Int? = null,
     marqueeWhenFocused: Boolean = false,
+    trailingContent: (@Composable () -> Unit)? = null,
     onClick: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
@@ -254,7 +259,7 @@ fun KawaiiDialogItem(
                     Modifier
                 }
             )
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = horizontalPadding, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
@@ -269,14 +274,14 @@ fun KawaiiDialogItem(
             DocomoPictogram(
                 index = docomoIndex,
                 tint = iconTint,
-                size = 16.dp
+                size = docomoSize
             )
             Spacer(modifier = Modifier.width(8.dp))
         }
         Text(
             text = text,
             color = textColor,
-            fontSize = 14.sp,
+            fontSize = fontSize,
             fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium,
             textAlign = textAlign,
             maxLines = 1,
@@ -301,6 +306,9 @@ fun KawaiiDialogItem(
                 isFocused = isFocused,
                 modifier = Modifier.padding(start = 6.dp)
             )
+        }
+        if (trailingContent != null) {
+            trailingContent()
         }
     }
 }

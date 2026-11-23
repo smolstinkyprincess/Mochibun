@@ -810,15 +810,17 @@ private fun J2meTemplateSyncDialog(
                     onDismiss()
                 }
             },
+            // 14dp just clears the pearl ring; 284dp width lets all 5 concise titles + toggle pill fit without resting truncation on 480x800.
+            contentPadding = 14.dp,
             modifier = Modifier
-                .width(dialogWidth)
+                .width(284.dp)
                 .heightIn(max = 420.dp)
                 .curtainUnfurl(visible = true)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp),
+                    .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
@@ -853,8 +855,11 @@ private fun J2meTemplateSyncDialog(
 
                 if (!isCaptureMode) {
                     KawaiiDialogItem(
-                        text = "Pick Emulator configs Folder",
+                        text = "Pick configs Folder",
                         docomoIndex = 102,
+                        docomoSize = 14.dp,
+                        fontSize = 13.sp,
+                        horizontalPadding = 8.dp,
                         isFocused = selectedIndex == 0,
                         jumpNumber = 1,
                         enabled = !isBusy,
@@ -866,8 +871,11 @@ private fun J2meTemplateSyncDialog(
                         }
                     )
                     KawaiiDialogItem(
-                        text = "Capture Master Template",
+                        text = "Capture Template",
                         docomoIndex = 72,
+                        docomoSize = 14.dp,
+                        fontSize = 13.sp,
+                        horizontalPadding = 8.dp,
                         isFocused = selectedIndex == 1,
                         jumpNumber = 2,
                         enabled = !isBusy,
@@ -879,12 +887,21 @@ private fun J2meTemplateSyncDialog(
                         }
                     )
                     KawaiiDialogItem(
-                        text = "Auto-Sync on Launch: ${if (autoSyncOnLaunch) "On" else "Off"}",
+                        text = "Auto-Sync on Launch",
                         docomoIndex = 72,
+                        docomoSize = 14.dp,
+                        fontSize = 13.sp,
+                        horizontalPadding = 8.dp,
                         isFocused = selectedIndex == 2,
                         jumpNumber = 3,
                         enabled = !isBusy,
                         marqueeWhenFocused = true,
+                        trailingContent = {
+                            SettingsTogglePill(
+                                checked = autoSyncOnLaunch,
+                                modifier = Modifier.padding(start = 6.dp)
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         onClick = {
                             selectedIndex = 2
@@ -892,8 +909,11 @@ private fun J2meTemplateSyncDialog(
                         }
                     )
                     KawaiiDialogItem(
-                        text = if (isBusy) "Syncing…" else "Sync Template to All Games Now",
+                        text = if (isBusy) "Syncing…" else "Sync to All Games",
                         docomoIndex = 14,
+                        docomoSize = 14.dp,
+                        fontSize = 13.sp,
+                        horizontalPadding = 8.dp,
                         isFocused = selectedIndex == 3,
                         jumpNumber = 4,
                         enabled = !isBusy && hasTemplate,
@@ -907,6 +927,9 @@ private fun J2meTemplateSyncDialog(
                     KawaiiDialogItem(
                         text = "Clear Template",
                         docomoIndex = 17,
+                        docomoSize = 14.dp,
+                        fontSize = 13.sp,
+                        horizontalPadding = 8.dp,
                         isDestructive = true,
                         isFocused = selectedIndex == 4,
                         jumpNumber = 5,
@@ -947,6 +970,9 @@ private fun J2meTemplateSyncDialog(
                             KawaiiDialogItem(
                                 text = entry.gameId,
                                 docomoIndex = 72,
+                                docomoSize = 14.dp,
+                                fontSize = 13.sp,
+                                horizontalPadding = 8.dp,
                                 isFocused = selectedIndex == index,
                                 jumpNumber = (index + 1).takeIf { it <= MAX_JUMP_ROWS },
                                 enabled = !isBusy,
