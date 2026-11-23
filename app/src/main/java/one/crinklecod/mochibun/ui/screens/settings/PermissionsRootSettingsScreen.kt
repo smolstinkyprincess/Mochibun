@@ -210,7 +210,6 @@ internal fun PermissionsRootSettingsScreen(
     val focusRequester = remember { FocusRequester() }
     val showRootOptions by PreferencesManager.showRootOptions.collectAsState()
     val rows = remember(showRootOptions) { permissionsRows(showRootOptions) }
-    val rowIds = remember(rows) { rows.map { it.id } }
     var focusedIndex by rememberSettingsFocusIndex(
         initialFocusedIndex.coerceIn(0, rows.lastIndex),
         onFocusedIndexChange
@@ -372,8 +371,10 @@ internal fun PermissionsRootSettingsScreen(
     // Re-aligns the focused row's card on every focus / row-set change.
     ScrollToFocusedItem(
         listState,
-        onlyIfHidden = false,
-        retriggerKey = { Triple(focusedIndex, rowIds, showBanner) }
+        onlyIfHidden = true,
+        retriggerKey = {
+            (focusedIndex shl 2) or (if (showRootOptions) 2 else 0) or (if (showBanner) 1 else 0)
+        }
     ) {
         val bannerOffset = if (showBanner) 1 else 0
         when (rows.getOrNull(focusedIndex)) {

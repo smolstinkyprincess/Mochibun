@@ -30,6 +30,7 @@ import java.io.File
 object HardwareRemapManager {
 
     private const val TAG = "HardwareRemapManager"
+    private val KL_WHITESPACE_REGEX = Regex("\\s+")
     const val PREFS_NAME = "hardware_remap_preferences"
 
     const val MODULE_ID = "mochibun_keys"
@@ -687,7 +688,7 @@ object HardwareRemapManager {
         for (line in lines) {
             val trimmed = line.trim()
             if (trimmed.startsWith("key ")) {
-                val parts = trimmed.split("\\s+".toRegex())
+                val parts = trimmed.split(KL_WHITESPACE_REGEX)
                 if (parts.size >= 3) {
                     val scancode = parts[1].toIntOrNull()
                     val keyName = parts[2]

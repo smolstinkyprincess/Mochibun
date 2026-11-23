@@ -90,7 +90,7 @@ fun AppWidgetHostCard(
                 }
             }
         }
-        val cardHeight = spec?.let { with(density) { it.displayHeightPx.toDp() } } ?: UNAVAILABLE_CARD_HEIGHT
+        val cardHeight = if (spec != null) with(density) { spec.displayHeightPx.toDp() } else UNAVAILABLE_CARD_HEIGHT
 
         Column(modifier = Modifier.fillMaxWidth()) {
             Box(

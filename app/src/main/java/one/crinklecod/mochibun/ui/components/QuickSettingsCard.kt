@@ -226,26 +226,39 @@ fun QuickSettingsCard(
         AudioManager.RINGER_MODE_SILENT -> "🔇"
         else -> "🔔"
     }
-    val pills = listOf(
-        "📶" to state.wifiOn,
-        "ᛒ" to state.bluetoothOn,
-        "🔦" to torchOn,
-        soundGlyph to (state.ringerMode == AudioManager.RINGER_MODE_NORMAL)
-    )
     Row(
         modifier = modifier.padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        pills.forEachIndexed { index, (glyph, active) ->
-            QuickSettingsPill(
-                glyph = glyph,
-                active = active,
-                isFocused = focusedIndex == index,
-                onClick = { onPillClick(index) },
-                modifier = Modifier.size(48.dp)
-            )
-        }
+        QuickSettingsPill(
+            glyph = "📶",
+            active = state.wifiOn,
+            isFocused = focusedIndex == 0,
+            onClick = { onPillClick(0) },
+            modifier = Modifier.size(48.dp)
+        )
+        QuickSettingsPill(
+            glyph = "ᛒ",
+            active = state.bluetoothOn,
+            isFocused = focusedIndex == 1,
+            onClick = { onPillClick(1) },
+            modifier = Modifier.size(48.dp)
+        )
+        QuickSettingsPill(
+            glyph = "🔦",
+            active = torchOn,
+            isFocused = focusedIndex == 2,
+            onClick = { onPillClick(2) },
+            modifier = Modifier.size(48.dp)
+        )
+        QuickSettingsPill(
+            glyph = soundGlyph,
+            active = state.ringerMode == AudioManager.RINGER_MODE_NORMAL,
+            isFocused = focusedIndex == 3,
+            onClick = { onPillClick(3) },
+            modifier = Modifier.size(48.dp)
+        )
     }
 }
 

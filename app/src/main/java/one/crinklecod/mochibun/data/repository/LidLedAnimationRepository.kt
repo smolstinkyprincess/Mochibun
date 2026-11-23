@@ -36,6 +36,9 @@ object LidLedAnimationRepository {
 
     // Cached so the LED ladder never parses YAML on a notification
     private val cachedActive = java.util.concurrent.ConcurrentHashMap<LidAnimationSlot, LidLedAnimation>()
+    private val cachedById = java.util.concurrent.ConcurrentHashMap<String, LidLedAnimation>()
+    private val SAFE_ID_REGEX = Regex("[a-z0-9_-]{1,80}")
+    private val SLUG_INVALID_REGEX = Regex("[^a-z0-9]+")
 
     val BUILT_INS: List<LidLedAnimation> by lazy { buildBuiltIns() }
 
@@ -62,9 +65,12 @@ object LidLedAnimationRepository {
     fun findById(context: Context, id: String): LidLedAnimation? {
         if (id.isBlank()) return null
         BUILT_INS.firstOrNull { it.id == id }?.let { return it }
+        cachedById[id]?.let { return it }
         val file = fileFor(context, id) ?: return null
         if (!file.isFile) return null
-        return LidLedAnimationCodec.decode(file.readText()).getOrNull()?.copy(id = id)
+        return LidLedAnimationCodec.decode(file.readText()).getOrNull()?.copy(id = id)?.also {
+            cachedById[id] = it
+        }
     }
 
     /**
@@ -86,6 +92,7 @@ object LidLedAnimationRepository {
             file.writeText(tmp.readText())
             tmp.delete()
         }
+        cachedById[id] = saved
         for ((slot, cached) in cachedActive) if (cached.id == id) cachedActive[slot] = saved
         return saved
     }
@@ -93,6 +100,7 @@ object LidLedAnimationRepository {
     /** Deletes a custom / imported animation. Built-ins can't be deleted. */
     fun delete(context: Context, id: String): Boolean {
         if (isBuiltIn(id)) return false
+        cachedById.remove(id)
         val deleted = fileFor(context, id)?.delete() == true
         for (slot in LidAnimationSlot.entries) {
             if (getActiveAnimationId(context, slot) == id) setActiveAnimationId(context, slot, "")
@@ -156,7 +164,7 @@ object LidLedAnimationRepository {
 
     /** Null for ids that aren't plain custom file names (blocks path tricks like `../`). */
     private fun fileFor(context: Context, id: String): File? {
-        if (isBuiltIn(id) || !id.matches(Regex("[a-z0-9_-]{1,80}"))) return null
+        if (isBuiltIn(id) || !id.matches(SAFE_ID_REGEX)) return null
         return File(dir(context), "$id.yaml")
     }
 
@@ -164,7 +172,7 @@ object LidLedAnimationRepository {
         "custom_${slug(name).take(32)}_${System.currentTimeMillis().toString(36)}"
 
     private fun slug(name: String): String =
-        name.lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "_").trim('_').ifBlank { "lid_animation" }
+        name.lowercase(Locale.US).replace(SLUG_INVALID_REGEX, "_").trim('_').ifBlank { "lid_animation" }
 
     private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
         val out = java.io.ByteArrayOutputStream()

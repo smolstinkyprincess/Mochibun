@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -114,23 +115,25 @@ fun NotificationsScreen(
     }
 
     // Scroll LazyColumn to keep focused element visible
-    LaunchedEffect(focusTarget, focusedCardIndex) {
+    LaunchedEffect(isActivePage, listState) {
         if (!isActivePage) return@LaunchedEffect
-        when (focusTarget) {
-            NotifFocusTarget.TOP_ACTION -> {
-                listState.animateScrollToItem(0)
-            }
-            NotifFocusTarget.NOTIFICATION_CARD -> {
-                if (notifications.isNotEmpty()) {
-                    val targetIdx = 1 + focusedCardIndex // 0 is header item
-                    val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
-                    if (!isVisible) {
-                        listState.animateScrollToItem(targetIdx)
+        snapshotFlow { focusTarget to focusedCardIndex }.collectLatest { (target, cardIndex) ->
+            when (target) {
+                NotifFocusTarget.TOP_ACTION -> {
+                    listState.animateScrollToItem(0)
+                }
+                NotifFocusTarget.NOTIFICATION_CARD -> {
+                    if (notifications.isNotEmpty()) {
+                        val targetIdx = 1 + cardIndex // 0 is header item
+                        val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
+                        if (!isVisible) {
+                            listState.animateScrollToItem(targetIdx)
+                        }
                     }
                 }
-            }
-            NotifFocusTarget.HOME_PILL -> {
-                // The home pill floats over the list and is always visible: nothing to scroll.
+                NotifFocusTarget.HOME_PILL -> {
+                    // The home pill floats over the list and is always visible: nothing to scroll.
+                }
             }
         }
     }

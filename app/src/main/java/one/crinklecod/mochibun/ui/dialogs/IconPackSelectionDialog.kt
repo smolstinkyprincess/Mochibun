@@ -242,7 +242,8 @@ fun IconPackSelectionDialog(
                     ) {
                         itemsIndexed(
                             items = installedPacks,
-                            key = { _, pack -> pack.packageName.ifEmpty { "__system_default__" } }
+                            key = { _, pack -> pack.packageName.ifEmpty { "__system_default__" } },
+                            contentType = { _, _ -> "icon_pack_row" }
                         ) { index, pack ->
                             val isFocused = index == focusedIndex
                             val isSelected = pack.packageName == selectedPackPkg

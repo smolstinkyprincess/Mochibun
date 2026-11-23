@@ -172,7 +172,8 @@ fun HiddenAppsDialog(
                     ) {
                         itemsIndexed(
                             hiddenApps,
-                            key = { _, app -> app.packageName }
+                            key = { _, app -> app.packageName },
+                            contentType = { _, _ -> "hidden_app_row" }
                         ) { index, app ->
                             val isRowFocused = selectedIndex == index
                             val rowShape = RoundedCornerShape(12.dp)

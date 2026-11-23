@@ -226,9 +226,7 @@ class MochibunKeyHook : IXposedHookLoadPackage {
                     topActivity?.className == ACTIVITY_MAIN ||
                     topActivity?.className?.endsWith("MainActivity") == true
                 )
-                val isShadeOverMochibun = if (!isMochibunHome) {
-                    isNotificationShadeOverMochibun(phoneWindowManager, context)
-                } else false
+                val isShadeOverMochibun = !isMochibunHome && isNotificationShadeOverMochibun(phoneWindowManager, context)
 
                 if (isMochibunHome || isShadeOverMochibun) {
                     isHomePressedOnMochibun = true

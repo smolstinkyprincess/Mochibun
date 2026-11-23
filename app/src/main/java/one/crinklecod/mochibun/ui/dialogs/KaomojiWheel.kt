@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,8 +29,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +61,6 @@ import one.crinklecod.mochibun.core.keypad.wheelItemIndexForDigit
 import one.crinklecod.mochibun.core.keypad.wheelPetalForDigit
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
-import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.ClipRingEntry
 import one.crinklecod.mochibun.data.repository.ClipboardRingRepository
 import one.crinklecod.mochibun.data.repository.KaomojiRepository
@@ -255,8 +255,7 @@ class KaomojiWheelState(
 fun KaomojiWheelCloudStage(
     state: KaomojiWheelState,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    confirmVerb: String = "Insert"
+    onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val dismissWithSound = {
@@ -283,9 +282,6 @@ fun KaomojiWheelCloudStage(
             KaomojiWheelCard(
                 state = state,
                 onConfirm = onConfirm,
-                onDismiss = onDismiss,
-                confirmVerb = confirmVerb,
-                showHeaderClose = false,
                 bottomContentInset = WHEEL_CARD_INNER_BOTTOM
             )
             // Pixel ribbon bow straddling the top lace rim. KaomojiWheelCard keeps 8dp of outer
@@ -484,41 +480,14 @@ private val WHITESPACE_RUN = Regex("\\s+")
 fun KaomojiWheelCard(
     state: KaomojiWheelState,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    /** "Copy" in the launcher dialog, "Insert" in the IME overlay. */
-    confirmVerb: String = "Copy",
-    /** Header "♡ [#]" dismiss badge; the cloud stage hides it (BACK / F4 / `#` dismiss). */
-    showHeaderClose: Boolean = true,
     /** Extra space under the hint pill so it clears a cloud shelf drawn over the card's rim. */
     bottomContentInset: Dp = 0.dp
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
     val theme = LocalLauncherTheme.current
-    val categories = state.categories
-    val isClipMode = state.mode == WheelMode.CLIPBOARD_SNIPPETS
-    val isItemStage = !isClipMode && state.stage == WheelStage.ITEM
-    val clipEntries = state.clipEntries
-    val triggerBadge = PreferencesManager.getKaomojiTriggerBadge()
 
-    val currentCategory = categories[state.categoryIndex]
-    val currentKaomoji = state.currentKaomoji
-    val currentClip = state.currentClip
-
-    // Petals: mood categories, or one per clip. An empty clip ring still draws 8 blank petals
-    // (nothing selected) so the wheel keeps its shape.
-    val petalCount = when {
-        !isClipMode -> categories.size
-        clipEntries.isEmpty() -> ClipboardRingRepository.MAX_RING_PETALS
-        else -> clipEntries.size
-    }
-    val selectedPetal = when {
-        !isClipMode -> state.categoryIndex
-        clipEntries.isEmpty() -> -1
-        else -> state.clipIndex
-    }
-
-    // High-contrast theme & translucent surface tokens
+    // High-contrast theme & translucent surface tokens (independent of D-pad state)
     val plumOutline = theme.greetingOutlineColor
     val cardBackground = theme.cardBgColor.copy(alpha = 0.82f)
     val glowColor = theme.selectionGlowColor
@@ -544,24 +513,35 @@ fun KaomojiWheelCard(
     val strokeWidth = (rOuter - rInner)
     val rMid = (rInner + rOuter) / 2f
 
-    fun selectPetal(index: Int) {
-        if (isClipMode) {
-            // Touch: tap a clip to pick it, tap the picked one again to use it
-            if (index == state.clipIndex && currentClip != null) onConfirm()
-            else if (state.selectClip(index)) SoundEffectManager.play(context, SoundEffect.NAV)
-        } else if (state.stage == WheelStage.CATEGORY) {
-            if (state.lockCategory(index)) SoundEffectManager.play(context, SoundEffect.SELECT)
-        } else if (index == state.categoryIndex) {
-            state.returnToCategories()
-            SoundEffectManager.play(context, SoundEffect.BACK)
-        } else if (state.lockCategory(index)) {
-            SoundEffectManager.play(context, SoundEffect.NAV)
+    val bodyStroke = remember(density) { Stroke(width = strokeWidth.value * density) }
+    val glowStrokes = remember(density) {
+        Array(4) { g ->
+            Stroke(width = (strokeWidth.value + GLOW_EXPANSIONS_DP[g] * 2f) * density)
         }
     }
 
-    fun toggleMode() {
-        state.toggleMode()
-        SoundEffectManager.play(context, SoundEffect.NAV)
+    val onSelectPetal: (Int) -> Unit = remember(state, context, onConfirm) {
+        { index ->
+            if (state.mode == WheelMode.CLIPBOARD_SNIPPETS) {
+                // Touch: tap a clip to pick it, tap the picked one again to use it
+                if (index == state.clipIndex && state.currentClip != null) onConfirm()
+                else if (state.selectClip(index)) SoundEffectManager.play(context, SoundEffect.NAV)
+            } else if (state.stage == WheelStage.CATEGORY) {
+                if (state.lockCategory(index)) SoundEffectManager.play(context, SoundEffect.SELECT)
+            } else if (index == state.categoryIndex) {
+                state.returnToCategories()
+                SoundEffectManager.play(context, SoundEffect.BACK)
+            } else if (state.lockCategory(index)) {
+                SoundEffectManager.play(context, SoundEffect.NAV)
+            }
+        }
+    }
+
+    val onToggleMode: () -> Unit = remember(state, context) {
+        {
+            state.toggleMode()
+            SoundEffectManager.play(context, SoundEffect.NAV)
+        }
     }
 
     KeitaiLaceContainer(
@@ -580,448 +560,638 @@ fun KaomojiWheelCard(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header in signature Mochibun style; tapping the title flips the mode
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (showHeaderClose) Arrangement.SpaceBetween else Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (isClipMode) "— ✂ Clips & Snippets —" else "— ♡ Kaomoji ♡ —",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = headerColor,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { toggleMode() }
-                        .padding(horizontal = 2.dp)
-                )
-                if (showHeaderClose) Text(
-                    text = "♡ [$triggerBadge]",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    color = headerColor.copy(alpha = 0.9f),
-                    modifier = Modifier
-                        .clickable {
-                            SoundEffectManager.play(context, SoundEffect.BACK)
-                            onDismiss()
-                        }
-                        .padding(2.dp)
-                )
-            }
+            KaomojiWheelHeader(
+                state = state,
+                headerColor = headerColor,
+                onToggleMode = onToggleMode
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Compact Radial Petal Wheel
-            val bodyStroke = remember(density) { Stroke(width = strokeWidth.value * density) }
-            val glowStrokes = remember(density) {
-                Array(4) { g ->
-                    Stroke(width = (strokeWidth.value + GLOW_EXPANSIONS_DP[g] * 2f) * density)
-                }
-            }
             Box(
                 modifier = Modifier
                     .size(wheelDiameter)
                     .graphicsLayer { clip = false },
                 contentAlignment = Alignment.Center
             ) {
-                // Canvas Petals Drawing Pass
-                Canvas(
-                    modifier = Modifier
-                        .size(wheelDiameter)
-                        .graphicsLayer { clip = false }
-                ) {
-                    val centerPx = Offset(size.width / 2f, size.height / 2f)
-                    val rInnerPx = rInner.toPx()
-                    val rOuterPx = rOuter.toPx()
-                    val rMidPx = rMid.toPx()
+                KaomojiWheelCanvas(
+                    state = state,
+                    wheelDiameter = wheelDiameter,
+                    rInner = rInner,
+                    rOuter = rOuter,
+                    rMid = rMid,
+                    density = density,
+                    isDarkTheme = isDarkTheme,
+                    glowColor = glowColor,
+                    surfaceTint = surfaceTint,
+                    plumOutline = plumOutline,
+                    appActionColor = theme.appActionColor,
+                    selectedFillAlpha = selectedFillAlpha,
+                    unselectedFillAlpha = unselectedFillAlpha,
+                    bodyStroke = bodyStroke,
+                    glowStrokes = glowStrokes
+                )
 
-                    val gapAngle = 5f
-                    val sweepAngle = (360f / petalCount) - gapAngle
-                    val ringDimFactor = if (isItemStage) 0.55f else 1f
-                    val unselectedDimFactor = if (isItemStage) 0.45f else 1f
+                KaomojiWheelPetals(
+                    state = state,
+                    rMid = rMid,
+                    selectedVioletText = selectedVioletText,
+                    deepPlumText = deepPlumText,
+                    selectedGlyphColor = selectedGlyphColor,
+                    unselectedGlyphColor = unselectedGlyphColor,
+                    onSelectPetal = onSelectPetal
+                )
 
-                    for (i in 0 until petalCount) {
-                        val centerAngle = -90f + i * (360f / petalCount)
-                        val startAngle = centerAngle - sweepAngle / 2f
-                        val isSelected = (i == selectedPetal)
-
-                        if (isSelected) {
-                            // Concentric glow passes matching softGlowFocus
-                            for (g in 0 until 4) {
-                                val expansion = GLOW_EXPANSIONS_DP[g] * density
-                                drawArc(
-                                    color = glowColor.copy(alpha = GLOW_ALPHAS[g] * ringDimFactor),
-                                    startAngle = startAngle - 1f,
-                                    sweepAngle = sweepAngle + 2f,
-                                    useCenter = false,
-                                    topLeft = Offset(centerPx.x - rMidPx - expansion, centerPx.y - rMidPx - expansion),
-                                    size = Size((rMidPx + expansion) * 2f, (rMidPx + expansion) * 2f),
-                                    style = glowStrokes[g]
-                                )
-                            }
-
-                            // Selected petal body fill
-                            drawArc(
-                                color = glowColor.copy(alpha = selectedFillAlpha * ringDimFactor),
-                                startAngle = startAngle,
-                                sweepAngle = sweepAngle,
-                                useCenter = false,
-                                topLeft = Offset(centerPx.x - rMidPx, centerPx.y - rMidPx),
-                                size = Size(rMidPx * 2f, rMidPx * 2f),
-                                style = bodyStroke
-                            )
-
-                            // Soft outline
-                            val selectedOutline = (if (isDarkTheme) theme.appActionColor else plumOutline)
-                                .copy(alpha = if (isItemStage) 0.65f else 1f)
-                            drawArc(
-                                color = selectedOutline,
-                                startAngle = startAngle,
-                                sweepAngle = sweepAngle,
-                                useCenter = false,
-                                topLeft = Offset(centerPx.x - rOuterPx, centerPx.y - rOuterPx),
-                                size = Size(rOuterPx * 2f, rOuterPx * 2f),
-                                style = HighlightBorderStroke
-                            )
-                            drawArc(
-                                color = selectedOutline,
-                                startAngle = startAngle,
-                                sweepAngle = sweepAngle,
-                                useCenter = false,
-                                topLeft = Offset(centerPx.x - rInnerPx, centerPx.y - rInnerPx),
-                                size = Size(rInnerPx * 2f, rInnerPx * 2f),
-                                style = HighlightBorderStroke
-                            )
-                        } else {
-                            // Unselected translucent petal fill
-                            drawArc(
-                                color = surfaceTint.copy(alpha = unselectedFillAlpha * unselectedDimFactor),
-                                startAngle = startAngle,
-                                sweepAngle = sweepAngle,
-                                useCenter = false,
-                                topLeft = Offset(centerPx.x - rMidPx, centerPx.y - rMidPx),
-                                size = Size(rMidPx * 2f, rMidPx * 2f),
-                                style = bodyStroke
-                            )
-
-                            // Unselected subtle border
-                            drawArc(
-                                color = plumOutline.copy(alpha = 0.30f * unselectedDimFactor),
-                                startAngle = startAngle,
-                                sweepAngle = sweepAngle,
-                                useCenter = false,
-                                topLeft = Offset(centerPx.x - rOuterPx, centerPx.y - rOuterPx),
-                                size = Size(rOuterPx * 2f, rOuterPx * 2f),
-                                style = ThinBorderStroke
-                            )
-                            drawArc(
-                                color = plumOutline.copy(alpha = 0.30f * unselectedDimFactor),
-                                startAngle = startAngle,
-                                sweepAngle = sweepAngle,
-                                useCenter = false,
-                                topLeft = Offset(centerPx.x - rInnerPx, centerPx.y - rInnerPx),
-                                size = Size(rInnerPx * 2f, rInnerPx * 2f),
-                                style = ThinBorderStroke
-                            )
-                        }
-                    }
-                }
-
-                // Petal Mini Labels
-                val labelCount = if (isClipMode) clipEntries.size else categories.size
-                for (i in 0 until labelCount) {
-                    val centerAngle = -90.0 + i * (360.0 / petalCount)
-                    val angleRad = Math.toRadians(centerAngle)
-                    val xOffset = (rMid.value * cos(angleRad)).dp
-                    val yOffset = (rMid.value * sin(angleRad)).dp
-                    val isSelected = (i == selectedPetal)
-                    val labelAlpha = when {
-                        !isItemStage -> 1f
-                        isSelected -> 0.80f
-                        else -> 0.45f
-                    }
-                    val title: String
-                    val subtitle: String
-                    if (isClipMode) {
-                        title = clipPetalLabel(clipEntries[i])
-                        subtitle = "${i + 1}"
-                    } else {
-                        title = categories[i].shortLabel
-                        subtitle = categories[i].icon
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .offset(x = xOffset, y = yOffset)
-                            .widthIn(max = 54.dp)
-                            .clickable { selectPetal(i) },
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = title,
-                            fontSize = if (isSelected) 10.sp else 9.5.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = (if (isSelected) selectedVioletText else deepPlumText).copy(alpha = labelAlpha),
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Clip
-                        )
-                        Text(
-                            text = subtitle,
-                            fontSize = if (isSelected) 8.sp else 7.5.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Clip,
-                            color = (if (isSelected) selectedGlyphColor else unselectedGlyphColor).copy(alpha = labelAlpha)
-                        )
-                    }
-                }
-
-                // Cozy Center Preview Hub (emphasized when locked into Stage 2)
-                val hubDiameter = (rInner * 2f) - 4.dp
-                Box(
-                    modifier = Modifier
-                        .size(if (isItemStage) hubDiameter + 4.dp else hubDiameter)
-                        .align(Alignment.Center)
-                        .then(
-                            if (isItemStage) {
-                                Modifier.border(2.5.dp, glowColor.copy(alpha = 0.65f), CircleShape)
-                            } else {
-                                Modifier
-                            }
-                        )
-                        .padding(if (isItemStage) 2.dp else 0.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(hubDiameter)
-                            .clip(CircleShape)
-                            .background(if (isItemStage) cardBackground.copy(alpha = 0.96f) else cardBackground)
-                            .border(
-                                width = if (isItemStage) 2.4.dp else 1.8.dp,
-                                color = if (isItemStage) plumOutline else plumOutline.copy(alpha = 0.85f),
-                                shape = CircleShape
-                            )
-                            .clickable {
-                                if (!isClipMode && state.stage == WheelStage.CATEGORY) {
-                                    state.lockCategory()
-                                    SoundEffectManager.play(context, SoundEffect.SELECT)
-                                } else {
-                                    onConfirm()
-                                }
-                            }
-                            .padding(4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            when {
-                                isItemStage -> {
-                                    val isWideKaomoji = currentKaomoji.length > 13
-                                    val displayedKaomoji = rememberSteppedTickerText(
-                                        text = currentKaomoji,
-                                        visibleCharCount = 13,
-                                        enabled = isWideKaomoji
-                                    )
-                                    Text(
-                                        text = "♥ ${currentCategory.shortLabel} ♥",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = activeCategoryRose,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = displayedKaomoji,
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = activeKaomojiPlum,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = if (isWideKaomoji) TextOverflow.Clip else TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(vertical = 1.dp)
-                                    )
-                                    Text(
-                                        text = "${state.itemIndex + 1} / ${currentCategory.items.size}",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = stepperPlum
-                                    )
-                                    Text(
-                                        text = "♥ Center: $confirmVerb ♥",
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = helperRose,
-                                        maxLines = 1,
-                                        modifier = Modifier.padding(top = 1.dp)
-                                    )
-                                }
-                                !isClipMode -> {
-                                    Text(
-                                        text = "♥ ${currentCategory.shortLabel} ♥",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = activeCategoryRose,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = currentKaomoji,
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = activeKaomojiPlum,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(vertical = 1.dp)
-                                    )
-                                    Text(
-                                        text = "♡ ${state.categoryIndex + 1} / ${categories.size} ♡",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = stepperPlum
-                                    )
-                                    Text(
-                                        text = "♥ Center: Open ♥",
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = helperRose,
-                                        maxLines = 1,
-                                        modifier = Modifier.padding(top = 1.dp)
-                                    )
-                                }
-                                currentClip == null -> {
-                                    Text(
-                                        text = "✂ Empty ✂",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = activeCategoryRose,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = "no clips yet",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = activeKaomojiPlum,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(vertical = 1.dp)
-                                    )
-                                    Text(
-                                        text = "♡ 0 / 0 ♡",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = stepperPlum
-                                    )
-                                    Text(
-                                        text = "♥ Center to $confirmVerb ♥",
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = helperRose,
-                                        maxLines = 1,
-                                        modifier = Modifier.padding(top = 1.dp)
-                                    )
-                                }
-                                else -> {
-                                    Text(
-                                        text = if (currentClip.pinned) "★ Snippet ★" else "✂ Clip ✂",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = activeCategoryRose,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = clipPetalLabel(currentClip.copy(pinned = false), maxChars = 10),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = activeKaomojiPlum,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(vertical = 1.dp)
-                                    )
-                                    Text(
-                                        text = "♡ ${state.clipIndex + 1} / ${clipEntries.size} ♡",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = stepperPlum
-                                    )
-                                    Text(
-                                        text = "♥ Center to $confirmVerb ♥",
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = helperRose,
-                                        maxLines = 1,
-                                        modifier = Modifier.padding(top = 1.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                KaomojiWheelCenterHub(
+                    state = state,
+                    rInner = rInner,
+                    cardBackground = cardBackground,
+                    glowColor = glowColor,
+                    plumOutline = plumOutline,
+                    activeCategoryRose = activeCategoryRose,
+                    activeKaomojiPlum = activeKaomojiPlum,
+                    stepperPlum = stepperPlum,
+                    helperRose = helperRose,
+                    onConfirm = onConfirm
+                )
             }
 
-            // Full text of the picked clip: the hub only has room for a few characters
-            if (isClipMode) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 92.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(cardBackground)
-                        .border(1.dp, plumOutline.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 5.dp)
-                ) {
-                    Text(
-                        text = currentClip?.text
-                            ?: "Copy some text, or add Quick Snippets in Settings → Keyboard ♡",
-                        fontSize = 10.sp,
-                        fontWeight = if (currentClip != null) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (currentClip != null) activeKaomojiPlum else deepPlumText,
-                        textAlign = if (currentClip != null) TextAlign.Start else TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
+            KaomojiWheelClipPreview(
+                state = state,
+                cardBackground = cardBackground,
+                plumOutline = plumOutline,
+                activeKaomojiPlum = activeKaomojiPlum,
+                deepPlumText = deepPlumText
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Bottom D-Pad instruction pill
-            val bottomHintBg = if (isDarkTheme) {
-                theme.unfocusedCardBgColor.copy(alpha = 0.85f)
-            } else {
-                surfaceTint.copy(alpha = 0.55f)
-            }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(bottomHintBg)
-                    .border(1.dp, plumOutline.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = when {
-                        isClipMode -> "◀▶▲▼ Pick  •  1–8 $confirmVerb\n✱/0 Kaomoji  •  Center: $confirmVerb"
-                        isItemStage -> "1-0: Quick Pick • ◀▶ Browse • Back: Moods"
-                        else -> "D-Pad: Mood • Center: Open • * Clips"
-                    },
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = deepPlumText,
-                    textAlign = TextAlign.Center
-                )
-            }
+            KaomojiWheelBottomHint(
+                state = state,
+                isDarkTheme = isDarkTheme,
+                unfocusedCardBgColor = theme.unfocusedCardBgColor,
+                surfaceTint = surfaceTint,
+                plumOutline = plumOutline,
+                deepPlumText = deepPlumText
+            )
             if (bottomContentInset > 0.dp) Spacer(modifier = Modifier.height(bottomContentInset))
         }
+    }
+}
+
+@Composable
+private fun KaomojiWheelHeader(
+    state: KaomojiWheelState,
+    headerColor: Color,
+    onToggleMode: () -> Unit
+) {
+    val isClipMode = state.mode == WheelMode.CLIPBOARD_SNIPPETS
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (isClipMode) "— ✂ Clips & Snippets —" else "— ♡ Kaomoji ♡ —",
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = headerColor,
+            maxLines = 1,
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onToggleMode)
+                .padding(horizontal = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun KaomojiWheelCanvas(
+    state: KaomojiWheelState,
+    wheelDiameter: Dp,
+    rInner: Dp,
+    rOuter: Dp,
+    rMid: Dp,
+    density: Float,
+    isDarkTheme: Boolean,
+    glowColor: Color,
+    surfaceTint: Color,
+    plumOutline: Color,
+    appActionColor: Color,
+    selectedFillAlpha: Float,
+    unselectedFillAlpha: Float,
+    bodyStroke: Stroke,
+    glowStrokes: Array<Stroke>
+) {
+    Canvas(
+        modifier = Modifier
+            .size(wheelDiameter)
+            .graphicsLayer { clip = false }
+    ) {
+        val isClipMode = state.mode == WheelMode.CLIPBOARD_SNIPPETS
+        val isItemStage = !isClipMode && state.stage == WheelStage.ITEM
+        val clipEntries = state.clipEntries
+        val petalCount = when {
+            !isClipMode -> state.categories.size
+            clipEntries.isEmpty() -> ClipboardRingRepository.MAX_RING_PETALS
+            else -> clipEntries.size
+        }
+        val selectedPetal = when {
+            !isClipMode -> state.categoryIndex
+            clipEntries.isEmpty() -> -1
+            else -> state.clipIndex
+        }
+
+        val centerPx = Offset(size.width / 2f, size.height / 2f)
+        val rInnerPx = rInner.toPx()
+        val rOuterPx = rOuter.toPx()
+        val rMidPx = rMid.toPx()
+
+        val gapAngle = 5f
+        val sweepAngle = (360f / petalCount) - gapAngle
+        val ringDimFactor = if (isItemStage) 0.55f else 1f
+        val unselectedDimFactor = if (isItemStage) 0.45f else 1f
+
+        for (i in 0 until petalCount) {
+            val centerAngle = -90f + i * (360f / petalCount)
+            val startAngle = centerAngle - sweepAngle / 2f
+            val isSelected = (i == selectedPetal)
+
+            if (isSelected) {
+                // Concentric glow passes matching softGlowFocus
+                for (g in 0 until 4) {
+                    val expansion = GLOW_EXPANSIONS_DP[g] * density
+                    drawArc(
+                        color = glowColor.copy(alpha = GLOW_ALPHAS[g] * ringDimFactor),
+                        startAngle = startAngle - 1f,
+                        sweepAngle = sweepAngle + 2f,
+                        useCenter = false,
+                        topLeft = Offset(centerPx.x - rMidPx - expansion, centerPx.y - rMidPx - expansion),
+                        size = Size((rMidPx + expansion) * 2f, (rMidPx + expansion) * 2f),
+                        style = glowStrokes[g]
+                    )
+                }
+
+                // Selected petal body fill
+                drawArc(
+                    color = glowColor.copy(alpha = selectedFillAlpha * ringDimFactor),
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    topLeft = Offset(centerPx.x - rMidPx, centerPx.y - rMidPx),
+                    size = Size(rMidPx * 2f, rMidPx * 2f),
+                    style = bodyStroke
+                )
+
+                // Soft outline
+                val selectedOutline = (if (isDarkTheme) appActionColor else plumOutline)
+                    .copy(alpha = if (isItemStage) 0.65f else 1f)
+                drawArc(
+                    color = selectedOutline,
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    topLeft = Offset(centerPx.x - rOuterPx, centerPx.y - rOuterPx),
+                    size = Size(rOuterPx * 2f, rOuterPx * 2f),
+                    style = HighlightBorderStroke
+                )
+                drawArc(
+                    color = selectedOutline,
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    topLeft = Offset(centerPx.x - rInnerPx, centerPx.y - rInnerPx),
+                    size = Size(rInnerPx * 2f, rInnerPx * 2f),
+                    style = HighlightBorderStroke
+                )
+            } else {
+                // Unselected translucent petal fill
+                drawArc(
+                    color = surfaceTint.copy(alpha = unselectedFillAlpha * unselectedDimFactor),
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    topLeft = Offset(centerPx.x - rMidPx, centerPx.y - rMidPx),
+                    size = Size(rMidPx * 2f, rMidPx * 2f),
+                    style = bodyStroke
+                )
+
+                // Unselected subtle border
+                drawArc(
+                    color = plumOutline.copy(alpha = 0.30f * unselectedDimFactor),
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    topLeft = Offset(centerPx.x - rOuterPx, centerPx.y - rOuterPx),
+                    size = Size(rOuterPx * 2f, rOuterPx * 2f),
+                    style = ThinBorderStroke
+                )
+                drawArc(
+                    color = plumOutline.copy(alpha = 0.30f * unselectedDimFactor),
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    topLeft = Offset(centerPx.x - rInnerPx, centerPx.y - rInnerPx),
+                    size = Size(rInnerPx * 2f, rInnerPx * 2f),
+                    style = ThinBorderStroke
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.KaomojiWheelPetals(
+    state: KaomojiWheelState,
+    rMid: Dp,
+    selectedVioletText: Color,
+    deepPlumText: Color,
+    selectedGlyphColor: Color,
+    unselectedGlyphColor: Color,
+    onSelectPetal: (Int) -> Unit
+) {
+    val isClipMode = state.mode == WheelMode.CLIPBOARD_SNIPPETS
+    val clipEntries = state.clipEntries
+    val categories = state.categories
+    val petalCount = when {
+        !isClipMode -> categories.size
+        clipEntries.isEmpty() -> ClipboardRingRepository.MAX_RING_PETALS
+        else -> clipEntries.size
+    }
+    val labelCount = if (isClipMode) clipEntries.size else categories.size
+
+    for (i in 0 until labelCount) {
+        val title: String
+        val subtitle: String
+        if (isClipMode) {
+            title = clipPetalLabel(clipEntries[i])
+            subtitle = "${i + 1}"
+        } else {
+            title = categories[i].shortLabel
+            subtitle = categories[i].icon
+        }
+        WheelPetalLabel(
+            index = i,
+            petalCount = petalCount,
+            state = state,
+            rMid = rMid,
+            title = title,
+            subtitle = subtitle,
+            selectedVioletText = selectedVioletText,
+            deepPlumText = deepPlumText,
+            selectedGlyphColor = selectedGlyphColor,
+            unselectedGlyphColor = unselectedGlyphColor,
+            onSelectPetal = onSelectPetal
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.WheelPetalLabel(
+    index: Int,
+    petalCount: Int,
+    state: KaomojiWheelState,
+    rMid: Dp,
+    title: String,
+    subtitle: String,
+    selectedVioletText: Color,
+    deepPlumText: Color,
+    selectedGlyphColor: Color,
+    unselectedGlyphColor: Color,
+    onSelectPetal: (Int) -> Unit
+) {
+    val isSelected by remember(index, state) {
+        derivedStateOf {
+            when {
+                state.mode != WheelMode.CLIPBOARD_SNIPPETS -> state.categoryIndex == index
+                state.clipEntries.isEmpty() -> false
+                else -> state.clipIndex == index
+            }
+        }
+    }
+    val isItemStage by remember(state) {
+        derivedStateOf { state.mode != WheelMode.CLIPBOARD_SNIPPETS && state.stage == WheelStage.ITEM }
+    }
+    val labelAlpha = when {
+        !isItemStage -> 1f
+        isSelected -> 0.80f
+        else -> 0.45f
+    }
+    val (xOffset, yOffset) = remember(index, petalCount, rMid) {
+        val centerAngle = -90.0 + index * (360.0 / petalCount)
+        val angleRad = Math.toRadians(centerAngle)
+        (rMid.value * cos(angleRad)).dp to (rMid.value * sin(angleRad)).dp
+    }
+    val onClick = remember(index, onSelectPetal) { { onSelectPetal(index) } }
+
+    Column(
+        modifier = Modifier
+            .align(Alignment.Center)
+            .offset(x = xOffset, y = yOffset)
+            .widthIn(max = 54.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = title,
+            fontSize = if (isSelected) 10.sp else 9.5.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = (if (isSelected) selectedVioletText else deepPlumText).copy(alpha = labelAlpha),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip
+        )
+        Text(
+            text = subtitle,
+            fontSize = if (isSelected) 8.sp else 7.5.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+            color = (if (isSelected) selectedGlyphColor else unselectedGlyphColor).copy(alpha = labelAlpha)
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.KaomojiWheelCenterHub(
+    state: KaomojiWheelState,
+    rInner: Dp,
+    cardBackground: Color,
+    glowColor: Color,
+    plumOutline: Color,
+    activeCategoryRose: Color,
+    activeKaomojiPlum: Color,
+    stepperPlum: Color,
+    helperRose: Color,
+    onConfirm: () -> Unit
+) {
+    val context = LocalContext.current
+    val isClipMode = state.mode == WheelMode.CLIPBOARD_SNIPPETS
+    val isItemStage = !isClipMode && state.stage == WheelStage.ITEM
+    val categories = state.categories
+    val currentCategory = categories[state.categoryIndex]
+    val currentKaomoji = state.currentKaomoji
+    val clipEntries = state.clipEntries
+    val currentClip = state.currentClip
+
+    val hubDiameter = (rInner * 2f) - 4.dp
+    Box(
+        modifier = Modifier
+            .size(if (isItemStage) hubDiameter + 4.dp else hubDiameter)
+            .align(Alignment.Center)
+            .then(
+                if (isItemStage) {
+                    Modifier.border(2.5.dp, glowColor.copy(alpha = 0.65f), CircleShape)
+                } else {
+                    Modifier
+                }
+            )
+            .padding(if (isItemStage) 2.dp else 0.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(hubDiameter)
+                .clip(CircleShape)
+                .background(if (isItemStage) cardBackground.copy(alpha = 0.96f) else cardBackground)
+                .border(
+                    width = if (isItemStage) 2.4.dp else 1.8.dp,
+                    color = if (isItemStage) plumOutline else plumOutline.copy(alpha = 0.85f),
+                    shape = CircleShape
+                )
+                .clickable {
+                    if (!isClipMode && state.stage == WheelStage.CATEGORY) {
+                        state.lockCategory()
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                    } else {
+                        onConfirm()
+                    }
+                }
+                .padding(4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                when {
+                    isItemStage -> {
+                        val isWideKaomoji = currentKaomoji.length > 13
+                        val displayedKaomoji = rememberSteppedTickerText(
+                            text = currentKaomoji,
+                            visibleCharCount = 13,
+                            enabled = isWideKaomoji
+                        )
+                        Text(
+                            text = "♥ ${currentCategory.shortLabel} ♥",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = activeCategoryRose,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = displayedKaomoji,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = activeKaomojiPlum,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = if (isWideKaomoji) TextOverflow.Clip else TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(vertical = 1.dp)
+                        )
+                        Text(
+                            text = "${state.itemIndex + 1} / ${currentCategory.items.size}",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = stepperPlum
+                        )
+                        Text(
+                            text = "♥ Center: Insert ♥",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = helperRose,
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 1.dp)
+                        )
+                    }
+                    !isClipMode -> {
+                        Text(
+                            text = "♥ ${currentCategory.shortLabel} ♥",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = activeCategoryRose,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = currentKaomoji,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = activeKaomojiPlum,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(vertical = 1.dp)
+                        )
+                        Text(
+                            text = "♡ ${state.categoryIndex + 1} / ${categories.size} ♡",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = stepperPlum
+                        )
+                        Text(
+                            text = "♥ Center: Open ♥",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = helperRose,
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 1.dp)
+                        )
+                    }
+                    currentClip == null -> {
+                        Text(
+                            text = "✂ Empty ✂",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = activeCategoryRose,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "no clips yet",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = activeKaomojiPlum,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(vertical = 1.dp)
+                        )
+                        Text(
+                            text = "♡ 0 / 0 ♡",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = stepperPlum
+                        )
+                        Text(
+                            text = "♥ Center to Insert ♥",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = helperRose,
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 1.dp)
+                        )
+                    }
+                    else -> {
+                        Text(
+                            text = if (currentClip.pinned) "★ Snippet ★" else "✂ Clip ✂",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = activeCategoryRose,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = clipPetalLabel(currentClip.copy(pinned = false), maxChars = 10),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = activeKaomojiPlum,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(vertical = 1.dp)
+                        )
+                        Text(
+                            text = "♡ ${state.clipIndex + 1} / ${clipEntries.size} ♡",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = stepperPlum
+                        )
+                        Text(
+                            text = "♥ Center to Insert ♥",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = helperRose,
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 1.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KaomojiWheelClipPreview(
+    state: KaomojiWheelState,
+    cardBackground: Color,
+    plumOutline: Color,
+    activeKaomojiPlum: Color,
+    deepPlumText: Color
+) {
+    if (state.mode != WheelMode.CLIPBOARD_SNIPPETS) return
+    val currentClip = state.currentClip
+    Spacer(modifier = Modifier.height(8.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 92.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(cardBackground)
+            .border(1.dp, plumOutline.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = currentClip?.text
+                ?: "Copy some text, or add Quick Snippets in Settings → Keyboard ♡",
+            fontSize = 10.sp,
+            fontWeight = if (currentClip != null) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (currentClip != null) activeKaomojiPlum else deepPlumText,
+            textAlign = if (currentClip != null) TextAlign.Start else TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun KaomojiWheelBottomHint(
+    state: KaomojiWheelState,
+    isDarkTheme: Boolean,
+    unfocusedCardBgColor: Color,
+    surfaceTint: Color,
+    plumOutline: Color,
+    deepPlumText: Color
+) {
+    val modeAndStage by remember(state) {
+        derivedStateOf { state.mode to state.stage }
+    }
+    val (mode, stage) = modeAndStage
+    val isClipMode = mode == WheelMode.CLIPBOARD_SNIPPETS
+    val isItemStage = !isClipMode && stage == WheelStage.ITEM
+    val bottomHintBg = if (isDarkTheme) {
+        unfocusedCardBgColor.copy(alpha = 0.85f)
+    } else {
+        surfaceTint.copy(alpha = 0.55f)
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(bottomHintBg)
+            .border(1.dp, plumOutline.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = when {
+                isClipMode -> "◀▶▲▼ Pick  •  1–8 Insert\n✱/0 Kaomoji  •  Center: Insert"
+                isItemStage -> "1-0: Quick Pick • ◀▶ Browse • Back: Moods"
+                else -> "D-Pad: Mood • Center: Open • * Clips"
+            },
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Medium,
+            color = deepPlumText,
+            textAlign = TextAlign.Center
+        )
     }
 }

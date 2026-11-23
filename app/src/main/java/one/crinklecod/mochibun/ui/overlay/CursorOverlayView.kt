@@ -19,8 +19,6 @@ import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
-import coil.decode.GifDecoder
-import coil.decode.ImageDecoderDecoder
 import coil.imageLoader
 import coil.request.Disposable
 import coil.request.ImageRequest
@@ -152,7 +150,6 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
 
         val request = ImageRequest.Builder(context)
             .data(targetData)
-            .decoderFactory(GifDecoder.Factory())
             .target(
                 onSuccess = { drawable ->
                     applyCursorDrawable(drawable)
@@ -175,7 +172,6 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
     private fun loadDefaultBundledCursor() {
         val fallbackRequest = ImageRequest.Builder(context)
             .data(R.drawable.cursor)
-            .decoderFactory(GifDecoder.Factory())
             .target(
                 onSuccess = { drawable ->
                     applyCursorDrawable(drawable)
@@ -214,7 +210,7 @@ class CursorOverlayView(context: Context) : FrameLayout(context) {
 
         if (isOverlayVisible) {
             val anim = (drawable as? Animatable) ?: (inner as? Animatable)
-            Log.d(TAG, "applyCursorDrawable: starting animation on visible overlay (anim=$anim)")
+            if (BuildConfig.DEBUG) Log.d(TAG, "applyCursorDrawable: starting animation on visible overlay (anim=$anim)")
             anim?.start()
         }
     }

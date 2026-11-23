@@ -459,7 +459,7 @@ fun selectSpeechBubbleDialogue(
         if (petMood == PetMood.HUNGRY || petMood == PetMood.SULKY || petMood == PetMood.SLEEPY) {
             return pickLineAvoiding(moodPool, previousLine)
         }
-        val isLowBatt = isLowBattery ?: (context?.let { isDeviceBatteryLow(it) } ?: false)
+        val isLowBatt = isLowBattery ?: (context != null && isDeviceBatteryLow(context))
         val isMusic = isMusicPlaying ?: MediaSessionTracker.mediaState.value.isPlaying
         val contextualPool = buildList {
             if (isLowBatt) addAll(LOW_BATTERY_LINES)
@@ -470,7 +470,7 @@ fun selectSpeechBubbleDialogue(
     }
 
     val isLateNight = hour >= 22 || hour < 5
-    val isLowBatt = isLowBattery ?: (context?.let { isDeviceBatteryLow(it) } ?: false)
+    val isLowBatt = isLowBattery ?: (context != null && isDeviceBatteryLow(context))
     val isMusic = isMusicPlaying ?: MediaSessionTracker.mediaState.value.isPlaying
 
     val contextualPool = mutableListOf<String>()

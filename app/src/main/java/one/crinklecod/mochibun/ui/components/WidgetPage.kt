@@ -1101,7 +1101,11 @@ fun WidgetPage(
             }
 
             // User-added Android App Widgets
-            itemsIndexed(widgetSlots, key = { _, slot -> slot.appWidgetId }) { idx, slot ->
+            itemsIndexed(
+                widgetSlots,
+                key = { _, slot -> slot.appWidgetId },
+                contentType = { _, _ -> "app_widget_card" }
+            ) { idx, slot ->
                 AppWidgetHostCard(
                     slot = slot,
                     info = widgetInfos[slot.appWidgetId],

@@ -408,7 +408,8 @@ fun CreateFavoriteFolderDialog(
                 ) {
                     itemsIndexed(
                         availableApps,
-                        key = { _, app -> app.componentKey }
+                        key = { _, app -> app.componentKey },
+                        contentType = { _, _ -> "folder_app_row" }
                     ) { index, app ->
                         val pkg = app.packageName
                         val checked = pkg in selectedPackages

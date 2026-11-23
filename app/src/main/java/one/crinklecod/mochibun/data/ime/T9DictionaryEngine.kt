@@ -598,14 +598,6 @@ class T9DictionaryEngine(
             return result
         }
 
-        fun displayNameFor(context: Context, dictId: String): String {
-            if (dictId == BUILT_IN_EN_ID) return BUILT_IN_EN_DISPLAY_NAME
-            return availableDictionaries(context)
-                .firstOrNull { it.id == dictId }
-                ?.displayName
-                ?: BUILT_IN_EN_DISPLAY_NAME
-        }
-
         private fun findCustomFile(context: Context, fileName: String): File? {
             if (fileName.isBlank() || fileName.contains('/') || fileName.contains('\\') || fileName == "..") {
                 return null
@@ -704,13 +696,6 @@ class UserWordStats {
             total += map.size
         }
         total
-    }
-
-    fun clearAll() {
-        synchronized(lock) {
-            byDict.clear()
-            dirty = false
-        }
     }
 
     fun loadFromJsonString(json: String?) {

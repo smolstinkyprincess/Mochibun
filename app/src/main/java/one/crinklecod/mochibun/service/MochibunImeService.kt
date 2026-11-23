@@ -364,8 +364,7 @@ class MochibunImeService : InputMethodService() {
                                 KaomojiWheelCloudStage(
                                     state = wheelState,
                                     onConfirm = ::confirmKaomojiWheel,
-                                    onDismiss = ::closeKaomojiWheel,
-                                    confirmVerb = "Insert"
+                                    onDismiss = ::closeKaomojiWheel
                                 )
                             }
                         } else {

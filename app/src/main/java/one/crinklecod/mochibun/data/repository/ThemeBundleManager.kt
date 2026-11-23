@@ -64,9 +64,6 @@ data class BundlePreviewData(
     val hasSoundPackAsset: Boolean
         get() = soundCueCount > 0
 
-    val hasCustomMascot: Boolean
-        get() = hasMascotAsset
-
     val hasCustomMascotDialogue: Boolean
         get() = (hasMascotAsset || manifest.hasCustomMascot) &&
             MascotAtlasValidator.sanitizeMascotDialogue(manifest.mascot?.dialogue) != null
@@ -654,8 +651,8 @@ object ThemeBundleManager {
             val cardInt = hexToColorInt(p.cardColorHex, DEFAULT_FALLBACK_CARD_INT)
             val greetingInt = hexToColorInt(p.greetingColorHex, DEFAULT_FALLBACK_GREETING_INT)
             val actionInt = hexToColorInt(p.actionColorHex, DEFAULT_FALLBACK_ACTION_INT)
-            val textInt = p.textColorHex?.let { safeParseColorInt(it, greetingInt) } ?: greetingInt
-            val outlineInt = p.outlineColorHex?.let { safeParseColorInt(it, cardInt) } ?: cardInt
+            val textInt = if (p.textColorHex != null) safeParseColorInt(p.textColorHex, greetingInt) else greetingInt
+            val outlineInt = if (p.outlineColorHex != null) safeParseColorInt(p.outlineColorHex, cardInt) else cardInt
             val resolvedBorderStyle = CardBorderStyle.fromId(p.borderStyle)
 
             editor.putInt(PreferencesManager.KEY_THEME_BG_COLOR, bgInt)

@@ -1285,7 +1285,6 @@ internal fun MochibunKeyGuideContent(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     PixelKeycap(
-                        key = KeyGuideKey.LSK,
                         isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.LSK,
                         isPressed = pressedKey == KeyGuideKey.LSK,
                         primaryInk = primaryInk,
@@ -1304,7 +1303,6 @@ internal fun MochibunKeyGuideContent(
                         }
                     }
                     PixelKeycap(
-                        key = KeyGuideKey.HOME,
                         isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.HOME,
                         isPressed = pressedKey == KeyGuideKey.HOME,
                         primaryInk = primaryInk,
@@ -1323,7 +1321,6 @@ internal fun MochibunKeyGuideContent(
                         }
                     }
                     PixelKeycap(
-                        key = KeyGuideKey.RSK,
                         isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.RSK,
                         isPressed = pressedKey == KeyGuideKey.RSK,
                         primaryInk = primaryInk,
@@ -1359,7 +1356,6 @@ internal fun MochibunKeyGuideContent(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         PixelKeycap(
-                            key = KeyGuideKey.CONTACTS,
                             isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.CONTACTS,
                             isPressed = pressedKey == KeyGuideKey.CONTACTS,
                             primaryInk = primaryInk,
@@ -1384,7 +1380,6 @@ internal fun MochibunKeyGuideContent(
                                 .background(theme.cardBorder.copy(alpha = 0.4f))
                         )
                         PixelKeycap(
-                            key = KeyGuideKey.MESSAGES,
                             isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.MESSAGES,
                             isPressed = pressedKey == KeyGuideKey.MESSAGES,
                             primaryInk = primaryInk,
@@ -1424,7 +1419,6 @@ internal fun MochibunKeyGuideContent(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         PixelKeycap(
-                            key = KeyGuideKey.CAMERA,
                             isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.CAMERA,
                             isPressed = pressedKey == KeyGuideKey.CAMERA,
                             primaryInk = primaryInk,
@@ -1449,7 +1443,6 @@ internal fun MochibunKeyGuideContent(
                                 .background(theme.cardBorder.copy(alpha = 0.4f))
                         )
                         PixelKeycap(
-                            key = KeyGuideKey.STAR_FN,
                             isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.STAR_FN,
                             isPressed = pressedKey == KeyGuideKey.STAR_FN,
                             primaryInk = primaryInk,
@@ -1484,7 +1477,6 @@ internal fun MochibunKeyGuideContent(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     PixelKeycap(
-                        key = KeyGuideKey.CALL,
                         isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.CALL,
                         isPressed = pressedKey == KeyGuideKey.CALL,
                         primaryInk = primaryInk,
@@ -1505,7 +1497,6 @@ internal fun MochibunKeyGuideContent(
                         )
                     }
                     PixelKeycap(
-                        key = KeyGuideKey.DEL,
                         isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.DEL,
                         isPressed = pressedKey == KeyGuideKey.DEL,
                         primaryInk = primaryInk,
@@ -1524,7 +1515,6 @@ internal fun MochibunKeyGuideContent(
                         )
                     }
                     PixelKeycap(
-                        key = KeyGuideKey.END,
                         isSelected = focusZone == KeyGuideZone.KEYPAD && selectedKey == KeyGuideKey.END,
                         isPressed = pressedKey == KeyGuideKey.END,
                         primaryInk = primaryInk,
@@ -2016,7 +2006,11 @@ private fun SystemActionPickerDialog(
                         .heightIn(max = 310.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    itemsIndexed(SYSTEM_REMAP_ACTIONS) { index, action ->
+                    itemsIndexed(
+                        items = SYSTEM_REMAP_ACTIONS,
+                        key = { _, action -> action.serialize() },
+                        contentType = { _, _ -> "system_remap_action" }
+                    ) { index, action ->
                         val isFocused = !isCloseFocused && index == selectedIndex
                         val itemShape = RoundedCornerShape(12.dp)
                         val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.5f) else Color.Transparent
@@ -2105,7 +2099,6 @@ private fun T9KeypadRow(
         listOf(left, center, right).forEach { (key, labels) ->
             val (main, sub) = labels
             PixelKeycap(
-                key = key,
                 isSelected = keypadFocused && selectedKey == key,
                 isPressed = pressedKey == key,
                 primaryInk = primaryInk,
@@ -2141,7 +2134,6 @@ private fun T9KeypadRow(
 
 @Composable
 private fun PixelKeycap(
-    @Suppress("UNUSED_PARAMETER") key: KeyGuideKey,
     isSelected: Boolean,
     isPressed: Boolean,
     primaryInk: Color,

@@ -255,7 +255,6 @@ internal fun CursorHardwareSettingsScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 false
             }
     ) {

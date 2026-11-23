@@ -19,7 +19,6 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.ZipFile
 import kotlin.math.roundToInt
 
@@ -48,20 +47,15 @@ object RootTouchInjector {
     // ---- wire format: keep in sync with evinject.c (24 bytes, little-endian) ----
     private const val PKT_SIZE = 24
     private const val PKT_MAGIC = 0xB7
-    private const val OP_DOWN = 1
-    private const val OP_MOVE = 2
-    private const val OP_UP = 3
     private const val OP_TAP = 4
     private const val OP_SWIPE = 5
     private const val OP_RESET = 6
     private const val OP_QUIT = 8
     private const val OP_KEY = 10
-    private const val OP_PASTE = 11
 
     private const val TAP_HOLD_MS = 20         // finger-on-glass time; DOWN itself lands instantly
     private const val MAX_LAUNCH_FAILURES = 3
     private const val RETRY_AFTER_MS = 60_000L
-    private const val NO_MOVE = -1L
 
     /** Pin a node here ("/dev/input/event3") if auto-detect ever picks the wrong one. */
     private val NODE_OVERRIDE: String? = "/dev/input/event3"
@@ -84,22 +78,6 @@ object RootTouchInjector {
     private var failures = 0
     private var blockedUntilMs = 0L
     private val pkt = ByteArray(PKT_SIZE)
-
-    // drag coalescing: only the newest MOVE matters, so keep one slot and enqueue at most one task
-    private val moveSlot = AtomicLong(NO_MOVE)
-    private val moveTask = Runnable {
-        val v = moveSlot.getAndSet(NO_MOVE)
-        if (v != NO_MOVE) {
-            val x = (v shr 32).toInt()
-            val y = v.toInt()
-            if (!nativeSend(OP_MOVE, x, y)) legacyMove(x, y)
-        }
-    }
-
-    // legacy drag emulation (io thread only): remember the press, replay it as one swipe on release
-    private var legacyX0 = 0f; private var legacyY0 = 0f
-    private var legacyX1 = 0f; private var legacyY1 = 0f
-    private var legacyT0 = 0L
 
     // ------------------------------------------------------------------ non-root fallback
 
@@ -146,15 +124,9 @@ object RootTouchInjector {
         appCtx = context.applicationContext
     }
 
-    /** Optional: bring the helper up now so the first click is instant. Not called by default. */
-    fun prewarm() {
-        io.execute { ensureHelper() }
-    }
-
     /** Cursor turned off (or service going away): let go of any finger and stop the helper. */
     fun release() {
         appCtx = null
-        moveSlot.set(NO_MOVE)
         io.execute {
             trySend(OP_RESET)
             trySend(OP_QUIT)
@@ -185,24 +157,6 @@ object RootTouchInjector {
         }
     }
 
-    fun touchDown(x: Float, y: Float) {
-        io.execute { if (!nativeSend(OP_DOWN, px(x), px(y))) legacyDown(x, y) }
-    }
-
-    /** Safe to call every frame: calls are coalesced, only the newest position is sent. */
-    fun touchMove(x: Float, y: Float) {
-        val prev = moveSlot.getAndSet((px(x).toLong() shl 32) or (px(y).toLong() and 0xFFFFFFFFL))
-        if (prev == NO_MOVE) io.execute(moveTask)
-    }
-
-    fun touchUp(x: Float, y: Float) {
-        io.execute {
-            moveSlot.set(NO_MOVE)
-            val ok = nativeSend(OP_MOVE, px(x), px(y)) && nativeSend(OP_UP)
-            if (!ok) legacyUp(x, y)
-        }
-    }
-
     /** Injects a Linux evdev key code (e.g. 523 for KEY_NUMERIC_POUND, 28 for KEY_ENTER). */
     fun keyAsync(linuxCode: Int, holdMs: Int = 20) {
         io.execute {
@@ -225,23 +179,9 @@ object RootTouchInjector {
         }
     }
 
-    /** Injects KEY_PASTE (135) to paste current clipboard contents. */
-    fun pasteAsync() {
-        io.execute {
-            if (!nativeSend(OP_PASTE)) {
-                val bin = appCtx?.let { installHelper(it) }
-                if (bin != null && RootShell.isSuBinaryPresent()) {
-                    RootShell.submit("exec ${q(bin.path)} paste")
-                } else {
-                    RootShell.submit("input keyevent 279") // KEYCODE_PASTE
-                }
-            }
-        }
-    }
-
     /** Lift whatever finger we have down (stuck-drag escape hatch). */
     fun cancelTouch() {
-        io.execute { moveSlot.set(NO_MOVE); trySend(OP_RESET) }
+        io.execute { trySend(OP_RESET) }
     }
 
     fun shutdown() {
@@ -263,12 +203,9 @@ object RootTouchInjector {
     private fun trySend(op: Int, a: Int = 0, b: Int = 0, c: Int = 0, d: Int = 0, e: Int = 0): Boolean {
         val stream = helperStream ?: return false
         encodePacket(pkt, op, a, b, c, d, e)
-        val t0 = System.nanoTime()
         return try {
             stream.write(pkt, 0, PKT_SIZE)
             stream.flush()
-            val dtUs = (System.nanoTime() - t0) / 1000L
-            Log.d(TAG, "pipe write op=$op took ${dtUs}µs")
             true
         } catch (ex: IOException) {
             Log.w(TAG, "helper pipe write failed (helper gone): ${ex.message}")
@@ -435,27 +372,6 @@ object RootTouchInjector {
         val xi2 = x2.roundToInt().coerceIn(0, 480)
         val yi2 = y2.roundToInt().coerceIn(0, 800)
         RootShell.submit("if [ -x $bin ]; then $bin swipe $xi1 $yi1 $xi2 $yi2 $durationMs --device /dev/input/event3; else input swipe $xi1 $yi1 $xi2 $yi2 $durationMs; fi")
-    }
-
-    private fun legacyDown(x: Float, y: Float) {
-        legacyX0 = x; legacyY0 = y; legacyX1 = x; legacyY1 = y
-        legacyT0 = SystemClock.uptimeMillis()
-    }
-
-    private fun legacyMove(x: Int, y: Int) {
-        legacyX1 = x.toFloat(); legacyY1 = y.toFloat()
-    }
-
-    private fun legacyUp(x: Float, y: Float) {
-        legacyX1 = x; legacyY1 = y
-        val dx = legacyX1 - legacyX0
-        val dy = legacyY1 - legacyY0
-        if (dx * dx + dy * dy < 100f) {
-            legacyTap(legacyX0, legacyY0)
-        } else {
-            val dur = (SystemClock.uptimeMillis() - legacyT0).coerceIn(50L, 2000L)
-            legacySwipe(legacyX0, legacyY0, legacyX1, legacyY1, dur)
-        }
     }
 
     // ------------------------------------------------------------------ wire encoding

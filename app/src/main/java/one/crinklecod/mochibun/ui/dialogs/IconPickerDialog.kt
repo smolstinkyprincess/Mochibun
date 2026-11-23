@@ -309,7 +309,8 @@ fun IconPickerDialog(
                     ) {
                         itemsIndexed(
                             items = filteredIcons,
-                            key = { _, name -> name }
+                            key = { _, name -> name },
+                            contentType = { _, _ -> "icon_cell" }
                         ) { index, iconName ->
                             val isSelected = focusZone == 1 && index == selectedIconIndex
                             // Cache misses decode on IO, never during grid composition

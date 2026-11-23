@@ -58,9 +58,11 @@ private const val ZONE_BUTTONS = 1
 private const val BUTTON_DELETE = 0
 private const val BUTTON_SAVE = 1
 
+private val SNIPPET_WHITESPACE_REGEX = Regex("\\s+")
+
 /** One-line list label for a snippet. */
 private fun snippetRowLabel(text: String): String {
-    val flat = text.replace(Regex("\\s+"), " ")
+    val flat = text.replace(SNIPPET_WHITESPACE_REGEX, " ")
     return if (flat.length > 26) flat.take(25).trimEnd() + "…" else flat
 }
 

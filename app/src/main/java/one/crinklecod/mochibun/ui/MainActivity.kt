@@ -1,6 +1,5 @@
 package one.crinklecod.mochibun.ui
 
-import androidx.compose.foundation.layout.imePadding
 import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -14,15 +13,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import one.crinklecod.mochibun.core.system.ClamshellListener
 import one.crinklecod.mochibun.core.system.ClamshellManager
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
@@ -33,7 +28,6 @@ import one.crinklecod.mochibun.core.util.MochibunSystemActions
 import one.crinklecod.mochibun.core.widget.MochibunWidgetHost
 import one.crinklecod.mochibun.ui.theme.MochibunTheme
 import one.crinklecod.mochibun.ui.theme.SystemUiThemeBridge
-import one.crinklecod.mochibun.ui.theme.ThemeBackground
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -469,32 +463,26 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MochibunTheme {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    containerColor = ThemeBackground
-                ) { innerPadding ->
-                    MainLauncher(
-                        modifier = Modifier.padding(innerPadding).imePadding(),
-                        viewModel = launcherViewModel,
-                        homePressCount = homePressCount,
-                        homePressedWhileVisible = homePressedWhileVisible,
-                        appListRefreshCount = appListRefreshCount,
-                        lidOpenCount = lidOpenCount,
-                        lidClosedCount = lidClosedCount,
-                        screenOffResetCount = screenOffResetCount,
-                        unlockCount = unlockCount,
-                        isActivityResumed = isActivityResumed,
-                        isKeyguardLocked = isKeyguardLocked,
-                        lastUnlockUptimeMs = lastUnlockUptimeMs,
-                        lastUserHomePressUptimeMs = lastUserHomePressUptimeMs,
-                        settingsRequestCount = settingsRequestCount,
-                        quickMemoRequestCount = quickMemoRequestCount,
-                        requestedPage = requestedPage,
-                        onPageConsumed = ::consumeRequestedPage,
-                        incomingBundleUri = pendingThemeBundleUri,
-                        onConsumeIncomingBundleUri = ::consumePendingThemeBundleUri
-                    )
-                }
+                MainLauncher(
+                    viewModel = launcherViewModel,
+                    homePressCount = homePressCount,
+                    homePressedWhileVisible = homePressedWhileVisible,
+                    appListRefreshCount = appListRefreshCount,
+                    lidOpenCount = lidOpenCount,
+                    lidClosedCount = lidClosedCount,
+                    screenOffResetCount = screenOffResetCount,
+                    unlockCount = unlockCount,
+                    isActivityResumed = isActivityResumed,
+                    isKeyguardLocked = isKeyguardLocked,
+                    lastUnlockUptimeMs = lastUnlockUptimeMs,
+                    lastUserHomePressUptimeMs = lastUserHomePressUptimeMs,
+                    settingsRequestCount = settingsRequestCount,
+                    quickMemoRequestCount = quickMemoRequestCount,
+                    requestedPage = requestedPage,
+                    onPageConsumed = ::consumeRequestedPage,
+                    incomingBundleUri = pendingThemeBundleUri,
+                    onConsumeIncomingBundleUri = ::consumePendingThemeBundleUri
+                )
             }
         }
     }

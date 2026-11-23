@@ -210,7 +210,6 @@ internal fun BackupRestoreSettingsScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 false
             }
     ) {

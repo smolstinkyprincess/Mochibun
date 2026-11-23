@@ -45,8 +45,6 @@ private val PinkColorScheme = lightColorScheme(
  */
 @Composable
 fun MochibunTheme(
-    @Suppress("UNUSED_PARAMETER") darkTheme: Boolean = false,
-    @Suppress("UNUSED_PARAMETER") dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val fontId by PreferencesManager.themeFontFamily.collectAsState()

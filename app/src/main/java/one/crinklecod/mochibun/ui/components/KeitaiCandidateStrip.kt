@@ -609,7 +609,11 @@ fun KeitaiCandidateStrip(
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                itemsIndexed(candidates) { index, candidate ->
+                itemsIndexed(
+                    items = candidates,
+                    key = { index, _ -> index },
+                    contentType = { _, _ -> "candidate_chip" }
+                ) { index, candidate ->
                     val isSelected = index == selected
                     val isSingleChar = candidate.length == 1
                     val chipShape = if (isSingleChar) CircleShape else CandidatePillShape
@@ -633,16 +637,12 @@ fun KeitaiCandidateStrip(
                                 animateScale = false
                             )
                             .background(ActiveTheme.primary.copy(alpha = 0.35f), chipShape)
-                            .let { mod ->
-                                if (isSingleChar) mod else mod.padding(horizontal = 8.dp)
-                            }
+                            .then(if (isSingleChar) Modifier else Modifier.padding(horizontal = 8.dp))
                     } else {
                         sizeModifier
                             .background(ActiveTheme.primary.copy(alpha = 0.12f), chipShape)
                             .border(0.8.dp, ActiveTheme.primary.copy(alpha = 0.30f), chipShape)
-                            .let { mod ->
-                                if (isSingleChar) mod else mod.padding(horizontal = 6.dp)
-                            }
+                            .then(if (isSingleChar) Modifier else Modifier.padding(horizontal = 6.dp))
                     }
 
                     Box(

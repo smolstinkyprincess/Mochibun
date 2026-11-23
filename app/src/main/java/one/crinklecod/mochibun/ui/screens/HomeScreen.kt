@@ -45,6 +45,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.IntState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -65,7 +66,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -199,7 +199,6 @@ fun HomeScreen(
     onNavigateToNotifications: () -> Unit = {},
     onFavoritePageChange: (page: Int) -> Unit = {}
 ) {
-    val theme = LocalLauncherTheme.current
     // Only the count is shown on Home. Collecting the whole list recomposed this body on every
     // notification repost (new list instance each time, even when the size is unchanged).
     val notificationsState = NotificationTracker.notifications.collectAsState()
@@ -208,6 +207,7 @@ fun HomeScreen(
     val isTickerDark by PreferencesManager.isSubDisplayTickerDark.collectAsState()
     val homeMascotSize by PreferencesManager.homeMascotSize.collectAsState()
     val petPillBounds = remember { PetPillBounds() }
+    val currentOnDismissPetPill = rememberUpdatedState(onDismissPetPill)
     // One shared 4 Hz Keitai step clock for both Mochibunny and the bottom menu handle.
     val homeKeitaiStep = rememberKeitaiStep(active = isHomeVisible, totalSteps = MascotAtlasMath.TICK_WRAP)
     if (!isTickerEnabled) {
@@ -218,7 +218,7 @@ fun HomeScreen(
         modifier = modifier
             .fillMaxSize()
             .onGloballyPositioned { petPillBounds.root = it }
-            .dismissPetPillOnOutsideTap(isPetPillOpen, petPillBounds, onDismissPetPill)
+            .dismissPetPillOnOutsideTap(isPetPillOpen, petPillBounds, currentOnDismissPetPill)
             .background(Color.Transparent)
     ) {
 
@@ -515,70 +515,70 @@ fun WelcomeHomeBanner(
             beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
             showCornerBows = false // the top-centre bow badge is drawn below
         ) {
-        // Inner pill: same shape as the lace card, so tap ripples stay rounded.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(pillShape)
-                .focusable()
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = onLongClick
+            // Inner pill: same shape as the lace card, so tap ripples stay rounded.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(pillShape)
+                    .focusable()
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onLongClick
+                    )
+                    // Ticker marquee: a little roomier (wider pill above, taller padding here)
+                    .padding(horizontal = 12.dp, vertical = if (isTickerEnabled) 12.dp else 9.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Inner corner sparkles
+                SparkleAccent(
+                    size = 11.dp,
+                    color = palette.primary,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = 4.dp, y = (-6).dp)
                 )
-                // Ticker marquee: a little roomier (wider pill above, taller padding here)
-                .padding(horizontal = 12.dp, vertical = if (isTickerEnabled) 12.dp else 9.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            // Inner corner sparkles
-            SparkleAccent(
-                size = 11.dp,
-                color = palette.primary,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .offset(x = 4.dp, y = (-6).dp)
-            )
-            SparkleAccent(
-                size = 10.dp,
-                color = palette.outline,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .offset(x = 2.dp, y = 8.dp)
-            )
-            SparkleAccent(
-                size = 11.dp,
-                color = palette.primary,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .offset(x = (-4).dp, y = (-6).dp)
-            )
-            SparkleAccent(
-                size = 10.dp,
-                color = palette.outline,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .offset(x = (-2).dp, y = 8.dp)
-            )
+                SparkleAccent(
+                    size = 10.dp,
+                    color = palette.outline,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = 2.dp, y = 8.dp)
+                )
+                SparkleAccent(
+                    size = 11.dp,
+                    color = palette.primary,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .offset(x = (-4).dp, y = (-6).dp)
+                )
+                SparkleAccent(
+                    size = 10.dp,
+                    color = palette.outline,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .offset(x = (-2).dp, y = 8.dp)
+                )
 
-            if (isTickerEnabled) {
-                GreetingMarquee(
-                    greeting = greetingText,
-                    unreadCount = unreadCount,
-                    color = if (isTickerDark) SubOledInk else theme.greetingColor,
-                    running = isTickerRunning,
+                if (isTickerEnabled) {
+                    GreetingMarquee(
+                        greeting = greetingText,
+                        unreadCount = unreadCount,
+                        color = if (isTickerDark) SubOledInk else theme.greetingColor,
+                        running = isTickerRunning,
+                        modifier = Modifier.padding(horizontal = 14.dp)
+                    )
+                } else Text(
+                    text = greetingText,
+                    fontSize = dynamicFontSize,
+                    fontWeight = FontWeight.Medium,
+                    color = theme.greetingColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
                     modifier = Modifier.padding(horizontal = 14.dp)
                 )
-            } else Text(
-                text = greetingText,
-                fontSize = dynamicFontSize,
-                fontWeight = FontWeight.Medium,
-                color = theme.greetingColor,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false,
-                modifier = Modifier.padding(horizontal = 14.dp)
-            )
-        }
+            }
         }
 
         // Tiny hearts flanking the bow badge
@@ -1468,18 +1468,15 @@ private const val MASCOT_TICKS_PER_MINUTE = 240
 private fun Modifier.dismissPetPillOnOutsideTap(
     enabled: Boolean,
     bounds: PetPillBounds,
-    onDismiss: () -> Unit
-): Modifier = if (!enabled) this else composed {
-    val currentOnDismiss by rememberUpdatedState(onDismiss)
-    pointerInput(bounds) {
-        awaitPointerEventScope {
-            while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                val down = event.changes.firstOrNull { it.changedToDownIgnoreConsumed() } ?: continue
-                if (!bounds.contains(down.position)) {
-                    event.changes.forEach { it.consume() }
-                    currentOnDismiss()
-                }
+    onDismissState: State<() -> Unit>
+): Modifier = if (!enabled) this else pointerInput(bounds, onDismissState) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val down = event.changes.firstOrNull { it.changedToDownIgnoreConsumed() } ?: continue
+            if (!bounds.contains(down.position)) {
+                event.changes.forEach { it.consume() }
+                onDismissState.value()
             }
         }
     }

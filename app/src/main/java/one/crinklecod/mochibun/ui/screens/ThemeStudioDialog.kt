@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -150,15 +151,17 @@ fun ThemeStudioDialog(
         }
     }
 
-    LaunchedEffect(focusRow, editingColorField) {
-        val targetScroll = when {
-            editingColorField != null -> scrollState.maxValue
-            focusRow <= 1 -> 0
-            focusRow in 2..7 -> (scrollState.maxValue * 0.35f).toInt()
-            focusRow in 8..13 -> (scrollState.maxValue * 0.78f).toInt()
-            else -> scrollState.maxValue
+    LaunchedEffect(scrollState) {
+        snapshotFlow { focusRow to editingColorField }.collectLatest { (row, editing) ->
+            val targetScroll = when {
+                editing != null -> scrollState.maxValue
+                row <= 1 -> 0
+                row in 2..7 -> (scrollState.maxValue * 0.35f).toInt()
+                row in 8..13 -> (scrollState.maxValue * 0.78f).toInt()
+                else -> scrollState.maxValue
+            }
+            scrollState.animateScrollTo(targetScroll)
         }
-        scrollState.animateScrollTo(targetScroll)
     }
 
     LaunchedEffect(showSaveDialog, saveDialogZone, editingColorField) {

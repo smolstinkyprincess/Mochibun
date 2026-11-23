@@ -113,7 +113,6 @@ object PreferencesManager {
     const val KEY_THEME_BORDER_STYLE = "theme_border_style"
     const val DEFAULT_THEME_BORDER_STYLE = CardBorderStyle.DEFAULT_ID
     const val KEY_CUSTOM_CARD_BORDER_SLICE_PX = "custom_card_border_slice_px"
-    const val DEFAULT_CUSTOM_CARD_BORDER_SLICE_PX = CardBorderStyle.DEFAULT_SLICE_PX
 
     val THEME_COLOR_KEYS = listOf(
         KEY_THEME_BG_COLOR,
@@ -319,9 +318,6 @@ object PreferencesManager {
 
     val customUserName: StateFlow<String>
         get() = AppearancePrefs.customUserName
-
-    val themePreset: StateFlow<String>
-        get() = AppearancePrefs.themePreset
 
     val themeFontFamily: StateFlow<String>
         get() = AppearancePrefs.themeFontFamily
@@ -706,13 +702,6 @@ object PreferencesManager {
 
     fun setShowRootOptions(context: Context, show: Boolean) =
         SystemAccessPrefs.setShowRootOptions(context, show)
-
-    /**
-     * Root's hall-switch reader or the LSPosed key hook already resets the UI on a real flip
-     * close, so the screen-off reset defaults on only when neither is around.
-     */
-    fun defaultNonRootScreenOffReset(lidDetectionActive: Boolean): Boolean =
-        SystemAccessPrefs.defaultNonRootScreenOffReset(lidDetectionActive)
 
     /** True when root (hall-switch reader) or the LSPosed key hook can see the flip close. */
     fun isLidDetectionActive(context: Context): Boolean =

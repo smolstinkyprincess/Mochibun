@@ -204,12 +204,12 @@ object LidLedManager : ClamshellListener {
                     isChargingState = true
                     // HLS_LsLedLights reacts to the same event; force a fresh charging program
                     if (appliedMode == LidLedMode.CHARGING) invalidateApplied()
-                    updateLedState()
+                    scope.launch(Dispatchers.IO) { updateLedState() }
                 }
                 Intent.ACTION_POWER_DISCONNECTED -> {
                     petChargerTracker.onPowerDisconnected()
                     isChargingState = false
-                    updateLedState()
+                    scope.launch(Dispatchers.IO) { updateLedState() }
                 }
                 Intent.ACTION_BATTERY_CHANGED -> {
                     // Sticky on registration: only sets the pet's plug baseline, never grants
@@ -223,7 +223,7 @@ object LidLedManager : ClamshellListener {
                     if (pct != null) batteryPct = pct
                     if (isChargingState != charging || (critical != null && critical != wasCritical)) {
                         isChargingState = charging
-                        updateLedState()
+                        scope.launch(Dispatchers.IO) { updateLedState() }
                     }
                 }
             }
@@ -333,11 +333,6 @@ object LidLedManager : ClamshellListener {
             ensureHelperInstalled(ctx)?.let { return it.absolutePath }
         }
         return "lidled"
-    }
-
-    @VisibleForTesting
-    internal fun setMockHelperPath(path: String?) {
-        helperBinaryPath = path
     }
 
     /**
@@ -532,7 +527,7 @@ object LidLedManager : ClamshellListener {
     // Physical flip only: a display timeout with the flip open never reaches these
     override fun onLidClosed() {
         Log.d(TAG, "Clamshell closed: updating lid LED states")
-        updateLedState()
+        scope.launch(Dispatchers.IO) { updateLedState() }
     }
 
     override fun onLidOpened() {
@@ -954,11 +949,6 @@ object LidLedManager : ClamshellListener {
         val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
         return if (level >= 0 && scale > 0) level * 100 / scale else null
-    }
-
-    @VisibleForTesting
-    internal fun setMockBatteryPct(pct: Int) {
-        batteryPct = pct
     }
 
     @VisibleForTesting

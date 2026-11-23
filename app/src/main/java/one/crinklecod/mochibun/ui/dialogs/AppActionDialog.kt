@@ -26,6 +26,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -142,10 +144,12 @@ fun AppActionDialog(
         selectedIndex = selectedIndex.coerceIn(0, (actions.size - 1).coerceAtLeast(0))
     }
 
-    LaunchedEffect(selectedIndex) {
-        val total = actions.size.coerceAtLeast(1)
-        val targetScroll = ((selectedIndex.toFloat() / total) * scrollState.maxValue).toInt()
-        scrollState.animateScrollTo(targetScroll)
+    LaunchedEffect(scrollState, actions.size) {
+        snapshotFlow { selectedIndex }.collectLatest { idx ->
+            val total = actions.size.coerceAtLeast(1)
+            val targetScroll = ((idx.toFloat() / total) * scrollState.maxValue).toInt()
+            scrollState.animateScrollTo(targetScroll)
+        }
     }
 
     requestFocusSafely(focusRequester)

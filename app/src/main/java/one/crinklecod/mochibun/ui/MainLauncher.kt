@@ -94,7 +94,6 @@ internal fun isPendingOpenActionFresh(
 
 @Composable
 fun MainLauncher(
-    modifier: Modifier = Modifier,
     viewModel: LauncherViewModel? = null,
     homePressCount: Int = 0,
     homePressedWhileVisible: Boolean = false,
@@ -257,14 +256,9 @@ fun MainLauncher(
         }
     }
 
-    val apps = launcherVm.apps
     val visibleApps = launcherVm.visibleApps
-    val hiddenApps = launcherVm.hiddenApps
     val letterStarts = launcherVm.letterStarts
-    val favoriteFolders = launcherVm.favoriteFolders
     val favoriteItems = launcherVm.favoriteItems
-    val favoritePackages = launcherVm.favoritePackages
-    val kawaiiIconNames = launcherVm.kawaiiIconNames
 
     val favoriteItemCount = favoriteItems.size
     var selectedFavoriteIndex by nav.selectedFavoriteIndexState

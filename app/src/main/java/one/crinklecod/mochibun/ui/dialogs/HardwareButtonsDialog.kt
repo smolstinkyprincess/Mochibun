@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.flow.collectLatest
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.model.ActionType
@@ -682,9 +683,10 @@ internal fun AppPickerDialog(
     var selectedIndex by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
 
-    LaunchedEffect(selectedIndex, sortedApps.size) {
-        if (sortedApps.isNotEmpty()) {
-            listState.animateScrollToItem(selectedIndex.coerceIn(0, sortedApps.lastIndex))
+    LaunchedEffect(listState, sortedApps.size) {
+        if (sortedApps.isEmpty()) return@LaunchedEffect
+        snapshotFlow { selectedIndex }.collectLatest { idx ->
+            listState.animateScrollToItem(idx.coerceIn(0, sortedApps.lastIndex))
         }
     }
 
@@ -773,7 +775,11 @@ internal fun AppPickerDialog(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    itemsIndexed(sortedApps) { index, app ->
+                    itemsIndexed(
+                        items = sortedApps,
+                        key = { _, app -> app.packageName },
+                        contentType = { _, _ -> "app_picker_row" }
+                    ) { index, app ->
                         val isFocused = index == selectedIndex
                         val itemShape = RoundedCornerShape(12.dp)
                         val bg = if (isFocused) ActiveTheme.surfaceTint.copy(alpha = 0.5f) else Color.Transparent
