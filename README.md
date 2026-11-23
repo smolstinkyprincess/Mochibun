@@ -90,10 +90,10 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai—with **offline T9 predictive text** or classic multi-tap—in any app on the phone (see the **Keitai T9 Keyboard** diagram above for every key's tap and hold action):
 
-- The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` / `T9` / `T9↑` / `T9🔒` / `123` badge.
+- The keyboard is a little floating cloud, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` / `T9` / `T9↑` / `T9🔒` / `123` badge.
 - **Offline T9 prediction & learned words:** Tap `*` to switch into `T9` mode using the bundled 30k+ English dictionary (contractions included), and hold `*` at any time to cycle `Abc` → `ABC` → `abc` (even mid-word in T9). Words you commit twice automatically rank higher for you, stored strictly offline on your device. Want another language or custom wordlist? Drop any `.tsv` or `.txt` wordlist into `Android/data/one.crinklecod.mochibun/files/dictionaries` and switch under **Settings > Keyboard > Predictive Text > T9 Dictionary**.
-- **It dodges your text box.** If the box you're typing in is down at the bottom of the screen (hi, Discord), the pill hops to the top so you can see your words, then hops back down when the coast is clear. Some apps don't tell Android where the cursor is, and in those the pill just stays at the bottom.
-- **It fades when you pause.** After a moment with no key presses the pill turns soft and see-through, then comes back to full strength on your next press.
+- **It dodges your text box.** If the box you're typing in is down at the bottom of the screen (hi, Discord), the pill hops to the top so you can see your words, then hops back down when the coast is clear. Some apps don't tell Android where the cursor is, and in those the cloud just stays at the bottom.
+- **It fades when you pause.** After a moment with no key presses the cloud turns soft and see-through, then comes back to full strength on your next press.
 - A pending multi-tap letter commits on its own after a short pause (**Auto-Commit Delay**: 0.7 s by default, adjustable from 0.3 to 1.5 s), while T9 words wait for Space / Center / navigation so you have time to pick the right word.
 - Sentences auto-capitalize in both multi-tap and T9.
 - Number, phone, and date fields get plain digits, so dialing works the way you'd expect.
