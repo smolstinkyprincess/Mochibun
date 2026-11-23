@@ -75,20 +75,10 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ## ⌨️ Physical Key Map
 
-| Button | Click | Hold (~400 ms) |
-| :--- | :--- | :--- |
-| **Physical Arrows** | Move around cards, drawers & wheel wedges | Fast-scroll |
-| **Center Key** | Open app, select item, or click | Quick menu (pin, edit icon, app info) |
-| **`#` (Pound)** | Open Launcher Menu (settings & themes) | **Quick Memo ✎** (Home) / **Kaomoji Wheel 🌸** (typing) |
-| **`*` (Star)** | Context actions | Toggle silent / vibrate |
-| **`0`** | Jump to top / input | **Flashlight 🔦** (on Home) |
-| **`2`–`9`** | T9 search (in drawer) | **Speed dial** |
-| *(while typing)* | See the [Keitai Keyboard](#-mochibun-keitai-keyboard) keys | — |
-| **Side Key (F4)** | Mouse pointer on / off | Dismiss popup / dialog |
-| **Call Key** | Phone dialer | — |
-| **Back** | Close dialogs, folders, or drawer & return Home | — |
-| **Home** | Return Home from anywhere; on Home, open the app drawer | — |
-| **Recents (LSK)** | On Home, go to the Stats page | On Home, open Recents |
+<div align="center">
+  <img src="assets/launcherkeyguide.png" alt="Mochibun Launcher Key Guide" width="48%" />
+  <img src="assets/keyboardkeyguide.png" alt="Mochibun Keitai Keyboard Key Guide" width="48%" />
+</div>
 
 > 🗝️ Without root, the side key and cursor keys work everywhere through the optional [Accessibility helper](#-standard-non-root-setup). Remapping extra buttons in every app comes from the [LSPosed module](#-lsposed-module-hardware-keys--cursor).
 >
@@ -98,18 +88,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 
 ## 🔤 Mochibun Keitai Keyboard
 
-Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai—with **offline T9 predictive text** or classic multi-tap—in any app on the phone:
-
-| Key | Tap | Hold |
-| :--- | :--- | :--- |
-| **`2`–`9`** | Cycle letters (multi-tap) or type predicted word (`T9` mode) | Type the digit |
-| **`*`** | Cycle mode: `abc` → `T9` → `123` → `abc` (skips `T9` when off) | Cycle case: `Abc` → `ABC` → `abc` |
-| **`0`** | Code symbols (`* / \ _ @ # $ …`) or `0` (`123` mode) | Type digit `0` |
-| **`#`** | Commit word & insert Space | **Kaomoji Wheel 🌸** |
-| **Left / Right** | Pick another candidate / word in the strip | Fast-scroll candidates |
-| **Center** | Commit the current letter/word (or send / go when nothing is pending) | — |
-| **Up / Down** | Commit the letter/word and move on | — |
-| **Back / Delete** | Undo T9 digit / cancel candidate, or delete | Repeat backspace |
+Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai—with **offline T9 predictive text** or classic multi-tap—in any app on the phone (see the **Keitai T9 Keyboard** diagram above for every key's tap and hold action):
 
 - The keyboard is a little floating pill, so it never squishes the app behind it. When you're not pressing keys, it shrinks down to a tiny `abc` / `Abc` / `ABC` / `T9` / `T9↑` / `T9🔒` / `123` badge.
 - **Offline T9 prediction & learned words:** Tap `*` to switch into `T9` mode using the bundled 30k+ English dictionary (contractions included), and hold `*` at any time to cycle `Abc` → `ABC` → `abc` (even mid-word in T9). Words you commit twice automatically rank higher for you, stored strictly offline on your device. Want another language or custom wordlist? Drop any `.tsv` or `.txt` wordlist into `Android/data/one.crinklecod.mochibun/files/dictionaries` and switch under **Settings > Keyboard > Predictive Text > T9 Dictionary**.
