@@ -1,19 +1,36 @@
 package one.crinklecod.mochibun.ui.screens.settings
 
 import android.view.KeyEvent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -22,21 +39,39 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.core.system.ClamshellManager
 import one.crinklecod.mochibun.core.system.LidLedManager
+import one.crinklecod.mochibun.core.system.RootShell
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.J2meGameRepository
+import one.crinklecod.mochibun.ui.components.curtainUnfurl
 import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
+import one.crinklecod.mochibun.ui.dialogs.KawaiiDialogItem
+import one.crinklecod.mochibun.ui.dialogs.KeitaiLaceDialogWithClose
 import one.crinklecod.mochibun.ui.dialogs.LidLedColorPickerDialog
+import one.crinklecod.mochibun.ui.dialogs.dialogWidth
+import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.requestFocusSafely
+import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
+import org.json.JSONObject
 
 internal enum class BehaviorRowId(val id: String) {
     CREATE_FOLDER("create_folder"),
     FOLDER_SCATTER("folder_scatter"),
     HIDDEN_APPS("hidden_apps"),
+    J2ME_FOLDER("j2me_folder"),
+    J2ME_TEMPLATE_SYNC("j2me_template_sync"),
     CLAMSHELL_LID("clamshell_lid")
 }
 
@@ -59,6 +94,8 @@ internal fun behaviorRowIds(
     if (hasCreateFolder) add(BehaviorRowId.CREATE_FOLDER.id)
     add(BehaviorRowId.FOLDER_SCATTER.id)
     add(BehaviorRowId.HIDDEN_APPS.id)
+    add(BehaviorRowId.J2ME_FOLDER.id)
+    add(BehaviorRowId.J2ME_TEMPLATE_SYNC.id)
     add(BehaviorRowId.CLAMSHELL_LID.id)
 }
 
@@ -111,6 +148,39 @@ internal fun BehaviorSettingsScreen(
     val showRootOptions by PreferencesManager.showRootOptions.collectAsState()
     val lidLedHardware by LidLedManager.hasLedHardware.collectAsState()
     val showLidLedRows = showRootOptions && lidLedHardware != false
+    val j2meFolderUri by PreferencesManager.j2meFolderUri.collectAsState()
+    val j2meConfigsFolderUri by PreferencesManager.j2meConfigsFolderUri.collectAsState()
+    val j2meTemplateConfigJson by PreferencesManager.j2meTemplateConfigJson.collectAsState()
+    val j2meAutoSyncOnLaunch by PreferencesManager.isJ2meAutoSyncOnLaunchEnabled.collectAsState()
+    var showJ2meFolderOptions by remember { mutableStateOf(false) }
+    var showJ2meTemplateDialog by remember { mutableStateOf(false) }
+
+    val j2meFolderDisplayName by produceState<String?>(initialValue = null, j2meFolderUri) {
+        value = if (j2meFolderUri.isNullOrBlank()) {
+            null
+        } else {
+            withContext(Dispatchers.IO) {
+                J2meGameRepository.getFolderDisplayName(context, j2meFolderUri)
+            }
+        }
+    }
+
+    val j2meFolderPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            J2meGameRepository.saveFolderTreeUri(context, uri)
+        }
+    }
+
+    val j2meConfigsPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            J2meGameRepository.saveConfigsFolderTreeUri(context, uri)
+            Toast.makeText(context, "Linked J2ME configs folder ♡", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val items = remember(onCreateFolderClick) {
         behaviorRowIds(hasCreateFolder = onCreateFolderClick != null)
@@ -136,6 +206,14 @@ internal fun BehaviorSettingsScreen(
             BehaviorRowId.CREATE_FOLDER.id -> onCreateFolderClick?.invoke()
             BehaviorRowId.FOLDER_SCATTER.id -> PreferencesManager.setFolderScatterLayout(context, !folderScatter)
             BehaviorRowId.HIDDEN_APPS.id -> onOpenHiddenApps?.invoke()
+            BehaviorRowId.J2ME_FOLDER.id -> {
+                if (j2meFolderUri.isNullOrBlank()) {
+                    j2meFolderPicker.launch(null)
+                } else {
+                    showJ2meFolderOptions = true
+                }
+            }
+            BehaviorRowId.J2ME_TEMPLATE_SYNC.id -> showJ2meTemplateDialog = true
             BehaviorRowId.CLAMSHELL_LID.id -> onOpenClamshellLid()
         }
     }
@@ -143,7 +221,9 @@ internal fun BehaviorSettingsScreen(
     ScrollToFocusedItem(listState) {
         when (items.getOrNull(focusedIndex)) {
             BehaviorRowId.CREATE_FOLDER.id, BehaviorRowId.FOLDER_SCATTER.id -> 0
-            BehaviorRowId.HIDDEN_APPS.id -> 1
+            BehaviorRowId.HIDDEN_APPS.id,
+            BehaviorRowId.J2ME_FOLDER.id,
+            BehaviorRowId.J2ME_TEMPLATE_SYNC.id -> 1
             else -> 2
         }
     }
@@ -251,6 +331,28 @@ internal fun BehaviorSettingsScreen(
                         jumpNumber = jumpNumber(BehaviorRowId.HIDDEN_APPS),
                         onClick = { onOpenHiddenApps?.invoke() }
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "J2ME Games Folder (.jar)",
+                        subtitle = j2meFolderDisplayName ?: "Not set",
+                        docomoIndex = 102,
+                        isFocused = isRowFocused(BehaviorRowId.J2ME_FOLDER),
+                        jumpNumber = jumpNumber(BehaviorRowId.J2ME_FOLDER),
+                        onClick = { activateRow(BehaviorRowId.J2ME_FOLDER.id) }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsNavigationRow(
+                        title = "J2ME Controls & Screen Template",
+                        subtitle = if (!j2meTemplateConfigJson.isNullOrBlank()) {
+                            "Saved • Ready to sync"
+                        } else {
+                            "Tap to link AbyssME configs & save template"
+                        },
+                        docomoIndex = 72,
+                        isFocused = isRowFocused(BehaviorRowId.J2ME_TEMPLATE_SYNC),
+                        jumpNumber = jumpNumber(BehaviorRowId.J2ME_TEMPLATE_SYNC),
+                        onClick = { activateRow(BehaviorRowId.J2ME_TEMPLATE_SYNC.id) }
+                    )
                 }
             }
             item(contentType = "behavior_clamshell_nav_card") {
@@ -263,6 +365,600 @@ internal fun BehaviorSettingsScreen(
                         jumpNumber = jumpNumber(BehaviorRowId.CLAMSHELL_LID),
                         onClick = { activateRow(BehaviorRowId.CLAMSHELL_LID.id) }
                     )
+                }
+            }
+        }
+    }
+
+    if (showJ2meFolderOptions) {
+        J2meFolderOptionsDialog(
+            folderName = j2meFolderDisplayName ?: "Selected folder",
+            onChangeFolder = {
+                showJ2meFolderOptions = false
+                j2meFolderPicker.launch(null)
+            },
+            onClearFolder = {
+                J2meGameRepository.saveFolderTreeUri(context, null)
+                showJ2meFolderOptions = false
+            },
+            onDismiss = { showJ2meFolderOptions = false }
+        )
+    }
+
+    if (showJ2meTemplateDialog) {
+        J2meTemplateSyncDialog(
+            configsFolderUri = j2meConfigsFolderUri,
+            hasTemplate = !j2meTemplateConfigJson.isNullOrBlank(),
+            autoSyncOnLaunch = j2meAutoSyncOnLaunch,
+            onPickConfigsFolder = {
+                j2meConfigsPicker.launch(J2meGameRepository.buildAbyssmeConfigsInitialUri())
+            },
+            onDismiss = { showJ2meTemplateDialog = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun J2meFolderOptionsDialog(
+    folderName: String,
+    onChangeFolder: () -> Unit,
+    onClearFolder: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val theme = LocalLauncherTheme.current
+    val focusRequester = remember { FocusRequester() }
+    var selectedIndex by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+
+    fun runAction(idx: Int) {
+        when (idx) {
+            0 -> onChangeFolder()
+            1 -> onClearFolder()
+            else -> onDismiss()
+        }
+    }
+
+    requestFocusSafely(focusRequester)
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        onDismiss()
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        runAction(selectedIndex)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null && digit in 1..2) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        selectedIndex = digit - 1
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        runAction(selectedIndex)
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (native.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        selectedIndex = (selectedIndex - 1 + 3) % 3
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        selectedIndex = (selectedIndex + 1) % 3
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        KeitaiLaceDialogWithClose(
+            isCloseFocused = selectedIndex == 2,
+            onClose = {
+                selectedIndex = 2
+                onDismiss()
+            },
+            modifier = Modifier
+                .width(dialogWidth)
+                .curtainUnfurl(visible = true)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "J2ME Games Folder (.jar)",
+                    color = theme.fgTextColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = folderName,
+                    color = theme.fgTextColor.copy(alpha = 0.7f),
+                    fontSize = 12.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                HorizontalDivider(
+                    color = theme.appActionColor.copy(alpha = 0.22f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                KawaiiDialogItem(
+                    text = "Change folder",
+                    docomoIndex = 102,
+                    isFocused = selectedIndex == 0,
+                    jumpNumber = 1,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectedIndex = 0
+                        onChangeFolder()
+                    }
+                )
+                KawaiiDialogItem(
+                    text = "Clear folder",
+                    docomoIndex = 17,
+                    isDestructive = true,
+                    isFocused = selectedIndex == 1,
+                    jumpNumber = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectedIndex = 1
+                        onClearFolder()
+                    }
+                )
+            }
+        }
+    }
+}
+
+private enum class J2meTemplateDialogMode {
+    MENU,
+    CAPTURE_LIST
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun J2meTemplateSyncDialog(
+    configsFolderUri: String?,
+    hasTemplate: Boolean,
+    autoSyncOnLaunch: Boolean,
+    onPickConfigsFolder: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val theme = LocalLauncherTheme.current
+    val scope = rememberCoroutineScope()
+    val focusRequester = remember { FocusRequester() }
+    val captureListState = rememberLazyListState()
+
+    var mode by remember { mutableStateOf(J2meTemplateDialogMode.MENU) }
+    var selectedIndex by remember { mutableIntStateOf(0) }
+    var sawCenterDown by remember { mutableStateOf(false) }
+    var isBusy by remember { mutableStateOf(false) }
+
+    var detectedConfigs by remember {
+        mutableStateOf<List<J2meGameRepository.DetectedJ2meConfig>>(emptyList())
+    }
+    var isScanningConfigs by remember { mutableStateOf(false) }
+
+    val configsFolderLabel by produceState<String?>(initialValue = null, configsFolderUri) {
+        value = withContext(Dispatchers.IO) {
+            when {
+                !configsFolderUri.isNullOrBlank() ->
+                    J2meGameRepository.getFolderDisplayName(context, configsFolderUri)
+                        ?: "Linked SAF folder"
+                RootShell.isRootAvailable() -> "AbyssME root fallback"
+                else -> null
+            }
+        }
+    }
+
+    LaunchedEffect(mode, configsFolderUri) {
+        if (mode == J2meTemplateDialogMode.CAPTURE_LIST) {
+            isScanningConfigs = true
+            detectedConfigs = withContext(Dispatchers.IO) {
+                J2meGameRepository.listDetectedGameConfigs(context)
+            }
+            isScanningConfigs = false
+            selectedIndex = 0
+        }
+    }
+
+    LaunchedEffect(mode, detectedConfigs.size) {
+        if (mode == J2meTemplateDialogMode.CAPTURE_LIST) {
+            selectedIndex = selectedIndex.coerceIn(0, detectedConfigs.size)
+        } else {
+            selectedIndex = selectedIndex.coerceIn(0, 5)
+        }
+    }
+
+    LaunchedEffect(mode, selectedIndex, detectedConfigs.size) {
+        if (mode == J2meTemplateDialogMode.CAPTURE_LIST &&
+            selectedIndex in detectedConfigs.indices
+        ) {
+            val isVisible = captureListState.layoutInfo.visibleItemsInfo.any {
+                it.index == selectedIndex
+            }
+            if (!isVisible) {
+                captureListState.animateScrollToItem(selectedIndex)
+            }
+        }
+    }
+
+    fun captureFromEntry(entry: J2meGameRepository.DetectedJ2meConfig) {
+        if (isBusy) return
+        isBusy = true
+        scope.launch {
+            val readResult = J2meGameRepository.readDetectedGameConfig(context, entry)
+            readResult.onSuccess { jsonText ->
+                val valid = withContext(Dispatchers.Default) {
+                    try {
+                        JSONObject(jsonText)
+                        true
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+                if (valid) {
+                    PreferencesManager.setJ2meTemplateConfigJson(context, jsonText)
+                    Toast.makeText(
+                        context,
+                        "Saved template from ${entry.gameId} ♡",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    mode = J2meTemplateDialogMode.MENU
+                    selectedIndex = 3
+                } else {
+                    Toast.makeText(
+                        context,
+                        "Invalid config.json in ${entry.gameId}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }.onFailure { err ->
+                Toast.makeText(
+                    context,
+                    err.message ?: "Failed reading ${entry.gameId}/config.json",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            isBusy = false
+        }
+    }
+
+    fun runSyncNow() {
+        if (isBusy) return
+        if (!hasTemplate) {
+            Toast.makeText(context, "Capture a master template first ♡", Toast.LENGTH_SHORT).show()
+            return
+        }
+        isBusy = true
+        scope.launch {
+            val result = J2meGameRepository.syncConfigTemplateToAllGames(context)
+            result.onSuccess { count ->
+                Toast.makeText(
+                    context,
+                    if (count == 0) {
+                        "No game config.json files found to update"
+                    } else {
+                        "Synced template to $count game config(s) ♡"
+                    },
+                    Toast.LENGTH_SHORT
+                ).show()
+            }.onFailure { err ->
+                Toast.makeText(
+                    context,
+                    err.message ?: "Failed syncing J2ME templates",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            isBusy = false
+        }
+    }
+
+    fun runMenuAction(idx: Int) {
+        when (idx) {
+            0 -> onPickConfigsFolder()
+            1 -> mode = J2meTemplateDialogMode.CAPTURE_LIST
+            2 -> {
+                val next = !autoSyncOnLaunch
+                PreferencesManager.setJ2meAutoSyncOnLaunchEnabled(context, next)
+            }
+            3 -> runSyncNow()
+            4 -> {
+                J2meGameRepository.clearTemplateSync(context)
+                Toast.makeText(context, "Cleared J2ME template", Toast.LENGTH_SHORT).show()
+            }
+            else -> onDismiss()
+        }
+    }
+
+    requestFocusSafely(focusRequester)
+
+    BasicAlertDialog(
+        onDismissRequest = {
+            if (mode == J2meTemplateDialogMode.CAPTURE_LIST) {
+                mode = J2meTemplateDialogMode.MENU
+                selectedIndex = 1
+            } else {
+                onDismiss()
+            }
+        },
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        ),
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (isBackDismissKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        SoundEffectManager.play(context, SoundEffect.BACK)
+                        if (mode == J2meTemplateDialogMode.CAPTURE_LIST) {
+                            mode = J2meTemplateDialogMode.MENU
+                            selectedIndex = 1
+                        } else {
+                            onDismiss()
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (isCenterActivateKey(native.keyCode)) {
+                    if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                        sawCenterDown = true
+                        SoundEffectManager.play(context, SoundEffect.CLICK)
+                    } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
+                        sawCenterDown = false
+                        SoundEffectManager.play(context, SoundEffect.SELECT)
+                        if (mode == J2meTemplateDialogMode.MENU) {
+                            runMenuAction(selectedIndex)
+                        } else if (selectedIndex in detectedConfigs.indices) {
+                            captureFromEntry(detectedConfigs[selectedIndex])
+                        } else {
+                            mode = J2meTemplateDialogMode.MENU
+                            selectedIndex = 1
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                val digit = getDigitFromKeyCode(native.keyCode)
+                if (digit != null) {
+                    if (mode == J2meTemplateDialogMode.MENU && digit in 1..5) {
+                        if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                            selectedIndex = digit - 1
+                            SoundEffectManager.play(context, SoundEffect.SELECT)
+                            runMenuAction(selectedIndex)
+                        }
+                        return@onPreviewKeyEvent true
+                    } else if (mode == J2meTemplateDialogMode.CAPTURE_LIST &&
+                        digit in 1..detectedConfigs.size.coerceAtMost(MAX_JUMP_ROWS)
+                    ) {
+                        if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                            selectedIndex = digit - 1
+                            SoundEffectManager.play(context, SoundEffect.SELECT)
+                            captureFromEntry(detectedConfigs[selectedIndex])
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                val itemCount = if (mode == J2meTemplateDialogMode.MENU) {
+                    6
+                } else {
+                    detectedConfigs.size + 1
+                }
+                when (native.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        selectedIndex = (selectedIndex - 1 + itemCount) % itemCount
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        selectedIndex = (selectedIndex + 1) % itemCount
+                        SoundEffectManager.play(context, SoundEffect.NAV)
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        val isCaptureMode = mode == J2meTemplateDialogMode.CAPTURE_LIST
+        val closeIndex = if (isCaptureMode) detectedConfigs.size else 5
+
+        KeitaiLaceDialogWithClose(
+            isCloseFocused = selectedIndex == closeIndex,
+            closeLabel = if (isCaptureMode) "back" else "close",
+            onClose = {
+                selectedIndex = closeIndex
+                if (isCaptureMode) {
+                    mode = J2meTemplateDialogMode.MENU
+                    selectedIndex = 1
+                } else {
+                    onDismiss()
+                }
+            },
+            modifier = Modifier
+                .width(dialogWidth)
+                .heightIn(max = 420.dp)
+                .curtainUnfurl(visible = true)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = if (isCaptureMode) {
+                        "Capture Master Template"
+                    } else {
+                        "J2ME Controls & Screen"
+                    },
+                    color = theme.fgTextColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (isCaptureMode) {
+                        "Pick a configured game (e.g. pending_...)"
+                    } else {
+                        val tplLabel = if (hasTemplate) "Template saved" else "No template"
+                        val dirLabel = configsFolderLabel ?: "Configs not linked"
+                        "$tplLabel · $dirLabel"
+                    },
+                    color = theme.fgTextColor.copy(alpha = 0.72f),
+                    fontSize = 11.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                HorizontalDivider(
+                    color = theme.appActionColor.copy(alpha = 0.22f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+
+                if (!isCaptureMode) {
+                    KawaiiDialogItem(
+                        text = "Pick Emulator configs Folder",
+                        docomoIndex = 102,
+                        isFocused = selectedIndex == 0,
+                        jumpNumber = 1,
+                        enabled = !isBusy,
+                        marqueeWhenFocused = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            selectedIndex = 0
+                            runMenuAction(0)
+                        }
+                    )
+                    KawaiiDialogItem(
+                        text = "Capture Master Template",
+                        docomoIndex = 72,
+                        isFocused = selectedIndex == 1,
+                        jumpNumber = 2,
+                        enabled = !isBusy,
+                        marqueeWhenFocused = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            selectedIndex = 1
+                            runMenuAction(1)
+                        }
+                    )
+                    KawaiiDialogItem(
+                        text = "Auto-Sync on Launch: ${if (autoSyncOnLaunch) "On" else "Off"}",
+                        docomoIndex = 72,
+                        isFocused = selectedIndex == 2,
+                        jumpNumber = 3,
+                        enabled = !isBusy,
+                        marqueeWhenFocused = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            selectedIndex = 2
+                            runMenuAction(2)
+                        }
+                    )
+                    KawaiiDialogItem(
+                        text = if (isBusy) "Syncing…" else "Sync Template to All Games Now",
+                        docomoIndex = 14,
+                        isFocused = selectedIndex == 3,
+                        jumpNumber = 4,
+                        enabled = !isBusy && hasTemplate,
+                        marqueeWhenFocused = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            selectedIndex = 3
+                            runMenuAction(3)
+                        }
+                    )
+                    KawaiiDialogItem(
+                        text = "Clear Template",
+                        docomoIndex = 17,
+                        isDestructive = true,
+                        isFocused = selectedIndex == 4,
+                        jumpNumber = 5,
+                        enabled = !isBusy,
+                        marqueeWhenFocused = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            selectedIndex = 4
+                            runMenuAction(4)
+                        }
+                    )
+                } else if (isScanningConfigs) {
+                    Text(
+                        text = "Scanning emulator configs…",
+                        color = theme.fgTextColor.copy(alpha = 0.75f),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(vertical = 10.dp)
+                    )
+                } else if (detectedConfigs.isEmpty()) {
+                    Text(
+                        text = "No config.json found. Link AbyssME's configs folder or launch a game once first.",
+                        color = theme.fgTextColor.copy(alpha = 0.75f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        state = captureListState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        itemsIndexed(
+                            detectedConfigs,
+                            key = { _, item -> item.documentUri ?: item.rootFilePath ?: item.gameId }
+                        ) { index, entry ->
+                            KawaiiDialogItem(
+                                text = entry.gameId,
+                                docomoIndex = 72,
+                                isFocused = selectedIndex == index,
+                                jumpNumber = (index + 1).takeIf { it <= MAX_JUMP_ROWS },
+                                enabled = !isBusy,
+                                marqueeWhenFocused = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = {
+                                    selectedIndex = index
+                                    captureFromEntry(entry)
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -56,6 +56,7 @@ import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.LidLedAnimationRepository
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
+import one.crinklecod.mochibun.data.repository.J2meGameRepository
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
 import one.crinklecod.mochibun.ui.components.WidgetPage
 import one.crinklecod.mochibun.ui.components.MascotReaction
@@ -1024,11 +1025,8 @@ fun MainLauncher(
                     selectedDrawerIndex =
                         currentVisibleApps.indexOfFirst { it.componentKey == app.componentKey }
                     launcherVm.recordAppLaunch(app.packageName)
-                    val launchIntent =
-                        context.packageManager.getLaunchIntentForPackage(app.packageName)
-                    if (launchIntent != null) {
-                        context.startActivity(launchIntent)
-                    }
+                    J2meGameRepository.launchLauncherApp(context, app)
+                    Unit
                 }
             }
             val onDrawerAppLongClick = remember {

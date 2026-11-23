@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -211,6 +212,7 @@ fun KawaiiDialogItem(
     isDestructive: Boolean = false,
     textAlign: TextAlign = TextAlign.Start,
     jumpNumber: Int? = null,
+    marqueeWhenFocused: Boolean = false,
     onClick: () -> Unit
 ) {
     val theme = LocalLauncherTheme.current
@@ -279,7 +281,19 @@ fun KawaiiDialogItem(
             textAlign = textAlign,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (marqueeWhenFocused) {
+                        Modifier.basicMarquee(
+                            iterations = if (isFocused && enabled) Int.MAX_VALUE else 0,
+                            initialDelayMillis = 800,
+                            velocity = 24.dp
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
         )
         if (jumpNumber != null) {
             JumpNumberBadge(

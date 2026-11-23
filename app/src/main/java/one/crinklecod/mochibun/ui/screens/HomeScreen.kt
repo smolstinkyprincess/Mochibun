@@ -60,6 +60,7 @@ import one.crinklecod.mochibun.core.sound.SoundEffect
 import one.crinklecod.mochibun.core.sound.SoundEffectManager
 import one.crinklecod.mochibun.data.prefs.HomeMascotSize
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.J2meGameRepository
 import one.crinklecod.mochibun.data.repository.NotificationTracker
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.Dispatchers
@@ -994,9 +995,7 @@ fun FavoritesCard(
                                 isSelected = isCardFocused && index == selectedIndex,
                                 onClick = {
                                     onAppClick(item.app)
-                                    context.packageManager
-                                        .getLaunchIntentForPackage(item.app.packageName)
-                                        ?.let(context::startActivity)
+                                    J2meGameRepository.launchLauncherApp(context, item.app)
                                 },
                                 onLongClick = {
                                     onAppClick(item.app)

@@ -20,8 +20,10 @@ import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.model.AppDrawerSortMode
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.IconPackManager
+import one.crinklecod.mochibun.data.repository.J2meGameRepository
 import one.crinklecod.mochibun.ui.screens.firstLetterOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -198,6 +200,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             wallpaperUri = parsedUri
             loadWallpaper(parsedUri)
         }
+
+        viewModelScope.launch {
+            PreferencesManager.j2meFolderUri.drop(1).collect {
+                loadApps()
+            }
+        }
     }
 
     private var installTimesLoaded = false
@@ -231,7 +239,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         private set
 
     fun recordAppLaunch(packageName: String) {
-        if (packageName.isNotBlank() && packageName != context.packageName) {
+        if (packageName.isNotBlank() &&
+            packageName != context.packageName &&
+            !packageName.startsWith("j2me://")
+        ) {
             lastLaunchedPackage = packageName
             PreferencesManager.setLastLaunchedPackage(context, packageName)
         }
@@ -286,11 +297,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 earlyFavoriteApps = fastFavs
             }
 
-            // Full app drawer list query (+ launch counts for MOST_USED sorting)
+            // Full app drawer list query + optional SAF J2ME games (+ launch counts for MOST_USED)
+            val j2meFolderUri = PreferencesManager.getJ2meFolderUri(context)
             val (loadedCounts, loadedApps) = withContext(Dispatchers.IO) {
                 val counts = loadLaunchCounts()
                 IconPackManager.getActiveParsedPack(context)
-                val list = context.packageManager
+                val androidApps = context.packageManager
                     .queryIntentActivities(launcherIntent, 0)
                     .map { resolveInfo ->
                         IconPackManager.getOrLoadLauncherApp(
@@ -300,7 +312,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                             includeInstallTime = needInstallTime
                         )
                     }
-                    .sortedBy { it.lowercaseName }
+                val j2meGames = J2meGameRepository.scanFolder(context, prefs, j2meFolderUri)
+                val list = (androidApps + j2meGames).sortedBy { it.lowercaseName }
                 counts to list
             }
             launchCounts = loadedCounts

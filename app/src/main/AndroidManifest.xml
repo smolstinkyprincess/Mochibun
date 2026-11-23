@@ -51,6 +51,10 @@
         <intent>
             <action android:name="com.dlto.atom.launcher.THEME" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/java-archive" />
+        </intent>
     </queries>
 
     <application

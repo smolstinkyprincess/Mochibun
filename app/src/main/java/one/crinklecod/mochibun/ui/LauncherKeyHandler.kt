@@ -31,6 +31,7 @@ import one.crinklecod.mochibun.data.model.ActionType
 import one.crinklecod.mochibun.data.model.FavoriteSlotItem
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.HardwareRemapManager
+import one.crinklecod.mochibun.data.repository.J2meGameRepository
 import one.crinklecod.mochibun.ui.dialogs.isBackDismissKey
 import one.crinklecod.mochibun.ui.dialogs.isCenterActivateKey
 import one.crinklecod.mochibun.ui.dialogs.isDpadOrActionKey
@@ -422,9 +423,7 @@ internal class LauncherKeyHandler(
                         } else {
                             state.visibleApps.getOrNull(state.selectedDrawerIndex)?.let { app ->
                                 actions.recordAppLaunch(app.packageName)
-                                context.packageManager.getLaunchIntentForPackage(
-                                    app.packageName
-                                )?.let(context::startActivity)
+                                J2meGameRepository.launchLauncherApp(context, app)
                             }
                         }
                     } else if (state.isHomeScreenActive) {
@@ -434,9 +433,7 @@ internal class LauncherKeyHandler(
                                 when (val item = state.favoriteItems.getOrNull(state.selectedFavoriteIndex)) {
                                     is FavoriteSlotItem.App -> {
                                         actions.recordAppLaunch(item.app.packageName)
-                                        context.packageManager.getLaunchIntentForPackage(
-                                            item.app.packageName
-                                        )?.let(context::startActivity)
+                                        J2meGameRepository.launchLauncherApp(context, item.app)
                                     }
                                     is FavoriteSlotItem.Folder -> {
                                         actions.openFolder(item.folder.id)
@@ -446,9 +443,7 @@ internal class LauncherKeyHandler(
                             } else if (state.selectedFavoriteIndex < state.favoriteApps.size) {
                                 state.favoriteApps.getOrNull(state.selectedFavoriteIndex)?.let { app ->
                                     actions.recordAppLaunch(app.packageName)
-                                    context.packageManager.getLaunchIntentForPackage(
-                                        app.packageName
-                                    )?.let(context::startActivity)
+                                    J2meGameRepository.launchLauncherApp(context, app)
                                 }
                             } else {
                                 state.favoriteFolders.getOrNull(

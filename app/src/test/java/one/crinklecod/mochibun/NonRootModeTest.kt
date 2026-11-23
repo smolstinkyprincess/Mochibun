@@ -153,14 +153,27 @@ class NonRootModeTest {
     fun behaviorAndClamshellRowsHideLedRowsAndStayContiguous() {
         val withFolder = behaviorRowIds(hasCreateFolder = true)
         assertEquals(
-            listOf("create_folder", "folder_scatter", "hidden_apps", "clamshell_lid"),
+            listOf(
+                "create_folder",
+                "folder_scatter",
+                "hidden_apps",
+                "j2me_folder",
+                "j2me_template_sync",
+                "clamshell_lid"
+            ),
             withFolder
         )
         assertContiguous(withFolder)
 
         val withoutFolder = behaviorRowIds(hasCreateFolder = false)
         assertEquals(
-            listOf("folder_scatter", "hidden_apps", "clamshell_lid"),
+            listOf(
+                "folder_scatter",
+                "hidden_apps",
+                "j2me_folder",
+                "j2me_template_sync",
+                "clamshell_lid"
+            ),
             withoutFolder
         )
         assertContiguous(withoutFolder)

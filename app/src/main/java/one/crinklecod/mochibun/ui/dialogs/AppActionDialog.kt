@@ -78,7 +78,7 @@ fun AppActionDialog(
         val onClick: () -> Unit
     )
 
-    val actions = remember(isFav, onOpenLauncherOptions) {
+    val actions = remember(isFav, app.isJ2meGame, onOpenLauncherOptions) {
         buildList {
             if (isFav) {
                 add(AppMenuAction("◀ Move Left", onClick = onMoveFavoriteLeft))
@@ -112,13 +112,15 @@ fun AppActionDialog(
                     onClick = onResetIcon
                 )
             )
-            add(
-                AppMenuAction(
-                    label = "App info",
-                    docomoIndex = 14,
-                    onClick = onAppInfo
+            if (!app.isJ2meGame) {
+                add(
+                    AppMenuAction(
+                        label = "App info",
+                        docomoIndex = 14,
+                        onClick = onAppInfo
+                    )
                 )
-            )
+            }
             add(
                 AppMenuAction(
                     label = "Hide app",

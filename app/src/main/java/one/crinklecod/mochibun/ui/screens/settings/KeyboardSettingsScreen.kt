@@ -464,7 +464,7 @@ internal fun KeyboardSettingsScreen(
 
     if (showKeyGuide) {
         val appOptions = remember(installedApps) {
-            installedApps().map { AppInfo(it.packageName, it.name) }
+            installedApps().filterNot { it.isJ2meGame }.map { AppInfo(it.packageName, it.name) }
         }
         MochibunKeyGuideDialog(
             initialTab = KeyGuideTab.LAUNCHER,

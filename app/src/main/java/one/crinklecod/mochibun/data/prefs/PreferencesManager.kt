@@ -261,6 +261,11 @@ object PreferencesManager {
     const val KEY_STEP_CARRIED = "pref_step_carried"
     const val KEY_STEP_LAST_COUNTER = "pref_step_last_counter"
     const val KEY_HIDDEN_APPS = "hidden_apps"
+    const val KEY_J2ME_FOLDER_URI = "pref_j2me_folder_uri"
+    const val KEY_J2ME_CONFIGS_FOLDER_URI = "pref_j2me_configs_folder_uri"
+    const val KEY_J2ME_TEMPLATE_CONFIG_JSON = "pref_j2me_template_config_json"
+    const val KEY_J2ME_AUTO_SYNC_ON_LAUNCH = "pref_j2me_auto_sync_on_launch"
+    const val DEFAULT_J2ME_AUTO_SYNC_ON_LAUNCH = false
     const val KEY_FAVORITE_ITEMS_ORDERED = "favorite_items_ordered_v1"
     const val KEY_CUSTOM_ICON_PREFIX = "custom_icon_"
     const val KEY_CUSTOM_FOLDER_ICON_PREFIX = "custom_folder_icon_"
@@ -306,6 +311,18 @@ object PreferencesManager {
 
     val appDrawerSortMode: StateFlow<AppDrawerSortMode>
         get() = AppearancePrefs.appDrawerSortMode
+
+    val j2meFolderUri: StateFlow<String?>
+        get() = AppearancePrefs.j2meFolderUri
+
+    val j2meConfigsFolderUri: StateFlow<String?>
+        get() = AppearancePrefs.j2meConfigsFolderUri
+
+    val j2meTemplateConfigJson: StateFlow<String?>
+        get() = AppearancePrefs.j2meTemplateConfigJson
+
+    val isJ2meAutoSyncOnLaunchEnabled: StateFlow<Boolean>
+        get() = AppearancePrefs.isJ2meAutoSyncOnLaunchEnabled
 
     val lidLedColor: StateFlow<String>
         get() = LidLedPrefs.lidLedColor
@@ -644,6 +661,30 @@ object PreferencesManager {
 
     fun setWallpaperUri(context: Context, uri: String?) =
         AppearancePrefs.setWallpaperUri(context, uri)
+
+    fun getJ2meFolderUri(context: Context): String? =
+        AppearancePrefs.getJ2meFolderUri(context)
+
+    fun setJ2meFolderUri(context: Context, uri: String?) =
+        AppearancePrefs.setJ2meFolderUri(context, uri)
+
+    fun getJ2meConfigsFolderUri(context: Context): String? =
+        AppearancePrefs.getJ2meConfigsFolderUri(context)
+
+    fun setJ2meConfigsFolderUri(context: Context, uri: String?) =
+        AppearancePrefs.setJ2meConfigsFolderUri(context, uri)
+
+    fun getJ2meTemplateConfigJson(context: Context): String? =
+        AppearancePrefs.getJ2meTemplateConfigJson(context)
+
+    fun setJ2meTemplateConfigJson(context: Context, json: String?) =
+        AppearancePrefs.setJ2meTemplateConfigJson(context, json)
+
+    fun isJ2meAutoSyncOnLaunchEnabled(context: Context): Boolean =
+        AppearancePrefs.isJ2meAutoSyncOnLaunchEnabled(context)
+
+    fun setJ2meAutoSyncOnLaunchEnabled(context: Context, enabled: Boolean) =
+        AppearancePrefs.setJ2meAutoSyncOnLaunchEnabled(context, enabled)
 
     fun getHiddenPackages(context: Context): Set<String> =
         HomeContentPrefs.getHiddenPackages(context)

@@ -19,10 +19,15 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_THEME_BORDE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_THEME_FONT_FAMILY
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_THEME_PRESET
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_WALLPAPER_OVERLAY_ENABLED
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_J2ME_AUTO_SYNC_ON_LAUNCH
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_APP_DRAWER_SORT_MODE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_CUSTOM_USER_NAME
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_FOLDER_SCATTER_LAYOUT
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_HOME_MASCOT_SIZE
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_J2ME_AUTO_SYNC_ON_LAUNCH
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_J2ME_CONFIGS_FOLDER_URI
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_J2ME_FOLDER_URI
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_J2ME_TEMPLATE_CONFIG_JSON
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_PHOTO_FRAME_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_PHOTO_FRAME_LABEL
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_PHOTO_FRAME_STYLE
@@ -61,6 +66,18 @@ internal object AppearancePrefs {
 
     private val _appDrawerSortMode = MutableStateFlow(AppDrawerSortMode.ALPHABETICAL)
     val appDrawerSortMode: StateFlow<AppDrawerSortMode> = _appDrawerSortMode.asStateFlow()
+
+    private val _j2meFolderUri = MutableStateFlow<String?>(null)
+    val j2meFolderUri: StateFlow<String?> = _j2meFolderUri.asStateFlow()
+
+    private val _j2meConfigsFolderUri = MutableStateFlow<String?>(null)
+    val j2meConfigsFolderUri: StateFlow<String?> = _j2meConfigsFolderUri.asStateFlow()
+
+    private val _j2meTemplateConfigJson = MutableStateFlow<String?>(null)
+    val j2meTemplateConfigJson: StateFlow<String?> = _j2meTemplateConfigJson.asStateFlow()
+
+    private val _isJ2meAutoSyncOnLaunchEnabled = MutableStateFlow(DEFAULT_J2ME_AUTO_SYNC_ON_LAUNCH)
+    val isJ2meAutoSyncOnLaunchEnabled: StateFlow<Boolean> = _isJ2meAutoSyncOnLaunchEnabled.asStateFlow()
 
     private val _systemMonitorInterval = MutableStateFlow(DEFAULT_SYSTEM_MONITOR_INTERVAL)
     val systemMonitorInterval: StateFlow<Int> = _systemMonitorInterval.asStateFlow()
@@ -129,6 +146,13 @@ internal object AppearancePrefs {
         val sortStr = prefs.getString(KEY_APP_DRAWER_SORT_MODE, DEFAULT_APP_DRAWER_SORT_MODE) ?: DEFAULT_APP_DRAWER_SORT_MODE
         _appDrawerSortMode.value = AppDrawerSortMode.entries.firstOrNull { it.name == sortStr }
             ?: AppDrawerSortMode.ALPHABETICAL
+        _j2meFolderUri.value = prefs.getString(KEY_J2ME_FOLDER_URI, null)?.takeIf { it.isNotBlank() }
+        _j2meConfigsFolderUri.value = prefs.getString(KEY_J2ME_CONFIGS_FOLDER_URI, null)?.takeIf { it.isNotBlank() }
+        _j2meTemplateConfigJson.value = prefs.getString(KEY_J2ME_TEMPLATE_CONFIG_JSON, null)?.takeIf { it.isNotBlank() }
+        _isJ2meAutoSyncOnLaunchEnabled.value = prefs.getBoolean(
+            KEY_J2ME_AUTO_SYNC_ON_LAUNCH,
+            DEFAULT_J2ME_AUTO_SYNC_ON_LAUNCH
+        )
         _themeFontFamily.value = prefs.getString(
             KEY_THEME_FONT_FAMILY,
             DEFAULT_THEME_FONT_FAMILY
@@ -360,5 +384,75 @@ internal object AppearancePrefs {
         } else {
             getPrefs(context).edit().putString(KEY_WALLPAPER_URI, uri).apply()
         }
+    }
+
+    fun getJ2meFolderUri(context: Context): String? {
+        return if (initialized) {
+            _j2meFolderUri.value
+        } else {
+            getPrefs(context).getString(KEY_J2ME_FOLDER_URI, null)?.takeIf { it.isNotBlank() }
+        }
+    }
+
+    fun setJ2meFolderUri(context: Context, uri: String?) {
+        val normalized = uri?.takeIf { it.isNotBlank() }
+        if (normalized == null) {
+            getPrefs(context).edit().remove(KEY_J2ME_FOLDER_URI).apply()
+        } else {
+            getPrefs(context).edit().putString(KEY_J2ME_FOLDER_URI, normalized).apply()
+        }
+        _j2meFolderUri.value = normalized
+    }
+
+    fun getJ2meConfigsFolderUri(context: Context): String? {
+        return if (initialized) {
+            _j2meConfigsFolderUri.value
+        } else {
+            getPrefs(context).getString(KEY_J2ME_CONFIGS_FOLDER_URI, null)?.takeIf { it.isNotBlank() }
+        }
+    }
+
+    fun setJ2meConfigsFolderUri(context: Context, uri: String?) {
+        val normalized = uri?.takeIf { it.isNotBlank() }
+        if (normalized == null) {
+            getPrefs(context).edit().remove(KEY_J2ME_CONFIGS_FOLDER_URI).apply()
+        } else {
+            getPrefs(context).edit().putString(KEY_J2ME_CONFIGS_FOLDER_URI, normalized).apply()
+        }
+        _j2meConfigsFolderUri.value = normalized
+    }
+
+    fun getJ2meTemplateConfigJson(context: Context): String? {
+        return if (initialized) {
+            _j2meTemplateConfigJson.value
+        } else {
+            getPrefs(context).getString(KEY_J2ME_TEMPLATE_CONFIG_JSON, null)?.takeIf { it.isNotBlank() }
+        }
+    }
+
+    fun setJ2meTemplateConfigJson(context: Context, json: String?) {
+        val normalized = json?.takeIf { it.isNotBlank() }
+        if (normalized == null) {
+            getPrefs(context).edit().remove(KEY_J2ME_TEMPLATE_CONFIG_JSON).apply()
+        } else {
+            getPrefs(context).edit().putString(KEY_J2ME_TEMPLATE_CONFIG_JSON, normalized).apply()
+        }
+        _j2meTemplateConfigJson.value = normalized
+    }
+
+    fun isJ2meAutoSyncOnLaunchEnabled(context: Context): Boolean {
+        return if (initialized) {
+            _isJ2meAutoSyncOnLaunchEnabled.value
+        } else {
+            getPrefs(context).getBoolean(
+                KEY_J2ME_AUTO_SYNC_ON_LAUNCH,
+                DEFAULT_J2ME_AUTO_SYNC_ON_LAUNCH
+            )
+        }
+    }
+
+    fun setJ2meAutoSyncOnLaunchEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_J2ME_AUTO_SYNC_ON_LAUNCH, enabled).apply()
+        _isJ2meAutoSyncOnLaunchEnabled.value = enabled
     }
 }

@@ -96,7 +96,8 @@ internal fun LidAppLedRulesScreen(
 
     // Built once per app list; uninstalled packages with leftover rules stay listed so they can be reset
     val targets = remember(apps, rules.keys) {
-        val installed = apps.distinctBy { it.packageName }
+        val installed = apps.filterNot { it.isJ2meGame }
+            .distinctBy { it.packageName }
             .sortedBy { it.lowercaseName }
             .map { RuleTarget(it.packageName, it.name, it.imageBitmap) }
         val installedPkgs = installed.mapTo(HashSet()) { it.packageName }

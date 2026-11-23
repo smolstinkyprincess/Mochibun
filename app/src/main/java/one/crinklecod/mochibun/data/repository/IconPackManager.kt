@@ -579,7 +579,7 @@ object IconPackManager {
         val pm = context.packageManager
         val selectedPack = getSelectedIconPack(context)
         return apps.map { app ->
-            if (app.installTime > 0L) {
+            if (app.installTime > 0L || app.isJ2meGame) {
                 app
             } else {
                 val installTime = readInstallTime(pm, app.packageName)

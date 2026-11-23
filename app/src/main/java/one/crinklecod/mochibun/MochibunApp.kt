@@ -26,6 +26,7 @@ import one.crinklecod.mochibun.data.repository.CustomMascotManager
 import one.crinklecod.mochibun.data.repository.ExternalThemeManager
 import one.crinklecod.mochibun.data.repository.HardwareRemapManager
 import one.crinklecod.mochibun.data.repository.IconPackManager
+import one.crinklecod.mochibun.data.repository.J2meGameRepository
 import one.crinklecod.mochibun.data.repository.NotificationTracker
 import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.data.repository.WidgetRepository
@@ -103,6 +104,7 @@ class MochibunApp : Application(), ImageLoaderFactory {
             com.android.quickstep.RecentTasksManager.clearCache()
         }
         if (tier >= MemoryTrimTier.RELEASE_DRAWER) {
+            J2meGameRepository.clearCache()
             MascotSpriteStore.clearCache()
             clearDialogBitmapCaches()
         }

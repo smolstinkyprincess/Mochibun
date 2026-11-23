@@ -22,6 +22,7 @@ import one.crinklecod.mochibun.data.model.FavoriteSlotItem
 import one.crinklecod.mochibun.data.model.LauncherApp
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.BundlePreviewData
+import one.crinklecod.mochibun.data.repository.J2meGameRepository
 import one.crinklecod.mochibun.data.repository.ThemeBundleManager
 import one.crinklecod.mochibun.ui.dialogs.AppActionDialog
 import one.crinklecod.mochibun.ui.dialogs.CreateFavoriteFolderDialog
@@ -198,7 +199,7 @@ internal fun LauncherModalHost(
         }
     }
     val installedAppsForButtons = remember(apps) {
-        apps.map { AppInfo(it.packageName, it.name) }
+        apps.filterNot { it.isJ2meGame }.map { AppInfo(it.packageName, it.name) }
     }
 
     when (val modal = activeModal) {
@@ -478,9 +479,7 @@ internal fun LauncherModalHost(
                 val onLaunchApp: (LauncherApp) -> Unit = remember(context, launcherVm) {
                     { app ->
                         launcherVm.recordAppLaunch(app.packageName)
-                        context.packageManager.getLaunchIntentForPackage(
-                            app.packageName
-                        )?.let(context::startActivity)
+                        J2meGameRepository.launchLauncherApp(context, app)
                     }
                 }
                 val onRemoveApp: (String) -> Unit = remember(openedFolder.id, launcherVm) {
