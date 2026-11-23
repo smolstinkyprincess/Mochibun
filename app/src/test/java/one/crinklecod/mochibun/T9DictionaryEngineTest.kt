@@ -86,17 +86,17 @@ class T9DictionaryEngineTest {
 
     @Test
     fun singleDigitT9AlwaysIncludesAllMappedLettersBeforeCompletions() {
-        val tsv = """
-            2\ta\t1000
-            26\tam\t900
-            36\tdo\t900
-            46\tin\t950
-            56\tlo\t800
-            66\tno\t850
-            76\tso\t850
-            86\tto\t950
-            96\tyo\t700
-        """.trimIndent()
+        val tsv = listOf(
+            "2\ta\t1000",
+            "26\tam\t900",
+            "36\tdo\t900",
+            "46\tin\t950",
+            "56\tlo\t800",
+            "66\tno\t850",
+            "76\tso\t850",
+            "86\tto\t950",
+            "96\tyo\t700"
+        ).joinToString("\n")
         val engine = T9DictionaryEngine()
         engine.loadFromReader("test", StringReader(tsv))
 

@@ -34,8 +34,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
@@ -62,7 +64,8 @@ import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherFontFamily
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
-import one.crinklecod.mochibun.ui.theme.softSurfaceColor
+import one.crinklecod.mochibun.ui.theme.cardBorderColor
+import one.crinklecod.mochibun.ui.theme.unfocusedCardBgColor
 
 // Focus zones: slot bar on top, memo text field, bottom row (Clear / Done)
 private const val ZONE_SLOTS = -1
@@ -349,20 +352,27 @@ fun QuickMemoDialog(
                 // Built here (this scope no longer recomposes per keystroke) and handed to the
                 // field, so typing does not rebuild TextFieldColors / TextStyle each character.
                 val fontFamily = LocalLauncherFontFamily.current
-                val memoTextStyle = remember(fontFamily) { TextStyle(fontFamily = fontFamily, fontSize = 14.sp) }
+                val memoTextStyle = remember(fontFamily) {
+                    TextStyle(fontFamily = fontFamily, fontSize = 14.sp, lineHeight = 20.sp)
+                }
                 val memoFieldColors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = theme.appActionColor,
                     unfocusedBorderColor = theme.greetingOutlineColor,
                     focusedTextColor = theme.fgTextColor,
                     unfocusedTextColor = theme.fgTextColor,
-                    focusedContainerColor = softSurfaceColor,
-                    unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.7f)
+                    focusedPlaceholderColor = theme.cardTextColor.copy(alpha = 0.55f),
+                    unfocusedPlaceholderColor = theme.cardTextColor.copy(alpha = 0.55f),
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent
                 )
                 QuickMemoTextField(
                     value = { memoValue },
                     onValueChange = { memoValue = it.limitTextLength(maxChars) },
                     textStyle = memoTextStyle,
                     colors = memoFieldColors,
+                    isFocused = focusZone == ZONE_TEXT,
+                    containerColor = theme.unfocusedCardBgColor,
+                    ruledLineColor = theme.cardBorderColor.copy(alpha = 0.35f),
                     focusRequester = textFocusRequester
                 )
 
@@ -373,7 +383,11 @@ fun QuickMemoDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (focusZone == ZONE_SLOTS) "1-5 / ◀▶ slot • ● or * pin ★" else "↑ slots",
+                        text = if (focusZone == ZONE_SLOTS) {
+                            "Center: Pin ★ • Back: Close"
+                        } else {
+                            "↑ slots • Back: Close"
+                        },
                         color = theme.cardTextColor.copy(alpha = 0.75f),
                         fontSize = 10.sp,
                         maxLines = 1,
@@ -439,7 +453,7 @@ private fun QuickMemoSlotBar(
             val mark = when {
                 n == pinnedSlot -> "★"
                 isFilled(n) -> "•"
-                else -> " "
+                else -> ""
             }
             Box(
                 contentAlignment = Alignment.Center,
@@ -449,12 +463,12 @@ private fun QuickMemoSlotBar(
                     .softGlowFocus(isSelected = barFocused && active, cornerRadius = 10.dp, bringIntoView = false)
                     .clip(shape)
                     .background(
-                        if (active) theme.appActionColor.copy(alpha = 0.35f) else softSurfaceColor.copy(alpha = 0.7f),
+                        if (active) theme.appActionColor.copy(alpha = 0.35f) else theme.unfocusedCardBgColor.copy(alpha = 0.7f),
                         shape
                     )
                     .border(
                         if (active) 1.5.dp else 1.dp,
-                        if (active) theme.appActionColor else theme.greetingOutlineColor,
+                        if (active) theme.appActionColor else theme.cardBorderColor.copy(alpha = 0.55f),
                         shape
                     )
                     .clickable { onSlotClick(n) }
@@ -482,19 +496,42 @@ private fun QuickMemoTextField(
     onValueChange: (TextFieldValue) -> Unit,
     textStyle: TextStyle,
     colors: TextFieldColors,
+    isFocused: Boolean,
+    containerColor: Color,
+    ruledLineColor: Color,
     focusRequester: FocusRequester
 ) {
+    val fieldShape = RoundedCornerShape(14.dp)
+    val containerBg = if (isFocused) containerColor else containerColor.copy(alpha = 0.7f)
     OutlinedTextField(
         value = value(),
         onValueChange = onValueChange,
         placeholder = { Text("jot something cute ♡") },
         minLines = 3,
         maxLines = 5,
-        shape = RoundedCornerShape(14.dp),
+        shape = fieldShape,
         textStyle = textStyle,
         colors = colors,
         modifier = Modifier
             .fillMaxWidth()
+            .background(containerBg, fieldShape)
+            .drawBehind {
+                val strokePx = 1.dp.toPx()
+                val insetX = 10.dp.toPx()
+                val topPaddingPx = 16.dp.toPx()
+                val lineStepPx = 20.sp.toPx()
+                val bottomGuardPx = 10.dp.toPx()
+                var y = topPaddingPx + lineStepPx
+                while (y <= size.height - bottomGuardPx) {
+                    drawLine(
+                        color = ruledLineColor,
+                        start = Offset(insetX, y),
+                        end = Offset(size.width - insetX, y),
+                        strokeWidth = strokePx
+                    )
+                    y += lineStepPx
+                }
+            }
             .focusRequester(focusRequester)
     )
 }

@@ -1,0 +1,4 @@
+Mochibun v2.7.1 ♡
+- Keitai IME * Key Split & Single-Letter T9: Short-tap * cycles abc / T9 / 123 while holding * cycles Abc → ABC → abc live; moved * to the front of 0 and added single-letter selection in T9 mode.
+- 8-Slice Compass Kaomoji Wheel: Expanded to 8 moods (10 kaomoji each) with 2-stage D-pad compass selection, 1–0 instant quick-pick, and marquee scrolling for wide faces.
+- Quick Memo Polish: Added faint ruled notebook lines, saved-slot dots, and contextual hints.

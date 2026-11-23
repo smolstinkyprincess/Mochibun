@@ -48,7 +48,7 @@ import one.crinklecod.mochibun.ui.components.getDigitFromKeyCode
 import one.crinklecod.mochibun.ui.components.MochibunSectionHeader
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
-import one.crinklecod.mochibun.ui.theme.softSurfaceColor
+import one.crinklecod.mochibun.ui.theme.unfocusedCardBgColor
 
 /** Longest label the frame accepts; the card ellipsizes anything that doesn't fit anyway. */
 private const val MAX_LABEL_LENGTH = 32
@@ -338,8 +338,10 @@ fun PhotoFrameLabelDialog(
                         unfocusedBorderColor = theme.greetingOutlineColor,
                         focusedTextColor = theme.fgTextColor,
                         unfocusedTextColor = theme.fgTextColor,
-                        focusedContainerColor = softSurfaceColor,
-                        unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.7f)
+                        focusedPlaceholderColor = theme.cardTextColor.copy(alpha = 0.55f),
+                        unfocusedPlaceholderColor = theme.cardTextColor.copy(alpha = 0.55f),
+                        focusedContainerColor = theme.unfocusedCardBgColor,
+                        unfocusedContainerColor = theme.unfocusedCardBgColor.copy(alpha = 0.7f)
                     ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { save() }),

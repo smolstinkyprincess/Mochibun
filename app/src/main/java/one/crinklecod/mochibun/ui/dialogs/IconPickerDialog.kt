@@ -58,7 +58,7 @@ import androidx.compose.ui.window.DialogProperties
 import one.crinklecod.mochibun.data.repository.IconPackManager
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.selectedContainerColor
-import one.crinklecod.mochibun.ui.theme.softSurfaceColor
+import one.crinklecod.mochibun.ui.theme.unfocusedCardBgColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -274,8 +274,10 @@ fun IconPickerDialog(
                         unfocusedBorderColor = theme.greetingOutlineColor,
                         focusedTextColor = theme.fgTextColor,
                         unfocusedTextColor = theme.fgTextColor,
-                        focusedContainerColor = softSurfaceColor,
-                        unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.7f)
+                        focusedPlaceholderColor = theme.cardTextColor.copy(alpha = 0.55f),
+                        unfocusedPlaceholderColor = theme.cardTextColor.copy(alpha = 0.55f),
+                        focusedContainerColor = theme.unfocusedCardBgColor,
+                        unfocusedContainerColor = theme.unfocusedCardBgColor.copy(alpha = 0.7f)
                     )
                 )
 
@@ -331,7 +333,7 @@ fun IconPickerDialog(
                                     .size(52.dp)
                                     .clip(cellShape)
                                     .background(
-                                        if (isSelected) theme.selectedContainerColor else softSurfaceColor.copy(alpha = 0.45f),
+                                        if (isSelected) theme.selectedContainerColor else theme.unfocusedCardBgColor.copy(alpha = 0.45f),
                                         cellShape
                                     )
                                     .border(

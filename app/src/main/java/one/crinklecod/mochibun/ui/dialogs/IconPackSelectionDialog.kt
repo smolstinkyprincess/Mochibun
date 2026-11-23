@@ -59,7 +59,7 @@ import one.crinklecod.mochibun.ui.components.MochibunSectionHeader
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.selectedContainerColor
-import one.crinklecod.mochibun.ui.theme.softSurfaceColor
+import one.crinklecod.mochibun.ui.theme.unfocusedCardBgColor
 import kotlin.text.ifEmpty
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -259,7 +259,7 @@ fun IconPackSelectionDialog(
                                     .background(
                                         when {
                                             isFocused -> theme.selectedContainerColor
-                                            isSelected -> softSurfaceColor.copy(alpha = 0.65f)
+                                            isSelected -> theme.unfocusedCardBgColor.copy(alpha = 0.65f)
                                             else -> Color.Transparent
                                         },
                                         packShape

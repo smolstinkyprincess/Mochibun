@@ -806,14 +806,13 @@ class MochibunImeService : InputMethodService() {
     }
 
     private fun handleKaomojiWheelKey(state: KaomojiWheelState, keyCode: Int) {
-        when (keyCode) {
-            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_F4,
-            KeyEvent.KEYCODE_POUND -> closeKaomojiWheel()
-            KeyEvent.KEYCODE_DPAD_CENTER,
-            KeyEvent.KEYCODE_ENTER,
-            KeyEvent.KEYCODE_NUMPAD_ENTER -> confirmKaomojiWheel()
-            else -> handleKaomojiWheelNavKey(state, keyCode, this, onConfirm = ::confirmKaomojiWheel)
-        }
+        handleKaomojiWheelNavKey(
+            state = state,
+            keyCode = keyCode,
+            context = this,
+            onConfirm = ::confirmKaomojiWheel,
+            onDismiss = ::closeKaomojiWheel
+        )
     }
 
     private fun confirmKaomojiWheel() {

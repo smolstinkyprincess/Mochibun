@@ -291,7 +291,7 @@ internal enum class KeyGuideKey(
         launcherTap = "Open Launcher Menu",
         launcherHold = "Open Quick Memo",
         typingTap = "Commit word & insert Space",
-        typingHold = "Open Kaomoji Wheel (* / 0 = Clips)"
+        typingHold = "Kaomoji Wheel (D-Pad mood → 1–0 pick, * = Clips)"
     );
 
     val remapKeyCode: Int?

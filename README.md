@@ -79,7 +79,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 | :--- | :--- | :--- |
 | **Physical Arrows** | Move around cards, drawers & wheel wedges | Fast-scroll |
 | **Center Key** | Open app, select item, or click | Quick menu (pin, edit icon, app info) |
-| **`#` (Pound)** | Open settings & theme switcher | **Kaomoji Wheel 🌸** |
+| **`#` (Pound)** | Open Launcher Menu (settings & themes) | **Quick Memo ✎** (Home) / **Kaomoji Wheel 🌸** (typing) |
 | **`*` (Star)** | Context actions | Toggle silent / vibrate |
 | **`0`** | Jump to top / input | **Flashlight 🔦** (on Home) |
 | **`2`–`9`** | T9 search (in drawer) | **Speed dial** |
@@ -130,10 +130,10 @@ Mochibun ships its own keypad keyboard, so typing feels like a real 2000s keitai
 Never wrestle with tiny touch keyboards just to send a cute face:
 
 1. **Pop it open**: Hold **`#`** for a split second, anywhere on the phone, even mid-chat in another app.
-2. **Pick a mood**: Press the **left / right arrows** (or keys **`1`–`6`**) to spin through *Happy*, *Love*, *Cute*, *Sleepy*, *Surprised*, or *Silly*.
-3. **Pick a face**: Press the **up / down arrows** to browse the kaomojis in the middle.
-4. **Send it**: Click the **center key** and your face pops right into the text box you were typing in.
-5. **Close**: Tap **Back**, your side key, or **`#`** again to tuck it away.
+2. **Pick a mood (Stage 1)**: Point the **D-Pad** toward North / East / South / West (*Happy*, *Love*, *Sleepy*, *Shock*)—or tap two perpendicular arrows quickly to tilt onto the diagonal moods (*Hype*, *Cute*, *Shy*, *Silly*)—then press **Center** (or the same arrow again) to lock it in, or press **`1`–`8`** to jump straight into a slice.
+3. **Pick a face (Stage 2)**: Press **`1`–`9`** or **`0`** (`#10`) for an instant one-tap pick, or browse with **left / right arrows** and confirm with **Center** (`Up` / **Back** returns to moods).
+4. **Clips & Snippets**: Tap **`*`** in either stage to flip to your recent clipboard history & pinned **Quick Snippets**.
+5. **Close**: Tap **Back** (in Stage 1), your side key, or **`#`** again to tuck it away.
 
 ---
 

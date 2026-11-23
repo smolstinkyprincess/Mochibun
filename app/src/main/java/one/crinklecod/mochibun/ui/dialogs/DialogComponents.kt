@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,11 +46,13 @@ import one.crinklecod.mochibun.ui.components.clearDocomoAtlasCache
 import one.crinklecod.mochibun.ui.components.mochibunCardBorder
 import one.crinklecod.mochibun.ui.components.softGlowFocus
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
+import one.crinklecod.mochibun.ui.theme.ColorContrast
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.ui.theme.destructiveBgColor
 import one.crinklecod.mochibun.ui.theme.destructiveColor
 import one.crinklecod.mochibun.ui.theme.selectedContainerColor
-import one.crinklecod.mochibun.ui.theme.softSurfaceColor
+import one.crinklecod.mochibun.ui.theme.surface
+import one.crinklecod.mochibun.ui.theme.unfocusedCardBgColor
 import kotlinx.coroutines.delay
 
 val dialogWidth = 268.dp
@@ -301,7 +304,7 @@ fun KawaiiDialogPillButton(
     val theme = LocalLauncherTheme.current
     val shape = CircleShape
     val bg = when {
-        !enabled -> softSurfaceColor.copy(alpha = 0.45f)
+        !enabled -> theme.unfocusedCardBgColor.copy(alpha = 0.45f)
         isDestructive && isFocused -> destructiveColor
         isDestructive -> destructiveBgColor
         isPrimary && isFocused -> theme.appActionColor
@@ -316,11 +319,20 @@ fun KawaiiDialogPillButton(
         isPrimary -> theme.appActionColor
         else -> theme.greetingOutlineColor.copy(alpha = 0.6f)
     }
+    val primaryInk = remember(theme.appActionColor, theme.surface) {
+        Color(
+            ColorContrast.legibleInk(
+                background = theme.appActionColor.toArgb(),
+                preferred = Color.White.toArgb(),
+                alternate = theme.surface.toArgb()
+            )
+        )
+    }
     val contentColor = when {
         !enabled -> theme.fgTextColor.copy(alpha = 0.38f)
         isDestructive && isFocused -> Color.White
         isDestructive -> destructiveColor
-        isPrimary -> Color.White
+        isPrimary -> primaryInk
         isFocused -> theme.fgTextColor
         else -> theme.appActionColor
     }

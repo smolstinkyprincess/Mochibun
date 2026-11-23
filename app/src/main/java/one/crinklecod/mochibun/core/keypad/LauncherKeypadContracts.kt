@@ -185,6 +185,13 @@ enum class WheelMode {
     fun toggled(): WheelMode = if (this == KAOMOJI) CLIPBOARD_SNIPPETS else KAOMOJI
 }
 
+/** `*` (keypad or numpad) toggles between Kaomoji and Clips & Snippets in every wheel stage. */
+fun isWheelStarToggleKey(keyCode: Int): Boolean = when (keyCode) {
+    android.view.KeyEvent.KEYCODE_STAR,
+    android.view.KeyEvent.KEYCODE_NUMPAD_MULTIPLY -> true
+    else -> false
+}
+
 /** `*` / `0` (keypad or numpad) switch the wheel between Kaomoji and Clips & Snippets. */
 fun isWheelModeToggleKey(keyCode: Int): Boolean = when (keyCode) {
     android.view.KeyEvent.KEYCODE_STAR,
@@ -198,5 +205,15 @@ fun isWheelModeToggleKey(keyCode: Int): Boolean = when (keyCode) {
 fun wheelPetalForDigit(keyCode: Int): Int? = when (keyCode) {
     in android.view.KeyEvent.KEYCODE_1..android.view.KeyEvent.KEYCODE_8 -> keyCode - android.view.KeyEvent.KEYCODE_1
     in android.view.KeyEvent.KEYCODE_NUMPAD_1..android.view.KeyEvent.KEYCODE_NUMPAD_8 -> keyCode - android.view.KeyEvent.KEYCODE_NUMPAD_1
+    else -> null
+}
+
+/**
+ * Keypad / numpad digit `1`–`9` → indices `0..8` and `0` → index `9` for Stage 2 kaomoji quick-pick.
+ */
+fun wheelItemIndexForDigit(keyCode: Int): Int? = when (keyCode) {
+    in android.view.KeyEvent.KEYCODE_1..android.view.KeyEvent.KEYCODE_9 -> keyCode - android.view.KeyEvent.KEYCODE_1
+    in android.view.KeyEvent.KEYCODE_NUMPAD_1..android.view.KeyEvent.KEYCODE_NUMPAD_9 -> keyCode - android.view.KeyEvent.KEYCODE_NUMPAD_1
+    android.view.KeyEvent.KEYCODE_0, android.view.KeyEvent.KEYCODE_NUMPAD_0 -> 9
     else -> null
 }

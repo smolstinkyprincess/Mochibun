@@ -51,7 +51,7 @@ import one.crinklecod.mochibun.ui.components.limitTextLength
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.LocalLauncherFontFamily
 import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
-import one.crinklecod.mochibun.ui.theme.softSurfaceColor
+import one.crinklecod.mochibun.ui.theme.unfocusedCardBgColor
 
 private const val ZONE_TEXT = 0
 private const val ZONE_BUTTONS = 1
@@ -313,8 +313,10 @@ fun QuickSnippetsDialog(onDismiss: () -> Unit) {
                             unfocusedBorderColor = theme.greetingOutlineColor,
                             focusedTextColor = theme.fgTextColor,
                             unfocusedTextColor = theme.fgTextColor,
-                            focusedContainerColor = softSurfaceColor,
-                            unfocusedContainerColor = softSurfaceColor.copy(alpha = 0.7f)
+                            focusedPlaceholderColor = theme.cardTextColor.copy(alpha = 0.55f),
+                            unfocusedPlaceholderColor = theme.cardTextColor.copy(alpha = 0.55f),
+                            focusedContainerColor = theme.unfocusedCardBgColor,
+                            unfocusedContainerColor = theme.unfocusedCardBgColor.copy(alpha = 0.7f)
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
