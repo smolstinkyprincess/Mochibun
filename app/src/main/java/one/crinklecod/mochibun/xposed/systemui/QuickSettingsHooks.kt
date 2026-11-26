@@ -27,6 +27,7 @@ import one.crinklecod.mochibun.xposed.systemui.SystemUiHookRegistry.trackedFoote
 import one.crinklecod.mochibun.xposed.systemui.SystemUiHookRegistry.trackedNotificationFooters
 import one.crinklecod.mochibun.xposed.systemui.SystemUiHookRegistry.trackedScrimControllers
 import one.crinklecod.mochibun.xposed.systemui.SystemUiHookRegistry.trackedTileViews
+import kotlin.math.roundToInt
 
 /** Stage D: shade blur/scrim suppression, 14dp QS tile squircles, footer & brightness slider tinting, and notification row skinning. */
 internal object QuickSettingsHooks {
@@ -549,6 +550,29 @@ internal object QuickSettingsHooks {
         }
     }
 
+    internal fun styleNotificationFooterPill(button: TextView, customText: String? = null) {
+        val density = button.resources.displayMetrics.density
+        val border = ActiveHookTheme.accentDeep.withAlpha(0x66)
+        val padH = (18f * density).roundToInt()
+        val padV = (6f * density).roundToInt()
+        val strokePx = (1.5f * density).roundToInt().coerceAtLeast(1)
+
+        button.backgroundTintList = null
+        button.clipToOutline = false
+        button.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 18f * density
+            setColor(ActiveHookTheme.container)
+            setStroke(strokePx, border)
+        }
+        button.setPadding(padH, padV, padH, padV)
+        if (customText != null) {
+            button.text = customText
+        }
+        button.setTextColor(ActiveHookTheme.accentDeep)
+        button.invalidate()
+    }
+
     internal fun styleNotificationFooter(footer: View) {
         try {
             val resources = footer.resources
@@ -561,19 +585,16 @@ internal object QuickSettingsHooks {
                 } catch (_: Throwable) {
                     null
                 }
-            val button = dismissButton as? TextView ?: return
-            val density = resources.displayMetrics.density
-            val border = ActiveHookTheme.accentDeep.withAlpha(0x4D)
-            button.background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 16f * density
-                setColor(ActiveHookTheme.container)
-                setStroke((1.2f * density).toInt().coerceAtLeast(1), border)
-            }
-            button.text = "♡ Clear All ♡"
-            button.setTextColor(ActiveHookTheme.accentDeep)
-            button.clipToOutline = true
-            button.invalidate()
+            (dismissButton as? TextView)?.let { styleNotificationFooterPill(it, "♡ Clear All ♡") }
+
+            val manageId = resources.getIdentifier("manage_text", "id", TARGET_PACKAGE)
+            val manageButton = (if (manageId != 0) footer.findViewById(manageId) else null)
+                ?: try {
+                    XposedHelpers.getObjectField(footer, "mManageButton") as? View
+                } catch (_: Throwable) {
+                    null
+                }
+            (manageButton as? TextView)?.let { styleNotificationFooterPill(it) }
         } catch (t: Throwable) {
             Log.d(TAG, "Failed applying pastel notification footer styling", t)
         }

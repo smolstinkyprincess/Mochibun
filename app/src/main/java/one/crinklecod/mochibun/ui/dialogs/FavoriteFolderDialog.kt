@@ -35,7 +35,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.focus.FocusRequester
@@ -44,12 +48,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.imageResource
@@ -71,6 +78,8 @@ import one.crinklecod.mochibun.R
 import one.crinklecod.mochibun.data.model.FavoriteFolder
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.model.LauncherApp
+import one.crinklecod.mochibun.ui.theme.accentDeep
+import one.crinklecod.mochibun.ui.theme.cardBorderColor
 import one.crinklecod.mochibun.ui.theme.focusedContainerColor
 import one.crinklecod.mochibun.ui.theme.selectedContainerColor
 import one.crinklecod.mochibun.ui.theme.destructiveColor
@@ -665,7 +674,7 @@ fun FavoriteFolderDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.38f))
+                .background(Color(0xFF1E1428).copy(alpha = 0.62f))
                 .clickable { handleBack() },
             contentAlignment = Alignment.Center
         ) {
@@ -986,6 +995,18 @@ fun FavoriteFolderDialog(
 
                                 // Recessed sticker tray of icon-only charms (up to 6 per page; scattered stickers or a neat 3 × 2 grid)
                                 val trayShape = RoundedCornerShape(18.dp)
+                                val density = LocalDensity.current
+                                val hemDashEffect = remember {
+                                    PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
+                                }
+                                val hemStroke = remember(density, hemDashEffect) {
+                                    Stroke(
+                                        width = with(density) { 1.dp.toPx() },
+                                        pathEffect = hemDashEffect
+                                    )
+                                }
+                                val hemColor = theme.cardBorderColor.copy(alpha = 0.55f)
+                                val watermarkColor = theme.accentDeep.copy(alpha = 0.08f)
                                 val trayModifier = Modifier
                                     .fillMaxWidth()
                                     .graphicsLayer { clip = false }
@@ -993,6 +1014,60 @@ fun FavoriteFolderDialog(
                                     // edge charm has to spill over the tray rim.
                                     .background(ActiveTheme.background.copy(alpha = 0.65f), trayShape)
                                     .border(1.dp, ActiveTheme.cardBorder.copy(alpha = 0.45f), trayShape)
+                                    .drawBehind {
+                                        val cornerPx = 18.dp.toPx()
+                                        val hemInsetPx = 4.dp.toPx()
+                                        val hemW = (size.width - hemInsetPx * 2f).coerceAtLeast(0f)
+                                        val hemH = (size.height - hemInsetPx * 2f).coerceAtLeast(0f)
+                                        if (hemW > 0f && hemH > 0f) {
+                                            drawRoundRect(
+                                                color = hemColor,
+                                                topLeft = Offset(hemInsetPx, hemInsetPx),
+                                                size = Size(hemW, hemH),
+                                                cornerRadius = CornerRadius((cornerPx - hemInsetPx).coerceAtLeast(0f)),
+                                                style = hemStroke
+                                            )
+                                        }
+
+                                        val marginPx = 11.dp.toPx()
+                                        val stepPx = 14.dp.toPx()
+                                        val availW = (size.width - marginPx * 2f).coerceAtLeast(0f)
+                                        val availH = (size.height - marginPx * 2f).coerceAtLeast(0f)
+                                        val cols = (availW / stepPx).toInt()
+                                        val rows = (availH / stepPx).toInt()
+                                        if (cols >= 1 && rows >= 1) {
+                                            val startX = (size.width - cols * stepPx) / 2f
+                                            val startY = (size.height - rows * stepPx) / 2f
+                                            val dotRadiusPx = 0.9.dp.toPx()
+                                            val dotSizePx = 1.dp.toPx()
+                                            val dotHalfPx = dotSizePx * 0.5f
+                                            val sparkleArmPx = 1.5.dp.toPx()
+                                            for (r in 0..rows) {
+                                                val y = startY + r * stepPx
+                                                for (c in 0..cols) {
+                                                    val x = startX + c * stepPx
+                                                    if ((r + c) % 4 == 0 && r % 2 == 1 && c % 2 == 1) {
+                                                        drawRect(
+                                                            color = watermarkColor,
+                                                            topLeft = Offset(x - sparkleArmPx, y - dotHalfPx),
+                                                            size = Size(sparkleArmPx * 2f, dotSizePx)
+                                                        )
+                                                        drawRect(
+                                                            color = watermarkColor,
+                                                            topLeft = Offset(x - dotHalfPx, y - sparkleArmPx),
+                                                            size = Size(dotSizePx, sparkleArmPx * 2f)
+                                                        )
+                                                    } else {
+                                                        drawCircle(
+                                                            color = watermarkColor,
+                                                            radius = dotRadiusPx,
+                                                            center = Offset(x, y)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                     .padding(horizontal = 12.dp, vertical = 14.dp)
 
                                 if (folderApps.isEmpty()) {

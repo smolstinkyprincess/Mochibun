@@ -23,8 +23,8 @@ android {
         applicationId = "one.crinklecod.mochibun"
         minSdk = 27
         targetSdk = 31
-        versionCode = 25
-        versionName = "2.8.0"
+        versionCode = 26
+        versionName = "2.8.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

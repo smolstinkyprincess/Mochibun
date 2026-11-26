@@ -1,6 +1,7 @@
 package one.crinklecod.mochibun.service
 
 import android.text.InputType
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 
 internal enum class ShiftMode { LOWER, ONCE, CAPS }
 
@@ -15,25 +16,49 @@ internal data class InputModeState(
 /**
  * Advances the input mode for a short `*` tap while preserving [shift]:
  *
- * - Predictive enabled: `MULTITAP (abc) -> T9 -> NUMBERS (123) -> MULTITAP (abc)`
- * - Predictive disabled: `MULTITAP (abc) -> NUMBERS (123) -> MULTITAP (abc)`
+ * - Predictive enabled: toggles strictly between `MULTITAP (abc)` and `T9`
+ * - Predictive disabled: stays in `MULTITAP (abc)`
+ *
+ * Manual `123` (`NUMBERS`) is not part of the `*` short-tap cycle; numeric fields still enter `123`
+ * automatically via `isNumericField`.
  */
 internal fun nextInputMode(
     mode: TextInputMode,
     shift: ShiftMode,
-    lastTextMode: TextInputMode,
+    @Suppress("UNUSED_PARAMETER") lastTextMode: TextInputMode = mode,
     predictiveEnabled: Boolean
 ): InputModeState {
     val nextMode = when (mode) {
-        TextInputMode.MULTITAP -> if (predictiveEnabled) TextInputMode.T9 else TextInputMode.NUMBERS
-        TextInputMode.T9 -> TextInputMode.NUMBERS
+        TextInputMode.MULTITAP -> if (predictiveEnabled) TextInputMode.T9 else TextInputMode.MULTITAP
+        TextInputMode.T9 -> TextInputMode.MULTITAP
         TextInputMode.NUMBERS -> TextInputMode.MULTITAP
     }
-    val nextLastTextMode = when (nextMode) {
-        TextInputMode.NUMBERS -> if (mode == TextInputMode.NUMBERS) lastTextMode else mode
-        TextInputMode.MULTITAP, TextInputMode.T9 -> nextMode
-    }
-    return InputModeState(mode = nextMode, shift = shift, lastTextMode = nextLastTextMode)
+    return InputModeState(mode = nextMode, shift = shift, lastTextMode = nextMode)
+}
+
+/**
+ * Resolves the initial [TextInputMode] when starting input in an editor (`!restarting`).
+ *
+ * Restores [savedMode] (`"t9"` vs `"abc"`) when both [predictiveEnabled] and [predictiveAllowed]
+ * are true; otherwise falls back to [TextInputMode.MULTITAP] without altering saved prefs.
+ */
+internal fun initialInputMode(
+    savedMode: String?,
+    predictiveEnabled: Boolean,
+    predictiveAllowed: Boolean
+): TextInputMode = if (
+    predictiveEnabled &&
+    predictiveAllowed &&
+    savedMode.equals(PreferencesManager.IME_LAST_MODE_T9, ignoreCase = true)
+) {
+    TextInputMode.T9
+} else {
+    TextInputMode.MULTITAP
+}
+
+internal fun persistedImeModeId(mode: TextInputMode): String = when (mode) {
+    TextInputMode.T9 -> PreferencesManager.IME_LAST_MODE_T9
+    TextInputMode.MULTITAP, TextInputMode.NUMBERS -> PreferencesManager.IME_LAST_MODE_MULTITAP
 }
 
 /**

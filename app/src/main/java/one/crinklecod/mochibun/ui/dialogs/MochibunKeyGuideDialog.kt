@@ -276,7 +276,7 @@ internal enum class KeyGuideKey(
         displayName = "* · shift",
         launcherTap = "Context actions · Dismiss notification",
         launcherHold = "Toggle Manner Mode (Normal / Vibrate)",
-        typingTap = "Cycle mode (abc / T9 / 123)",
+        typingTap = "Toggle mode (abc / T9)",
         typingHold = "Cycle case (Abc → ABC → abc)"
     ),
     KEY_0(

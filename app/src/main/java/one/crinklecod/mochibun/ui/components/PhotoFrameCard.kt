@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import one.crinklecod.mochibun.ui.dialogs.PixelRibbonBow
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.ui.theme.M3x6FontFamily
@@ -104,7 +105,13 @@ private fun InstaxFrame(photo: ImageBitmap?, label: String, isFocused: Boolean, 
                 .softGlowFocus(isSelected = isFocused, cornerRadius = 16.dp)
                 .clip(shape)
                 .background(FrameCream)
-                .mochibunCardBorder(cornerRadius = 12.dp, borderColor = ActiveTheme.cardBorder, borderWidth = 1.2.dp)
+                .mochibunCardBorder(
+                    cornerRadius = 12.dp,
+                    borderColor = ActiveTheme.cardBorder,
+                    borderWidth = 1.2.dp,
+                    allowCustomNineSlice = false,
+                    styleOverride = CardBorderStyle.SOLID
+                )
                 .clickable(onClick = onClick)
                 .padding(start = 8.dp, top = 8.dp, end = 8.dp)
         ) {
@@ -157,7 +164,13 @@ private fun PurikuraFrame(photo: ImageBitmap?, label: String, isFocused: Boolean
                 .softGlowFocus(isSelected = isFocused, cornerRadius = 16.dp)
                 .clip(shape)
                 .background(PurikuraPink)
-                .mochibunCardBorder(cornerRadius = 12.dp, borderColor = ActiveTheme.cardBorder, borderWidth = 1.2.dp)
+                .mochibunCardBorder(
+                    cornerRadius = 12.dp,
+                    borderColor = ActiveTheme.cardBorder,
+                    borderWidth = 1.2.dp,
+                    allowCustomNineSlice = false,
+                    styleOverride = CardBorderStyle.SOLID
+                )
                 .clickable(onClick = onClick)
                 .padding(start = 10.dp, top = 12.dp, end = 10.dp)
         ) {
@@ -203,6 +216,8 @@ private fun PearlLaceFrame(photo: ImageBitmap?, label: String, isFocused: Boolea
         beadDiameter = 5.dp,
         bowWidth = 20.dp,
         bowHeight = 17.dp,
+        allowCustomNineSlice = false,
+        borderStyleOverride = CardBorderStyle.SOLID,
         modifier = Modifier
             .width(FrameWidth)
             .softGlowFocus(isSelected = isFocused, cornerRadius = 16.dp)

@@ -92,8 +92,8 @@ import one.crinklecod.mochibun.ui.theme.loadSavedTheme
  *
  * Keypad keys `2–9` act on release in T9 mode (and cycle on tap in multi-tap); holding a digit key
  * past the hold delay commits any pending T9 word and types the key's own digit straight into the
- * editor. Short-tapping `*` cycles the input mode (`abc -> T9 -> 123 -> abc`, skipping `T9` when
- * disabled or disallowed), while holding `*` cycles letter case (`Abc -> ABC -> abc -> Abc`).
+ * editor. Short-tapping `*` toggles between multi-tap (`abc`) and `T9` (when enabled and
+ * allowed), while holding `*` cycles letter case (`Abc -> ABC -> abc -> Abc`). Sentence starts are
  * Sentence starts are capitalised automatically in fields that ask for it.
  */
 class MochibunImeService : InputMethodService() {
@@ -170,7 +170,7 @@ class MochibunImeService : InputMethodService() {
     private var holdDelayMs = PreferencesManager.DEFAULT_IME_HOLD_DELAY_MS.toLong()
     private val poundHoldRunnable = Runnable { openKaomojiWheel() }
     private var holdForDigitEnabled = PreferencesManager.DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED
-    private var holdVibrates = PreferencesManager.DEFAULT_IME_HOLD_VIBRATION
+    private var keyHapticsEnabled = PreferencesManager.DEFAULT_IME_HOLD_VIBRATION
     private var autoCommitEnabled = PreferencesManager.DEFAULT_IME_AUTO_COMMIT_ENABLED
     private val holdRunnable = Runnable { fireHold() }
     private var idleCommitMs = PreferencesManager.DEFAULT_IME_IDLE_COMMIT_MS.toLong()
@@ -201,6 +201,9 @@ class MochibunImeService : InputMethodService() {
     private var imeTheme by mutableStateOf(SakuraDreamTheme)
     private val themePrefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == null || isThemePrefKey(key)) refreshTheme()
+        if (key == null || key == PreferencesManager.KEY_IME_HOLD_VIBRATION) {
+            keyHapticsEnabled = PreferencesManager.isImeHoldVibrationEnabled(this)
+        }
     }
 
     private fun refreshTheme() {
@@ -431,7 +434,7 @@ class MochibunImeService : InputMethodService() {
         consumedDown.fill(false)
         holdDelayMs = PreferencesManager.getImeHoldDelayMs(this).toLong()
         holdForDigitEnabled = PreferencesManager.isImeHoldForDigitEnabled(this)
-        holdVibrates = PreferencesManager.isImeHoldVibrationEnabled(this)
+        keyHapticsEnabled = PreferencesManager.isImeHoldVibrationEnabled(this)
         autoCommitEnabled = PreferencesManager.isImeAutoCommitEnabled(this)
         idleCommitMs = PreferencesManager.getImeIdleCommitMs(this).toLong()
         predictiveEnabled = PreferencesManager.isImePredictiveT9Enabled(this)
@@ -465,8 +468,13 @@ class MochibunImeService : InputMethodService() {
         if (!restarting) {
             shiftMode = ShiftMode.LOWER
             autoCapSuppressed = false
-            inputMode = TextInputMode.MULTITAP
-            lastTextMode = TextInputMode.MULTITAP
+            val restoredMode = initialInputMode(
+                savedMode = PreferencesManager.getImeLastMode(this),
+                predictiveEnabled = predictiveEnabled,
+                predictiveAllowed = predictiveAllowedForField
+            )
+            inputMode = restoredMode
+            lastTextMode = restoredMode
         } else if (!predictiveEnabled || !predictiveAllowedForField) {
             if (inputMode == TextInputMode.T9) inputMode = TextInputMode.MULTITAP
             if (lastTextMode == TextInputMode.T9) lastTextMode = TextInputMode.MULTITAP
@@ -596,6 +604,13 @@ class MochibunImeService : InputMethodService() {
         // Rolling onto another key before releasing the first counts the first as a tap
         resolvePendingTap()
         val consumed = hasTextEditor() && batchEdit { handleNewPress(keyCode) }
+        if (consumed && keyHapticsEnabled) {
+            if (isConfirmOrDeleteKey(keyCode)) {
+                HapticManager.vibrateKeyConfirmOrDelete(this)
+            } else {
+                HapticManager.vibrateKeyPress(this)
+            }
+        }
         consumedDown[keyCode] = consumed
         // BACK we don't use goes to the app: the default would spend it hiding the keyboard
         if (keyCode == KeyEvent.KEYCODE_BACK) return consumed
@@ -656,8 +671,11 @@ class MochibunImeService : InputMethodService() {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
                 // Navigation commits, then the editor (or our dialog) still gets the key
                 manualSelection = false
-                commitPending()
-                syncComposing()
+                if (active) {
+                    commitPending()
+                    syncComposing()
+                    if (keyHapticsEnabled) HapticManager.vibrateKeyPress(this)
+                }
                 return false
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
@@ -752,9 +770,20 @@ class MochibunImeService : InputMethodService() {
         }
         when (keyCode) {
             KeyEvent.KEYCODE_POUND -> poundRepeated = true
-            KeyEvent.KEYCODE_DPAD_LEFT -> { candidateState.navigateLeft(); syncComposing() }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> { candidateState.navigateRight(); syncComposing() }
-            KeyEvent.KEYCODE_DEL -> if (!candidateState.isActive) deleteBeforeCursor()
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                candidateState.navigateLeft()
+                syncComposing()
+                if (keyHapticsEnabled) HapticManager.vibrateKeyPress(this)
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                candidateState.navigateRight()
+                syncComposing()
+                if (keyHapticsEnabled) HapticManager.vibrateKeyPress(this)
+            }
+            KeyEvent.KEYCODE_DEL -> if (!candidateState.isActive) {
+                deleteBeforeCursor()
+                if (keyHapticsEnabled) HapticManager.vibrateKeyDeleteRepeat(this)
+            }
         }
     }
 
@@ -772,7 +801,7 @@ class MochibunImeService : InputMethodService() {
                 cycleShiftOnHold()
                 syncComposing()
             }
-            HapticManager.vibrateTick(this)
+            if (keyHapticsEnabled) HapticManager.vibrateKeyLongPress(this)
             return
         }
         if (!holdForDigitEnabled) return
@@ -788,7 +817,7 @@ class MochibunImeService : InputMethodService() {
             literalFor(keyCode)?.let(commit)
             syncComposing()
         }
-        if (holdVibrates) HapticManager.vibrateTick(this)
+        if (keyHapticsEnabled) HapticManager.vibrateKeyLongPress(this)
     }
 
     private fun openKaomojiWheel() {
@@ -800,18 +829,29 @@ class MochibunImeService : InputMethodService() {
         }
         kaomojiWheelState = KaomojiWheelState()
         refreshTouchableInsets()
-        HapticManager.vibrateTick(this)
+        if (keyHapticsEnabled) HapticManager.vibrateKeyLongPress(this)
         SoundEffectManager.play(this, SoundEffect.SELECT)
     }
 
     private fun handleKaomojiWheelKey(state: KaomojiWheelState, keyCode: Int) {
-        handleKaomojiWheelNavKey(
+        var confirmed = false
+        val handled = handleKaomojiWheelNavKey(
             state = state,
             keyCode = keyCode,
             context = this,
-            onConfirm = ::confirmKaomojiWheel,
+            onConfirm = {
+                confirmed = true
+                confirmKaomojiWheel()
+            },
             onDismiss = ::closeKaomojiWheel
         )
+        if (handled && !confirmed && keyHapticsEnabled) {
+            if (isConfirmOrDeleteKey(keyCode)) {
+                HapticManager.vibrateKeyConfirmOrDelete(this)
+            } else {
+                HapticManager.vibrateKeyPress(this)
+            }
+        }
     }
 
     private fun confirmKaomojiWheel() {
@@ -824,9 +864,17 @@ class MochibunImeService : InputMethodService() {
                 commit(text)
                 syncComposing()
             }
-            HapticManager.vibrateTick(this)
+            if (keyHapticsEnabled) HapticManager.vibrateKeyConfirmOrDelete(this)
             SoundEffectManager.play(this, SoundEffect.SELECT)
         }
+    }
+
+    private fun isConfirmOrDeleteKey(keyCode: Int): Boolean = when (keyCode) {
+        KeyEvent.KEYCODE_ENTER,
+        KeyEvent.KEYCODE_NUMPAD_ENTER,
+        KeyEvent.KEYCODE_DPAD_CENTER,
+        KeyEvent.KEYCODE_DEL -> true
+        else -> false
     }
 
     /** Back to the T9 cloud strip, with touches passing through to the app again. */
@@ -1063,7 +1111,7 @@ class MochibunImeService : InputMethodService() {
         }
     }
 
-    /** Short `*` tap: `abc -> T9 -> 123 -> abc` (or `abc -> 123 -> abc` when T9 is off/disallowed). */
+    /** Short `*` tap: toggles between `abc` and `T9` when predictive text is enabled and allowed. */
     private fun cycleInputMode() {
         autoCapFreshForComposing = false
         manualSelection = false
@@ -1078,6 +1126,9 @@ class MochibunImeService : InputMethodService() {
         inputMode = next.mode
         shiftMode = next.shift
         lastTextMode = next.lastTextMode
+        if (allowed) {
+            PreferencesManager.setImeLastMode(this, persistedImeModeId(next.mode))
+        }
     }
 
     /** Long `*` hold: `Abc -> ABC -> abc -> Abc` (returning from `123` to `abc`/`T9` with `Abc`). */

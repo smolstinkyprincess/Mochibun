@@ -45,6 +45,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -448,6 +449,12 @@ fun WidgetPage(
         onNavigateHome()
     }
 
+    val openWidgetPicker: () -> Unit = {
+        endWidgetInteraction()
+        focusSection = WidgetFocusSection.ADD_WIDGET
+        showWidgetPicker = true
+    }
+
     // Graceful D-pad focus fallback when active music playback stops or a card is toggled off
     LaunchedEffect(mediaState.isPlaying, isSystemMonitorEnabled, isPhotoFrameEnabled) {
         if (!mediaState.isPlaying && focusSection == WidgetFocusSection.NOW_PLAYING) {
@@ -655,7 +662,7 @@ fun WidgetPage(
                                 }
                             }
                             WidgetFocusSection.ADD_WIDGET -> {
-                                showWidgetPicker = true
+                                openWidgetPicker()
                             }
                             WidgetFocusSection.HOME_PILL -> {
                                 navigateHomeAndReset()
@@ -917,7 +924,7 @@ fun WidgetPage(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 14.dp),
-            contentPadding = PaddingValues(top = 44.dp, bottom = 100.dp),
+            contentPadding = PaddingValues(top = 44.dp, bottom = 116.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -1130,24 +1137,23 @@ fun WidgetPage(
             // "+ Add Widget" kawaii pill action
             item(key = "add_widget_button") {
                 val isAddFocused = focusSection == WidgetFocusSection.ADD_WIDGET
+                val pillShape = RoundedCornerShape(50)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp),
+                        .padding(top = 4.dp, bottom = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
                             .graphicsLayer { clip = false }
                             .softGlowFocus(isSelected = isAddFocused, cornerRadius = 50.dp)
-                            .clip(RoundedCornerShape(50))
+                            .defaultMinSize(minHeight = 44.dp)
+                            .clip(pillShape)
                             .background(if (isAddFocused) ActiveTheme.palette.focusedCardContainerEnd else ActiveTheme.unfocusedCardBg)
-                            .border(1.5.dp, if (isAddFocused) ActiveTheme.palette.focusedCardBorder else ActiveTheme.cardBorder, RoundedCornerShape(50))
-                            .clickable {
-                                focusSection = WidgetFocusSection.ADD_WIDGET
-                                showWidgetPicker = true
-                            }
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                            .border(1.5.dp, if (isAddFocused) ActiveTheme.palette.focusedCardBorder else ActiveTheme.cardBorder, pillShape)
+                            .clickable(role = Role.Button, onClick = openWidgetPicker)
+                            .padding(horizontal = 22.dp, vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(

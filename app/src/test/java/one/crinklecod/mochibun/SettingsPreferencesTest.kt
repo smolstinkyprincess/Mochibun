@@ -130,6 +130,26 @@ class SettingsPreferencesTest {
         assertTrue(isThemePrefKey(PreferencesManager.KEY_THEME_FONT_FAMILY))
         assertFalse(isThemePrefKey(PreferencesManager.KEY_KEYPAD_SOUND_MODE))
         assertFalse(isThemePrefKey(PreferencesManager.KEY_IME_IDLE_COMMIT_MS))
+        assertFalse(isThemePrefKey(PreferencesManager.KEY_IME_LAST_MODE))
+    }
+
+    @Test
+    fun imeLastModeDefaultsToMultitapAndPersists() {
+        val context = RuntimeEnvironment.getApplication()
+        assertEquals(PreferencesManager.DEFAULT_IME_LAST_MODE, PreferencesManager.getImeLastMode(context))
+        assertEquals(PreferencesManager.IME_LAST_MODE_MULTITAP, PreferencesManager.getImeLastMode(context))
+
+        PreferencesManager.setImeLastMode(context, PreferencesManager.IME_LAST_MODE_T9)
+        assertEquals(PreferencesManager.IME_LAST_MODE_T9, PreferencesManager.getImeLastMode(context))
+
+        PreferencesManager.setImeLastMode(context, PreferencesManager.IME_LAST_MODE_MULTITAP)
+        assertEquals(PreferencesManager.IME_LAST_MODE_MULTITAP, PreferencesManager.getImeLastMode(context))
+
+        // Unknown / legacy values (e.g. "123") normalize cleanly back to multi-tap
+        PreferencesManager.setImeLastMode(context, "T9")
+        assertEquals(PreferencesManager.IME_LAST_MODE_T9, PreferencesManager.getImeLastMode(context))
+        PreferencesManager.setImeLastMode(context, "123")
+        assertEquals(PreferencesManager.IME_LAST_MODE_MULTITAP, PreferencesManager.getImeLastMode(context))
     }
 
     @Test

@@ -85,10 +85,11 @@ fun KeitaiLaceContainer(
     bowWidth: Dp = 28.dp,
     bowHeight: Dp = 24.dp,
     allowCustomNineSlice: Boolean = true,
+    borderStyleOverride: CardBorderStyle? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val borderState = currentCardBorderState()
-    val activeBorderStyle = borderState.style
+    val activeBorderStyle = borderStyleOverride ?: borderState.style
     val customFrame = if (allowCustomNineSlice) borderState.frame else null
     val hasCustomBorder = allowCustomNineSlice && borderState.hasCustomBorder
 

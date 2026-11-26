@@ -11,7 +11,10 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_HOLD_DE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_HOLD_FOR_DIGIT_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_HOLD_VIBRATION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_IDLE_COMMIT_MS
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_LAST_MODE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_PREDICTIVE_T9_ENABLED
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.IME_LAST_MODE_MULTITAP
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.IME_LAST_MODE_T9
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_T9_DICTIONARY_LANG
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_T9_LEARNED_EPOCH
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_IME_T9_LEARNED_WORDS
@@ -27,6 +30,7 @@ import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_HOLD_DELAY_
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_HOLD_FOR_DIGIT_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_HOLD_VIBRATION
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_IDLE_COMMIT_MS
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_LAST_MODE
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_PREDICTIVE_T9_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_T9_DICTIONARY_LANG
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_IME_T9_LEARNED_EPOCH
@@ -270,6 +274,16 @@ internal object HardwareInputPrefs {
     fun setImePredictiveT9Enabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_IME_PREDICTIVE_T9_ENABLED, enabled).apply()
     }
+
+    fun getImeLastMode(context: Context): String =
+        normalizeImeLastMode(getPrefs(context).getString(KEY_IME_LAST_MODE, DEFAULT_IME_LAST_MODE))
+
+    fun setImeLastMode(context: Context, mode: String) {
+        getPrefs(context).edit().putString(KEY_IME_LAST_MODE, normalizeImeLastMode(mode)).apply()
+    }
+
+    private fun normalizeImeLastMode(mode: String?): String =
+        if (mode.equals(IME_LAST_MODE_T9, ignoreCase = true)) IME_LAST_MODE_T9 else IME_LAST_MODE_MULTITAP
 
     fun getImeT9DictionaryLang(context: Context): String =
         getPrefs(context).getString(KEY_IME_T9_DICTIONARY_LANG, DEFAULT_IME_T9_DICTIONARY_LANG)

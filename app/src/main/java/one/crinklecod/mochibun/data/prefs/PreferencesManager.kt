@@ -198,6 +198,10 @@ object PreferencesManager {
     const val DEFAULT_IME_AUTO_COMMIT_ENABLED = true
     const val KEY_IME_PREDICTIVE_T9_ENABLED = "pref_ime_predictive_t9_enabled"
     const val DEFAULT_IME_PREDICTIVE_T9_ENABLED = true
+    const val KEY_IME_LAST_MODE = "pref_ime_last_mode"
+    const val IME_LAST_MODE_MULTITAP = "abc"
+    const val IME_LAST_MODE_T9 = "t9"
+    const val DEFAULT_IME_LAST_MODE = IME_LAST_MODE_MULTITAP
     const val KEY_IME_T9_DICTIONARY_LANG = "pref_ime_t9_dictionary_lang"
     const val DEFAULT_IME_T9_DICTIONARY_LANG = "en"
     const val KEY_IME_T9_LEARNED_WORDS = "pref_ime_t9_learned_words"
@@ -812,6 +816,12 @@ object PreferencesManager {
 
     fun setImePredictiveT9Enabled(context: Context, enabled: Boolean) =
         HardwareInputPrefs.setImePredictiveT9Enabled(context, enabled)
+
+    fun getImeLastMode(context: Context): String =
+        HardwareInputPrefs.getImeLastMode(context)
+
+    fun setImeLastMode(context: Context, mode: String) =
+        HardwareInputPrefs.setImeLastMode(context, mode)
 
     fun getImeT9DictionaryLang(context: Context): String =
         HardwareInputPrefs.getImeT9DictionaryLang(context)

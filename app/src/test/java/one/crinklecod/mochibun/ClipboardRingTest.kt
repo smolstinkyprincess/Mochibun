@@ -14,6 +14,7 @@ import one.crinklecod.mochibun.data.repository.ClipRingEntry
 import one.crinklecod.mochibun.data.repository.ClipboardRing
 import one.crinklecod.mochibun.data.repository.ClipboardRingRepository
 import one.crinklecod.mochibun.ui.dialogs.KaomojiWheelState
+import one.crinklecod.mochibun.ui.dialogs.WheelStage
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -185,7 +186,10 @@ class ClipboardRingTest {
 
         state.toggleMode()
         assertEquals(WheelMode.CLIPBOARD_SNIPPETS, state.mode)
+        assertEquals(WheelStage.CATEGORY, state.stage)
         assertEquals("pinned", state.currentText)
+        assertTrue(state.lockClip())
+        assertEquals(WheelStage.ITEM, state.stage)
         assertTrue(state.stepClip(1))
         assertEquals("recent", state.currentText)
         assertTrue(state.stepClip(1)) // wraps
@@ -193,9 +197,13 @@ class ClipboardRingTest {
         assertFalse(state.selectClip(5))
         assertTrue(state.selectClip(1))
         assertEquals("recent", state.currentText)
+        state.returnToCategories()
+        assertEquals(WheelStage.CATEGORY, state.stage)
+        assertEquals(1, state.clipWedgeIndex)
 
         state.toggleMode()
         assertEquals(WheelMode.KAOMOJI, state.mode)
+        assertEquals(WheelStage.CATEGORY, state.stage)
     }
 
     @Test

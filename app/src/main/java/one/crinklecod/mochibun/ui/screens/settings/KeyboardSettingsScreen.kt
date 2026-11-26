@@ -412,8 +412,8 @@ internal fun KeyboardSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
-                        title = "Key Hold Haptic",
-                        subtitle = "Gentle buzz when holding a key types a number",
+                        title = "Haptic Key Feedback",
+                        subtitle = "Crisp tactile thump on keypad taps, commits & holds",
                         checked = holdVibration,
                         isFocused = isRowFocused(KeyboardRowId.HOLD_VIBRATION),
                         jumpNumber = jumpNumber(KeyboardRowId.HOLD_VIBRATION),

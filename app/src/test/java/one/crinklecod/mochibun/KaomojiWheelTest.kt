@@ -223,6 +223,120 @@ class KaomojiWheelTest {
         assertEquals(WheelStage.ITEM, state.stage)
         assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_STAR, context))
         assertEquals(WheelMode.CLIPBOARD_SNIPPETS, state.mode)
+        assertEquals(WheelStage.CATEGORY, state.stage)
         assertFalse(state.currentText.isBlank())
+
+        // Lock Clips Stage 2, then toggle back to Kaomoji with '*'
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_DPAD_CENTER, context))
+        assertEquals(WheelStage.ITEM, state.stage)
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_STAR, context))
+        assertEquals(WheelMode.KAOMOJI, state.mode)
+        assertEquals(WheelStage.CATEGORY, state.stage)
+    }
+
+    @Test
+    fun clipsModeUsesSameTwoStageCompassNavigationAndQuickPick() {
+        val clips = (1..8).map { ClipRingEntry("clip $it", pinned = it <= 2) }
+        val state = newState(clips)
+        var confirmedText: String? = null
+        var dismissed = 0
+
+        // Switch to Clips & Snippets via '*'
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_STAR, context))
+        assertEquals(WheelMode.CLIPBOARD_SNIPPETS, state.mode)
+        assertEquals(WheelStage.CATEGORY, state.stage)
+        assertEquals(0, state.clipWedgeIndex)
+
+        // Stage 1: cardinal point + 900 ms diagonal tilt to wedge 3 (Cute/SE)
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_DPAD_RIGHT, context))
+        assertEquals(2, state.clipWedgeIndex)
+        assertEquals(WheelStage.CATEGORY, state.stage)
+
+        nowMs += 300L
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_DPAD_DOWN, context))
+        assertEquals(3, state.clipWedgeIndex)
+        assertEquals(WheelStage.CATEGORY, state.stage)
+
+        // Second tap on WEST (wedge 6) locks into Stage 2
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_DPAD_LEFT, context))
+        assertEquals(6, state.clipWedgeIndex)
+        assertEquals(WheelStage.CATEGORY, state.stage)
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_DPAD_LEFT, context))
+        assertEquals(WheelStage.ITEM, state.stage)
+        assertEquals("clip 7", state.currentText)
+
+        // Stage 2: Left/Right browse clips
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_DPAD_RIGHT, context))
+        assertEquals(7, state.clipIndex)
+        assertEquals("clip 8", state.currentText)
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_DPAD_RIGHT, context))
+        assertEquals(0, state.clipIndex)
+        assertEquals("clip 1", state.currentText)
+
+        // Stage 2: DPAD_UP / BACK unlocks to Stage 1 without dismissing
+        assertTrue(
+            handleKaomojiWheelNavKey(
+                state,
+                KeyEvent.KEYCODE_BACK,
+                context,
+                onDismiss = { dismissed++ }
+            )
+        )
+        assertEquals(WheelStage.CATEGORY, state.stage)
+        assertEquals(0, dismissed)
+
+        // Stage 1: Digit 1-8 locks that slot into Stage 2 without confirming
+        assertTrue(
+            handleKaomojiWheelNavKey(
+                state,
+                KeyEvent.KEYCODE_5,
+                context,
+                onConfirm = { confirmedText = state.currentText }
+            )
+        )
+        assertEquals(WheelStage.ITEM, state.stage)
+        assertEquals(4, state.clipIndex)
+        assertEquals(null, confirmedText)
+
+        // Stage 2: Digit 2 quick-picks clip #2 and confirms immediately
+        assertTrue(
+            handleKaomojiWheelNavKey(
+                state,
+                KeyEvent.KEYCODE_2,
+                context,
+                onConfirm = { confirmedText = state.currentText }
+            )
+        )
+        assertEquals(1, state.clipIndex)
+        assertEquals("clip 2", confirmedText)
+    }
+
+    @Test
+    fun clipsModeStage1RejectsEmptyDigitSlotAndStage2ConfirmsWithCenter() {
+        val clips = listOf(ClipRingEntry("first", pinned = true), ClipRingEntry("second", pinned = false))
+        val state = newState(clips)
+        var confirmedText: String? = null
+
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_STAR, context))
+        assertEquals(WheelMode.CLIPBOARD_SNIPPETS, state.mode)
+
+        // Digit 6 corresponds to an empty slot -> stays in Stage 1
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_6, context))
+        assertEquals(WheelStage.CATEGORY, state.stage)
+
+        // Digit 2 locks slot 2 into Stage 2, then Center confirms
+        assertTrue(handleKaomojiWheelNavKey(state, KeyEvent.KEYCODE_2, context))
+        assertEquals(WheelStage.ITEM, state.stage)
+        assertEquals("second", state.currentText)
+
+        assertTrue(
+            handleKaomojiWheelNavKey(
+                state,
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                context,
+                onConfirm = { confirmedText = state.currentText }
+            )
+        )
+        assertEquals("second", confirmedText)
     }
 }

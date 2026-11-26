@@ -1,12 +1,15 @@
 package one.crinklecod.mochibun
 
 import android.text.InputType
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.service.InputModeState
 import one.crinklecod.mochibun.service.ShiftMode
 import one.crinklecod.mochibun.service.TextInputMode
+import one.crinklecod.mochibun.service.initialInputMode
 import one.crinklecod.mochibun.service.isPredictiveAllowed
 import one.crinklecod.mochibun.service.nextInputMode
 import one.crinklecod.mochibun.service.nextShiftOnHold
+import one.crinklecod.mochibun.service.persistedImeModeId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -15,39 +18,39 @@ import org.junit.Test
 class ImeInputModeTest {
 
     @Test
-    fun shortStarCyclesModesWithPredictiveEnabledAndPreservesShift() {
+    fun shortStarTogglesBetweenMultitapAndT9WhenPredictiveEnabledAndPreservesShift() {
         var state = InputModeState(TextInputMode.MULTITAP, ShiftMode.ONCE)
 
-        // abc (Abc) -> T9 (T9↑)
+        // abc (Abc) -> T9 (T9↑), skipping manual 123
         state = nextInputMode(state.mode, state.shift, state.lastTextMode, predictiveEnabled = true)
         assertEquals(InputModeState(TextInputMode.T9, ShiftMode.ONCE, TextInputMode.T9), state)
 
-        // T9 -> 123 (lastTextMode remembers T9)
-        state = nextInputMode(state.mode, state.shift, state.lastTextMode, predictiveEnabled = true)
-        assertEquals(InputModeState(TextInputMode.NUMBERS, ShiftMode.ONCE, TextInputMode.T9), state)
-
-        // 123 -> abc
+        // T9 -> abc (Abc), skipping manual 123
         state = nextInputMode(state.mode, state.shift, state.lastTextMode, predictiveEnabled = true)
         assertEquals(InputModeState(TextInputMode.MULTITAP, ShiftMode.ONCE, TextInputMode.MULTITAP), state)
 
         // Preserves CAPS and LOWER as well
         val capsToT9 = nextInputMode(TextInputMode.MULTITAP, ShiftMode.CAPS, TextInputMode.MULTITAP, predictiveEnabled = true)
         assertEquals(InputModeState(TextInputMode.T9, ShiftMode.CAPS, TextInputMode.T9), capsToT9)
-        val lowerToNumbers = nextInputMode(TextInputMode.T9, ShiftMode.LOWER, TextInputMode.T9, predictiveEnabled = true)
-        assertEquals(InputModeState(TextInputMode.NUMBERS, ShiftMode.LOWER, TextInputMode.T9), lowerToNumbers)
+        val lowerToMultitap = nextInputMode(TextInputMode.T9, ShiftMode.LOWER, TextInputMode.T9, predictiveEnabled = true)
+        assertEquals(InputModeState(TextInputMode.MULTITAP, ShiftMode.LOWER, TextInputMode.MULTITAP), lowerToMultitap)
+
+        // Defensive recovery if starting from NUMBERS
+        val fromNumbers = nextInputMode(TextInputMode.NUMBERS, ShiftMode.ONCE, TextInputMode.T9, predictiveEnabled = true)
+        assertEquals(InputModeState(TextInputMode.MULTITAP, ShiftMode.ONCE, TextInputMode.MULTITAP), fromNumbers)
     }
 
     @Test
-    fun shortStarSkipsT9WhenPredictiveDisabledAndPreservesShift() {
+    fun shortStarStaysInMultitapWhenPredictiveDisabledAndPreservesShift() {
         var state = InputModeState(TextInputMode.MULTITAP, ShiftMode.CAPS)
 
-        // abc -> 123
-        state = nextInputMode(state.mode, state.shift, state.lastTextMode, predictiveEnabled = false)
-        assertEquals(InputModeState(TextInputMode.NUMBERS, ShiftMode.CAPS, TextInputMode.MULTITAP), state)
-
-        // 123 -> abc
+        // abc -> abc (no 123 step)
         state = nextInputMode(state.mode, state.shift, state.lastTextMode, predictiveEnabled = false)
         assertEquals(InputModeState(TextInputMode.MULTITAP, ShiftMode.CAPS, TextInputMode.MULTITAP), state)
+
+        // Even if currently in T9 when predictive becomes disabled, short '*' falls back to MULTITAP
+        val t9Fallback = nextInputMode(TextInputMode.T9, ShiftMode.LOWER, TextInputMode.T9, predictiveEnabled = false)
+        assertEquals(InputModeState(TextInputMode.MULTITAP, ShiftMode.LOWER, TextInputMode.MULTITAP), t9Fallback)
     }
 
     @Test
@@ -186,5 +189,57 @@ class ImeInputModeTest {
                 nullEditorEngaged = false
             )
         )
+    }
+
+    @Test
+    fun initialInputModeRestoresSavedModeOnlyWhenPredictiveEnabledAndAllowed() {
+        assertEquals(
+            TextInputMode.T9,
+            initialInputMode(
+                savedMode = PreferencesManager.IME_LAST_MODE_T9,
+                predictiveEnabled = true,
+                predictiveAllowed = true
+            )
+        )
+        assertEquals(
+            TextInputMode.MULTITAP,
+            initialInputMode(
+                savedMode = PreferencesManager.IME_LAST_MODE_MULTITAP,
+                predictiveEnabled = true,
+                predictiveAllowed = true
+            )
+        )
+        // Disallowed fields or disabled T9 setting ignore saved T9 mode
+        assertEquals(
+            TextInputMode.MULTITAP,
+            initialInputMode(
+                savedMode = PreferencesManager.IME_LAST_MODE_T9,
+                predictiveEnabled = true,
+                predictiveAllowed = false
+            )
+        )
+        assertEquals(
+            TextInputMode.MULTITAP,
+            initialInputMode(
+                savedMode = PreferencesManager.IME_LAST_MODE_T9,
+                predictiveEnabled = false,
+                predictiveAllowed = true
+            )
+        )
+        assertEquals(
+            TextInputMode.MULTITAP,
+            initialInputMode(
+                savedMode = null,
+                predictiveEnabled = true,
+                predictiveAllowed = true
+            )
+        )
+    }
+
+    @Test
+    fun persistedImeModeIdMapsModesToPreferenceStrings() {
+        assertEquals(PreferencesManager.IME_LAST_MODE_T9, persistedImeModeId(TextInputMode.T9))
+        assertEquals(PreferencesManager.IME_LAST_MODE_MULTITAP, persistedImeModeId(TextInputMode.MULTITAP))
+        assertEquals(PreferencesManager.IME_LAST_MODE_MULTITAP, persistedImeModeId(TextInputMode.NUMBERS))
     }
 }
