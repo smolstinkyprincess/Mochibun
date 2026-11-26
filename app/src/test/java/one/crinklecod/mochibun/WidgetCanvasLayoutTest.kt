@@ -2,6 +2,7 @@ package one.crinklecod.mochibun
 
 import one.crinklecod.mochibun.core.widget.CollagePreset
 import one.crinklecod.mochibun.core.widget.DecoStyle
+import one.crinklecod.mochibun.core.widget.StickerKind
 import one.crinklecod.mochibun.core.widget.WidgetCanvasLayout
 import one.crinklecod.mochibun.core.widget.WidgetCanvasLayout.GAP
 import one.crinklecod.mochibun.core.widget.WidgetCanvasLayout.MAX_H
@@ -15,7 +16,14 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.data.repository.WidgetRepository
 
 class WidgetCanvasLayoutTest {
 
@@ -305,7 +313,8 @@ class WidgetCanvasLayoutTest {
         val layout = linkedMapOf(
             "plain" to WidgetPlacement(0, 0, 6, 4, 0f),
             "taped" to WidgetPlacement(0, 5, 6, 4, 1f, DecoStyle.WASHI_TAPE),
-            "bow" to WidgetPlacement(0, 10, 6, 4, 2f, DecoStyle.CORNER_BOW)
+            "bow" to WidgetPlacement(0, 10, 6, 4, 2f, DecoStyle.CORNER_BOW),
+            "corners" to WidgetPlacement(0, 15, 6, 4, 3f, DecoStyle.CORNER_TAPE)
         )
         val encoded = WidgetCanvasLayout.encode(layout)
         assertEquals(6, encoded.lines().first().split('|').size)
@@ -321,6 +330,30 @@ class WidgetCanvasLayoutTest {
     @Test
     fun `unknown deco ids fall back to none`() {
         assertEquals(DecoStyle.NONE, WidgetCanvasLayout.decode("a|0|0|6|4|0.0|glitter").getValue("a").deco)
+    }
+
+    @Test
+    fun `corner tape persists under its own id`() {
+        val encoded = WidgetCanvasLayout.encode(mapOf("a" to WidgetPlacement(1, 2, 6, 4, 0f, DecoStyle.CORNER_TAPE)))
+        assertEquals("a|1|2|6|4|0.0|corner_tape", encoded.lines().first())
+        assertEquals(DecoStyle.CORNER_TAPE, WidgetCanvasLayout.decode(encoded).getValue("a").deco)
+    }
+
+    @Test
+    fun `decos saved before corner tape existed keep their style`() {
+        // Ids, not ordinals, are persisted, so inserting CORNER_TAPE mid-enum must not shift old saves
+        val decoded = WidgetCanvasLayout.decode("w|0|0|6|4|0.0|washi\nb|0|5|6|4|1.0|bow\nh|0|10|6|4|2.0|heart")
+        assertEquals(DecoStyle.WASHI_TAPE, decoded.getValue("w").deco)
+        assertEquals(DecoStyle.CORNER_BOW, decoded.getValue("b").deco)
+        assertEquals(DecoStyle.CORNER_HEART, decoded.getValue("h").deco)
+    }
+
+    @Test
+    fun `deco cycle order puts corner tape between washi tape and the bow`() {
+        assertEquals(
+            listOf(DecoStyle.WASHI_TAPE, DecoStyle.CORNER_TAPE, DecoStyle.CORNER_BOW, DecoStyle.CORNER_HEART, DecoStyle.NONE),
+            generateSequence(DecoStyle.NONE.next()) { it.next() }.take(5).toList()
+        )
     }
 
     @Test
@@ -348,5 +381,210 @@ class WidgetCanvasLayoutTest {
             assertEquals("$preset", DecoStyle.WASHI_TAPE, arranged.getValue("t").deco)
             assertEquals("$preset", DecoStyle.CORNER_HEART, arranged.getValue("o").deco)
         }
+    }
+
+    // ── Standalone stickers ───────────────────────────────────────────
+
+    private val S = WidgetCanvasLayout.STICKER_SIZE
+
+    @Test
+    fun `sticker keys carry a uid and kind and round-trip through persistence`() {
+        val key = WidgetCanvasLayout.stickerKey(3, StickerKind.PASTEL_STAR)
+        assertTrue(WidgetCanvasLayout.isStickerKey(key))
+        assertEquals(3, WidgetCanvasLayout.stickerUidOf(key))
+        assertEquals(StickerKind.PASTEL_STAR, WidgetCanvasLayout.stickerKindOf(key))
+        assertFalse(WidgetCanvasLayout.isStickerKey(WidgetCanvasLayout.KEY_STICKY_NOTE))
+        assertNull(WidgetCanvasLayout.stickerKindOf("sticker:4:glitter"))
+        val layout = linkedMapOf(key to WidgetPlacement(10, 2, S, S, 5f))
+        assertEquals(layout, WidgetCanvasLayout.decode(WidgetCanvasLayout.encode(layout)))
+    }
+
+    @Test
+    fun `sticker kind ids are unique`() {
+        assertEquals(StickerKind.entries.size, StickerKind.entries.map { it.id }.toSet().size)
+    }
+
+    @Test
+    fun `a new sticker fills an open corner beside a narrower card, on top of everything`() {
+        val card = WidgetPlacement(0, 0, cols - 4, 10, 2f)
+        val (layout, key) = WidgetCanvasLayout.addSticker(linkedMapOf("card" to card), StickerKind.PUFFY_BOW, cols)!!
+        val sticker = layout.getValue(key)
+        assertEquals(cols - S, sticker.gridX)
+        assertEquals(0, sticker.gridY)
+        assertEquals(S, sticker.gridW)
+        assertEquals(S, sticker.gridH)
+        assertFalse(sticker.overlaps(card))
+        assertEquals(3f, sticker.zIndex)
+    }
+
+    @Test
+    fun `with no free gap a sticker lands just below the cards`() {
+        val card = WidgetPlacement(0, 0, cols, 10, 0f)
+        val (layout, key) = WidgetCanvasLayout.addSticker(linkedMapOf("card" to card), StickerKind.PICTO_CAT, cols)!!
+        assertEquals(10, layout.getValue(key).gridY)
+    }
+
+    @Test
+    fun `stickers stop at the cap and get distinct keys`() {
+        var layout: Map<String, WidgetPlacement> = linkedMapOf("card" to WidgetPlacement(0, 0, cols, 6, 0f))
+        val keys = mutableSetOf<String>()
+        repeat(WidgetCanvasLayout.MAX_STICKERS) {
+            val (next, key) = WidgetCanvasLayout.addSticker(layout, StickerKind.PUFFY_HEART, cols)!!
+            layout = next
+            keys += key
+        }
+        assertEquals(WidgetCanvasLayout.MAX_STICKERS, keys.size)
+        assertNull(WidgetCanvasLayout.addSticker(layout, StickerKind.PUFFY_HEART, cols))
+        // Removing one frees a slot again
+        val fewer = LinkedHashMap(layout).apply { remove(keys.first()) }
+        assertNotNull(WidgetCanvasLayout.addSticker(fewer, StickerKind.PUFFY_HEART, cols))
+    }
+
+    @Test
+    fun `stickers keep their size when moved and can tuck behind cards`() {
+        val key = WidgetCanvasLayout.stickerKey(1, StickerKind.RIBBON)
+        val sticker = WidgetPlacement(cols - S, 0, S, S, 1f)
+        val moved = WidgetCanvasLayout.move(sticker, -1, 1, cols, key)!!
+        assertEquals(S, moved.gridW)
+        assertEquals(S, moved.gridH)
+        assertNull(WidgetCanvasLayout.move(sticker, 1, 0, cols, key)) // already at the right edge
+        // Without the key the card clamp would grow it to the card minimum
+        assertEquals(S, WidgetCanvasLayout.clampFor(key, sticker, cols).gridW)
+
+        val layout = linkedMapOf("card" to WidgetPlacement(cols - 8, 0, 8, 6, 0f), key to sticker)
+        val behind = WidgetCanvasLayout.shiftLayer(layout, key, forward = false)!!
+        assertTrue(behind.getValue(key).zIndex < behind.getValue("card").zIndex)
+    }
+
+    @Test
+    fun `swapping a sticker keeps its spot, layer and order`() {
+        val key = WidgetCanvasLayout.stickerKey(2, StickerKind.PUFFY_BOW)
+        val layout = linkedMapOf("a" to WidgetPlacement(0, 0, 6, 4, 0f), key to WidgetPlacement(4, 1, S, S, 1f), "b" to WidgetPlacement(0, 5, 6, 4, 2f))
+        val (swapped, newKey) = WidgetCanvasLayout.swapSticker(layout, key, StickerKind.PUFFY_HEART)!!
+        assertEquals(WidgetCanvasLayout.stickerKey(2, StickerKind.PUFFY_HEART), newKey)
+        assertEquals(listOf("a", newKey, "b"), swapped.keys.toList())
+        assertEquals(layout.getValue(key), swapped.getValue(newKey))
+        assertNull(WidgetCanvasLayout.swapSticker(layout, "a", StickerKind.PUFFY_HEART))
+    }
+
+    @Test
+    fun `presets arrange cards only and keep stickers in place on top`() {
+        val key = WidgetCanvasLayout.stickerKey(1, StickerKind.SPARKLES)
+        val sticker = WidgetPlacement(2, 3, S, S, 0f)
+        val layout = linkedMapOf(
+            key to sticker,
+            "a" to WidgetPlacement(0, 0, cols, 6, 1f),
+            "b" to WidgetPlacement(0, 8, cols, 6, 2f)
+        )
+        CollagePreset.entries.forEach { preset ->
+            val arranged = WidgetCanvasLayout.applyPreset(layout, layout.keys, preset, cols)
+            val s = arranged.getValue(key)
+            assertEquals("$preset", sticker.copy(zIndex = s.zIndex), s)
+            assertTrue("$preset", s.zIndex > arranged.getValue("a").zIndex && s.zIndex > arranged.getValue("b").zIndex)
+        }
+    }
+
+    // ── Custom preset slots ───────────────────────────────────────────
+
+    @Test
+    fun `a saved layout restores every card, deco and sticker`() {
+        val star = WidgetCanvasLayout.stickerKey(1, StickerKind.PASTEL_STAR)
+        val snapshot = linkedMapOf(
+            "a" to WidgetPlacement(0, 0, 8, 6, 0f, DecoStyle.WASHI_TAPE),
+            WidgetCanvasLayout.KEY_STICKY_NOTE to WidgetPlacement(8, 0, 10, 8, 1f, DecoStyle.CORNER_BOW),
+            star to WidgetPlacement(15, 7, S, S, 2f)
+        )
+        // Since saving: cards moved, the star was removed and a heart added
+        val heart = WidgetCanvasLayout.stickerKey(2, StickerKind.PUFFY_HEART)
+        val current = linkedMapOf(
+            "a" to WidgetPlacement(0, 20, cols, 6, 1f),
+            WidgetCanvasLayout.KEY_STICKY_NOTE to WidgetPlacement(0, 0, cols, 8, 0f),
+            heart to WidgetPlacement(0, 0, S, S, 2f)
+        )
+        val restored = WidgetCanvasLayout.applySnapshot(current, snapshot, cols)
+        assertEquals(snapshot.getValue("a"), restored.getValue("a"))
+        assertEquals(snapshot.getValue(WidgetCanvasLayout.KEY_STICKY_NOTE), restored.getValue(WidgetCanvasLayout.KEY_STICKY_NOTE))
+        assertEquals(snapshot.getValue(star), restored.getValue(star))
+        assertFalse(heart in restored)
+    }
+
+    @Test
+    fun `cards added after saving move out from under the restored layout`() {
+        val snapshot = linkedMapOf("a" to WidgetPlacement(0, 0, cols, 10, 0f))
+        val current = linkedMapOf(
+            "a" to WidgetPlacement(0, 30, cols, 10, 0f),
+            "new" to WidgetPlacement(0, 2, cols, 6, 1f)
+        )
+        val restored = WidgetCanvasLayout.applySnapshot(current, snapshot, cols)
+        val added = restored.getValue("new")
+        assertFalse(added.overlaps(restored.getValue("a")))
+        assertTrue(added.zIndex > restored.getValue("a").zIndex)
+    }
+
+    @Test
+    fun `snapshot entries for removed widgets are ignored`() {
+        val snapshot = linkedMapOf(
+            "a" to WidgetPlacement(0, 0, 8, 6, 0f),
+            WidgetCanvasLayout.appWidgetKey(42) to WidgetPlacement(0, 8, 8, 6, 1f)
+        )
+        val restored = WidgetCanvasLayout.applySnapshot(linkedMapOf("a" to WidgetPlacement(0, 10, 8, 6, 0f)), snapshot, cols)
+        assertEquals(setOf("a"), restored.keys)
+    }
+}
+
+/** Sticky Note and My Layout slots persisted through [WidgetRepository]. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [31])
+class WidgetCanvasPersistenceTest {
+
+    private val context get() = RuntimeEnvironment.getApplication()
+
+    @Before
+    fun clearPrefs() {
+        PreferencesManager.getPrefs(context).edit().clear().commit()
+        WidgetRepository.init(context)
+    }
+
+    @Test
+    fun `sticky note toggle and text survive a reload`() {
+        WidgetRepository.setStickyNoteEnabled(context, true)
+        WidgetRepository.setStickyNoteText(context, "buy strawberry mochi ♡\n\n")
+        WidgetRepository.init(context)
+        assertTrue(WidgetRepository.stickyNoteEnabled.value)
+        assertEquals("buy strawberry mochi ♡", WidgetRepository.stickyNoteText.value)
+
+        WidgetRepository.setStickyNoteEnabled(context, false)
+        WidgetRepository.init(context)
+        assertFalse(WidgetRepository.stickyNoteEnabled.value)
+        assertEquals("buy strawberry mochi ♡", WidgetRepository.stickyNoteText.value) // hiding keeps the note
+    }
+
+    @Test
+    fun `sticky note text is capped like Quick Memo`() {
+        WidgetRepository.setStickyNoteText(context, "a".repeat(500))
+        assertEquals(WidgetRepository.STICKY_NOTE_MAX_CHARS, WidgetRepository.stickyNoteText.value.length)
+    }
+
+    @Test
+    fun `sticky note mirrors the ticker's Quick Memo slot, else its own text`() {
+        assertNull(WidgetRepository.stickyNoteSource(listOf("", "", ""), pinnedSlot = 1))
+        assertEquals(2, WidgetRepository.stickyNoteSource(listOf("", "hi", "yo"), pinnedSlot = 1))
+        assertEquals(3, WidgetRepository.stickyNoteSource(listOf("", "hi", "yo"), pinnedSlot = 3))
+    }
+
+    @Test
+    fun `custom preset slots save and reload with stickers and deco`() {
+        assertEquals(listOf(null, null), WidgetRepository.customPresets.value)
+        val sticker = WidgetCanvasLayout.stickerKey(1, StickerKind.PICTO_HEART)
+        val layout = linkedMapOf(
+            WidgetCanvasLayout.KEY_STICKY_NOTE to WidgetPlacement(0, 0, 10, 8, 0f, DecoStyle.CORNER_TAPE),
+            sticker to WidgetPlacement(12, 1, WidgetCanvasLayout.STICKER_SIZE, WidgetCanvasLayout.STICKER_SIZE, 1f)
+        )
+        WidgetRepository.saveCustomPreset(context, 2, layout)
+        WidgetRepository.saveCustomPreset(context, 3, layout) // out of range: ignored
+        WidgetRepository.init(context)
+        assertNull(WidgetRepository.customPresets.value[0])
+        assertEquals(layout, WidgetRepository.customPresets.value[1])
+        assertEquals(2, WidgetRepository.customPresets.value.size)
     }
 }

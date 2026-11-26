@@ -45,8 +45,34 @@ object WidgetRepository {
     /** Now Playing's compact MiniDisc / pocket-deck skin instead of the full two-band card. */
     const val KEY_NOW_PLAYING_MINI = "widget_now_playing_mini"
 
+    /** Sticky Note card on the canvas, and its own short note (shown when Quick Memo is empty). */
+    const val KEY_STICKY_NOTE_ENABLED = "widget_sticky_note_enabled"
+    const val KEY_STICKY_NOTE_TEXT = "widget_sticky_note_text"
+
+    /** Same keitai-sized cap as Quick Memo. */
+    const val STICKY_NOTE_MAX_CHARS = PreferencesManager.QUICK_MEMO_MAX_CHARS
+
+    /**
+     * "My Layout" preset slots, each a full canvas snapshot in [WidgetCanvasLayout.encode]
+     * format (cards, sizes, layers, deco and stickers). Device-local like [KEY_WIDGET_CANVAS].
+     */
+    const val CUSTOM_PRESET_SLOTS = 2
+    private const val KEY_CUSTOM_PRESET_PREFIX = "widget_custom_preset_"
+
+    fun customPresetKey(slot: Int): String = "$KEY_CUSTOM_PRESET_PREFIX$slot"
+
     private val _nowPlayingMini = MutableStateFlow(false)
     val nowPlayingMini: StateFlow<Boolean> = _nowPlayingMini.asStateFlow()
+
+    private val _stickyNoteEnabled = MutableStateFlow(false)
+    val stickyNoteEnabled: StateFlow<Boolean> = _stickyNoteEnabled.asStateFlow()
+
+    private val _stickyNoteText = MutableStateFlow("")
+    val stickyNoteText: StateFlow<String> = _stickyNoteText.asStateFlow()
+
+    /** Index 0 = slot 1; null = slot never saved. */
+    private val _customPresets = MutableStateFlow<List<Map<String, WidgetPlacement>?>>(List(CUSTOM_PRESET_SLOTS) { null })
+    val customPresets: StateFlow<List<Map<String, WidgetPlacement>?>> = _customPresets.asStateFlow()
 
     private val _slots = MutableStateFlow<List<WidgetSlot>>(emptyList())
     val slots: StateFlow<List<WidgetSlot>> = _slots.asStateFlow()
@@ -65,6 +91,13 @@ object WidgetRepository {
         )
         _placements.value = WidgetCanvasLayout.decode(prefs.getString(KEY_WIDGET_CANVAS, "").orEmpty())
         _nowPlayingMini.value = prefs.getBoolean(KEY_NOW_PLAYING_MINI, false)
+        _stickyNoteEnabled.value = prefs.getBoolean(KEY_STICKY_NOTE_ENABLED, false)
+        _stickyNoteText.value = prefs.getString(KEY_STICKY_NOTE_TEXT, "").orEmpty()
+        _customPresets.value = List(CUSTOM_PRESET_SLOTS) { i ->
+            prefs.getString(customPresetKey(i + 1), null)
+                ?.let { WidgetCanvasLayout.decode(it) }
+                ?.takeIf { it.isNotEmpty() }
+        }
         loaded = true
     }
 
@@ -102,6 +135,29 @@ object WidgetRepository {
         if (_nowPlayingMini.value == mini) return
         _nowPlayingMini.value = mini
         prefs(context).edit().putBoolean(KEY_NOW_PLAYING_MINI, mini).apply()
+    }
+
+    fun setStickyNoteEnabled(context: Context, enabled: Boolean) {
+        ensureLoaded(context)
+        if (_stickyNoteEnabled.value == enabled) return
+        _stickyNoteEnabled.value = enabled
+        prefs(context).edit().putBoolean(KEY_STICKY_NOTE_ENABLED, enabled).apply()
+    }
+
+    fun setStickyNoteText(context: Context, text: String) {
+        ensureLoaded(context)
+        val clean = sanitizeNote(text)
+        if (_stickyNoteText.value == clean) return
+        _stickyNoteText.value = clean
+        prefs(context).edit().putString(KEY_STICKY_NOTE_TEXT, clean).apply()
+    }
+
+    /** Saves [layout] into "My Layout" [slot] (1-based). Empty layouts aren't worth a slot. */
+    fun saveCustomPreset(context: Context, slot: Int, layout: Map<String, WidgetPlacement>) {
+        ensureLoaded(context)
+        if (slot !in 1..CUSTOM_PRESET_SLOTS || layout.isEmpty()) return
+        _customPresets.value = _customPresets.value.toMutableList().also { it[slot - 1] = LinkedHashMap(layout) }
+        prefs(context).edit().putString(customPresetKey(slot), WidgetCanvasLayout.encode(layout)).apply()
     }
 
     private fun dropPlacements(context: Context, appWidgetIds: Collection<Int>) {
@@ -170,6 +226,19 @@ object WidgetRepository {
         val kept = saved.filter { it.appWidgetId in hostIds }
         val orphans = hostIds.filter { it !in savedIds && it != pendingId }.sorted()
         return ReconcilePlan(kept, orphans)
+    }
+
+    /** Trailing blank lines trimmed, capped at [STICKY_NOTE_MAX_CHARS]. */
+    fun sanitizeNote(text: String): String = text.trimEnd().take(STICKY_NOTE_MAX_CHARS)
+
+    /**
+     * What the Sticky Note shows and edits: the Quick Memo slot the Home ticker shows (pinned
+     * slot, else the first filled one) when there is one, else the note's own text.
+     * Returns the 1-based Quick Memo slot, or null for the note's own text.
+     */
+    fun stickyNoteSource(quickMemoSlots: List<String>, pinnedSlot: Int): Int? {
+        if (quickMemoSlots.getOrNull(pinnedSlot - 1)?.isNotBlank() == true) return pinnedSlot
+        return quickMemoSlots.indexOfFirst { it.isNotBlank() }.takeIf { it >= 0 }?.plus(1)
     }
 
     fun encodeIds(slots: List<WidgetSlot>): String = slots.joinToString(",") { it.appWidgetId.toString() }

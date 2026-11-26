@@ -70,6 +70,17 @@ class WidgetPickerEntry(
     val shrinksToFit: Boolean
 )
 
+/**
+ * A Mochibun-made entry pinned above the app widgets in the picker ("Built-in · Sticky Note",
+ * "Built-in · Sticker"). [enabled] false shows it dimmed with [subtitle] explaining why.
+ */
+class BuiltInPickerEntry(
+    val label: String,
+    val subtitle: String,
+    val enabled: Boolean,
+    val onPick: () -> Unit
+)
+
 /** Approximate home-screen cells for a dp size, using Android's `70 × n − 30` sizing rule. */
 private fun cellsFor(sizeDp: Float): Int = ceil((sizeDp + 30f) / 70f).toInt().coerceAtLeast(1)
 
@@ -126,7 +137,8 @@ private fun loadWidgetProviders(context: Context, availableWidthPx: Int): List<W
 fun WidgetPickerDialog(
     availableWidthPx: Int,
     onPick: (AppWidgetProviderInfo) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    builtIns: List<BuiltInPickerEntry> = emptyList()
 ) {
     val context = LocalContext.current
     val theme = LocalLauncherTheme.current
@@ -139,9 +151,19 @@ fun WidgetPickerDialog(
         value = withContext(Dispatchers.IO) { loadWidgetProviders(context, availableWidthPx) }
     }
     val list = entries.orEmpty()
+    // Rows: built-ins first, then app widgets
+    val rowCount = builtIns.size + list.size
 
-    LaunchedEffect(selectedIndex, list.size) {
-        if (list.isEmpty()) return@LaunchedEffect
+    fun pickRow(index: Int) {
+        if (index < builtIns.size) {
+            builtIns[index].takeIf { it.enabled }?.onPick?.invoke()
+        } else {
+            list.getOrNull(index - builtIns.size)?.let { onPick(it.info) }
+        }
+    }
+
+    LaunchedEffect(selectedIndex, rowCount) {
+        if (rowCount == 0) return@LaunchedEffect
         val visible = listState.layoutInfo.visibleItemsInfo
         val fullyVisible = visible.any { it.index == selectedIndex } &&
             visible.first().index != selectedIndex &&
@@ -175,18 +197,18 @@ fun WidgetPickerDialog(
                         sawCenterDown = true
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
-                        list.getOrNull(selectedIndex)?.let { onPick(it.info) }
+                        pickRow(selectedIndex)
                     }
                     return@onPreviewKeyEvent true
                 }
-                if (event.type != KeyEventType.KeyDown || list.isEmpty()) return@onPreviewKeyEvent false
+                if (event.type != KeyEventType.KeyDown || rowCount == 0) return@onPreviewKeyEvent false
                 when (native.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> {
-                        selectedIndex = if (selectedIndex > 0) selectedIndex - 1 else list.lastIndex
+                        selectedIndex = if (selectedIndex > 0) selectedIndex - 1 else rowCount - 1
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        selectedIndex = if (selectedIndex < list.lastIndex) selectedIndex + 1 else 0
+                        selectedIndex = if (selectedIndex < rowCount - 1) selectedIndex + 1 else 0
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> true
@@ -214,7 +236,7 @@ fun WidgetPickerDialog(
                 )
                 Text(
                     text = when (entries) {
-                        null -> "Gathering widgets… ♡"
+                        null -> if (builtIns.isEmpty()) "Gathering widgets… ♡" else "Built-ins ♡ · gathering widgets…"
                         else -> if (list.isEmpty()) "No apps offer widgets yet ♡" else "${list.size} widgets from your apps ♡"
                     },
                     color = theme.cardTextColor,
@@ -229,7 +251,20 @@ fun WidgetPickerDialog(
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    itemsIndexed(list, key = { _, e -> e.info.provider.flattenToString() }) { idx, entry ->
+                    itemsIndexed(builtIns, key = { _, e -> "builtin:${e.label}" }) { idx, entry ->
+                        PickerRow(
+                            title = entry.label,
+                            subtitle = entry.subtitle,
+                            isFocused = idx == selectedIndex,
+                            enabled = entry.enabled,
+                            onClick = {
+                                selectedIndex = idx
+                                pickRow(idx)
+                            }
+                        )
+                    }
+                    itemsIndexed(list, key = { _, e -> e.info.provider.flattenToString() }) { i, entry ->
+                        val idx = builtIns.size + i
                         WidgetPickerRow(
                             entry = entry,
                             isFocused = idx == selectedIndex,
@@ -247,6 +282,27 @@ fun WidgetPickerDialog(
 
 @Composable
 private fun WidgetPickerRow(entry: WidgetPickerEntry, isFocused: Boolean, onClick: () -> Unit) {
+    PickerRow(
+        title = entry.label,
+        subtitle = buildString {
+            append(entry.appLabel)
+            append(" · ")
+            append(entry.cellsText)
+            if (entry.shrinksToFit) append(" · shrinks to fit")
+        },
+        isFocused = isFocused,
+        onClick = onClick
+    )
+}
+
+@Composable
+private fun PickerRow(
+    title: String,
+    subtitle: String,
+    isFocused: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
     val theme = LocalLauncherTheme.current
     val shape = RoundedCornerShape(12.dp)
     Column(
@@ -257,11 +313,12 @@ private fun WidgetPickerRow(entry: WidgetPickerEntry, isFocused: Boolean, onClic
             .clip(shape)
             .background(if (isFocused) theme.selectedContainerColor else Color.Transparent, shape)
             .border(if (isFocused) 1.5.dp else 0.dp, if (isFocused) theme.appActionColor else Color.Transparent, shape)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
     ) {
         Text(
-            text = entry.label,
+            text = title,
             color = if (isFocused) theme.fgTextColor else theme.appActionColor,
             fontSize = 14.sp,
             fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium,
@@ -269,12 +326,7 @@ private fun WidgetPickerRow(entry: WidgetPickerEntry, isFocused: Boolean, onClic
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = buildString {
-                append(entry.appLabel)
-                append(" · ")
-                append(entry.cellsText)
-                if (entry.shrinksToFit) append(" · shrinks to fit")
-            },
+            text = subtitle,
             color = theme.cardTextColor.copy(alpha = 0.8f),
             fontSize = 11.sp,
             maxLines = 1,
@@ -299,12 +351,18 @@ fun WidgetOptionsDialog(
     onUseControls: () -> Unit,
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
-    decoLabel: String,
+    // Null hides the deco row (stickers are decoration already)
+    decoLabel: String?,
     onCycleDeco: () -> Unit,
     isHostedWidget: Boolean = true,
     // Null hides the row (only Now Playing has an alternate skin)
     skinLabel: String? = null,
-    onToggleSkin: () -> Unit = {}
+    onToggleSkin: () -> Unit = {},
+    // Card-specific rows shown under deco / skin (Sticky Note "Edit note", sticker "Swap")
+    extraActions: List<Pair<String, () -> Unit>> = emptyList(),
+    // Overrides the hosted-widget Remove row for native cards that can be removed / hidden
+    removeLabel: String? = null,
+    subtitle: String? = null
 ) {
     val theme = LocalLauncherTheme.current
     val focusRequester = remember { FocusRequester() }
@@ -323,13 +381,14 @@ fun WidgetOptionsDialog(
     val actions = buildList {
         if (isHostedWidget) add(Action("Use widget buttons", canUseControls, docomoIndex = 121, run = onUseControls))
         add(Action("✥ Move / resize / layer", true, run = onArrange))
-        add(Action("✿ Deco: $decoLabel", true, run = onCycleDeco))
+        if (decoLabel != null) add(Action("✿ Deco: $decoLabel", true, run = onCycleDeco))
         if (skinLabel != null) add(Action("♫ Skin: $skinLabel", true, run = onToggleSkin))
-        if (isHostedWidget) {
-            add(Action("Configure widget", canConfigure, docomoIndex = 144, run = onConfigure))
+        extraActions.forEach { (label, run) -> add(Action(label, true, run = run)) }
+        if (isHostedWidget) add(Action("Configure widget", canConfigure, docomoIndex = 144, run = onConfigure))
+        if (isHostedWidget || removeLabel != null) {
             add(
                 Action(
-                    if (confirmingRemove) "Press OK again to remove" else "Remove widget",
+                    if (confirmingRemove) "Press OK again to remove" else removeLabel ?: "Remove widget",
                     enabled = true,
                     docomoIndex = 17,
                     destructive = true,
@@ -442,7 +501,7 @@ fun WidgetOptionsDialog(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (isHostedWidget) "Widget options ♡" else "Card options ♡",
+                    text = subtitle ?: if (isHostedWidget) "Widget options ♡" else "Card options ♡",
                     color = theme.cardTextColor,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(bottom = 6.dp)

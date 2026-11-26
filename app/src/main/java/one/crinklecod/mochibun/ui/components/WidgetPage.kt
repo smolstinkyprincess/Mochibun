@@ -62,6 +62,7 @@ import one.crinklecod.mochibun.core.widget.CollagePreset
 import one.crinklecod.mochibun.core.widget.DecoStyle
 import one.crinklecod.mochibun.core.widget.MochibunWidgetHost
 import one.crinklecod.mochibun.core.widget.NavDirection
+import one.crinklecod.mochibun.core.widget.StickerKind
 import one.crinklecod.mochibun.core.widget.WidgetCanvasLayout
 import one.crinklecod.mochibun.core.widget.WidgetFrame
 import one.crinklecod.mochibun.core.widget.WidgetPlacement
@@ -73,7 +74,10 @@ import one.crinklecod.mochibun.data.repository.WidgetRepository
 import one.crinklecod.mochibun.data.repository.currentCardBorderState
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
 import one.crinklecod.mochibun.data.repository.MediaSessionTracker
+import one.crinklecod.mochibun.ui.dialogs.BuiltInPickerEntry
 import one.crinklecod.mochibun.ui.dialogs.PhotoFrameActionDialog
+import one.crinklecod.mochibun.ui.dialogs.StickerPickerDialog
+import one.crinklecod.mochibun.ui.dialogs.StickyNoteEditDialog
 import one.crinklecod.mochibun.ui.dialogs.PhotoFrameLabelDialog
 import one.crinklecod.mochibun.ui.dialogs.WidgetOptionsDialog
 import one.crinklecod.mochibun.ui.dialogs.WidgetPickerDialog
@@ -97,6 +101,7 @@ private const val NOW_PLAYING_ROWS = 10
 private const val NOW_PLAYING_MINI_ROWS = 4
 private const val SYSTEM_MONITOR_ROWS = 14
 private const val PHOTO_FRAME_ROWS = 17
+private const val STICKY_NOTE_ROWS = 8
 
 /** Space kept on each side of the canvas so focus glows aren't cut by the screen edge. */
 private const val CANVAS_SIDE_PADDING_DP = 12
@@ -116,6 +121,10 @@ enum class WidgetFocusSection {
 }
 
 /** Which Arrange tool the D-pad is driving; BAR means it's choosing one from the pill bar. */
+/** Presets bar rows: the built-in presets + ✕, then apply/save pills for each My Layout slot. */
+private val PRESET_ROW1 = CollagePreset.entries.size + 1
+private val PRESET_ROW2 = WidgetRepository.CUSTOM_PRESET_SLOTS * 2
+
 private enum class ArrangeTool { BAR, MOVE, RESIZE, LAYER }
 
 // ⋯ holds the per-card extras (deco, Now Playing skin, hosted-widget options) so the bar stays
@@ -159,6 +168,17 @@ fun WidgetPage(
     val photoFrameUri by PreferencesManager.photoFrameUri.collectAsState()
     val photoFrameStyle by PreferencesManager.photoFrameStyle.collectAsState()
     val photoFrameLabel by PreferencesManager.photoFrameLabel.collectAsState()
+
+    // Sticky Note: mirrors the Quick Memo the Home ticker shows, else its own short note
+    val isStickyNoteEnabled by WidgetRepository.stickyNoteEnabled.collectAsState()
+    val stickyNoteOwnText by WidgetRepository.stickyNoteText.collectAsState()
+    val quickMemoSlots by PreferencesManager.quickMemoSlots.collectAsState()
+    val pinnedQuickMemoSlot by PreferencesManager.pinnedQuickMemoSlot.collectAsState()
+    val stickyNoteMemoSlot = remember(quickMemoSlots, pinnedQuickMemoSlot) {
+        WidgetRepository.stickyNoteSource(quickMemoSlots, pinnedQuickMemoSlot)
+    }
+    val stickyNoteText = stickyNoteMemoSlot?.let { quickMemoSlots.getOrNull(it - 1) } ?: stickyNoteOwnText
+    val customPresets by WidgetRepository.customPresets.collectAsState()
 
     // Decoded here rather than in the card so scrolling the card off and back doesn't re-decode
     val photoFrameBitmap by produceState<ImageBitmap?>(null, photoFrameUri, isPhotoFrameEnabled) {
@@ -223,27 +243,36 @@ fun WidgetPage(
 
     // Cards on the canvas right now, in the old list's top-to-bottom order (also the order
     // first-time placements stack in)
-    val canvasKeys = remember(mediaState.isPlaying, isSystemMonitorEnabled, isPhotoFrameEnabled, widgetSlots) {
+    val savedPlacements by WidgetRepository.placements.collectAsState()
+    val nowPlayingMini by WidgetRepository.nowPlayingMini.collectAsState()
+    // Standalone stickers live only in the layout (unknown kinds from a newer build are skipped)
+    val stickerKeys = remember(savedPlacements) {
+        WidgetCanvasLayout.stickerKeys(savedPlacements).filter { WidgetCanvasLayout.stickerKindOf(it) != null }
+    }
+    val canvasKeys = remember(mediaState.isPlaying, isSystemMonitorEnabled, isPhotoFrameEnabled, isStickyNoteEnabled, widgetSlots, stickerKeys) {
         buildList {
             if (mediaState.isPlaying) add(WidgetCanvasLayout.KEY_NOW_PLAYING)
             if (isSystemMonitorEnabled) add(WidgetCanvasLayout.KEY_SYSTEM_MONITOR)
             if (isPhotoFrameEnabled) add(WidgetCanvasLayout.KEY_PHOTO_FRAME)
+            if (isStickyNoteEnabled) add(WidgetCanvasLayout.KEY_STICKY_NOTE)
             widgetSlots.forEach { add(WidgetCanvasLayout.appWidgetKey(it.appWidgetId)) }
+            addAll(stickerKeys)
         }
     }
-
-    val savedPlacements by WidgetRepository.placements.collectAsState()
-    val nowPlayingMini by WidgetRepository.nowPlayingMini.collectAsState()
+    // Cards (not stickers) the presets arrange and the Presets pill needs at least one of
+    val cardKeys = remember(canvasKeys) { canvasKeys.filterNot(WidgetCanvasLayout::isStickerKey) }
     // Cards without a saved spot (an upgrade from the list layout, a new widget, Now Playing
     // appearing for the first time) are stacked into the first free gap
     val layout = remember(savedPlacements, canvasKeys, widgetInfos, cols, stepPx, nowPlayingMini) {
         WidgetCanvasLayout.withDefaults(
             savedPlacements,
             canvasKeys.map { key ->
-                key to when (key) {
-                    WidgetCanvasLayout.KEY_NOW_PLAYING -> if (nowPlayingMini) NOW_PLAYING_MINI_ROWS else NOW_PLAYING_ROWS
-                    WidgetCanvasLayout.KEY_SYSTEM_MONITOR -> SYSTEM_MONITOR_ROWS
-                    WidgetCanvasLayout.KEY_PHOTO_FRAME -> PHOTO_FRAME_ROWS
+                key to when {
+                    key == WidgetCanvasLayout.KEY_NOW_PLAYING -> if (nowPlayingMini) NOW_PLAYING_MINI_ROWS else NOW_PLAYING_ROWS
+                    key == WidgetCanvasLayout.KEY_SYSTEM_MONITOR -> SYSTEM_MONITOR_ROWS
+                    key == WidgetCanvasLayout.KEY_PHOTO_FRAME -> PHOTO_FRAME_ROWS
+                    key == WidgetCanvasLayout.KEY_STICKY_NOTE -> STICKY_NOTE_ROWS
+                    WidgetCanvasLayout.isStickerKey(key) -> WidgetCanvasLayout.STICKER_SIZE
                     else -> defaultAppWidgetRows(
                         widgetInfos[WidgetCanvasLayout.appWidgetIdOf(key)],
                         canvasWidthPx,
@@ -259,7 +288,7 @@ fun WidgetPage(
         if (layout !== savedPlacements) WidgetRepository.setPlacements(context, layout)
     }
     // Saved spots refitted to this screen's width (a layout from a wider screen stays usable)
-    val placed = remember(layout, cols) { layout.mapValues { WidgetCanvasLayout.clamp(it.value, cols) } }
+    val placed = remember(layout, cols) { layout.mapValues { WidgetCanvasLayout.clampFor(it.key, it.value, cols) } }
 
     // Native cards grow past their slot rather than squash their content; their real height
     // lets resize stop at the content and lets the canvas leave room below them
@@ -302,8 +331,12 @@ fun WidgetPage(
     var showWidgetPicker by remember { mutableStateOf(false) }
     var showPhotoFrameDialog by remember { mutableStateOf(false) }
     var showPhotoLabelDialog by remember { mutableStateOf(false) }
+    var showStickyEditor by remember { mutableStateOf(false) }
+    var showStickerPicker by remember { mutableStateOf(false) }
+    // A card just added from the picker: focused as soon as it reaches the canvas
+    var pendingFocusKey by remember { mutableStateOf<String?>(null) }
     val anyWidgetDialogOpen = optionsKey != null || showWidgetPicker ||
-        showPhotoFrameDialog || showPhotoLabelDialog
+        showPhotoFrameDialog || showPhotoLabelDialog || showStickyEditor || showStickerPicker
 
     // Arrange mode: [draft] is the live Move/Resize placement, saved when the tool closes, so
     // a held D-pad key doesn't write preferences on every repeat
@@ -312,6 +345,8 @@ fun WidgetPage(
     var arrangeBarIndex by remember { mutableIntStateOf(0) }
     var draft by remember { mutableStateOf<WidgetPlacement?>(null) }
     var presetsOpen by remember { mutableStateOf(false) }
+    // Presets bar: row 1 = built-in presets + ✕ (0 until PRESET_ROW1), row 2 = My Layout slots
+    // as [apply 1][save 1][apply 2][save 2] (PRESET_ROW1 onward)
     var presetIndex by remember { mutableIntStateOf(0) }
     val isEditing = arrangeKey != null || presetsOpen
 
@@ -444,12 +479,90 @@ fun WidgetPage(
     }
 
     fun applyPreset(preset: CollagePreset) {
-        val updated = WidgetCanvasLayout.applyPreset(layout, canvasKeys, preset, cols)
+        val updated = WidgetCanvasLayout.applyPreset(layout, cardKeys, preset, cols)
         WidgetRepository.setPlacements(context, updated)
         presetsOpen = false
         SoundEffectManager.play(context, SoundEffect.SELECT)
-        WidgetCanvasLayout.readingOrder(updated, canvasKeys).firstOrNull()?.let { focusCanvas(it) }
+        WidgetCanvasLayout.readingOrder(updated, cardKeys).firstOrNull()?.let { focusCanvas(it) }
         scope.launch { scrollState.animateScrollTo(0) }
+    }
+
+    fun applyCustomPreset(slot: Int) {
+        val snapshot = customPresets.getOrNull(slot - 1)
+        if (snapshot == null) {
+            HapticManager.performBoundaryHaptic(context)
+            Toast.makeText(context, "My Layout $slot is empty · save one first ♡", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val updated = WidgetCanvasLayout.applySnapshot(layout, snapshot, cols)
+        WidgetRepository.setPlacements(context, updated)
+        presetsOpen = false
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+        WidgetCanvasLayout.readingOrder(updated, cardKeys).firstOrNull()?.let { focusCanvas(it) }
+        scope.launch { scrollState.animateScrollTo(0) }
+    }
+
+    /** Captures every card's spot, size, layer and deco plus the stickers. The bar stays open. */
+    fun saveCustomPreset(slot: Int) {
+        WidgetRepository.saveCustomPreset(context, slot, layout)
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+        Toast.makeText(context, "Saved as My Layout $slot ♡", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Slot-sized footprint of each card on screen, grown to what native cards really drew. */
+    fun occupiedFootprints(): List<WidgetPlacement> = canvasKeys.mapNotNull { key ->
+        val p = placed[key] ?: return@mapNotNull null
+        val drawnRows = nativeHeightsPx[key]?.let { WidgetCanvasLayout.rowsFor(it, stepPx) } ?: 0
+        if (drawnRows > p.gridH) p.copy(gridH = drawnRows) else p
+    }
+
+    fun addSticker(kind: StickerKind) {
+        showStickerPicker = false
+        val added = WidgetCanvasLayout.addSticker(layout, kind, cols, occupiedFootprints())
+        if (added == null) {
+            HapticManager.performBoundaryHaptic(context)
+            Toast.makeText(context, "Sticker sheet is full (${WidgetCanvasLayout.MAX_STICKERS}) ♡", Toast.LENGTH_SHORT).show()
+            return
+        }
+        WidgetRepository.setPlacements(context, added.first)
+        pendingFocusKey = added.second
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+    }
+
+    fun removeSticker(key: String) {
+        if (key !in layout) return
+        WidgetRepository.setPlacements(context, LinkedHashMap(layout).apply { remove(key) })
+        SoundEffectManager.play(context, SoundEffect.BACK)
+    }
+
+    /** Cycles a sticker to the next design in place; its key changes, so focus follows it. */
+    fun swapSticker(key: String) {
+        val kind = WidgetCanvasLayout.stickerKindOf(key) ?: return
+        val (updated, newKey) = WidgetCanvasLayout.swapSticker(layout, key, kind.next()) ?: return
+        if (arrangeKey == key) {
+            commitDraft()
+            arrangeKey = newKey
+        }
+        if (focusedKey == key) focusedKey = newKey
+        if (optionsKey == key) optionsKey = newKey
+        WidgetRepository.setPlacements(context, updated)
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+    }
+
+    fun showStickyNote() {
+        showWidgetPicker = false
+        WidgetRepository.setStickyNoteEnabled(context, true)
+        pendingFocusKey = WidgetCanvasLayout.KEY_STICKY_NOTE
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+    }
+
+    fun saveStickyNote(text: String) {
+        val slot = stickyNoteMemoSlot
+        if (slot != null) {
+            PreferencesManager.setQuickMemoSlotText(context, slot, text)
+        } else {
+            WidgetRepository.setStickyNoteText(context, text)
+        }
     }
 
     // ── Add-widget flow: allocate -> bind (permission) -> configure -> save ──
@@ -683,6 +796,14 @@ fun WidgetPage(
     // Graceful D-pad fallback when a card leaves the canvas (playback stops, a card is toggled
     // off, a widget is removed or its app uninstalled)
     LaunchedEffect(canvasKeys) {
+        pendingFocusKey?.let { pending ->
+            if (pending in canvasKeys) {
+                pendingFocusKey = null
+                focusCanvas(pending)
+                dpadScrollTick++
+            }
+        }
+        if (WidgetCanvasLayout.KEY_STICKY_NOTE !in canvasKeys) showStickyEditor = false
         val arranging = arrangeKey
         if (arranging != null && arranging !in canvasKeys) {
             exitArrange()
@@ -768,6 +889,8 @@ fun WidgetPage(
             showWidgetPicker = false
             showPhotoFrameDialog = false
             showPhotoLabelDialog = false
+            showStickyEditor = false
+            showStickerPicker = false
             isQuickSettingsExpanded = false
             resetFocus()
             quickSettingsIndex = 0
@@ -785,7 +908,12 @@ fun WidgetPage(
             }
             WidgetCanvasLayout.KEY_SYSTEM_MONITOR -> systemMonitorRefreshTrigger++
             WidgetCanvasLayout.KEY_PHOTO_FRAME -> showPhotoFrameDialog = true
+            WidgetCanvasLayout.KEY_STICKY_NOTE -> showStickyEditor = true
             else -> {
+                if (WidgetCanvasLayout.isStickerKey(key)) {
+                    optionsKey = key
+                    return
+                }
                 val id = WidgetCanvasLayout.appWidgetIdOf(key) ?: return
                 val interacting = interactingWidgetId
                 if (interacting == id) widgetFrames[id]?.clickSelection() else activateWidget(id)
@@ -797,6 +925,11 @@ fun WidgetPage(
         val key = arrangeKey ?: return
         when (action) {
             ArrangeAction.MOVE, ArrangeAction.RESIZE -> {
+                if (action == ArrangeAction.RESIZE && WidgetCanvasLayout.isStickerKey(key)) {
+                    HapticManager.performBoundaryHaptic(context)
+                    Toast.makeText(context, "Stickers keep their size ♡", Toast.LENGTH_SHORT).show()
+                    return
+                }
                 arrangeTool = if (action == ArrangeAction.MOVE) ArrangeTool.MOVE else ArrangeTool.RESIZE
                 draft = placed[key]
                 SoundEffectManager.play(context, SoundEffect.SELECT)
@@ -886,7 +1019,9 @@ fun WidgetPage(
                     null -> return true
                 }
                 val next = if (arrangeTool == ArrangeTool.MOVE) {
-                    WidgetCanvasLayout.move(current, dx, dy, cols)
+                    WidgetCanvasLayout.move(current, dx, dy, cols, key)
+                } else if (WidgetCanvasLayout.isStickerKey(key)) {
+                    null
                 } else {
                     // A native card already taller than its slot is at its content height
                     val isNative = WidgetCanvasLayout.appWidgetIdOf(key) == null
@@ -920,8 +1055,18 @@ fun WidgetPage(
         return true
     }
 
+    fun runPresetPill(index: Int) {
+        if (index < PRESET_ROW1) {
+            val preset = CollagePreset.entries.getOrNull(index)
+            if (preset != null) applyPreset(preset) else presetsOpen = false
+            return
+        }
+        val pill = index - PRESET_ROW1
+        val slot = pill / 2 + 1
+        if (pill % 2 == 0) applyCustomPreset(slot) else saveCustomPreset(slot)
+    }
+
     fun handlePresetsKey(native: KeyEvent, type: KeyEventType): Boolean {
-        val options = CollagePreset.entries.size + 1 // + Cancel
         if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4) {
             if (type == KeyEventType.KeyUp) {
                 presetsOpen = false
@@ -934,19 +1079,24 @@ fun WidgetPage(
                 sawCenterDown = true
             } else if (type == KeyEventType.KeyUp && sawCenterDown) {
                 sawCenterDown = false
-                val preset = CollagePreset.entries.getOrNull(presetIndex)
-                if (preset != null) applyPreset(preset) else presetsOpen = false
+                runPresetPill(presetIndex)
             }
             return true
         }
         if (type != KeyEventType.KeyDown) return true
-        val delta = when (native.keyCode) {
-            KeyEvent.KEYCODE_DPAD_LEFT -> -1
-            KeyEvent.KEYCODE_DPAD_RIGHT -> 1
+        val inRow2 = presetIndex >= PRESET_ROW1
+        val rowStart = if (inRow2) PRESET_ROW1 else 0
+        val rowSize = if (inRow2) PRESET_ROW2 else PRESET_ROW1
+        val col = presetIndex - rowStart
+        val next = when (native.keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> if (col > 0) presetIndex - 1 else null
+            KeyEvent.KEYCODE_DPAD_RIGHT -> if (col < rowSize - 1) presetIndex + 1 else null
+            KeyEvent.KEYCODE_DPAD_UP -> if (inRow2) col.coerceAtMost(PRESET_ROW1 - 1) else null
+            KeyEvent.KEYCODE_DPAD_DOWN -> if (!inRow2) PRESET_ROW1 + col.coerceAtMost(PRESET_ROW2 - 1) else null
             else -> return true
         }
-        if (presetIndex + delta in 0 until options) {
-            presetIndex += delta
+        if (next != null) {
+            presetIndex = next
             SoundEffectManager.play(context, SoundEffect.NAV)
         } else {
             HapticManager.performBoundaryHaptic(context)
@@ -955,7 +1105,7 @@ fun WidgetPage(
     }
 
     fun openPresets() {
-        if (canvasKeys.none { it in placed }) {
+        if (cardKeys.none { it in placed }) {
             HapticManager.performBoundaryHaptic(context)
             Toast.makeText(context, "Add a widget first ♡", Toast.LENGTH_SHORT).show()
             return
@@ -983,6 +1133,9 @@ fun WidgetPage(
                 if (anyWidgetDialogOpen && (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4)) {
                     if (event.type == KeyEventType.KeyUp) {
                         when {
+                            // Closing the editor disposes it, which saves the draft
+                            showStickyEditor -> showStickyEditor = false
+                            showStickerPicker -> showStickerPicker = false
                             showPhotoLabelDialog -> showPhotoLabelDialog = false
                             showPhotoFrameDialog -> showPhotoFrameDialog = false
                             showWidgetPicker -> showWidgetPicker = false
@@ -1269,6 +1422,11 @@ fun WidgetPage(
                         // Tape / pins replace a custom 9-slice frame with a plain stitched border
                         val plainBorder = deco != DecoStyle.NONE
                         val isNative = appWidgetId == null
+                        val stickerKind = WidgetCanvasLayout.stickerKindOf(cardKey)
+                        // Native cards grow to their content; the sticky note and stickers fill
+                        // their slot exactly, like hosted widgets
+                        val growsWithContent = isNative && stickerKind == null &&
+                            cardKey != WidgetCanvasLayout.KEY_STICKY_NOTE
                         // One unclipped wrapper per slot: carries the canvas position and zIndex,
                         // and lets tape, pins and focus glows draw past the card edge
                         Box(
@@ -1277,7 +1435,7 @@ fun WidgetPage(
                                 .offset { IntOffset(p.gridX * stepPx, p.gridY * stepPx) }
                                 .width(slotWidth)
                                 .then(
-                                    if (isNative) {
+                                    if (growsWithContent) {
                                         // Native cards: the slot is a minimum, so content never gets squashed
                                         Modifier
                                             .heightIn(min = slotHeight)
@@ -1326,7 +1484,33 @@ fun WidgetPage(
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                                else -> {
+                                WidgetCanvasLayout.KEY_STICKY_NOTE -> StickyNoteCard(
+                                    text = stickyNoteText,
+                                    isFocused = isCardFocused,
+                                    onClick = {
+                                        if (arrangeKey == null) {
+                                            focusCanvas(cardKey)
+                                            showStickyEditor = true
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                else -> if (stickerKind != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer { clip = false }
+                                            .softGlowFocus(isSelected = isCardFocused, cornerRadius = 24.dp)
+                                            .clickable {
+                                                if (arrangeKey == null) {
+                                                    focusCanvas(cardKey)
+                                                    optionsKey = cardKey
+                                                }
+                                            }
+                                    ) {
+                                        ScrapbookSticker(kind = stickerKind, modifier = Modifier.fillMaxSize())
+                                    }
+                                } else {
                                     val slot = appWidgetId?.let { slotsById[it] }
                                     if (slot != null) {
                                         AppWidgetHostCard(
@@ -1347,12 +1531,13 @@ fun WidgetPage(
                                                 }
                                             },
                                             plainBorder = plainBorder,
+                                            showOptionsHandle = isCardFocused || arrangeKey != null,
                                             modifier = Modifier.fillMaxSize()
                                         )
                                     }
                                 }
                             }
-                            WidgetDecoOverlay(
+                            if (stickerKind == null) WidgetDecoOverlay(
                                 deco = deco,
                                 // Pins avoid the corner a card already uses: Now Playing's mascot
                                 // (top-left), a hosted widget's ⋯ handle (top-right)
@@ -1511,14 +1696,34 @@ fun WidgetPage(
             }
             presetsOpen -> {
                 val labels = CollagePreset.entries.map { it.label } + "✕"
+                val customLabels = (1..WidgetRepository.CUSTOM_PRESET_SLOTS).flatMap { slot ->
+                    listOf("♡ My $slot", "✚ Save $slot")
+                }
+                // Apply pills for empty slots are dimmed
+                val dimmed = (1..WidgetRepository.CUSTOM_PRESET_SLOTS)
+                    .filter { customPresets.getOrNull(it - 1) == null }
+                    .mapTo(HashSet()) { labels.size + (it - 1) * 2 }
+                val hint = if (presetIndex < PRESET_ROW1) {
+                    "✦ Quick collage ✦ ◀▶ pick · ▼ my layouts · OK"
+                } else {
+                    val pill = presetIndex - PRESET_ROW1
+                    val slot = pill / 2 + 1
+                    when {
+                        pill % 2 == 1 -> "✚ OK saves this layout as My $slot"
+                        customPresets.getOrNull(slot - 1) == null -> "My $slot is empty · ▶ save first"
+                        else -> "♡ OK restores My Layout $slot"
+                    }
+                }
                 EditPillBar(
-                    hint = "✦ Quick collage ✦ ◀▶ pick · OK apply",
+                    hint = hint,
                     labels = labels,
+                    secondRow = customLabels,
+                    dimmedIndices = dimmed,
                     selectedIndex = presetIndex,
                     activeIndex = -1,
                     onPillClick = { index ->
-                        val preset = CollagePreset.entries.getOrNull(index)
-                        if (preset != null) applyPreset(preset) else presetsOpen = false
+                        presetIndex = index
+                        runPresetPill(index)
                     },
                     modifier = barModifier
                 )
@@ -1537,10 +1742,52 @@ fun WidgetPage(
 
         // 7. Widget dialogs (own windows, so they take keys away from this page while open)
         if (showWidgetPicker) {
+            val stickerCount = stickerKeys.size
             WidgetPickerDialog(
                 availableWidthPx = canvasWidthPx,
                 onPick = { info -> addWidget(info) },
-                onDismiss = { showWidgetPicker = false }
+                onDismiss = { showWidgetPicker = false },
+                builtIns = listOf(
+                    BuiltInPickerEntry(
+                        label = "✎ Sticky Note",
+                        subtitle = if (isStickyNoteEnabled) "Built-in · already on your canvas ♡" else "Built-in · ruled memo card",
+                        enabled = !isStickyNoteEnabled,
+                        onPick = { showStickyNote() }
+                    ),
+                    BuiltInPickerEntry(
+                        label = "✿ Sticker",
+                        subtitle = if (stickerCount < WidgetCanvasLayout.MAX_STICKERS) {
+                            "Built-in · scrapbook trim · $stickerCount/${WidgetCanvasLayout.MAX_STICKERS}"
+                        } else {
+                            "Built-in · sticker sheet full (${WidgetCanvasLayout.MAX_STICKERS}) ♡"
+                        },
+                        enabled = stickerCount < WidgetCanvasLayout.MAX_STICKERS,
+                        onPick = {
+                            showWidgetPicker = false
+                            showStickerPicker = true
+                        }
+                    )
+                )
+            )
+        }
+
+        if (showStickerPicker) {
+            StickerPickerDialog(
+                placedCount = stickerKeys.size,
+                maxStickers = WidgetCanvasLayout.MAX_STICKERS,
+                onPick = { kind -> addSticker(kind) },
+                onDismiss = { showStickerPicker = false }
+            )
+        }
+
+        if (showStickyEditor) {
+            val memoSlot = stickyNoteMemoSlot
+            StickyNoteEditDialog(
+                initialText = stickyNoteText,
+                sourceLabel = if (memoSlot != null) "Quick Memo slot $memoSlot ♡" else "Note on your Widgets page ♡",
+                maxChars = WidgetRepository.STICKY_NOTE_MAX_CHARS,
+                onSave = { saveStickyNote(it) },
+                onDismiss = { showStickyEditor = false }
             )
         }
 
@@ -1593,12 +1840,16 @@ fun WidgetPage(
             val id = WidgetCanvasLayout.appWidgetIdOf(key)
             if (key in canvasKeys && (id == null || slotsById.containsKey(id))) {
                 val info = id?.let { widgetInfos[it] }
+                val stickerKind = WidgetCanvasLayout.stickerKindOf(key)
+                val isStickyNote = key == WidgetCanvasLayout.KEY_STICKY_NOTE
                 val label = remember(key, info) {
                     when (key) {
                         WidgetCanvasLayout.KEY_NOW_PLAYING -> "Now Playing"
                         WidgetCanvasLayout.KEY_SYSTEM_MONITOR -> "System Monitor"
                         WidgetCanvasLayout.KEY_PHOTO_FRAME -> "Photo Frame"
-                        else -> info?.loadLabel(context.packageManager)?.takeIf { it.isNotBlank() } ?: "Widget"
+                        WidgetCanvasLayout.KEY_STICKY_NOTE -> "Sticky Note"
+                        else -> stickerKind?.label
+                            ?: info?.loadLabel(context.packageManager)?.takeIf { it.isNotBlank() } ?: "Widget"
                     }
                 }
                 // Actions that leave the page (configure, use buttons, remove) end Arrange first
@@ -1611,7 +1862,7 @@ fun WidgetPage(
                     isHostedWidget = id != null,
                     canConfigure = info?.configure != null,
                     canUseControls = id != null && info != null && widgetFrames.containsKey(id),
-                    decoLabel = (layout[key]?.deco ?: DecoStyle.NONE).label,
+                    decoLabel = if (stickerKind != null) null else (layout[key]?.deco ?: DecoStyle.NONE).label,
                     onCycleDeco = { cycleDeco(key) },
                     skinLabel = if (key == WidgetCanvasLayout.KEY_NOW_PLAYING) {
                         if (nowPlayingMini) "MiniDisc deck" else "Classic"
@@ -1619,6 +1870,22 @@ fun WidgetPage(
                         null
                     },
                     onToggleSkin = { toggleNowPlayingSkin() },
+                    extraActions = when {
+                        isStickyNote -> listOf(
+                            "✎ Edit note" to {
+                                leaveArrange()
+                                showStickyEditor = true
+                            }
+                        )
+                        stickerKind != null -> listOf("⇄ Swap: ${stickerKind.label}" to { swapSticker(key) })
+                        else -> emptyList()
+                    },
+                    removeLabel = when {
+                        isStickyNote -> "Hide sticky note"
+                        stickerKind != null -> "Remove sticker"
+                        else -> null
+                    },
+                    subtitle = if (stickerKind != null) "Sticker options ♡" else null,
                     onArrange = {
                         optionsKey = null
                         if (arrangeKey != key) enterArrange(key)
@@ -1633,7 +1900,12 @@ fun WidgetPage(
                     },
                     onRemove = {
                         leaveArrange()
-                        id?.let { removeWidget(it) }
+                        when {
+                            // Hiding keeps its spot and text, so adding it back restores both
+                            isStickyNote -> WidgetRepository.setStickyNoteEnabled(context, false)
+                            stickerKind != null -> removeSticker(key)
+                            else -> id?.let { removeWidget(it) }
+                        }
                     },
                     onDismiss = { optionsKey = null }
                 )
@@ -1773,7 +2045,10 @@ private fun EditPillBar(
     selectedIndex: Int,
     activeIndex: Int,
     onPillClick: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // Optional second row; its pills are indexed after [labels] (labels.size + i)
+    secondRow: List<String> = emptyList(),
+    dimmedIndices: Set<Int> = emptySet()
 ) {
     Column(
         modifier = modifier.graphicsLayer { clip = false },
@@ -1793,12 +2068,14 @@ private fun EditPillBar(
                 .border(1.dp, ActiveTheme.palette.focusedCardBorder, RoundedCornerShape(50))
                 .padding(horizontal = 10.dp, vertical = 2.dp)
         )
-        if (labels.isNotEmpty()) {
+        listOf(labels to 0, secondRow to labels.size).forEach { (rowLabels, offset) ->
+            if (rowLabels.isEmpty()) return@forEach
             Row(
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 modifier = Modifier.graphicsLayer { clip = false }
             ) {
-                labels.forEachIndexed { index, label ->
+                rowLabels.forEachIndexed { i, label ->
+                    val index = offset + i
                     val isSelected = index == selectedIndex
                     val isActive = index == activeIndex
                     val shape = RoundedCornerShape(50)
@@ -1825,7 +2102,7 @@ private fun EditPillBar(
                             text = label,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = ActiveTheme.textPrimary,
+                            color = ActiveTheme.textPrimary.copy(alpha = if (index in dimmedIndices) 0.45f else 1f),
                             maxLines = 1
                         )
                     }

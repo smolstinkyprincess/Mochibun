@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -111,6 +112,102 @@ fun DocomoPictogram(
             dstSize = dstSize,
             filterQuality = FilterQuality.None,
             colorFilter = colorFilter
+        )
+    }
+}
+
+/** Source pixels of backing around a die-cut pictogram: 1 white + 1 faint rim. */
+private const val DIE_CUT_PAD = 2
+private const val DIE_CUT_TILE = DOCOMO_TILE_PX + 2 * DIE_CUT_PAD
+
+/**
+ * Bakes one pictogram into a tiny 16x16 die-cut sprite: the glyph in [tint]; its silhouette
+ * (enclosed holes included, so outline glyphs aren't see-through) grown one pixel in every
+ * direction in white; and a one-pixel [rim] round that. Pure pixel work on a 1 KB bitmap.
+ */
+private fun bakeDieCutPictogram(atlas: ImageBitmap, srcX: Int, srcY: Int, tint: Int, rim: Int): ImageBitmap {
+    val n = DIE_CUT_TILE
+    val tile = IntArray(DOCOMO_TILE_PX * DOCOMO_TILE_PX)
+    atlas.readPixels(tile, startX = srcX, startY = srcY, width = DOCOMO_TILE_PX, height = DOCOMO_TILE_PX)
+    val glyph = BooleanArray(n * n)
+    for (y in 0 until DOCOMO_TILE_PX) for (x in 0 until DOCOMO_TILE_PX) {
+        glyph[(y + DIE_CUT_PAD) * n + x + DIE_CUT_PAD] = (tile[y * DOCOMO_TILE_PX + x] ushr 24) > 127
+    }
+    // Flood the outside from the padded border; whatever it can't reach is part of the sticker
+    val outside = BooleanArray(n * n)
+    val stack = ArrayDeque<Int>()
+    for (i in 0 until n) {
+        stack.add(i); stack.add((n - 1) * n + i); stack.add(i * n); stack.add(i * n + n - 1)
+    }
+    while (stack.isNotEmpty()) {
+        val c = stack.removeLast()
+        if (outside[c] || glyph[c]) continue
+        outside[c] = true
+        val x = c % n
+        val y = c / n
+        if (x > 0) stack.add(c - 1)
+        if (x < n - 1) stack.add(c + 1)
+        if (y > 0) stack.add(c - n)
+        if (y < n - 1) stack.add(c + n)
+    }
+    fun nearSolid(x: Int, y: Int, radiusSq: Int): Boolean {
+        for (dy in -2..2) for (dx in -2..2) {
+            if (dx * dx + dy * dy > radiusSq) continue
+            val nx = x + dx
+            val ny = y + dy
+            if (nx in 0 until n && ny in 0 until n && !outside[ny * n + nx]) return true
+        }
+        return false
+    }
+    val out = IntArray(n * n)
+    for (y in 0 until n) for (x in 0 until n) {
+        val c = y * n + x
+        out[c] = when {
+            glyph[c] -> tint
+            !outside[c] || nearSolid(x, y, 2) -> android.graphics.Color.WHITE
+            nearSolid(x, y, 5) -> rim
+            else -> 0
+        }
+    }
+    return android.graphics.Bitmap.createBitmap(out, n, n, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap()
+}
+
+/**
+ * A Docomo pictogram as a die-cut vinyl sticker, baked once into a 16x16 sprite (see
+ * [bakeDieCutPictogram]) and drawn at the largest whole-number scale that fits, centred, with
+ * [FilterQuality.None], so every 1-bit pixel stays a crisp square. One blit per frame.
+ */
+@Composable
+fun DieCutPictogram(
+    index: Int,
+    tint: Color,
+    rimColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val appContext = LocalContext.current.applicationContext
+    val atlas = remember(appContext) { getOrLoadDocomoAtlas(appContext) }
+    val safeIndex = index.coerceIn(0, DOCOMO_MAX_INDEX)
+    val sprite = remember(atlas, safeIndex, tint, rimColor) {
+        val srcX = (safeIndex % DOCOMO_ATLAS_COLS) * DOCOMO_TILE_PX
+        val srcY = (safeIndex / DOCOMO_ATLAS_COLS) * DOCOMO_TILE_PX
+        if (atlas == null || srcX + DOCOMO_TILE_PX > atlas.width || srcY + DOCOMO_TILE_PX > atlas.height) {
+            null
+        } else {
+            bakeDieCutPictogram(atlas, srcX, srcY, tint.toArgb(), rimColor.toArgb())
+        }
+    }
+
+    Canvas(modifier = modifier) {
+        if (sprite == null) return@Canvas
+        val scale = (minOf(size.width, size.height) / DIE_CUT_TILE).toInt().coerceAtLeast(1)
+        val side = DIE_CUT_TILE * scale
+        drawImage(
+            image = sprite,
+            srcOffset = IntOffset.Zero,
+            srcSize = IntSize(DIE_CUT_TILE, DIE_CUT_TILE),
+            dstOffset = IntOffset(((size.width - side) / 2f).roundToInt(), ((size.height - side) / 2f).roundToInt()),
+            dstSize = IntSize(side, side),
+            filterQuality = FilterQuality.None
         )
     }
 }

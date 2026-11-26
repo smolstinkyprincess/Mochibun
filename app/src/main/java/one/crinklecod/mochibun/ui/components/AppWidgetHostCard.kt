@@ -88,7 +88,10 @@ fun AppWidgetHostCard(
     onOptionsClick: () -> Unit,
     modifier: Modifier = Modifier,
     // Under washi tape / a corner pin: swap a custom 9-slice frame for a plain stitched border
-    plainBorder: Boolean = false
+    plainBorder: Boolean = false,
+    // The floating ⋯ handle only shows on the D-pad focused card (or while arranging), so
+    // overlapping collages stay clean. An unavailable widget always shows it, to be removable.
+    showOptionsHandle: Boolean = true
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
@@ -171,8 +174,9 @@ fun AppWidgetHostCard(
                 }
             }
 
-            // Corner options handle for touch users (D-pad users pick ⋯ in the arrange bar)
-            Box(
+            // Corner options handle for touch users (D-pad users pick ⋯ in the arrange bar).
+            // Left out of composition while hidden, so it costs nothing on unfocused cards.
+            if (showOptionsHandle || info == null) Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(6.dp)
