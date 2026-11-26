@@ -720,6 +720,8 @@ fun MainLauncher(
         )
     }
 
+    // True while the Widgets page is in Arrange / Presets mode (blocks pager swipes)
+    var isWidgetArrangeActive by remember { mutableStateOf(false) }
     val keyHandler = rememberLauncherKeyHandler(context, scope, nav, listState, keypadActions)
 
     fun getCurrentKeypadState(): LauncherKeypadState =
@@ -883,7 +885,8 @@ fun MainLauncher(
                             }
                         }
                     },
-                userScrollEnabled = !drawerOpen && !anyModalOpen
+                // Widget Arrange mode owns the D-pad; a stray swipe mustn't flip pages mid-edit
+                userScrollEnabled = !drawerOpen && !anyModalOpen && !isWidgetArrangeActive
             ) { page ->
                 when (page) {
                     0 -> {
@@ -907,7 +910,8 @@ fun MainLauncher(
                                     savedFavoriteIndexOnHome = 0
                                     pendingTargetPage = 1
                                     scope.launch { pagerState.animateScrollToPage(1) }
-                                }
+                                },
+                                onArrangeModeChanged = { isWidgetArrangeActive = it }
                             )
                         } else {
                             Box(modifier = Modifier.fillMaxSize())

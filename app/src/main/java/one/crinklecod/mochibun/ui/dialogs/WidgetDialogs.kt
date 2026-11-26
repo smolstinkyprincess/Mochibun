@@ -284,23 +284,27 @@ private fun WidgetPickerRow(entry: WidgetPickerEntry, isFocused: Boolean, onClic
 }
 
 /**
- * Options for a hosted widget: move, reconfigure, use its controls, or remove.
+ * Options for a Widgets-page card: arrange, scrapbook deco, and (Now Playing) its skin. Hosted
+ * widgets ([isHostedWidget]) also get use controls / reconfigure / remove.
  * Remove needs a second OK press so a stray click can't delete a configured widget.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WidgetOptionsDialog(
     widgetLabel: String,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
     canConfigure: Boolean,
     canUseControls: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
+    onArrange: () -> Unit,
     onConfigure: () -> Unit,
     onUseControls: () -> Unit,
     onRemove: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    decoLabel: String,
+    onCycleDeco: () -> Unit,
+    isHostedWidget: Boolean = true,
+    // Null hides the row (only Now Playing has an alternate skin)
+    skinLabel: String? = null,
+    onToggleSkin: () -> Unit = {}
 ) {
     val theme = LocalLauncherTheme.current
     val focusRequester = remember { FocusRequester() }
@@ -315,20 +319,26 @@ fun WidgetOptionsDialog(
         val run: () -> Unit
     )
 
-    val actions = listOf(
-        Action("Use widget buttons", canUseControls, docomoIndex = 121, run = onUseControls),
-        Action("▲ Move up", canMoveUp, run = onMoveUp),
-        Action("▼ Move down", canMoveDown, run = onMoveDown),
-        Action("Configure widget", canConfigure, docomoIndex = 144, run = onConfigure),
-        Action(
-            if (confirmingRemove) "Press OK again to remove" else "Remove widget",
-            enabled = true,
-            docomoIndex = 17,
-            destructive = true,
-            run = { if (confirmingRemove) onRemove() else confirmingRemove = true }
-        ),
-        Action("♥ Close ♥", true, run = onDismiss)
-    )
+    // Deco / skin rows cycle in place (the dialog stays open so the card behind updates live)
+    val actions = buildList {
+        if (isHostedWidget) add(Action("Use widget buttons", canUseControls, docomoIndex = 121, run = onUseControls))
+        add(Action("✥ Move / resize / layer", true, run = onArrange))
+        add(Action("✿ Deco: $decoLabel", true, run = onCycleDeco))
+        if (skinLabel != null) add(Action("♫ Skin: $skinLabel", true, run = onToggleSkin))
+        if (isHostedWidget) {
+            add(Action("Configure widget", canConfigure, docomoIndex = 144, run = onConfigure))
+            add(
+                Action(
+                    if (confirmingRemove) "Press OK again to remove" else "Remove widget",
+                    enabled = true,
+                    docomoIndex = 17,
+                    destructive = true,
+                    run = { if (confirmingRemove) onRemove() else confirmingRemove = true }
+                )
+            )
+        }
+        add(Action("♥ Close ♥", true, run = onDismiss))
+    }
 
     var selectedIndex by remember { mutableIntStateOf(actions.indexOfFirst { it.enabled }.coerceAtLeast(0)) }
 
@@ -432,7 +442,7 @@ fun WidgetOptionsDialog(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Widget options ♡",
+                    text = if (isHostedWidget) "Widget options ♡" else "Card options ♡",
                     color = theme.cardTextColor,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(bottom = 6.dp)

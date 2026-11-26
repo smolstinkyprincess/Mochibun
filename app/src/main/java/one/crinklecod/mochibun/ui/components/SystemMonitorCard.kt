@@ -1,12 +1,13 @@
 package one.crinklecod.mochibun.ui.components
 
+import one.crinklecod.mochibun.data.model.CardBorderStyle
+import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.lerp
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Debug
 import android.os.Process
 import android.os.SystemClock
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -229,7 +230,9 @@ fun SystemMonitorCard(
     isFocused: Boolean,
     onCardClick: () -> Unit,
     modifier: Modifier = Modifier,
-    triggerRefreshKey: Int = 0
+    triggerRefreshKey: Int = 0,
+    // Under washi tape / a corner pin: swap a custom 9-slice frame for a plain stitched border
+    plainBorder: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -282,7 +285,9 @@ fun SystemMonitorCard(
         containerColor = palette.container,
         borderColor = palette.outline,
         beadBorderColor = palette.deepAccent.copy(alpha = 0.45f),
-        showCornerBows = false
+        showCornerBows = false,
+        allowCustomNineSlice = !plainBorder,
+        borderStyleOverride = if (plainBorder) CardBorderStyle.STITCH else null
     ) {
     // Inner card: same shape as the lace card, so tap ripples stay rounded.
     Box(
@@ -332,7 +337,6 @@ fun SystemMonitorCard(
 
             MetricRow(
                 glyph = "✦",
-                markerKind = MetricMarkerKind.SPARKLE,
                 badgeBg = palette.squircleSecondary.copy(alpha = 0.45f),
                 title = "CPU",
                 overallReadout = cpuOverallReadout,
@@ -340,7 +344,6 @@ fun SystemMonitorCard(
                 progress = cpuProgress,
                 progressColors = listOf(palette.squircleSecondary, palette.primary),
                 trackColor = palette.squirclePrimary.copy(alpha = 0.24f),
-                markerFillColor = palette.squircleSecondary,
                 deepColor = palette.deepAccent,
                 textColor = palette.textColor,
                 outlineColor = palette.outline
@@ -359,7 +362,6 @@ fun SystemMonitorCard(
 
             MetricRow(
                 glyph = "♥",
-                markerKind = MetricMarkerKind.HEART,
                 badgeBg = palette.squirclePrimary.copy(alpha = 0.45f),
                 title = "RAM",
                 overallReadout = ramOverallReadout,
@@ -367,7 +369,6 @@ fun SystemMonitorCard(
                 progress = ramProgress,
                 progressColors = listOf(palette.primary, palette.squirclePrimary),
                 trackColor = palette.squirclePrimary.copy(alpha = 0.24f),
-                markerFillColor = palette.primary,
                 deepColor = palette.deepAccent,
                 textColor = palette.textColor,
                 outlineColor = palette.outline
@@ -375,11 +376,11 @@ fun SystemMonitorCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // 3. Kawaii Status Footer Line reacting to memory load
-            val statusFooter = when {
-                stats.ramPercent > 90f -> "💦 sleepy memory ( ; ω ; )"
-                stats.ramPercent >= 80f -> "✦ cozy & busy ( •̀ᴗ•́ )و ✦"
-                else -> "♡ comfy & breezy ( ˘͈ ᵕ ˘͈ ) ♡"
+            // 3. Kawaii Status Footer Line reacting to memory load (its kaomoji is the corner badge)
+            val statusFooter = when (ramMood(stats.ramPercent)) {
+                RamMood.TIGHT -> "💦 sleepy memory 💦"
+                RamMood.BUSY -> "✦ cozy & busy ✦"
+                RamMood.COMFY -> "♡ comfy & breezy ♡"
             }
             Text(
                 text = statusFooter,
@@ -392,19 +393,42 @@ fun SystemMonitorCard(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+
+        // Tiny mood badge in the top corner, reacting to RAM pressure
+        Text(
+            text = ramMood(stats.ramPercent).kaomoji,
+            fontSize = 9.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = palette.deepAccent,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .clip(RoundedCornerShape(50))
+                .background(palette.squirclePrimary.copy(alpha = 0.45f))
+                .border(1.dp, palette.outline.copy(alpha = 0.6f), RoundedCornerShape(50))
+                .padding(horizontal = 6.dp, vertical = 1.dp)
+        )
     }
     }
 }
 
-private enum class MetricMarkerKind {
-    SPARKLE,
-    HEART
+private enum class RamMood(val kaomoji: String) {
+    COMFY("( ˘͈ ᵕ ˘͈ )"),
+    BUSY("( •̀ᴗ•́ )و"),
+    TIGHT("( ;´・ω・)")
+}
+
+/** Same thresholds the footer line has always used. */
+private fun ramMood(ramPercent: Float): RamMood = when {
+    ramPercent > 90f -> RamMood.TIGHT
+    ramPercent >= 80f -> RamMood.BUSY
+    else -> RamMood.COMFY
 }
 
 @Composable
 private fun MetricRow(
     glyph: String,
-    markerKind: MetricMarkerKind,
     badgeBg: Color,
     title: String,
     overallReadout: String,
@@ -412,17 +436,10 @@ private fun MetricRow(
     progress: Float,
     progressColors: List<Color>,
     trackColor: Color,
-    markerFillColor: Color,
     deepColor: Color,
     textColor: Color,
     outlineColor: Color
 ) {
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress.coerceIn(0.02f, 1f),
-        animationSpec = tween(durationMillis = 650),
-        label = "MetricProgress"
-    )
-
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -497,130 +514,58 @@ private fun MetricRow(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        KeitaiMetricGauge(
-            progress = animatedProgress,
-            markerKind = markerKind,
-            progressColors = progressColors,
-            trackColor = trackColor,
-            trackBorderColor = outlineColor.copy(alpha = 0.35f),
-            tickColor = outlineColor.copy(alpha = 0.35f),
-            markerFillColor = markerFillColor,
-            markerOutlineColor = deepColor
+        // Discrete blocks: a refresh just changes how many are lit, no tween frames needed
+        CandyBlockGauge(
+            progress = progress,
+            fillColors = progressColors,
+            emptyColor = trackColor,
+            outlineColor = outlineColor.copy(alpha = 0.45f)
         )
     }
 }
 
+/** Blocks per gauge: one block = 10%, read at a glance like a keitai signal meter. */
+private const val CANDY_BLOCKS = 10
+
 /**
- * Pastel pocket-monitor gauge with a 6dp rounded track, subtle 25/50/75% segment ticks,
- * and a `✦` or `♥` marker at the current fill position (zero per-frame allocations).
+ * Segmented pastel "candy block" gauge (`■■■■□□□□□□`): lit blocks blend from the first to the
+ * last [fillColors] entry, unlit blocks are a soft track with a hairline outline. Drawn straight
+ * into the Canvas with a remembered stroke, so a redraw allocates nothing.
  */
 @Composable
-private fun KeitaiMetricGauge(
+private fun CandyBlockGauge(
     progress: Float,
-    markerKind: MetricMarkerKind,
-    progressColors: List<Color>,
-    trackColor: Color,
-    trackBorderColor: Color,
-    tickColor: Color,
-    markerFillColor: Color,
-    markerOutlineColor: Color,
+    fillColors: List<Color>,
+    emptyColor: Color,
+    outlineColor: Color,
     modifier: Modifier = Modifier
 ) {
-    val markerPath = remember { Path() }
-    val fillBrush = remember(progressColors) { Brush.horizontalGradient(progressColors) }
     val density = LocalDensity.current
-    val trackBorderStroke = remember(density) { Stroke(width = with(density) { 0.75.dp.toPx() }) }
-    val markerStroke = remember(density) { Stroke(width = with(density) { 1.1.dp.toPx() }) }
+    val outlineStroke = remember(density) { Stroke(width = with(density) { 0.75.dp.toPx() }) }
+    val startColor = fillColors.first()
+    val endColor = fillColors.last()
+    // Any non-zero reading lights at least one block, so "barely busy" never looks dead
+    val lit = if (progress <= 0f) 0 else (progress.coerceIn(0f, 1f) * CANDY_BLOCKS).roundToInt().coerceIn(1, CANDY_BLOCKS)
 
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height(14.dp)
+            .height(12.dp)
     ) {
-        val w = size.width
-        val h = size.height
-        if (w <= 0f || h <= 0f) return@Canvas
-
-        val trackHeight = 6.dp.toPx()
-        val trackRadius = trackHeight / 2f
-        val trackY = (h - trackHeight) / 2f
-        val clamped = progress.coerceIn(0f, 1f)
-
-        // 1. Soft pastel pill track + hairline outline
-        drawRoundRect(
-            color = trackColor,
-            topLeft = Offset(0f, trackY),
-            size = Size(w, trackHeight),
-            cornerRadius = CornerRadius(trackRadius, trackRadius)
-        )
-        drawRoundRect(
-            color = trackBorderColor,
-            topLeft = Offset(0f, trackY),
-            size = Size(w, trackHeight),
-            cornerRadius = CornerRadius(trackRadius, trackRadius),
-            style = trackBorderStroke
-        )
-
-        // 2. Active pastel gradient fill
-        if (clamped > 0f) {
-            val fillWidth = (w * clamped).coerceAtLeast(trackHeight).coerceAtMost(w)
-            drawRoundRect(
-                brush = fillBrush,
-                topLeft = Offset(0f, trackY),
-                size = Size(fillWidth, trackHeight),
-                cornerRadius = CornerRadius(trackRadius, trackRadius)
-            )
-        }
-
-        // 3. Subtle quarter segment ticks (25%, 50%, 75%)
-        val tickInset = 1.dp.toPx()
-        val tickStrokeW = 1.dp.toPx()
-        val tickTop = trackY + tickInset
-        val tickBottom = trackY + trackHeight - tickInset
-        for (i in 1..3) {
-            val tx = w * (i * 0.25f)
-            drawLine(
-                color = tickColor,
-                start = Offset(tx, tickTop),
-                end = Offset(tx, tickBottom),
-                strokeWidth = tickStrokeW
-            )
-        }
-
-        // 4. Tiny ✦ (CPU) or ♥ (RAM) marker at current fill position
-        val markerSize = if (markerKind == MetricMarkerKind.SPARKLE) 5.2.dp.toPx() else 4.8.dp.toPx()
-        val mx = (w * clamped).coerceIn(markerSize, (w - markerSize).coerceAtLeast(markerSize))
-        val my = h / 2f
-
-        markerPath.reset()
-        when (markerKind) {
-            MetricMarkerKind.SPARKLE -> {
-                markerPath.moveTo(mx, my - markerSize)
-                markerPath.lineTo(mx + markerSize * 0.30f, my - markerSize * 0.30f)
-                markerPath.lineTo(mx + markerSize, my)
-                markerPath.lineTo(mx + markerSize * 0.30f, my + markerSize * 0.30f)
-                markerPath.lineTo(mx, my + markerSize)
-                markerPath.lineTo(mx - markerSize * 0.30f, my + markerSize * 0.30f)
-                markerPath.lineTo(mx - markerSize, my)
-                markerPath.lineTo(mx - markerSize * 0.30f, my - markerSize * 0.30f)
-                markerPath.close()
+        val gap = 3.dp.toPx()
+        val blockW = (size.width - gap * (CANDY_BLOCKS - 1)) / CANDY_BLOCKS
+        if (blockW <= 0f) return@Canvas
+        val blockH = size.height
+        val radius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+        for (i in 0 until CANDY_BLOCKS) {
+            val topLeft = Offset(i * (blockW + gap), 0f)
+            val blockSize = Size(blockW, blockH)
+            if (i < lit) {
+                drawRoundRect(lerp(startColor, endColor, i / (CANDY_BLOCKS - 1f)), topLeft, blockSize, radius)
+            } else {
+                drawRoundRect(emptyColor, topLeft, blockSize, radius)
             }
-            MetricMarkerKind.HEART -> {
-                markerPath.moveTo(mx, my + markerSize * 0.75f)
-                markerPath.cubicTo(
-                    mx - markerSize * 1.15f, my + markerSize * 0.1f,
-                    mx - markerSize * 1.15f, my - markerSize * 0.85f,
-                    mx, my - markerSize * 0.35f
-                )
-                markerPath.cubicTo(
-                    mx + markerSize * 1.15f, my - markerSize * 0.85f,
-                    mx + markerSize * 1.15f, my + markerSize * 0.1f,
-                    mx, my + markerSize * 0.75f
-                )
-                markerPath.close()
-            }
+            drawRoundRect(outlineColor, topLeft, blockSize, radius, style = outlineStroke)
         }
-        drawPath(markerPath, markerFillColor)
-        drawPath(markerPath, markerOutlineColor, style = markerStroke)
     }
 }

@@ -24,10 +24,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,24 +42,36 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import one.crinklecod.mochibun.core.haptic.HapticManager
+import one.crinklecod.mochibun.core.sound.SoundEffect
+import one.crinklecod.mochibun.core.sound.SoundEffectManager
+import one.crinklecod.mochibun.core.widget.CollagePreset
+import one.crinklecod.mochibun.core.widget.DecoStyle
 import one.crinklecod.mochibun.core.widget.MochibunWidgetHost
 import one.crinklecod.mochibun.core.widget.NavDirection
+import one.crinklecod.mochibun.core.widget.WidgetCanvasLayout
 import one.crinklecod.mochibun.core.widget.WidgetFrame
+import one.crinklecod.mochibun.core.widget.WidgetPlacement
+import one.crinklecod.mochibun.core.widget.WidgetTargetNavigator
 import one.crinklecod.mochibun.core.util.findActivity
 import one.crinklecod.mochibun.core.util.loadDownsampledPhotoBitmap
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import one.crinklecod.mochibun.data.repository.WidgetRepository
 import one.crinklecod.mochibun.data.repository.currentCardBorderState
 import one.crinklecod.mochibun.ui.theme.ActiveTheme
-import one.crinklecod.mochibun.ui.theme.LocalLauncherTheme
 import one.crinklecod.mochibun.data.repository.MediaSessionTracker
 import one.crinklecod.mochibun.ui.dialogs.PhotoFrameActionDialog
 import one.crinklecod.mochibun.ui.dialogs.PhotoFrameLabelDialog
@@ -72,30 +83,61 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 private const val TAG = "WidgetPage"
 
-/** Holding OK this long on a widget opens its options instead of using it. */
+/** Holding OK this long on a card opens Arrange mode instead of using it. */
 private const val WIDGET_LONG_PRESS_MS = 400L
+
+// First-placement heights for the native cards, in 16dp rows. They only need to be close:
+// native cards never squeeze below their content (see the canvas slot modifier).
+private const val NOW_PLAYING_ROWS = 10
+private const val NOW_PLAYING_MINI_ROWS = 4
+private const val SYSTEM_MONITOR_ROWS = 14
+private const val PHOTO_FRAME_ROWS = 17
+
+/** Space kept on each side of the canvas so focus glows aren't cut by the screen edge. */
+private const val CANVAS_SIDE_PADDING_DP = 12
+
+/** Room the top clouds take, and what the Home pill (and, while editing, the pill bar) covers. */
+private val SCROLL_TOP_INSET = 44.dp
+private val SCROLL_BOTTOM_INSET = 116.dp
+private val EDIT_BOTTOM_INSET = 180.dp
 
 enum class WidgetFocusSection {
     HEADER,
+    PRESETS,
     QUICK_SETTINGS,
-    NOW_PLAYING,
-    SYSTEM_MONITOR,
-    PHOTO_FRAME,
-    USER_WIDGETS,
+    CANVAS,
     ADD_WIDGET,
     HOME_PILL
 }
 
+/** Which Arrange tool the D-pad is driving; BAR means it's choosing one from the pill bar. */
+private enum class ArrangeTool { BAR, MOVE, RESIZE, LAYER }
+
+// ⋯ holds the per-card extras (deco, Now Playing skin, hosted-widget options) so the bar stays
+// at five pills, which is all that fits across the 320dp screen
+private enum class ArrangeAction(val label: String) {
+    MOVE("Move"),
+    RESIZE("Resize"),
+    LAYER("Layer ▲▼"),
+    OPTIONS("⋯"),
+    DONE("Done")
+}
+
 /**
- * Widget Screen hosting the native "Now Playing" media widget, System Monitor card, and Android AppWidgets.
- * Faithfully matches the visual styling, component hierarchy, and kawaii aesthetic of Mochibun.
+ * Widgets page (Page 0): a freeform canvas of native cards (Now Playing, System Monitor,
+ * Photo Frame) and hosted Android AppWidgets, each placed on a 16dp grid by [WidgetPlacement].
  *
- * Hosted app widgets: OK uses the widget (walks its buttons with the D-pad when it has several),
- * holding OK opens Move / Configure / Remove. Listening for widget updates is tied to
- * MainActivity's onStart/onStop through [MochibunWidgetHost], not to this composable.
+ * Browse: the D-pad moves spatially between cards. OK uses a card; holding OK (or `*`) opens
+ * Arrange mode, where a pill bar offers Move / Resize / Layer / Done and the D-pad edits the
+ * placement in whole grid steps. Pager swipes are blocked while editing ([onArrangeModeChanged]).
+ *
+ * Listening for widget updates is tied to MainActivity's onStart/onStop through
+ * [MochibunWidgetHost], not to this composable.
  */
 @Composable
 fun WidgetPage(
@@ -106,10 +148,11 @@ fun WidgetPage(
     cardRoundness: Dp,
     modifier: Modifier = Modifier,
     isActivePage: Boolean = true,
-    onNavigateHome: () -> Unit = {}
+    onNavigateHome: () -> Unit = {},
+    onArrangeModeChanged: (Boolean) -> Unit = {}
 ) {
-    val theme = LocalLauncherTheme.current
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
 
     val isSystemMonitorEnabled by PreferencesManager.isSystemMonitorEnabled.collectAsState()
     val isPhotoFrameEnabled by PreferencesManager.isPhotoFrameEnabled.collectAsState()
@@ -129,6 +172,7 @@ fun WidgetPage(
     val widgetHost = remember { MochibunWidgetHost.get(context) }
     val widgetSlots by WidgetRepository.slots.collectAsState()
     val providersVersion by widgetHost.providersVersion.collectAsState()
+    val slotsById = remember(widgetSlots) { widgetSlots.associateBy { it.appWidgetId } }
 
     // Provider info per widget; null means the provider is unavailable (uninstalled, updating, disabled)
     val widgetInfos = remember(widgetSlots, providersVersion) {
@@ -169,28 +213,82 @@ fun WidgetPage(
     // open the matching Android Settings panel instead of toggling in place.
     val isRootQuickSettingsEnabled by PreferencesManager.isRootQuickSettingsEnabled.collectAsState()
     val isQuickSettingsVisible = isRootQuickSettingsEnabled
-    val qsOffset = if (isQuickSettingsVisible) 1 else 0
 
-    // First section below the Quick Settings grid
-    fun sectionBelowQuickSettings(): WidgetFocusSection =
-        if (mediaState.isPlaying) WidgetFocusSection.NOW_PLAYING
-        else if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
-        else if (isPhotoFrameEnabled) WidgetFocusSection.PHOTO_FRAME
-        else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
-        else WidgetFocusSection.ADD_WIDGET
+    // ── Freeform canvas layout ─────────────────────────────────────────
+
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val cols = remember(screenWidthDp) { WidgetCanvasLayout.columnsFor(screenWidthDp - 2 * CANVAS_SIDE_PADDING_DP) }
+    val stepPx = with(density) { WidgetCanvasLayout.STEP_DP.dp.roundToPx() }
+    val canvasWidthPx = cols * stepPx
+
+    // Cards on the canvas right now, in the old list's top-to-bottom order (also the order
+    // first-time placements stack in)
+    val canvasKeys = remember(mediaState.isPlaying, isSystemMonitorEnabled, isPhotoFrameEnabled, widgetSlots) {
+        buildList {
+            if (mediaState.isPlaying) add(WidgetCanvasLayout.KEY_NOW_PLAYING)
+            if (isSystemMonitorEnabled) add(WidgetCanvasLayout.KEY_SYSTEM_MONITOR)
+            if (isPhotoFrameEnabled) add(WidgetCanvasLayout.KEY_PHOTO_FRAME)
+            widgetSlots.forEach { add(WidgetCanvasLayout.appWidgetKey(it.appWidgetId)) }
+        }
+    }
+
+    val savedPlacements by WidgetRepository.placements.collectAsState()
+    val nowPlayingMini by WidgetRepository.nowPlayingMini.collectAsState()
+    // Cards without a saved spot (an upgrade from the list layout, a new widget, Now Playing
+    // appearing for the first time) are stacked into the first free gap
+    val layout = remember(savedPlacements, canvasKeys, widgetInfos, cols, stepPx, nowPlayingMini) {
+        WidgetCanvasLayout.withDefaults(
+            savedPlacements,
+            canvasKeys.map { key ->
+                key to when (key) {
+                    WidgetCanvasLayout.KEY_NOW_PLAYING -> if (nowPlayingMini) NOW_PLAYING_MINI_ROWS else NOW_PLAYING_ROWS
+                    WidgetCanvasLayout.KEY_SYSTEM_MONITOR -> SYSTEM_MONITOR_ROWS
+                    WidgetCanvasLayout.KEY_PHOTO_FRAME -> PHOTO_FRAME_ROWS
+                    else -> defaultAppWidgetRows(
+                        widgetInfos[WidgetCanvasLayout.appWidgetIdOf(key)],
+                        canvasWidthPx,
+                        stepPx,
+                        density
+                    )
+                }
+            },
+            cols
+        )
+    }
+    LaunchedEffect(layout) {
+        if (layout !== savedPlacements) WidgetRepository.setPlacements(context, layout)
+    }
+    // Saved spots refitted to this screen's width (a layout from a wider screen stays usable)
+    val placed = remember(layout, cols) { layout.mapValues { WidgetCanvasLayout.clamp(it.value, cols) } }
+
+    // Native cards grow past their slot rather than squash their content; their real height
+    // lets resize stop at the content and lets the canvas leave room below them
+    val nativeHeightsPx = remember { mutableStateMapOf<String, Int>() }
+    val scrollState = rememberScrollState()
 
     // D-Pad Focus State Management
-    fun defaultFocusSection(): WidgetFocusSection =
-        if (isQuickSettingsVisible) WidgetFocusSection.HEADER else sectionBelowQuickSettings()
+    fun topCanvasKey(): String? = WidgetCanvasLayout.readingOrder(placed, canvasKeys).firstOrNull()
+
+    fun bottomCanvasKey(): String? = canvasKeys.filter { it in placed }.maxWithOrNull(
+        compareBy<String>({ placed.getValue(it).bottom }, { -placed.getValue(it).gridX })
+    )
 
     // Quick Settings drawer under the header pill, collapsed by default
     var isQuickSettingsExpanded by rememberSaveable { mutableStateOf(false) }
 
-    var focusSection by remember { mutableStateOf(defaultFocusSection()) }
+    var focusSection by remember {
+        mutableStateOf(
+            when {
+                isQuickSettingsVisible -> WidgetFocusSection.HEADER
+                topCanvasKey() != null -> WidgetFocusSection.CANVAS
+                else -> WidgetFocusSection.ADD_WIDGET
+            }
+        )
+    }
+    var focusedKey by remember { mutableStateOf(topCanvasKey()) }
     var nowPlayingCol by remember { mutableIntStateOf(1) } // 0 = Prev, 1 = Play/Pause, 2 = Next
     var quickSettingsIndex by remember { mutableIntStateOf(0) } // 0 Wi-Fi, 1 BT, 2 Torch, 3 Sound
     var quickSettingsRefresh by remember { mutableIntStateOf(0) }
-    var focusedWidgetIdx by remember { mutableIntStateOf(0) }
     var dpadScrollTick by remember { mutableIntStateOf(0) }
     var sawCenterDown by remember { mutableStateOf(false) }
     var centerDownAt by remember { mutableLongStateOf(0L) }
@@ -199,12 +297,77 @@ fun WidgetPage(
 
     // Hosted widget state
     var interactingWidgetId by remember { mutableStateOf<Int?>(null) }
-    var optionsWidgetId by remember { mutableStateOf<Int?>(null) }
+    // Card whose ⋯ options dialog is open (any card key; hosted widgets also via their corner ⋯)
+    var optionsKey by remember { mutableStateOf<String?>(null) }
     var showWidgetPicker by remember { mutableStateOf(false) }
     var showPhotoFrameDialog by remember { mutableStateOf(false) }
     var showPhotoLabelDialog by remember { mutableStateOf(false) }
-    val anyWidgetDialogOpen = optionsWidgetId != null || showWidgetPicker ||
+    val anyWidgetDialogOpen = optionsKey != null || showWidgetPicker ||
         showPhotoFrameDialog || showPhotoLabelDialog
+
+    // Arrange mode: [draft] is the live Move/Resize placement, saved when the tool closes, so
+    // a held D-pad key doesn't write preferences on every repeat
+    var arrangeKey by remember { mutableStateOf<String?>(null) }
+    var arrangeTool by remember { mutableStateOf(ArrangeTool.BAR) }
+    var arrangeBarIndex by remember { mutableIntStateOf(0) }
+    var draft by remember { mutableStateOf<WidgetPlacement?>(null) }
+    var presetsOpen by remember { mutableStateOf(false) }
+    var presetIndex by remember { mutableIntStateOf(0) }
+    val isEditing = arrangeKey != null || presetsOpen
+
+    val currentOnArrangeModeChanged by rememberUpdatedState(onArrangeModeChanged)
+    LaunchedEffect(isEditing) { currentOnArrangeModeChanged(isEditing) }
+    DisposableEffect(Unit) { onDispose { currentOnArrangeModeChanged(false) } }
+
+    fun placementOf(key: String?): WidgetPlacement? {
+        if (key == null) return null
+        return if (key == arrangeKey) draft ?: placed[key] else placed[key]
+    }
+
+    fun focusCanvas(key: String) {
+        focusSection = WidgetFocusSection.CANVAS
+        focusedKey = key
+        if (key == WidgetCanvasLayout.KEY_NOW_PLAYING) nowPlayingCol = 1
+    }
+
+    fun spatialNeighbour(from: String, direction: NavDirection): String? {
+        val keys = canvasKeys.filter { it in placed }
+        val index = keys.indexOf(from)
+        if (index < 0) return null
+        val next = WidgetTargetNavigator.findNext(keys.map { placed.getValue(it).toBounds() }, index, direction)
+        return keys.getOrNull(next)
+    }
+
+    /** UP off the top card: the Quick Settings grid when open, else the header row. */
+    fun focusAboveCanvas() {
+        when {
+            isQuickSettingsVisible && isQuickSettingsExpanded -> {
+                focusSection = WidgetFocusSection.QUICK_SETTINGS
+                quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
+            }
+            isQuickSettingsVisible -> focusSection = WidgetFocusSection.HEADER
+            else -> HapticManager.performBoundaryHaptic(context) // Header is decorative without QS
+        }
+    }
+
+    fun focusBelowHeader() {
+        if (isQuickSettingsVisible && isQuickSettingsExpanded) {
+            focusSection = WidgetFocusSection.QUICK_SETTINGS
+            quickSettingsIndex = 0
+        } else {
+            topCanvasKey()?.let { focusCanvas(it) } ?: run { focusSection = WidgetFocusSection.ADD_WIDGET }
+        }
+    }
+
+    fun resetFocus() {
+        if (isQuickSettingsVisible) {
+            focusSection = WidgetFocusSection.HEADER
+            focusedKey = topCanvasKey()
+        } else {
+            topCanvasKey()?.let { focusCanvas(it) } ?: run { focusSection = WidgetFocusSection.ADD_WIDGET }
+        }
+        nowPlayingCol = 1
+    }
 
     fun endWidgetInteraction() {
         interactingWidgetId?.let { widgetFrames[it]?.endInteraction() }
@@ -212,12 +375,81 @@ fun WidgetPage(
     }
 
     fun focusWidget(appWidgetId: Int) {
-        val idx = WidgetRepository.ids().indexOf(appWidgetId)
-        if (idx >= 0) {
-            focusSection = WidgetFocusSection.USER_WIDGETS
-            focusedWidgetIdx = idx
-            dpadScrollTick++
+        focusCanvas(WidgetCanvasLayout.appWidgetKey(appWidgetId))
+        dpadScrollTick++
+    }
+
+    // ── Arrange mode ───────────────────────────────────────────────────
+
+
+    /** Saves the Move/Resize draft. A native card's slot grows to cover what it really drew. */
+    fun commitDraft() {
+        val key = arrangeKey ?: return
+        var p = draft ?: return
+        draft = null
+        if (WidgetCanvasLayout.appWidgetIdOf(key) == null) {
+            val drawnRows = nativeHeightsPx[key]?.let { WidgetCanvasLayout.rowsFor(it, stepPx) } ?: 0
+            if (drawnRows > p.gridH) p = WidgetCanvasLayout.clamp(p.copy(gridH = drawnRows), cols)
         }
+        WidgetRepository.setPlacements(context, LinkedHashMap(layout).apply { put(key, p) })
+    }
+
+    fun enterArrange(key: String) {
+        if (key !in placed) return
+        endWidgetInteraction()
+        presetsOpen = false
+        focusCanvas(key)
+        arrangeKey = key
+        arrangeTool = ArrangeTool.BAR
+        arrangeBarIndex = 0
+        draft = null
+        sawCenterDown = false
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+        dpadScrollTick++
+    }
+
+    fun exitArrange() {
+        commitDraft()
+        arrangeKey = null
+        arrangeTool = ArrangeTool.BAR
+    }
+
+    fun finishArrangeTool() {
+        commitDraft()
+        arrangeTool = ArrangeTool.BAR
+    }
+
+    fun cycleDeco(key: String) {
+        val current = layout[key] ?: return
+        WidgetRepository.setPlacements(
+            context,
+            LinkedHashMap(layout).apply { put(key, current.copy(deco = current.deco.next())) }
+        )
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+    }
+
+    /** Swaps Now Playing's skin and refits its slot height to the new skin. */
+    fun toggleNowPlayingSkin() {
+        val mini = !nowPlayingMini
+        WidgetRepository.setNowPlayingMini(context, mini)
+        nativeHeightsPx.remove(WidgetCanvasLayout.KEY_NOW_PLAYING)
+        layout[WidgetCanvasLayout.KEY_NOW_PLAYING]?.let { p ->
+            val rows = if (mini) NOW_PLAYING_MINI_ROWS else NOW_PLAYING_ROWS
+            WidgetRepository.setPlacements(
+                context,
+                LinkedHashMap(layout).apply { put(WidgetCanvasLayout.KEY_NOW_PLAYING, WidgetCanvasLayout.clamp(p.copy(gridH = rows), cols)) }
+            )
+        }
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+    }
+
+    fun applyPreset(preset: CollagePreset) {
+        val updated = WidgetCanvasLayout.applyPreset(layout, canvasKeys, preset, cols)
+        WidgetRepository.setPlacements(context, updated)
+        presetsOpen = false
+        SoundEffectManager.play(context, SoundEffect.SELECT)
+        WidgetCanvasLayout.readingOrder(updated, canvasKeys).firstOrNull()?.let { focusCanvas(it) }
+        scope.launch { scrollState.animateScrollTo(0) }
     }
 
     // ── Add-widget flow: allocate -> bind (permission) -> configure -> save ──
@@ -373,13 +605,7 @@ fun WidgetPage(
         widgetFrames.remove(id)
         widgetHost.deleteAppWidgetIdSafely(id)
         WidgetRepository.remove(context, id)
-        val remaining = WidgetRepository.ids().size
-        if (remaining == 0) {
-            focusSection = WidgetFocusSection.ADD_WIDGET
-            focusedWidgetIdx = 0
-        } else {
-            focusedWidgetIdx = focusedWidgetIdx.coerceIn(0, remaining - 1)
-        }
+        // Focus falls back to another card via the canvasKeys effect below
     }
 
     /**
@@ -388,14 +614,14 @@ fun WidgetPage(
      */
     fun activateWidget(id: Int) {
         if (widgetInfos[id] == null) {
-            optionsWidgetId = id
+            optionsKey = WidgetCanvasLayout.appWidgetKey(id)
             return
         }
         val frame = widgetFrames[id] ?: return
         when (frame.beginInteraction()) {
             0 -> {
                 frame.endInteraction()
-                Toast.makeText(context, "This widget has no buttons ♡ Hold OK for options", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "This widget has no buttons ♡ Hold OK to arrange", Toast.LENGTH_SHORT).show()
             }
             1 -> {
                 frame.clickSelection()
@@ -436,15 +662,14 @@ fun WidgetPage(
     }
 
     val pageFocusRequester = remember { FocusRequester() }
-    val listState = rememberLazyListState()
 
     val navigateHomeAndReset: () -> Unit = {
         endWidgetInteraction()
+        if (arrangeKey != null) exitArrange()
+        presetsOpen = false
         isQuickSettingsExpanded = false
-        focusSection = defaultFocusSection()
-        nowPlayingCol = 1
+        resetFocus()
         quickSettingsIndex = 0
-        focusedWidgetIdx = 0
         sawCenterDown = false
         onNavigateHome()
     }
@@ -455,106 +680,72 @@ fun WidgetPage(
         showWidgetPicker = true
     }
 
-    // Graceful D-pad focus fallback when active music playback stops or a card is toggled off
-    LaunchedEffect(mediaState.isPlaying, isSystemMonitorEnabled, isPhotoFrameEnabled) {
-        if (!mediaState.isPlaying && focusSection == WidgetFocusSection.NOW_PLAYING) {
-            focusSection = if (isSystemMonitorEnabled) WidgetFocusSection.SYSTEM_MONITOR
-                else if (isPhotoFrameEnabled) WidgetFocusSection.PHOTO_FRAME
-                else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
-                else WidgetFocusSection.HOME_PILL
-        } else if (!isSystemMonitorEnabled && focusSection == WidgetFocusSection.SYSTEM_MONITOR) {
-            focusSection = if (isPhotoFrameEnabled) WidgetFocusSection.PHOTO_FRAME
-                else if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
-                else WidgetFocusSection.HOME_PILL
-        } else if (!isPhotoFrameEnabled && focusSection == WidgetFocusSection.PHOTO_FRAME) {
+    // Graceful D-pad fallback when a card leaves the canvas (playback stops, a card is toggled
+    // off, a widget is removed or its app uninstalled)
+    LaunchedEffect(canvasKeys) {
+        val arranging = arrangeKey
+        if (arranging != null && arranging !in canvasKeys) {
+            exitArrange()
+        }
+        if (focusedKey !in canvasKeys) {
+            val fallback = topCanvasKey()
+            focusedKey = fallback
+            if (focusSection == WidgetFocusSection.CANVAS) {
+                if (fallback != null) focusCanvas(fallback) else focusSection = WidgetFocusSection.ADD_WIDGET
+            }
+        }
+        if (!isPhotoFrameEnabled) {
             showPhotoFrameDialog = false
             showPhotoLabelDialog = false
-            focusSection = if (widgetSlots.isNotEmpty()) WidgetFocusSection.USER_WIDGETS
-                else WidgetFocusSection.HOME_PILL
         }
-    }
-
-    // Keep the focused widget index valid when widgets disappear (removed or uninstalled)
-    LaunchedEffect(widgetSlots.size) {
-        if (widgetSlots.isEmpty() && focusSection == WidgetFocusSection.USER_WIDGETS) {
-            focusSection = WidgetFocusSection.ADD_WIDGET
-        }
-        focusedWidgetIdx = focusedWidgetIdx.coerceIn(0, (widgetSlots.size - 1).coerceAtLeast(0))
         if (interactingWidgetId != null && widgetSlots.none { it.appWidgetId == interactingWidgetId }) {
             interactingWidgetId = null
         }
     }
 
-    // Ensure D-pad focused item is visible in LazyColumn (fires only on explicit D-pad movement)
+    // Placement of the canvas and the Add pill inside the scrolling column, for keeping the
+    // D-pad target on screen. Only read by the scroll effect, so updating them doesn't recompose.
+    val canvasTopPx = remember { mutableIntStateOf(0) }
+    val addPillTopPx = remember { mutableIntStateOf(0) }
+    val addPillHeightPx = remember { mutableIntStateOf(0) }
+
+    // Keep the D-pad target fully visible between the top clouds and the bottom pill(s)
     LaunchedEffect(dpadScrollTick) {
         if (dpadScrollTick == 0) return@LaunchedEffect
-        val npOffset = if (mediaState.isPlaying) 1 else 0
-        val smOffset = if (isSystemMonitorEnabled) 1 else 0
-        val pfOffset = if (isPhotoFrameEnabled) 1 else 0
-        val baseOffset = 1 + qsOffset + npOffset + smOffset + pfOffset
+        val top: Int
+        val bottom: Int
         when (focusSection) {
             WidgetFocusSection.HEADER,
             WidgetFocusSection.QUICK_SETTINGS -> {
-                listState.animateScrollToItem(0)
+                scrollState.animateScrollTo(0)
+                return@LaunchedEffect
             }
-            WidgetFocusSection.NOW_PLAYING -> {
-                val targetIdx = 1 + qsOffset
-                val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == targetIdx }
-                if (!isVisible) {
-                    listState.animateScrollToItem(targetIdx)
-                }
+            WidgetFocusSection.CANVAS -> {
+                val key = focusedKey
+                val p = placementOf(key) ?: return@LaunchedEffect
+                top = canvasTopPx.intValue + p.gridY * stepPx
+                bottom = top + max(p.gridH * stepPx, nativeHeightsPx[key] ?: 0)
             }
-            WidgetFocusSection.SYSTEM_MONITOR -> {
-                val targetIdx = 1 + qsOffset + npOffset
-                val layout = listState.layoutInfo
-                val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
-                val fullyVisible = item != null &&
-                    item.offset >= layout.viewportStartOffset &&
-                    item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
-                if (!fullyVisible) {
-                    listState.animateScrollToItem(targetIdx)
-                }
+            WidgetFocusSection.ADD_WIDGET,
+            WidgetFocusSection.PRESETS -> {
+                top = addPillTopPx.intValue
+                bottom = top + addPillHeightPx.intValue
             }
-            WidgetFocusSection.PHOTO_FRAME -> {
-                // The frame is tall, so scroll only when part of it is off screen
-                val targetIdx = 1 + qsOffset + npOffset + smOffset
-                val layout = listState.layoutInfo
-                val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
-                val fullyVisible = item != null &&
-                    item.offset >= layout.viewportStartOffset &&
-                    item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
-                if (!fullyVisible) {
-                    listState.animateScrollToItem(targetIdx)
-                }
-            }
-            WidgetFocusSection.USER_WIDGETS -> {
-                if (widgetSlots.isNotEmpty()) {
-                    val targetIdx = baseOffset + focusedWidgetIdx.coerceIn(0, widgetSlots.lastIndex)
-                    val layout = listState.layoutInfo
-                    val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
-                    val fullyVisible = item != null &&
-                        item.offset >= layout.viewportStartOffset &&
-                        item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
-                    if (!fullyVisible) {
-                        listState.animateScrollToItem(targetIdx)
-                    }
-                }
-            }
-            WidgetFocusSection.ADD_WIDGET -> {
-                val targetIdx = baseOffset + widgetSlots.size
-                val layout = listState.layoutInfo
-                val item = layout.visibleItemsInfo.firstOrNull { it.index == targetIdx }
-                val fullyVisible = item != null &&
-                    item.offset >= layout.viewportStartOffset &&
-                    item.offset + item.size <= layout.viewportEndOffset - layout.afterContentPadding
-                if (!fullyVisible) {
-                    listState.animateScrollToItem(targetIdx)
-                }
-            }
-            WidgetFocusSection.HOME_PILL -> {
-                // Fixed bottom overlay; no LazyColumn scroll needed
-            }
+            WidgetFocusSection.HOME_PILL -> return@LaunchedEffect // Fixed overlay
         }
+        val topInset = with(density) { SCROLL_TOP_INSET.roundToPx() }
+        val bottomInset = with(density) { (if (isEditing) EDIT_BOTTOM_INSET else SCROLL_BOTTOM_INSET).roundToPx() }
+        val current = scrollState.value
+        var target = current
+        if (bottom + bottomInset > current + scrollState.viewportSize) {
+            target = bottom + bottomInset - scrollState.viewportSize
+        }
+        // A card taller than the screen shows its top
+        if (top - topInset < target) target = top - topInset
+        target = target.coerceIn(0, scrollState.maxValue)
+        if (target == current) return@LaunchedEffect
+        // Held-key nudges jump instead of queueing a scroll animation per repeat
+        if (arrangeKey != null) scrollState.scrollTo(target) else scrollState.animateScrollTo(target)
     }
 
     // Re-take key focus when the page becomes active and after a widget dialog closes
@@ -571,17 +762,208 @@ fun WidgetPage(
             }
         } else {
             endWidgetInteraction()
-            optionsWidgetId = null
+            if (arrangeKey != null) exitArrange()
+            presetsOpen = false
+            optionsKey = null
             showWidgetPicker = false
             showPhotoFrameDialog = false
             showPhotoLabelDialog = false
             isQuickSettingsExpanded = false
-            focusSection = defaultFocusSection()
-            nowPlayingCol = 1
+            resetFocus()
             quickSettingsIndex = 0
-            focusedWidgetIdx = 0
             sawCenterDown = false
         }
+    }
+
+    /** OK on a canvas card. */
+    fun activateCard(key: String) {
+        when (key) {
+            WidgetCanvasLayout.KEY_NOW_PLAYING -> when (nowPlayingCol) {
+                0 -> MediaSessionTracker.skipToPrevious()
+                1 -> MediaSessionTracker.togglePlayPause()
+                2 -> MediaSessionTracker.skipToNext()
+            }
+            WidgetCanvasLayout.KEY_SYSTEM_MONITOR -> systemMonitorRefreshTrigger++
+            WidgetCanvasLayout.KEY_PHOTO_FRAME -> showPhotoFrameDialog = true
+            else -> {
+                val id = WidgetCanvasLayout.appWidgetIdOf(key) ?: return
+                val interacting = interactingWidgetId
+                if (interacting == id) widgetFrames[id]?.clickSelection() else activateWidget(id)
+            }
+        }
+    }
+
+    fun runArrangeAction(action: ArrangeAction) {
+        val key = arrangeKey ?: return
+        when (action) {
+            ArrangeAction.MOVE, ArrangeAction.RESIZE -> {
+                arrangeTool = if (action == ArrangeAction.MOVE) ArrangeTool.MOVE else ArrangeTool.RESIZE
+                draft = placed[key]
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            ArrangeAction.LAYER -> {
+                arrangeTool = ArrangeTool.LAYER
+                SoundEffectManager.play(context, SoundEffect.SELECT)
+            }
+            ArrangeAction.OPTIONS -> {
+                // Arrange stays active underneath, so deco changes show live behind the dialog
+                // and closing it lands back on the pill bar
+                optionsKey = key
+            }
+            ArrangeAction.DONE -> {
+                exitArrange()
+                SoundEffectManager.play(context, SoundEffect.BACK)
+            }
+        }
+    }
+
+    /**
+     * Arrange mode owns every key while active (no page swipes, no card activation) so a nudge
+     * can never leak into the pager or a widget. HOME is handled by MainLauncher before this.
+     */
+    fun handleArrangeKey(native: KeyEvent, type: KeyEventType): Boolean {
+        val key = arrangeKey ?: return false
+        val actions = ArrangeAction.entries
+
+        if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4) {
+            if (type == KeyEventType.KeyUp) {
+                if (arrangeTool != ArrangeTool.BAR) finishArrangeTool() else exitArrange()
+                SoundEffectManager.play(context, SoundEffect.BACK)
+            }
+            return true
+        }
+        if (isCenterActivateKey(native.keyCode)) {
+            if (type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                sawCenterDown = true
+            } else if (type == KeyEventType.KeyUp && sawCenterDown) {
+                // Only a fresh press counts: the release of the hold that opened Arrange is ignored
+                sawCenterDown = false
+                if (arrangeTool == ArrangeTool.BAR) {
+                    actions.getOrNull(arrangeBarIndex)?.let { runArrangeAction(it) }
+                } else {
+                    finishArrangeTool()
+                    SoundEffectManager.play(context, SoundEffect.SELECT)
+                }
+            }
+            return true
+        }
+        if (type != KeyEventType.KeyDown) return true
+
+        val direction = when (native.keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> NavDirection.UP
+            KeyEvent.KEYCODE_DPAD_DOWN -> NavDirection.DOWN
+            KeyEvent.KEYCODE_DPAD_LEFT -> NavDirection.LEFT
+            KeyEvent.KEYCODE_DPAD_RIGHT -> NavDirection.RIGHT
+            else -> null
+        }
+        when (arrangeTool) {
+            ArrangeTool.BAR -> {
+                if (native.keyCode == KeyEvent.KEYCODE_STAR && native.repeatCount == 0) {
+                    exitArrange()
+                    SoundEffectManager.play(context, SoundEffect.BACK)
+                    return true
+                }
+                val delta = when (direction) {
+                    NavDirection.LEFT -> -1
+                    NavDirection.RIGHT -> 1
+                    else -> return true
+                }
+                val next = arrangeBarIndex + delta
+                if (next in actions.indices) {
+                    arrangeBarIndex = next
+                    SoundEffectManager.play(context, SoundEffect.NAV)
+                } else {
+                    HapticManager.performBoundaryHaptic(context)
+                }
+            }
+            ArrangeTool.MOVE, ArrangeTool.RESIZE -> {
+                val current = draft ?: placed[key] ?: return true
+                val (dx, dy) = when (direction) {
+                    NavDirection.UP -> 0 to -1
+                    NavDirection.DOWN -> 0 to 1
+                    NavDirection.LEFT -> -1 to 0
+                    NavDirection.RIGHT -> 1 to 0
+                    null -> return true
+                }
+                val next = if (arrangeTool == ArrangeTool.MOVE) {
+                    WidgetCanvasLayout.move(current, dx, dy, cols)
+                } else {
+                    // A native card already taller than its slot is at its content height
+                    val isNative = WidgetCanvasLayout.appWidgetIdOf(key) == null
+                    val drawnPx = nativeHeightsPx[key] ?: 0
+                    val minH = if (isNative && drawnPx > current.gridH * stepPx) current.gridH else WidgetCanvasLayout.MIN_H
+                    WidgetCanvasLayout.resize(current, dx, dy, cols, minH)
+                }
+                if (next == null) {
+                    HapticManager.performBoundaryHaptic(context)
+                } else {
+                    draft = next
+                    SoundEffectManager.play(context, SoundEffect.CLICK)
+                    dpadScrollTick++
+                }
+            }
+            ArrangeTool.LAYER -> {
+                val forward = when {
+                    direction == NavDirection.UP || native.keyCode == KeyEvent.KEYCODE_2 -> true
+                    direction == NavDirection.DOWN || native.keyCode == KeyEvent.KEYCODE_8 -> false
+                    else -> return true
+                }
+                val updated = WidgetCanvasLayout.shiftLayer(layout, key, forward, canvasKeys)
+                if (updated == null) {
+                    HapticManager.performBoundaryHaptic(context)
+                } else {
+                    WidgetRepository.setPlacements(context, updated)
+                    SoundEffectManager.play(context, SoundEffect.SELECT)
+                }
+            }
+        }
+        return true
+    }
+
+    fun handlePresetsKey(native: KeyEvent, type: KeyEventType): Boolean {
+        val options = CollagePreset.entries.size + 1 // + Cancel
+        if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4) {
+            if (type == KeyEventType.KeyUp) {
+                presetsOpen = false
+                SoundEffectManager.play(context, SoundEffect.BACK)
+            }
+            return true
+        }
+        if (isCenterActivateKey(native.keyCode)) {
+            if (type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                sawCenterDown = true
+            } else if (type == KeyEventType.KeyUp && sawCenterDown) {
+                sawCenterDown = false
+                val preset = CollagePreset.entries.getOrNull(presetIndex)
+                if (preset != null) applyPreset(preset) else presetsOpen = false
+            }
+            return true
+        }
+        if (type != KeyEventType.KeyDown) return true
+        val delta = when (native.keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> -1
+            KeyEvent.KEYCODE_DPAD_RIGHT -> 1
+            else -> return true
+        }
+        if (presetIndex + delta in 0 until options) {
+            presetIndex += delta
+            SoundEffectManager.play(context, SoundEffect.NAV)
+        } else {
+            HapticManager.performBoundaryHaptic(context)
+        }
+        return true
+    }
+
+    fun openPresets() {
+        if (canvasKeys.none { it in placed }) {
+            HapticManager.performBoundaryHaptic(context)
+            Toast.makeText(context, "Add a widget first ♡", Toast.LENGTH_SHORT).show()
+            return
+        }
+        endWidgetInteraction()
+        presetsOpen = true
+        presetIndex = 0
+        SoundEffectManager.play(context, SoundEffect.SELECT)
     }
 
     Box(
@@ -593,6 +975,25 @@ fun WidgetPage(
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 if (!isActivePage) return@onPreviewKeyEvent false
+
+                // With Soft-Key Nav on, MochibunKeyHook re-sends BACK to the activity window, so it
+                // lands here even while one of this page's dialogs has focus (MainActivity only
+                // reroutes it for launcher-level modals). Close the dialog instead of letting it
+                // exit Arrange or leave the page behind the dialog's back.
+                if (anyWidgetDialogOpen && (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        when {
+                            showPhotoLabelDialog -> showPhotoLabelDialog = false
+                            showPhotoFrameDialog -> showPhotoFrameDialog = false
+                            showWidgetPicker -> showWidgetPicker = false
+                            else -> optionsKey = null
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
+                if (arrangeKey != null) return@onPreviewKeyEvent handleArrangeKey(native, event.type)
+                if (presetsOpen) return@onPreviewKeyEvent handlePresetsKey(native, event.type)
 
                 if (isBackDismissKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_F4) {
                     if (event.type == KeyEventType.KeyUp) {
@@ -615,19 +1016,15 @@ fun WidgetPage(
                         centerDownAt = native.eventTime
                         centerLongPressFired = false
                     } else if (event.type == KeyEventType.KeyDown) {
-                        // Held OK on a widget card: open its options
+                        // Held OK on a card: Arrange mode
                         val heldMs = native.eventTime - centerDownAt
+                        val key = focusedKey
                         if (sawCenterDown && !centerLongPressFired &&
-                            focusSection == WidgetFocusSection.USER_WIDGETS &&
+                            focusSection == WidgetFocusSection.CANVAS && key != null &&
                             heldMs >= WIDGET_LONG_PRESS_MS
                         ) {
                             centerLongPressFired = true
-                            sawCenterDown = false
-                            val widgetId = widgetSlots.getOrNull(focusedWidgetIdx)?.appWidgetId
-                            if (widgetId != null) {
-                                endWidgetInteraction()
-                                optionsWidgetId = widgetId
-                            }
+                            enterArrange(key)
                         }
                     } else if (event.type == KeyEventType.KeyUp && sawCenterDown) {
                         sawCenterDown = false
@@ -635,44 +1032,28 @@ fun WidgetPage(
                             WidgetFocusSection.HEADER -> {
                                 if (isQuickSettingsVisible) isQuickSettingsExpanded = !isQuickSettingsExpanded
                             }
+                            WidgetFocusSection.PRESETS -> openPresets()
                             WidgetFocusSection.QUICK_SETTINGS -> {
                                 performQuickSettingsAction(context, quickSettingsIndex)
                                 quickSettingsRefresh++
                             }
-                            WidgetFocusSection.NOW_PLAYING -> {
-                                when (nowPlayingCol) {
-                                    0 -> MediaSessionTracker.skipToPrevious()
-                                    1 -> MediaSessionTracker.togglePlayPause()
-                                    2 -> MediaSessionTracker.skipToNext()
-                                }
-                            }
-                            WidgetFocusSection.SYSTEM_MONITOR -> {
-                                systemMonitorRefreshTrigger++
-                            }
-                            WidgetFocusSection.PHOTO_FRAME -> {
-                                showPhotoFrameDialog = true
-                            }
-                            WidgetFocusSection.USER_WIDGETS -> {
-                                val widgetId = widgetSlots.getOrNull(focusedWidgetIdx)?.appWidgetId
-                                val interacting = interactingWidgetId
-                                if (interacting != null && interacting == widgetId) {
-                                    widgetFrames[interacting]?.clickSelection()
-                                } else if (widgetId != null) {
-                                    activateWidget(widgetId)
-                                }
-                            }
-                            WidgetFocusSection.ADD_WIDGET -> {
-                                openWidgetPicker()
-                            }
-                            WidgetFocusSection.HOME_PILL -> {
-                                navigateHomeAndReset()
-                            }
+                            WidgetFocusSection.CANVAS -> focusedKey?.let { activateCard(it) }
+                            WidgetFocusSection.ADD_WIDGET -> openWidgetPicker()
+                            WidgetFocusSection.HOME_PILL -> navigateHomeAndReset()
                         }
                     }
                     return@onPreviewKeyEvent true
                 }
 
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+                if (native.keyCode == KeyEvent.KEYCODE_STAR) {
+                    val key = focusedKey
+                    if (native.repeatCount == 0 && focusSection == WidgetFocusSection.CANVAS && key != null) {
+                        enterArrange(key)
+                    }
+                    return@onPreviewKeyEvent true
+                }
 
                 // Inside a widget: the D-pad walks its buttons until it runs off the top/bottom
                 val interacting = interactingWidgetId
@@ -699,174 +1080,49 @@ fun WidgetPage(
                 }
 
                 val prevSection = focusSection
-                val prevWidgetIdx = focusedWidgetIdx
-                when (native.keyCode) {
+                val prevKey = focusedKey
+                val onCanvas = focusSection == WidgetFocusSection.CANVAS
+                val canvasKey = focusedKey
+                val handled = when (native.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         when (focusSection) {
-                            WidgetFocusSection.HEADER -> {
-                                HapticManager.performBoundaryHaptic(context)
-                            }
+                            WidgetFocusSection.HEADER -> HapticManager.performBoundaryHaptic(context)
                             WidgetFocusSection.QUICK_SETTINGS -> {
                                 val move = QuickSettingsNav.up(quickSettingsIndex)
                                 if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
                                 else focusSection = WidgetFocusSection.HEADER
                             }
-                            WidgetFocusSection.NOW_PLAYING -> {
-                                if (isQuickSettingsVisible && isQuickSettingsExpanded) {
-                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = when (nowPlayingCol) {
-                                        0 -> 0
-                                        2 -> 3
-                                        else -> 1
-                                    }
-                                } else if (isQuickSettingsVisible) {
-                                    focusSection = WidgetFocusSection.HEADER
-                                }
+                            WidgetFocusSection.CANVAS -> {
+                                val next = canvasKey?.let { spatialNeighbour(it, NavDirection.UP) }
+                                if (next != null) focusCanvas(next) else focusAboveCanvas()
                             }
-                            WidgetFocusSection.SYSTEM_MONITOR -> {
-                                if (mediaState.isPlaying) {
-                                    focusSection = WidgetFocusSection.NOW_PLAYING
-                                    nowPlayingCol = 1
-                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
-                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
-                                } else if (isQuickSettingsVisible) {
-                                    focusSection = WidgetFocusSection.HEADER
-                                }
+                            WidgetFocusSection.ADD_WIDGET,
+                            WidgetFocusSection.PRESETS -> {
+                                bottomCanvasKey()?.let { focusCanvas(it) } ?: focusAboveCanvas()
                             }
-                            WidgetFocusSection.PHOTO_FRAME -> {
-                                if (isSystemMonitorEnabled) {
-                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
-                                } else if (mediaState.isPlaying) {
-                                    focusSection = WidgetFocusSection.NOW_PLAYING
-                                    nowPlayingCol = 1
-                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
-                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
-                                } else if (isQuickSettingsVisible) {
-                                    focusSection = WidgetFocusSection.HEADER
-                                }
-                            }
-                            WidgetFocusSection.USER_WIDGETS -> {
-                                if (focusedWidgetIdx > 0) {
-                                    focusedWidgetIdx--
-                                } else if (isPhotoFrameEnabled) {
-                                    focusSection = WidgetFocusSection.PHOTO_FRAME
-                                } else if (isSystemMonitorEnabled) {
-                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
-                                } else if (mediaState.isPlaying) {
-                                    focusSection = WidgetFocusSection.NOW_PLAYING
-                                    nowPlayingCol = 1
-                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
-                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
-                                } else if (isQuickSettingsVisible) {
-                                    focusSection = WidgetFocusSection.HEADER
-                                }
-                            }
-                            WidgetFocusSection.ADD_WIDGET -> {
-                                if (widgetSlots.isNotEmpty()) {
-                                    focusSection = WidgetFocusSection.USER_WIDGETS
-                                    focusedWidgetIdx = widgetSlots.size - 1
-                                } else if (isPhotoFrameEnabled) {
-                                    focusSection = WidgetFocusSection.PHOTO_FRAME
-                                } else if (isSystemMonitorEnabled) {
-                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
-                                } else if (mediaState.isPlaying) {
-                                    focusSection = WidgetFocusSection.NOW_PLAYING
-                                    nowPlayingCol = 1
-                                } else if (isQuickSettingsVisible && isQuickSettingsExpanded) {
-                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = quickSettingsIndex.coerceIn(0, 3)
-                                } else if (isQuickSettingsVisible) {
-                                    focusSection = WidgetFocusSection.HEADER
-                                }
-                            }
-                            WidgetFocusSection.HOME_PILL -> {
-                                focusSection = WidgetFocusSection.ADD_WIDGET
-                            }
-                        }
-                        if (focusSection != prevSection || focusedWidgetIdx != prevWidgetIdx) {
-                            dpadScrollTick++
+                            WidgetFocusSection.HOME_PILL -> focusSection = WidgetFocusSection.ADD_WIDGET
                         }
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
                         when (focusSection) {
-                            WidgetFocusSection.HEADER -> {
-                                if (isQuickSettingsVisible && isQuickSettingsExpanded) {
-                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = 0
-                                } else {
-                                    val next = sectionBelowQuickSettings()
-                                    if (next == WidgetFocusSection.NOW_PLAYING) nowPlayingCol = 1
-                                    if (next == WidgetFocusSection.USER_WIDGETS) focusedWidgetIdx = 0
-                                    focusSection = next
-                                }
-                            }
+                            WidgetFocusSection.HEADER -> focusBelowHeader()
                             WidgetFocusSection.QUICK_SETTINGS -> {
                                 when (val move = QuickSettingsNav.down(quickSettingsIndex)) {
                                     is QuickSettingsNav.Move.To -> quickSettingsIndex = move.index
-                                    else -> {
-                                        val next = sectionBelowQuickSettings()
-                                        if (next == WidgetFocusSection.NOW_PLAYING) {
-                                            nowPlayingCol = when (quickSettingsIndex) {
-                                                0 -> 0
-                                                3 -> 2
-                                                else -> 1
-                                            }
-                                        }
-                                        if (next == WidgetFocusSection.USER_WIDGETS) focusedWidgetIdx = 0
-                                        focusSection = next
-                                    }
+                                    else -> topCanvasKey()?.let { focusCanvas(it) }
+                                        ?: run { focusSection = WidgetFocusSection.ADD_WIDGET }
                                 }
                             }
-                            WidgetFocusSection.NOW_PLAYING -> {
-                                if (isSystemMonitorEnabled) {
-                                    focusSection = WidgetFocusSection.SYSTEM_MONITOR
-                                } else if (isPhotoFrameEnabled) {
-                                    focusSection = WidgetFocusSection.PHOTO_FRAME
-                                } else if (widgetSlots.isNotEmpty()) {
-                                    focusSection = WidgetFocusSection.USER_WIDGETS
-                                    focusedWidgetIdx = 0
-                                } else {
-                                    focusSection = WidgetFocusSection.ADD_WIDGET
-                                }
+                            WidgetFocusSection.CANVAS -> {
+                                val next = canvasKey?.let { spatialNeighbour(it, NavDirection.DOWN) }
+                                if (next != null) focusCanvas(next) else focusSection = WidgetFocusSection.ADD_WIDGET
                             }
-                            WidgetFocusSection.SYSTEM_MONITOR -> {
-                                if (isPhotoFrameEnabled) {
-                                    focusSection = WidgetFocusSection.PHOTO_FRAME
-                                } else if (widgetSlots.isNotEmpty()) {
-                                    focusSection = WidgetFocusSection.USER_WIDGETS
-                                    focusedWidgetIdx = 0
-                                } else {
-                                    focusSection = WidgetFocusSection.ADD_WIDGET
-                                }
-                            }
-                            WidgetFocusSection.PHOTO_FRAME -> {
-                                if (widgetSlots.isNotEmpty()) {
-                                    focusSection = WidgetFocusSection.USER_WIDGETS
-                                    focusedWidgetIdx = 0
-                                } else {
-                                    focusSection = WidgetFocusSection.ADD_WIDGET
-                                }
-                            }
-                            WidgetFocusSection.USER_WIDGETS -> {
-                                if (focusedWidgetIdx < widgetSlots.size - 1) {
-                                    focusedWidgetIdx++
-                                } else {
-                                    focusSection = WidgetFocusSection.ADD_WIDGET
-                                }
-                            }
-                            WidgetFocusSection.ADD_WIDGET -> {
-                                focusSection = WidgetFocusSection.HOME_PILL
-                            }
+                            WidgetFocusSection.ADD_WIDGET,
+                            WidgetFocusSection.PRESETS -> focusSection = WidgetFocusSection.HOME_PILL
                             WidgetFocusSection.HOME_PILL -> {
                                 // Already at bottom
                             }
-                        }
-                        if (focusSection != prevSection || focusedWidgetIdx != prevWidgetIdx) {
-                            dpadScrollTick++
                         }
                         true
                     }
@@ -877,12 +1133,17 @@ fun WidgetPage(
                                 if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
                                 else HapticManager.performBoundaryHaptic(context)
                             }
-                            WidgetFocusSection.NOW_PLAYING -> {
-                                nowPlayingCol = (nowPlayingCol - 1).coerceAtLeast(0)
+                            WidgetFocusSection.CANVAS -> {
+                                if (canvasKey == WidgetCanvasLayout.KEY_NOW_PLAYING && nowPlayingCol > 0) {
+                                    nowPlayingCol--
+                                } else {
+                                    val next = canvasKey?.let { spatialNeighbour(it, NavDirection.LEFT) }
+                                    if (next != null) focusCanvas(next) else HapticManager.performBoundaryHaptic(context)
+                                }
                             }
-                            WidgetFocusSection.HEADER -> {
-                                HapticManager.performBoundaryHaptic(context)
-                            }
+                            WidgetFocusSection.PRESETS -> focusSection = WidgetFocusSection.ADD_WIDGET
+                            WidgetFocusSection.HEADER,
+                            WidgetFocusSection.ADD_WIDGET -> HapticManager.performBoundaryHaptic(context)
                             else -> {}
                         }
                         true
@@ -894,21 +1155,26 @@ fun WidgetPage(
                                 if (move is QuickSettingsNav.Move.To) quickSettingsIndex = move.index
                                 else navigateHomeAndReset()
                             }
-                            WidgetFocusSection.NOW_PLAYING -> {
-                                if (nowPlayingCol < 2) {
+                            WidgetFocusSection.ADD_WIDGET -> focusSection = WidgetFocusSection.PRESETS
+                            WidgetFocusSection.CANVAS -> {
+                                if (canvasKey == WidgetCanvasLayout.KEY_NOW_PLAYING && nowPlayingCol < 2) {
                                     nowPlayingCol++
                                 } else {
-                                    navigateHomeAndReset()
+                                    // A card to the right first; past the right edge it's Home, as before
+                                    val next = canvasKey?.let { spatialNeighbour(it, NavDirection.RIGHT) }
+                                    if (next != null) focusCanvas(next) else navigateHomeAndReset()
                                 }
                             }
-                            else -> {
-                                navigateHomeAndReset()
-                            }
+                            else -> navigateHomeAndReset()
                         }
                         true
                     }
                     else -> false
                 }
+                if (focusSection != prevSection || (onCanvas && focusedKey != prevKey)) {
+                    dpadScrollTick++
+                }
+                handled
             }
     ) {
         // 1. Top Scalloped Lavender Clouds
@@ -918,269 +1184,260 @@ fun WidgetPage(
                 .align(Alignment.TopCenter)
         )
 
-        // 2. Main Scrollable Content (Header, Now Playing, System Monitor, User Widgets, Add Widget)
-        LazyColumn(
-            state = listState,
+        // 2. Scrollable content: header, Quick Settings, freeform canvas, Add Widget.
+        // Spacers (not padding) hold the top/bottom room so child offsets are scroll offsets.
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp),
-            contentPadding = PaddingValues(top = 44.dp, bottom = 116.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Header & Overlapping Sub-Badge
-            item(key = "header") {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = 12.dp)
+            Spacer(modifier = Modifier.height(SCROLL_TOP_INSET))
+
+            WidgetHeader(
+                isQuickSettingsVisible = isQuickSettingsVisible,
+                isQuickSettingsExpanded = isQuickSettingsExpanded,
+                isHeaderFocused = focusSection == WidgetFocusSection.HEADER && !isEditing,
+                onHeaderClick = {
+                    focusSection = WidgetFocusSection.HEADER
+                    isQuickSettingsExpanded = !isQuickSettingsExpanded
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+                    .padding(top = 8.dp, bottom = 26.dp)
+            )
+
+            if (isQuickSettingsVisible) {
+                AnimatedVisibility(
+                    visible = isQuickSettingsExpanded,
+                    enter = expandVertically(animationSpec = tween(160), clip = false) + fadeIn(animationSpec = tween(120)),
+                    exit = shrinkVertically(animationSpec = tween(140), clip = false) + fadeOut(animationSpec = tween(100))
                 ) {
-                    // Pill card: — ♡ Widgets ♡ —
-                    val isHeaderFocused = focusSection == WidgetFocusSection.HEADER
-                    val hasCustomBorder = currentCardBorderState().hasCustomBorder
-                    val effectiveCornerRadius = if (hasCustomBorder) 16.dp else 32.dp
-                    // Frosted pastel pill inside the same dainty lace + pearl rim as the Home cards.
-                    // The 6dp frill sits inside the original 56dp height.
-                    KeitaiLaceContainer(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
-                            .softGlowFocus(isSelected = isHeaderFocused, cornerRadius = effectiveCornerRadius),
-                        cardCornerRadius = effectiveCornerRadius,
-                        scallopDepth = 3.dp,
-                        beadDiameter = 4.dp,
-                        contentPadding = 6.dp,
-                        containerColor = ActiveTheme.surface,
-                        borderColor = ActiveTheme.cardBorder,
-                        beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
-                        showCornerBows = false
+                            .padding(horizontal = 14.dp)
+                            .padding(bottom = 14.dp)
+                            .curtainUnfurl(visible = isQuickSettingsExpanded)
+                            .graphicsLayer { clip = false }
                     ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(effectiveCornerRadius))
-                            .clickable(enabled = isQuickSettingsVisible) {
-                                focusSection = WidgetFocusSection.HEADER
-                                isQuickSettingsExpanded = !isQuickSettingsExpanded
+                        QuickSettingsCard(
+                            // Polling only runs while the drawer is open
+                            isActivePage = isActivePage && isQuickSettingsExpanded,
+                            focusedIndex = if (focusSection == WidgetFocusSection.QUICK_SETTINGS) quickSettingsIndex else -1,
+                            onPillClick = { index ->
+                                focusSection = WidgetFocusSection.QUICK_SETTINGS
+                                quickSettingsIndex = index
+                                performQuickSettingsAction(context, index)
+                                quickSettingsRefresh++
                             },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = when {
-                                    !isQuickSettingsVisible -> "— ♡ Widgets ♡ —"
-                                    isQuickSettingsExpanded -> "— ♡ Widgets ▴ ♡ —"
-                                    else -> "— ♡ Widgets ▾ ♡ —"
-                                },
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = ActiveTheme.accentDeep
-                            )
-                        }
-                    }
-                    }
-
-                    // Overlapping Sub-Badge: ✦ Now Playing ✦
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .offset(y = 13.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(ActiveTheme.unfocusedCardBg)
-                            .border(1.2.dp, ActiveTheme.cardBorder, RoundedCornerShape(50))
-                            .clickable {
-                                if (!MediaSessionTracker.hasNotificationAccess(context)) {
-                                    Toast.makeText(
-                                        context,
-                                        "Please allow Notification Access for Mochibun to track media ♡",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                    try {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
-                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            }
-                                        )
-                                    } catch (_: Exception) {}
-                                } else {
-                                    Toast.makeText(
-                                        context,
-                                        "Now Playing media service active ♡",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                            .padding(horizontal = 14.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "✦ Now Playing ✦",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ActiveTheme.textPrimary
+                            refreshKey = quickSettingsRefresh,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
             }
 
-            if (isQuickSettingsVisible) {
-                item(key = "quick_settings_card") {
-                    AnimatedVisibility(
-                        visible = isQuickSettingsExpanded,
-                        enter = expandVertically(animationSpec = tween(160), clip = false) + fadeIn(animationSpec = tween(120)),
-                        exit = shrinkVertically(animationSpec = tween(140), clip = false) + fadeOut(animationSpec = tween(100))
-                    ) {
+            // 3. Freeform canvas. Each card is offset into its grid slot; zIndex decides overlap.
+            val canvasBottomPx = canvasKeys.maxOfOrNull { key ->
+                val p = placementOf(key) ?: return@maxOfOrNull 0
+                p.gridY * stepPx + max(p.gridH * stepPx, nativeHeightsPx[key] ?: 0)
+            } ?: 0
+            Box(
+                modifier = Modifier
+                    .width(with(density) { canvasWidthPx.toDp() })
+                    .height(with(density) { canvasBottomPx.toDp() })
+                    .onPlaced { canvasTopPx.intValue = it.positionInParent().y.roundToInt() }
+                    .graphicsLayer { clip = false }
+            ) {
+                canvasKeys.forEach { cardKey ->
+                    val livePlacement = placementOf(cardKey) ?: return@forEach
+                    val appWidgetId = WidgetCanvasLayout.appWidgetIdOf(cardKey)
+                    // Resizing a hosted widget only moves the outline; the widget itself is
+                    // resized once on commit so RemoteViews don't re-inflate per keypress
+                    val p = if (appWidgetId != null && cardKey == arrangeKey && arrangeTool == ArrangeTool.RESIZE) {
+                        placed[cardKey] ?: livePlacement
+                    } else {
+                        livePlacement
+                    }
+                    val isCardFocused = focusSection == WidgetFocusSection.CANVAS && focusedKey == cardKey && !presetsOpen
+                    key(cardKey) {
+                        val slotHeight = with(density) { (p.gridH * stepPx).toDp() }
+                        val slotWidth = with(density) { (p.gridW * stepPx).toDp() }
+                        val deco = livePlacement.deco
+                        // Tape / pins replace a custom 9-slice frame with a plain stitched border
+                        val plainBorder = deco != DecoStyle.NONE
+                        val isNative = appWidgetId == null
+                        // One unclipped wrapper per slot: carries the canvas position and zIndex,
+                        // and lets tape, pins and focus glows draw past the card edge
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .curtainUnfurl(visible = isQuickSettingsExpanded)
+                                .zIndex(p.zIndex)
+                                .offset { IntOffset(p.gridX * stepPx, p.gridY * stepPx) }
+                                .width(slotWidth)
+                                .then(
+                                    if (isNative) {
+                                        // Native cards: the slot is a minimum, so content never gets squashed
+                                        Modifier
+                                            .heightIn(min = slotHeight)
+                                            .onSizeChanged { nativeHeightsPx[cardKey] = it.height }
+                                    } else {
+                                        Modifier.height(slotHeight)
+                                    }
+                                )
                                 .graphicsLayer { clip = false }
                         ) {
-                            QuickSettingsCard(
-                                // Polling only runs while the drawer is open
-                                isActivePage = isActivePage && isQuickSettingsExpanded,
-                                focusedIndex = if (focusSection == WidgetFocusSection.QUICK_SETTINGS) quickSettingsIndex else -1,
-                                onPillClick = { index ->
-                                    focusSection = WidgetFocusSection.QUICK_SETTINGS
-                                    quickSettingsIndex = index
-                                    performQuickSettingsAction(context, index)
-                                    quickSettingsRefresh++
+                            when (cardKey) {
+                                WidgetCanvasLayout.KEY_NOW_PLAYING -> NowPlayingCard(
+                                    mediaState = mediaState,
+                                    focusedControl = if (isCardFocused && arrangeKey == null) nowPlayingCol else -1,
+                                    onPrevious = { MediaSessionTracker.skipToPrevious() },
+                                    onPlayPause = { MediaSessionTracker.togglePlayPause() },
+                                    onNext = { MediaSessionTracker.skipToNext() },
+                                    onOpenMediaApp = { MediaSessionTracker.openCurrentMediaApp(context) },
+                                    miniSkin = nowPlayingMini,
+                                    plainBorder = plainBorder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                WidgetCanvasLayout.KEY_SYSTEM_MONITOR -> SystemMonitorCard(
+                                    isActivePage = isActivePage,
+                                    isFocused = isCardFocused,
+                                    onCardClick = {
+                                        if (arrangeKey == null) {
+                                            focusCanvas(cardKey)
+                                            systemMonitorRefreshTrigger++
+                                        }
+                                    },
+                                    triggerRefreshKey = systemMonitorRefreshTrigger,
+                                    plainBorder = plainBorder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                WidgetCanvasLayout.KEY_PHOTO_FRAME -> PhotoFrameCard(
+                                    photo = photoFrameBitmap,
+                                    frameStyle = photoFrameStyle,
+                                    label = photoFrameLabel,
+                                    isFocused = isCardFocused,
+                                    onClick = {
+                                        if (arrangeKey == null) {
+                                            focusCanvas(cardKey)
+                                            showPhotoFrameDialog = true
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                else -> {
+                                    val slot = appWidgetId?.let { slotsById[it] }
+                                    if (slot != null) {
+                                        AppWidgetHostCard(
+                                            slot = slot,
+                                            info = widgetInfos[slot.appWidgetId],
+                                            host = widgetHost,
+                                            isFocused = isCardFocused,
+                                            onFrameAttached = { id, frame -> widgetFrames[id] = frame },
+                                            onFrameDetached = { id, frame ->
+                                                if (widgetFrames[id] === frame) widgetFrames.remove(id)
+                                                if (interactingWidgetId == id) interactingWidgetId = null
+                                            },
+                                            onOptionsClick = {
+                                                if (arrangeKey == null) {
+                                                    endWidgetInteraction()
+                                                    focusCanvas(cardKey)
+                                                    optionsKey = cardKey
+                                                }
+                                            },
+                                            plainBorder = plainBorder,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                }
+                            }
+                            WidgetDecoOverlay(
+                                deco = deco,
+                                // Pins avoid the corner a card already uses: Now Playing's mascot
+                                // (top-left), a hosted widget's ⋯ handle (top-right)
+                                pinAtEnd = when {
+                                    cardKey == WidgetCanvasLayout.KEY_NOW_PLAYING -> !nowPlayingMini
+                                    !isNative -> false
+                                    else -> null
                                 },
-                                refreshKey = quickSettingsRefresh,
-                                modifier = Modifier.fillMaxWidth()
+                                topInset = when (cardKey) {
+                                    WidgetCanvasLayout.KEY_NOW_PLAYING -> if (nowPlayingMini) 0.dp else 18.dp
+                                    WidgetCanvasLayout.KEY_PHOTO_FRAME -> 10.dp
+                                    else -> 0.dp
+                                },
+                                // The photo frame is a fixed 240dp centred in its slot
+                                sideInset = if (cardKey == WidgetCanvasLayout.KEY_PHOTO_FRAME) {
+                                    ((slotWidth - FrameWidth) / 2).coerceAtLeast(0.dp)
+                                } else {
+                                    0.dp
+                                }
                             )
                         }
                     }
                 }
-            }
 
-            // Dedicated, Dynamic "Now Playing" Native Card (Active Playback Only)
-            if (mediaState.isPlaying) {
-                item(key = "now_playing_card") {
-                    NowPlayingCard(
-                        mediaState = mediaState,
-                        focusedControl = if (focusSection == WidgetFocusSection.NOW_PLAYING) nowPlayingCol else -1,
-                        onPrevious = { MediaSessionTracker.skipToPrevious() },
-                        onPlayPause = { MediaSessionTracker.togglePlayPause() },
-                        onNext = { MediaSessionTracker.skipToNext() },
-                        onOpenMediaApp = { MediaSessionTracker.openCurrentMediaApp(context) },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-
-            // Lightweight, Cute Pastel System Monitor Card (when enabled)
-            if (isSystemMonitorEnabled) {
-                item(key = "system_monitor_card") {
-                    SystemMonitorCard(
-                        isActivePage = isActivePage,
-                        isFocused = focusSection == WidgetFocusSection.SYSTEM_MONITOR,
-                        onCardClick = {
-                            focusSection = WidgetFocusSection.SYSTEM_MONITOR
-                            systemMonitorRefreshTrigger++
-                        },
-                        triggerRefreshKey = systemMonitorRefreshTrigger,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-
-            // Photo frame card (Instax / Purikura / Pearl Lace)
-            if (isPhotoFrameEnabled) {
-                item(key = "photo_frame_card") {
-                    PhotoFrameCard(
-                        photo = photoFrameBitmap,
-                        frameStyle = photoFrameStyle,
-                        label = photoFrameLabel,
-                        isFocused = focusSection == WidgetFocusSection.PHOTO_FRAME,
-                        onClick = {
-                            focusSection = WidgetFocusSection.PHOTO_FRAME
-                            showPhotoFrameDialog = true
-                        },
+                // Arrange outline: drawn above every card so the slot stays visible under overlaps
+                val outlined = placementOf(arrangeKey)
+                if (outlined != null) {
+                    ArrangeStitchFrame(
+                        showResizeHandle = arrangeTool == ArrangeTool.RESIZE,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
+                            .zIndex(Float.MAX_VALUE)
+                            .offset { IntOffset(outlined.gridX * stepPx, outlined.gridY * stepPx) }
+                            .size(
+                                width = with(density) { (outlined.gridW * stepPx).toDp() },
+                                height = with(density) { (outlined.gridH * stepPx).toDp() }
+                            )
                     )
                 }
             }
 
-            // User-added Android App Widgets
-            itemsIndexed(
-                widgetSlots,
-                key = { _, slot -> slot.appWidgetId },
-                contentType = { _, _ -> "app_widget_card" }
-            ) { idx, slot ->
-                AppWidgetHostCard(
-                    slot = slot,
-                    info = widgetInfos[slot.appWidgetId],
-                    host = widgetHost,
-                    isFocused = focusSection == WidgetFocusSection.USER_WIDGETS && focusedWidgetIdx == idx,
-                    isInteracting = interactingWidgetId == slot.appWidgetId,
-                    onFrameAttached = { id, frame -> widgetFrames[id] = frame },
-                    onFrameDetached = { id, frame ->
-                        if (widgetFrames[id] === frame) widgetFrames.remove(id)
-                        if (interactingWidgetId == id) interactingWidgetId = null
+            // Bottom action row: [ + Add Widget ] [ ✦ Presets ], LEFT/RIGHT between them
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 18.dp, bottom = 8.dp)
+                    // Hidden (but still laid out) while the edit bar floats over this spot
+                    .graphicsLayer {
+                        clip = false
+                        alpha = if (isEditing) 0f else 1f
+                    }
+                    .onPlaced {
+                        addPillTopPx.intValue = it.positionInParent().y.roundToInt()
+                        addPillHeightPx.intValue = it.size.height
                     },
-                    onOptionsClick = {
-                        endWidgetInteraction()
-                        focusSection = WidgetFocusSection.USER_WIDGETS
-                        focusedWidgetIdx = idx
-                        optionsWidgetId = slot.appWidgetId
-                    },
-                    modifier = Modifier.fillMaxWidth()
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CanvasActionPill(
+                    text = "+ Add Widget ♡",
+                    isFocused = focusSection == WidgetFocusSection.ADD_WIDGET && !isEditing,
+                    onClick = openWidgetPicker
+                )
+                CanvasActionPill(
+                    text = "✦ Presets",
+                    isFocused = focusSection == WidgetFocusSection.PRESETS && !isEditing,
+                    onClick = {
+                        focusSection = WidgetFocusSection.PRESETS
+                        openPresets()
+                    }
                 )
             }
 
-            // "+ Add Widget" kawaii pill action
-            item(key = "add_widget_button") {
-                val isAddFocused = focusSection == WidgetFocusSection.ADD_WIDGET
-                val pillShape = RoundedCornerShape(50)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .graphicsLayer { clip = false }
-                            .softGlowFocus(isSelected = isAddFocused, cornerRadius = 50.dp)
-                            .defaultMinSize(minHeight = 44.dp)
-                            .clip(pillShape)
-                            .background(if (isAddFocused) ActiveTheme.palette.focusedCardContainerEnd else ActiveTheme.unfocusedCardBg)
-                            .border(1.5.dp, if (isAddFocused) ActiveTheme.palette.focusedCardBorder else ActiveTheme.cardBorder, pillShape)
-                            .clickable(role = Role.Button, onClick = openWidgetPicker)
-                            .padding(horizontal = 22.dp, vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (widgetSlots.isEmpty() && !mediaState.isPlaying) {
-                                "+ Add Favorite Widgets ♡"
-                            } else {
-                                "+ Add Widget ♡"
-                            },
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ActiveTheme.textPrimary
-                        )
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(if (isEditing) EDIT_BOTTOM_INSET else SCROLL_BOTTOM_INSET))
         }
 
-        // 3. Bottom Layered Lavender Clouds
+        // 4. Bottom Layered Lavender Clouds
         BottomLavenderClouds(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
         )
 
-        // 4. "Back to Home" Navigation Pill
+        // 5. "Back to Home" Navigation Pill
         KawaiiReturnHomePill(
-            isFocused = focusSection == WidgetFocusSection.HOME_PILL,
+            isFocused = focusSection == WidgetFocusSection.HOME_PILL && !isEditing,
             onClick = { navigateHomeAndReset() },
             direction = HomePillDirection.RIGHT,
             animateAlways = isActivePage,
@@ -1189,12 +1446,99 @@ fun WidgetPage(
                 .padding(bottom = 12.dp)
         )
 
-        // 5. Widget dialogs (own windows, so they take keys away from this page while open)
+        // 6a. Arrange HUD: mode, snapped size (dp) and layer, pinned at the top of the screen
+        val hudKey = arrangeKey
+        val hudPlacement = placementOf(hudKey)
+        if (hudKey != null && hudPlacement != null) {
+            val visible = canvasKeys.filter { it in placed }
+            val layerRank = 1 + visible.count { other ->
+                other != hudKey && (placed[other]?.zIndex ?: 0f) < hudPlacement.zIndex
+            }
+            val mode = when (arrangeTool) {
+                ArrangeTool.BAR -> "ARRANGE"
+                ArrangeTool.MOVE -> "MOVE"
+                ArrangeTool.RESIZE -> "RESIZE"
+                ArrangeTool.LAYER -> "LAYER"
+            }
+            val step = WidgetCanvasLayout.STEP_DP
+            Text(
+                text = "✦ $mode • ${hudPlacement.gridW * step}×${hudPlacement.gridH * step} • Layer $layerRank/${visible.size} ✦",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = ActiveTheme.accentDeep,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(ActiveTheme.palette.focusedCardContainerEnd.copy(alpha = 0.95f))
+                    .border(1.2.dp, ActiveTheme.palette.focusedCardBorder, RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+        }
+
+        // 6. Arrange / Presets pill bar, or the widget-buttons hint, floating above the Home pill
+        val barModifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 64.dp, start = 8.dp, end = 8.dp)
+        val arranging = arrangeKey
+        when {
+            arranging != null -> {
+                val actions = ArrangeAction.entries
+                val shown = placementOf(arranging)
+                EditPillBar(
+                    hint = when (arrangeTool) {
+                        ArrangeTool.BAR -> "✦ Arrange ✦ ◀▶ pick · OK · ↩ done"
+                        ArrangeTool.MOVE -> "✥ ◀▲▼▶ move · OK done"
+                        ArrangeTool.RESIZE -> "⤡ ${shown?.gridW ?: 0}×${shown?.gridH ?: 0} · ◀▶ width · ▲▼ height"
+                        ArrangeTool.LAYER -> "▲/2 to front · ▼/8 to back · OK done"
+                    },
+                    labels = actions.map { it.label },
+                    selectedIndex = if (arrangeTool == ArrangeTool.BAR) arrangeBarIndex else -1,
+                    activeIndex = when (arrangeTool) {
+                        ArrangeTool.BAR -> -1
+                        ArrangeTool.MOVE -> actions.indexOf(ArrangeAction.MOVE)
+                        ArrangeTool.RESIZE -> actions.indexOf(ArrangeAction.RESIZE)
+                        ArrangeTool.LAYER -> actions.indexOf(ArrangeAction.LAYER)
+                    },
+                    onPillClick = { index ->
+                        if (arrangeTool != ArrangeTool.BAR) finishArrangeTool()
+                        arrangeBarIndex = index
+                        actions.getOrNull(index)?.let { runArrangeAction(it) }
+                    },
+                    modifier = barModifier
+                )
+            }
+            presetsOpen -> {
+                val labels = CollagePreset.entries.map { it.label } + "✕"
+                EditPillBar(
+                    hint = "✦ Quick collage ✦ ◀▶ pick · OK apply",
+                    labels = labels,
+                    selectedIndex = presetIndex,
+                    activeIndex = -1,
+                    onPillClick = { index ->
+                        val preset = CollagePreset.entries.getOrNull(index)
+                        if (preset != null) applyPreset(preset) else presetsOpen = false
+                    },
+                    modifier = barModifier
+                )
+            }
+            interactingWidgetId != null -> {
+                EditPillBar(
+                    hint = "✦ ◀▲▼▶ pick · OK tap · ↩ done ✦",
+                    labels = emptyList(),
+                    selectedIndex = -1,
+                    activeIndex = -1,
+                    onPillClick = {},
+                    modifier = barModifier
+                )
+            }
+        }
+
+        // 7. Widget dialogs (own windows, so they take keys away from this page while open)
         if (showWidgetPicker) {
-            val density = LocalDensity.current
-            val cardWidthPx = with(density) { (LocalConfiguration.current.screenWidthDp.dp - 28.dp).roundToPx() }
             WidgetPickerDialog(
-                availableWidthPx = cardWidthPx,
+                availableWidthPx = canvasWidthPx,
                 onPick = { info -> addWidget(info) },
                 onDismiss = { showWidgetPicker = false }
             )
@@ -1245,39 +1589,247 @@ fun WidgetPage(
             )
         }
 
-        optionsWidgetId?.let { id ->
-            val idx = widgetSlots.indexOfFirst { it.appWidgetId == id }
-            if (idx >= 0) {
-                val info = widgetInfos[id]
-                val label = remember(id, info) {
-                    info?.loadLabel(context.packageManager)?.takeIf { it.isNotBlank() } ?: "Widget"
+        optionsKey?.let { key ->
+            val id = WidgetCanvasLayout.appWidgetIdOf(key)
+            if (key in canvasKeys && (id == null || slotsById.containsKey(id))) {
+                val info = id?.let { widgetInfos[it] }
+                val label = remember(key, info) {
+                    when (key) {
+                        WidgetCanvasLayout.KEY_NOW_PLAYING -> "Now Playing"
+                        WidgetCanvasLayout.KEY_SYSTEM_MONITOR -> "System Monitor"
+                        WidgetCanvasLayout.KEY_PHOTO_FRAME -> "Photo Frame"
+                        else -> info?.loadLabel(context.packageManager)?.takeIf { it.isNotBlank() } ?: "Widget"
+                    }
+                }
+                // Actions that leave the page (configure, use buttons, remove) end Arrange first
+                fun leaveArrange() {
+                    optionsKey = null
+                    if (arrangeKey != null) exitArrange()
                 }
                 WidgetOptionsDialog(
                     widgetLabel = label,
-                    canMoveUp = idx > 0,
-                    canMoveDown = idx < widgetSlots.lastIndex,
+                    isHostedWidget = id != null,
                     canConfigure = info?.configure != null,
-                    canUseControls = info != null && widgetFrames.containsKey(id),
-                    onMoveUp = {
-                        if (WidgetRepository.move(context, id, -1)) focusWidget(id)
+                    canUseControls = id != null && info != null && widgetFrames.containsKey(id),
+                    decoLabel = (layout[key]?.deco ?: DecoStyle.NONE).label,
+                    onCycleDeco = { cycleDeco(key) },
+                    skinLabel = if (key == WidgetCanvasLayout.KEY_NOW_PLAYING) {
+                        if (nowPlayingMini) "MiniDisc deck" else "Classic"
+                    } else {
+                        null
                     },
-                    onMoveDown = {
-                        if (WidgetRepository.move(context, id, 1)) focusWidget(id)
+                    onToggleSkin = { toggleNowPlayingSkin() },
+                    onArrange = {
+                        optionsKey = null
+                        if (arrangeKey != key) enterArrange(key)
                     },
                     onConfigure = {
-                        optionsWidgetId = null
-                        reconfigureWidget(id)
+                        leaveArrange()
+                        id?.let { reconfigureWidget(it) }
                     },
                     onUseControls = {
-                        optionsWidgetId = null
-                        activateWidget(id)
+                        leaveArrange()
+                        id?.let { activateWidget(it) }
                     },
                     onRemove = {
-                        optionsWidgetId = null
-                        removeWidget(id)
+                        leaveArrange()
+                        id?.let { removeWidget(it) }
                     },
-                    onDismiss = { optionsWidgetId = null }
+                    onDismiss = { optionsKey = null }
                 )
+            }
+        }
+    }
+}
+
+/** Centered "♡ Widgets ♡" header pill (opens Quick Settings) with its Now Playing sub-badge. */
+@Composable
+private fun WidgetHeader(
+    isQuickSettingsVisible: Boolean,
+    isQuickSettingsExpanded: Boolean,
+    isHeaderFocused: Boolean,
+    onHeaderClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Box(modifier = modifier) {
+        val hasCustomBorder = currentCardBorderState().hasCustomBorder
+        val effectiveCornerRadius = if (hasCustomBorder) 16.dp else 32.dp
+        // Frosted pastel pill inside the same dainty lace + pearl rim as the Home cards.
+        // The 6dp frill sits inside the original 56dp height.
+        KeitaiLaceContainer(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .softGlowFocus(isSelected = isHeaderFocused, cornerRadius = effectiveCornerRadius),
+            cardCornerRadius = effectiveCornerRadius,
+            scallopDepth = 3.dp,
+            beadDiameter = 4.dp,
+            contentPadding = 6.dp,
+            containerColor = ActiveTheme.surface,
+            borderColor = ActiveTheme.cardBorder,
+            beadBorderColor = ActiveTheme.accentDeep.copy(alpha = 0.45f),
+            showCornerBows = false
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(effectiveCornerRadius))
+                    .clickable(enabled = isQuickSettingsVisible, onClick = onHeaderClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = when {
+                        !isQuickSettingsVisible -> "— ♡ Widgets ♡ —"
+                        isQuickSettingsExpanded -> "— ♡ Widgets ▴ ♡ —"
+                        else -> "— ♡ Widgets ▾ ♡ —"
+                    },
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ActiveTheme.accentDeep,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // Overlapping Sub-Badge: ✦ Now Playing ✦
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = 13.dp)
+                .clip(RoundedCornerShape(50))
+                .background(ActiveTheme.unfocusedCardBg)
+                .border(1.2.dp, ActiveTheme.cardBorder, RoundedCornerShape(50))
+                .clickable {
+                    if (!MediaSessionTracker.hasNotificationAccess(context)) {
+                        Toast.makeText(
+                            context,
+                            "Please allow Notification Access for Mochibun to track media ♡",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        try {
+                            context.startActivity(
+                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            )
+                        } catch (_: Exception) {}
+                    } else {
+                        Toast.makeText(
+                            context,
+                            "Now Playing media service active ♡",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                .padding(horizontal = 14.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "✦ Now Playing ✦",
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = ActiveTheme.textPrimary
+            )
+        }
+    }
+}
+
+/** Pastel pill button for the row under the canvas. */
+@Composable
+private fun CanvasActionPill(text: String, isFocused: Boolean, onClick: () -> Unit) {
+    val pillShape = RoundedCornerShape(50)
+    Box(
+        modifier = Modifier
+            .graphicsLayer { clip = false }
+            .softGlowFocus(isSelected = isFocused, cornerRadius = 50.dp)
+            .defaultMinSize(minHeight = 44.dp)
+            .clip(pillShape)
+            .background(if (isFocused) ActiveTheme.palette.focusedCardContainerEnd else ActiveTheme.unfocusedCardBg)
+            .border(1.5.dp, if (isFocused) ActiveTheme.palette.focusedCardBorder else ActiveTheme.cardBorder, pillShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = ActiveTheme.textPrimary,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * Compact floating bar: a hint line over a row of pills. [selectedIndex] is the D-pad cursor;
+ * [activeIndex] marks the tool currently being used.
+ */
+@Composable
+private fun EditPillBar(
+    hint: String,
+    labels: List<String>,
+    selectedIndex: Int,
+    activeIndex: Int,
+    onPillClick: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.graphicsLayer { clip = false },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = hint,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = ActiveTheme.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(ActiveTheme.palette.focusedCardContainerEnd.copy(alpha = 0.95f))
+                .border(1.dp, ActiveTheme.palette.focusedCardBorder, RoundedCornerShape(50))
+                .padding(horizontal = 10.dp, vertical = 2.dp)
+        )
+        if (labels.isNotEmpty()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier.graphicsLayer { clip = false }
+            ) {
+                labels.forEachIndexed { index, label ->
+                    val isSelected = index == selectedIndex
+                    val isActive = index == activeIndex
+                    val shape = RoundedCornerShape(50)
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer { clip = false }
+                            // Outside the scroller: a bring-into-view request would reach the pager
+                            .softGlowFocus(isSelected = isSelected, cornerRadius = 50.dp, bringIntoView = false)
+                            .clip(shape)
+                            .background(
+                                if (isSelected || isActive) ActiveTheme.palette.focusedCardContainerEnd
+                                else ActiveTheme.unfocusedCardBg
+                            )
+                            .border(
+                                if (isActive) 2.dp else 1.5.dp,
+                                if (isSelected || isActive) ActiveTheme.palette.focusedCardBorder else ActiveTheme.cardBorder,
+                                shape
+                            )
+                            .clickable(role = Role.Button) { onPillClick(index) }
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ActiveTheme.textPrimary,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
         }
     }

@@ -32,10 +32,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import one.crinklecod.mochibun.core.widget.MochibunWidgetHost
+import one.crinklecod.mochibun.data.model.CardBorderStyle
+import one.crinklecod.mochibun.core.widget.WidgetCanvasLayout
 import one.crinklecod.mochibun.core.widget.WidgetFrame
 import one.crinklecod.mochibun.core.widget.WidgetLayoutMath
 import one.crinklecod.mochibun.data.repository.WidgetSlot
@@ -48,11 +51,31 @@ private val WIDGET_MAX_HEIGHT = 340.dp
 private val UNAVAILABLE_CARD_HEIGHT = 96.dp
 
 /**
- * A kawaii card hosting one third-party app widget.
+ * Default canvas height for a newly placed widget, in grid rows: the height the old list
+ * layout gave it at [widthPx] (its scaled minHeight, 64–340dp).
+ */
+fun defaultAppWidgetRows(info: AppWidgetProviderInfo?, widthPx: Int, stepPx: Int, density: Density): Int {
+    if (info == null) return with(density) { WidgetCanvasLayout.rowsFor(UNAVAILABLE_CARD_HEIGHT.roundToPx(), stepPx) }
+    val spec = with(density) {
+        WidgetLayoutMath.computeSize(
+            availableWidthPx = widthPx,
+            minWidthPx = info.minWidth,
+            minHeightPx = info.minHeight,
+            minResizeWidthPx = info.minResizeWidth,
+            resizesHorizontally = (info.resizeMode and AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0,
+            floorHeightPx = WIDGET_MIN_HEIGHT.roundToPx(),
+            maxDisplayHeightPx = WIDGET_MAX_HEIGHT.roundToPx()
+        )
+    }
+    return WidgetCanvasLayout.rowsFor(spec.displayHeightPx, stepPx)
+}
+
+/**
+ * A kawaii card hosting one third-party app widget, filling the canvas slot it's given.
  *
- * The card measures the width it gets, asks [WidgetLayoutMath] for a logical size + scale,
- * and hands that to a [WidgetFrame] wrapped in an AndroidView. If the provider is gone
- * ([info] == null) it shows a placeholder instead, so the user can remove it on purpose.
+ * The card measures its slot, asks [WidgetLayoutMath] for a logical size + scale, and hands that
+ * to a [WidgetFrame] wrapped in an AndroidView. If the provider is gone ([info] == null) it
+ * shows a placeholder instead, so the user can remove it on purpose.
  */
 @Composable
 fun AppWidgetHostCard(
@@ -60,130 +83,110 @@ fun AppWidgetHostCard(
     info: AppWidgetProviderInfo?,
     host: MochibunWidgetHost,
     isFocused: Boolean,
-    isInteracting: Boolean,
     onFrameAttached: (appWidgetId: Int, frame: WidgetFrame) -> Unit,
     onFrameDetached: (appWidgetId: Int, frame: WidgetFrame) -> Unit,
     onOptionsClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // Under washi tape / a corner pin: swap a custom 9-slice frame for a plain stitched border
+    plainBorder: Boolean = false
 ) {
     val theme = LocalLauncherTheme.current
     val palette = theme.palette
     val cardShape = remember { RoundedCornerShape(22.dp) }
-    val density = LocalDensity.current
     val highlightArgb = theme.selectionGlowColor.toArgb()
     val errorTextArgb = palette.textColor.toArgb()
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier = modifier) {
         val availableWidthPx = constraints.maxWidth
-        val spec = remember(info, availableWidthPx) {
+        val cardHeightPx = constraints.maxHeight
+        val floorHeightPx = with(LocalDensity.current) { WIDGET_MIN_HEIGHT.roundToPx() }
+        val spec = remember(info, availableWidthPx, cardHeightPx) {
             info?.let {
-                with(density) {
-                    WidgetLayoutMath.computeSize(
-                        availableWidthPx = availableWidthPx,
-                        minWidthPx = it.minWidth,
-                        minHeightPx = it.minHeight,
-                        minResizeWidthPx = it.minResizeWidth,
-                        resizesHorizontally = (it.resizeMode and AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0,
-                        floorHeightPx = WIDGET_MIN_HEIGHT.roundToPx(),
-                        maxDisplayHeightPx = WIDGET_MAX_HEIGHT.roundToPx()
-                    )
-                }
+                WidgetLayoutMath.computeSize(
+                    availableWidthPx = availableWidthPx,
+                    minWidthPx = it.minWidth,
+                    minHeightPx = it.minHeight,
+                    minResizeWidthPx = it.minResizeWidth,
+                    resizesHorizontally = (it.resizeMode and AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0,
+                    floorHeightPx = floorHeightPx,
+                    maxDisplayHeightPx = cardHeightPx
+                )
             }
         }
-        val cardHeight = if (spec != null) with(density) { spec.displayHeightPx.toDp() } else UNAVAILABLE_CARD_HEIGHT
 
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(cardHeight)
-                    .softGlowFocus(isSelected = isFocused, cornerRadius = 22.dp)
-                    .clip(cardShape)
-                    .background(palette.container)
-                    .then(
-                        if (!isFocused) {
-                            Modifier.mochibunCardBorder(
-                                cornerRadius = 22.dp,
-                                borderColor = palette.outline,
-                                borderWidth = 1.5.dp
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
-            ) {
-                if (info == null || spec == null) {
-                    UnavailableWidgetContent(slot = slot, modifier = Modifier.align(Alignment.Center))
-                } else {
-                    key(slot.appWidgetId) {
-                        AndroidView(
-                            factory = { ctx ->
-                                WidgetFrame(ctx).apply {
-                                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .softGlowFocus(isSelected = isFocused, cornerRadius = 22.dp)
+                .clip(cardShape)
+                .background(palette.container)
+                .then(
+                    if (!isFocused) {
+                        Modifier.mochibunCardBorder(
+                            cornerRadius = 22.dp,
+                            borderColor = palette.outline,
+                            borderWidth = 1.5.dp,
+                            allowCustomNineSlice = !plainBorder,
+                            styleOverride = if (plainBorder) CardBorderStyle.STITCH else null
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
+        ) {
+            if (info == null || spec == null) {
+                UnavailableWidgetContent(slot = slot, modifier = Modifier.align(Alignment.Center))
+            } else {
+                key(slot.appWidgetId) {
+                    AndroidView(
+                        factory = { ctx ->
+                            WidgetFrame(ctx).apply {
+                                descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                                isFocusable = false
+                                isFocusableInTouchMode = false
+                            }.also { frame ->
+                                val hostView = createHostViewOrError(
+                                    ctx, host, slot.appWidgetId, info, errorTextArgb
+                                ).apply {
                                     isFocusable = false
                                     isFocusableInTouchMode = false
-                                }.also { frame ->
-                                    val hostView = createHostViewOrError(
-                                        ctx, host, slot.appWidgetId, info, errorTextArgb
-                                    ).apply {
-                                        isFocusable = false
-                                        isFocusableInTouchMode = false
-                                        if (this is ViewGroup) {
-                                            descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                                        }
+                                    if (this is ViewGroup) {
+                                        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                                     }
-                                    frame.setContent(hostView)
-                                    onFrameAttached(slot.appWidgetId, frame)
                                 }
-                            },
-                            update = { frame ->
-                                frame.applySpec(spec)
-                                frame.setHighlightColor(highlightArgb)
-                            },
-                            onRelease = { frame ->
-                                frame.endInteraction()
-                                onFrameDetached(slot.appWidgetId, frame)
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-
-                // Corner options handle for touch users (D-pad users hold OK instead)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(palette.unfocusedCardBg)
-                        .border(1.5.dp, palette.outline, RoundedCornerShape(10.dp))
-                        .clickable(onClick = onOptionsClick)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "⋯",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = palette.textColor
+                                frame.setContent(hostView)
+                                onFrameAttached(slot.appWidgetId, frame)
+                            }
+                        },
+                        update = { frame ->
+                            frame.applySpec(spec)
+                            frame.setHighlightColor(highlightArgb)
+                        },
+                        onRelease = { frame ->
+                            frame.endInteraction()
+                            onFrameDetached(slot.appWidgetId, frame)
+                        },
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
 
-            // Hint sits under the card so it never covers the widget's own buttons
-            if (isInteracting) {
+            // Corner options handle for touch users (D-pad users pick ⋯ in the arrange bar)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(palette.unfocusedCardBg)
+                    .border(1.5.dp, palette.outline, RoundedCornerShape(10.dp))
+                    .clickable(onClick = onOptionsClick)
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
                 Text(
-                    text = "✦ ◀▲▼▶ pick · OK tap · ↩ done ✦",
-                    fontSize = 10.sp,
+                    text = "⋯",
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = palette.textColor,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(top = 4.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(palette.focusedCardContainerEnd.copy(alpha = 0.95f))
-                        .border(1.dp, palette.focusedCardBorder, RoundedCornerShape(50))
-                        .padding(horizontal = 10.dp, vertical = 2.dp)
+                    color = palette.textColor
                 )
             }
         }
@@ -235,7 +238,7 @@ private fun UnavailableWidgetContent(slot: WidgetSlot, modifier: Modifier = Modi
             )
         }
         Text(
-            text = "Its app is missing or updating. Hold OK to remove.",
+            text = "Its app is missing or updating. Press OK to remove it.",
             fontSize = 11.sp,
             color = theme.palette.textColor.copy(alpha = 0.75f),
             textAlign = TextAlign.Center

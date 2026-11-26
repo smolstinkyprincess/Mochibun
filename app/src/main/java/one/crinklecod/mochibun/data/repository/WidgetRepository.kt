@@ -3,6 +3,8 @@ package one.crinklecod.mochibun.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import one.crinklecod.mochibun.core.widget.WidgetCanvasLayout
+import one.crinklecod.mochibun.core.widget.WidgetPlacement
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,8 +35,24 @@ object WidgetRepository {
     /** A widget ID that's mid-way through bind / configure, so cleanup doesn't delete it. */
     const val KEY_PENDING_WIDGET_ID = "widget_pending_id"
 
+    /**
+     * Freeform canvas placements for every Widgets-page card (native cards and hosted widgets),
+     * in [WidgetCanvasLayout.encode] format. Kept out of JSON backups like the widget IDs above:
+     * hosted-widget entries are keyed by device-local IDs.
+     */
+    const val KEY_WIDGET_CANVAS = "widget_canvas_layout"
+
+    /** Now Playing's compact MiniDisc / pocket-deck skin instead of the full two-band card. */
+    const val KEY_NOW_PLAYING_MINI = "widget_now_playing_mini"
+
+    private val _nowPlayingMini = MutableStateFlow(false)
+    val nowPlayingMini: StateFlow<Boolean> = _nowPlayingMini.asStateFlow()
+
     private val _slots = MutableStateFlow<List<WidgetSlot>>(emptyList())
     val slots: StateFlow<List<WidgetSlot>> = _slots.asStateFlow()
+
+    private val _placements = MutableStateFlow<Map<String, WidgetPlacement>>(emptyMap())
+    val placements: StateFlow<Map<String, WidgetPlacement>> = _placements.asStateFlow()
 
     @Volatile
     private var loaded = false
@@ -45,6 +63,8 @@ object WidgetRepository {
             prefs.getString(KEY_WIDGET_IDS, "").orEmpty(),
             prefs.getString(KEY_WIDGET_PROVIDERS, "").orEmpty()
         )
+        _placements.value = WidgetCanvasLayout.decode(prefs.getString(KEY_WIDGET_CANVAS, "").orEmpty())
+        _nowPlayingMini.value = prefs.getBoolean(KEY_NOW_PLAYING_MINI, false)
         loaded = true
     }
 
@@ -66,16 +86,29 @@ object WidgetRepository {
         val current = _slots.value
         val updated = current.filter { it.appWidgetId != appWidgetId }
         if (updated.size != current.size) save(context, updated)
+        dropPlacements(context, listOf(appWidgetId))
     }
 
-    /** Moves a widget [delta] slots (-1 = up, +1 = down). Returns false at either end. */
-    fun move(context: Context, appWidgetId: Int, delta: Int): Boolean {
+    /** Saves the canvas layout (no-op when unchanged, so callers can commit freely). */
+    fun setPlacements(context: Context, layout: Map<String, WidgetPlacement>) {
         ensureLoaded(context)
-        val current = _slots.value
-        val from = current.indexOfFirst { it.appWidgetId == appWidgetId }
-        val updated = moveItem(current, from, from + delta) ?: return false
-        save(context, updated)
-        return true
+        if (layout == _placements.value) return
+        _placements.value = layout
+        prefs(context).edit().putString(KEY_WIDGET_CANVAS, WidgetCanvasLayout.encode(layout)).apply()
+    }
+
+    fun setNowPlayingMini(context: Context, mini: Boolean) {
+        ensureLoaded(context)
+        if (_nowPlayingMini.value == mini) return
+        _nowPlayingMini.value = mini
+        prefs(context).edit().putBoolean(KEY_NOW_PLAYING_MINI, mini).apply()
+    }
+
+    private fun dropPlacements(context: Context, appWidgetIds: Collection<Int>) {
+        val keys = appWidgetIds.mapTo(HashSet()) { WidgetCanvasLayout.appWidgetKey(it) }
+        val current = _placements.value
+        if (current.keys.none { it in keys }) return
+        setPlacements(context, current.filterKeys { it !in keys })
     }
 
     fun pendingWidgetId(context: Context): Int? {
@@ -109,7 +142,10 @@ object WidgetRepository {
         )
         if (plan.kept.size != _slots.value.size) {
             Log.i(TAG, "Dropping ${_slots.value.size - plan.kept.size} widget(s) whose provider is gone")
+            val keptIds = plan.kept.mapTo(HashSet()) { it.appWidgetId }
+            val dropped = _slots.value.map { it.appWidgetId }.filter { it !in keptIds }
             save(context, plan.kept)
+            dropPlacements(context, dropped)
         }
         return plan.orphans
     }

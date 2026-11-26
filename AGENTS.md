@@ -197,7 +197,8 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
             │   │                  # LidLedManager, TorchManager, KeyHookStatus, MemoryTrimPolicy,
             │   │                  # MediaVolumeLockSync, CursorServiceWatchdog
             │   ├── util/          # BitmapUtils, ContextUtils, CursorPhysics, MochibunSystemActions
-            │   └── widget/        # MochibunWidgetHost, WidgetFrame (D-pad widget traversal), WidgetLayoutMath
+            │   └── widget/        # MochibunWidgetHost, WidgetFrame (D-pad widget traversal), WidgetLayoutMath,
+│                      # WidgetCanvasLayout (Page 0 freeform 16dp-grid placements, layers, presets)
             ├── data/
             │   ├── ime/           # T9Keymap, T9DictionaryEngine, UserWordStats, UserWordStore, LearnedWordExtractor
             │   ├── model/         # LauncherModels, FavoriteFolder, FavoriteSlotItem, CardBorderStyle,

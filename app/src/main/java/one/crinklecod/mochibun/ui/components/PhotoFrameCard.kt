@@ -62,7 +62,8 @@ private val WashiLavender = Color(0xD9F3E5F5)
 private val PlaceholderFill = Color(0xFFFBF3FA)
 private val PlaceholderDash = Color(0xFFD9B8D9)
 
-private val FrameWidth = 240.dp
+/** Shared by all three frame styles; the canvas uses it to pin decorations onto the frame. */
+internal val FrameWidth = 240.dp
 
 /**
  * Widget-page photo frame. The page owns D-pad focus and decoding: [photo] is already

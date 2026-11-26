@@ -1,5 +1,7 @@
 package one.crinklecod.mochibun.ui.components
 
+import androidx.compose.foundation.layout.width
+import one.crinklecod.mochibun.data.model.CardBorderStyle
 import android.os.SystemClock
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -364,8 +366,25 @@ fun NowPlayingCard(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onOpenMediaApp: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // Compact MiniDisc / pocket-deck skin (Widgets page arrange options)
+    miniSkin: Boolean = false,
+    // Under washi tape / a corner pin: swap a custom 9-slice frame for a plain stitched border
+    plainBorder: Boolean = false
 ) {
+    if (miniSkin) {
+        NowPlayingMiniDeck(
+            mediaState = mediaState,
+            focusedControl = focusedControl,
+            onPrevious = onPrevious,
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+            onOpenMediaApp = onOpenMediaApp,
+            plainBorder = plainBorder,
+            modifier = modifier
+        )
+        return
+    }
     val theme = LocalLauncherTheme.current
     val cardShape = remember { RoundedCornerShape(22.dp) }
     val artShape = remember { RoundedCornerShape(14.dp) }
@@ -405,7 +424,9 @@ fun NowPlayingCard(
                 .mochibunCardBorder(
                     cornerRadius = 22.dp,
                     borderColor = theme.cardBorderColor,
-                    borderWidth = 1.5.dp
+                    borderWidth = 1.5.dp,
+                    allowCustomNineSlice = !plainBorder,
+                    styleOverride = if (plainBorder) CardBorderStyle.STITCH else null
                 )
                 .padding(horizontal = 12.dp, vertical = 12.dp)
         ) {
@@ -537,6 +558,112 @@ fun NowPlayingCard(
                 size = 30.dp,
                 themeTintColor = theme.mascotTintColor
             )
+        }
+    }
+}
+
+/** Steps per disc turn: 8 x 45 degrees at the shared 250ms keitai rhythm = one turn every 2s. */
+private const val DISC_STEPS = 8
+
+/**
+ * Compact MiniDisc / pocket-deck Now Playing: a stepped spinning disc, a one-line marquee track
+ * ticker and three small transport keys. Small enough to tuck over the corner of another card.
+ *
+ * The disc turns in 45 degree steps on [rememberKeitaiStep] (4 Hz, paused unless RESUMED and
+ * playing). The step is read only inside graphicsLayer, so a tick redraws the disc layer and
+ * never recomposes the card.
+ */
+@Composable
+private fun NowPlayingMiniDeck(
+    mediaState: MochibunMediaState,
+    focusedControl: Int,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onOpenMediaApp: () -> Unit,
+    plainBorder: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val theme = LocalLauncherTheme.current
+    val cardShape = remember { RoundedCornerShape(18.dp) }
+    val discStep = rememberKeitaiStep(active = mediaState.isPlaying, totalSteps = DISC_STEPS)
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer { clip = false }
+            .kawaiiCardMotifs(isFocused = focusedControl != -1, cornerRadius = 18.dp)
+            .background(color = theme.cardBgColor, shape = cardShape)
+            .mochibunCardBorder(
+                cornerRadius = 18.dp,
+                borderColor = theme.cardBorderColor,
+                borderWidth = 1.5.dp,
+                allowCustomNineSlice = !plainBorder,
+                styleOverride = if (plainBorder) CardBorderStyle.STITCH else null
+            )
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { clip = false },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PastelMiniDiscIcon(
+                modifier = Modifier
+                    .size(40.dp)
+                    .graphicsLayer { rotationZ = discStep.intValue * (360f / DISC_STEPS) }
+                    .clickable(onClick = onOpenMediaApp)
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+                    .clickable(onClick = onOpenMediaApp)
+            ) {
+                Text(
+                    text = mediaState.title.ifBlank { "No Media Active" },
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ActiveTheme.accentDeep,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .basicMarquee()
+                )
+                Text(
+                    text = mediaState.artist.ifBlank { "Unknown Artist" },
+                    fontSize = 10.sp,
+                    color = theme.cardTextColor.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Row(
+                modifier = Modifier.graphicsLayer { clip = false },
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                TransportButton(
+                    text = "◄◄",
+                    isFocused = focusedControl == 0,
+                    onClick = onPrevious,
+                    modifier = Modifier.width(36.dp)
+                )
+                TransportButton(
+                    text = if (mediaState.isPlaying) "❚❚" else "▶",
+                    isFocused = focusedControl == 1,
+                    isPrimary = true,
+                    onClick = onPlayPause,
+                    modifier = Modifier.width(36.dp)
+                )
+                TransportButton(
+                    text = "►►",
+                    isFocused = focusedControl == 2,
+                    onClick = onNext,
+                    modifier = Modifier.width(36.dp)
+                )
+            }
         }
     }
 }
