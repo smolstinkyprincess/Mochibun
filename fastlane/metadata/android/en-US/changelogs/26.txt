@@ -1,0 +1,5 @@
+Mochibun v2.9.0 ♡
+- Freeform Scrapbook Widgets Page: Move, resize, and overlap widgets with the D-pad in Arrange Mode (* or hold OK).
+- Scrapbook Deco & Stickers: Add pastel washi tape, corner tape, puffy vector stickers, or 1-bit Docomo stickers to your canvas.
+- Ruled Sticky Note Card: Tuck a pastel memo pad onto your canvas synced with Quick Memo.
+- Keitai Mini-Skins & Presets: MiniDisc Now Playing deck, candy-block System Monitor, 3 collage presets + 2 custom layout slots.
