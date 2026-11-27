@@ -1,0 +1,3 @@
+Mochibun v2.10.0 ♡
+- Mochiwalker BLE Companion: Opt-in Bluetooth Low Energy GATT server so an external Waveshare ESP32-S3-ePaper-1.54 V2 running Mochiwalker can read Mochibunny's stats, mood, and dialogue and send Feed/Pet actions on the go—100% offline with zero internet permissions.
+- Updated README with Mochiwalker companion setup details.

@@ -3,6 +3,7 @@ package one.crinklecod.mochibun.data.prefs
 import android.content.Context
 import android.content.SharedPreferences
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_CURSOR_WATCHDOG_ENABLED
+import one.crinklecod.mochibun.data.prefs.PreferencesManager.KEY_BLE_COMPANION_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_HOOK_KEY_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_HOOK_SYSUI_ENABLED
 import one.crinklecod.mochibun.data.prefs.PreferencesManager.DEFAULT_ROOT_QUICK_SETTINGS_ENABLED
@@ -32,7 +33,11 @@ internal object SystemAccessPrefs {
     /** Whether root / LSPosed rows are shown in settings. Loaded in [PreferencesManager.init]. */
     val showRootOptions: StateFlow<Boolean> = _showRootOptions.asStateFlow()
 
+    private val _bleCompanionEnabled = MutableStateFlow(false)
+    val bleCompanionEnabled: StateFlow<Boolean> = _bleCompanionEnabled.asStateFlow()
+
     fun reload(prefs: SharedPreferences) {
+        _bleCompanionEnabled.value = prefs.getBoolean(KEY_BLE_COMPANION_ENABLED, false)
         _isRootQuickSettingsEnabled.value = prefs.getBoolean(
             KEY_ROOT_QUICK_SETTINGS_ENABLED,
             DEFAULT_ROOT_QUICK_SETTINGS_ENABLED
@@ -88,6 +93,11 @@ internal object SystemAccessPrefs {
 
     fun setNonRootScreenOffResetEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_NON_ROOT_SCREEN_OFF_RESET, enabled).apply()
+    }
+
+    fun setBleCompanionEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_BLE_COMPANION_ENABLED, enabled).apply()
+        _bleCompanionEnabled.value = enabled
     }
 
     fun isKeyHookEnabled(context: Context): Boolean =

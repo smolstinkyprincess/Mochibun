@@ -4,12 +4,15 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.KeyEvent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.WorkerThread
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.PaddingValues
@@ -56,6 +59,7 @@ import one.crinklecod.mochibun.core.system.KeyHookStatus
 import one.crinklecod.mochibun.core.system.RootShell
 import one.crinklecod.mochibun.core.util.MochibunSystemActions
 import one.crinklecod.mochibun.data.prefs.PreferencesManager
+import one.crinklecod.mochibun.pet.PetBleCompanionServer
 import one.crinklecod.mochibun.data.repository.HardwareRemapManager
 import one.crinklecod.mochibun.service.MochibunAccessibilityService
 import one.crinklecod.mochibun.service.MochibunImeStatus
@@ -72,6 +76,7 @@ internal enum class PermissionsRootRowId(val id: String) {
     A11Y("a11y"),
     NOTIFICATIONS("notifications"),
     CURSOR("cursor"),
+    BLE_COMPANION("ble_companion"),
     SHOW_ROOT("show_root"),
     MAGISK_ROOT_LSPOSED("magisk_root_lsposed")
 }
@@ -100,13 +105,14 @@ internal fun permissionsRows(showRootOptions: Boolean): List<PermissionsRootRowI
     add(PermissionsRootRowId.A11Y)
     add(PermissionsRootRowId.NOTIFICATIONS)
     add(PermissionsRootRowId.CURSOR)
+    add(PermissionsRootRowId.BLE_COMPANION)
     add(PermissionsRootRowId.SHOW_ROOT)
     if (showRootOptions) add(PermissionsRootRowId.MAGISK_ROOT_LSPOSED)
 }
 
 /**
  * Visible rows of the Permissions & Root parent screen in on-screen order. Focus index = list
- * index and jump number = index + 1 (`1..7` non-root, `1..8` when root options are revealed).
+ * index and jump number = index + 1 (`1..8` non-root, `1..9` when root options are revealed).
  */
 internal fun permissionsRowIds(showRootOptions: Boolean): List<String> =
     permissionsRows(showRootOptions).map { it.id }
@@ -209,6 +215,8 @@ internal fun PermissionsRootSettingsScreen(
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
     val showRootOptions by PreferencesManager.showRootOptions.collectAsState()
+    val bleCompanionEnabled by PreferencesManager.bleCompanionEnabled.collectAsState()
+    val bleStatus by PetBleCompanionServer.status.collectAsState()
     val rows = remember(showRootOptions) { permissionsRows(showRootOptions) }
     var focusedIndex by rememberSettingsFocusIndex(
         initialFocusedIndex.coerceIn(0, rows.lastIndex),
@@ -288,6 +296,8 @@ internal fun PermissionsRootSettingsScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshState(applyHeartbeat = false)
+                // Picks up a Nearby devices grant made in App info while we were away
+                if (PreferencesManager.bleCompanionEnabled.value) PetBleCompanionServer.requestSync()
                 keyHookActive = false
                 context.sendBroadcast(Intent(MochibunSystemActions.ACTION_REQUEST_KEY_HOOK_STATUS))
             }
@@ -328,6 +338,38 @@ internal fun PermissionsRootSettingsScreen(
         PreferencesManager.setShowRootOptions(context, !showRootOptions)
     }
 
+    // Android 12+ "Nearby devices" prompt; below 12 the Bluetooth permissions are install-time.
+    val blePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.isNotEmpty() && results.values.all { it }) {
+            PreferencesManager.setBleCompanionEnabled(context, true)
+        } else {
+            Toast.makeText(
+                context,
+                "Allow Nearby devices for Mochibun (App info › Permissions) to link MicroMochi.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    fun toggleBleCompanion() {
+        if (bleCompanionEnabled) {
+            PreferencesManager.setBleCompanionEnabled(context, false)
+            return
+        }
+        if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            Toast.makeText(context, "This phone has no Bluetooth LE.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val missing = PetBleCompanionServer.missingRuntimePermissions(context)
+        if (missing.isEmpty()) {
+            PreferencesManager.setBleCompanionEnabled(context, true)
+        } else {
+            blePermissionLauncher.launch(missing)
+        }
+    }
+
     fun activateRow(row: PermissionsRootRowId) {
         when (row) {
             PermissionsRootRowId.HOME -> launchSettings(Intent(Settings.ACTION_HOME_SETTINGS))
@@ -350,14 +392,18 @@ internal fun PermissionsRootSettingsScreen(
                     cursorVisible = !wasVisible
                 }
             }
+            PermissionsRootRowId.BLE_COMPANION -> toggleBleCompanion()
             PermissionsRootRowId.SHOW_ROOT -> toggleShowRootOptions()
             PermissionsRootRowId.MAGISK_ROOT_LSPOSED -> onOpenMagiskRootLsposed()
         }
     }
 
     fun adjustRow(row: PermissionsRootRowId?): Boolean {
-        if (row != PermissionsRootRowId.SHOW_ROOT) return false
-        toggleShowRootOptions()
+        when (row) {
+            PermissionsRootRowId.SHOW_ROOT -> toggleShowRootOptions()
+            PermissionsRootRowId.BLE_COMPANION -> toggleBleCompanion()
+            else -> return false
+        }
         return true
     }
 
@@ -385,6 +431,7 @@ internal fun PermissionsRootSettingsScreen(
             PermissionsRootRowId.A11Y -> 0
             PermissionsRootRowId.NOTIFICATIONS,
             PermissionsRootRowId.CURSOR -> bannerOffset
+            PermissionsRootRowId.BLE_COMPANION,
             PermissionsRootRowId.SHOW_ROOT,
             PermissionsRootRowId.MAGISK_ROOT_LSPOSED -> bannerOffset + 1
         }
@@ -533,6 +580,26 @@ internal fun PermissionsRootSettingsScreen(
             }
             item(contentType = "permissions_advanced_card") {
                 SettingsCard(categoryTitle = "Advanced") {
+                    SettingsToggleRow(
+                        title = "MicroMochi Keychain (BLE)",
+                        subtitle = if (!bleCompanionEnabled) {
+                            "Share Mochibunny with an e-paper keychain • offline Bluetooth LE"
+                        } else {
+                            when (bleStatus) {
+                                PetBleCompanionServer.Status.CONNECTED -> "✓ Keychain linked"
+                                PetBleCompanionServer.Status.ADVERTISING -> "✓ Waiting for keychain to pair"
+                                PetBleCompanionServer.Status.BLUETOOTH_OFF -> "○ Turn on Bluetooth to link"
+                                PetBleCompanionServer.Status.NEEDS_PERMISSION -> "! Nearby devices permission needed"
+                                PetBleCompanionServer.Status.UNSUPPORTED -> "! BLE advertising unsupported"
+                                PetBleCompanionServer.Status.OFF -> "Starting…"
+                            }
+                        },
+                        checked = bleCompanionEnabled,
+                        isFocused = isRowFocused(PermissionsRootRowId.BLE_COMPANION),
+                        jumpNumber = jumpNumber(PermissionsRootRowId.BLE_COMPANION),
+                        onCheckedChange = { toggleBleCompanion() }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     SettingsToggleRow(
                         title = "Show Root Options",
                         subtitle = if (showRootOptions) {

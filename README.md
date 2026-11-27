@@ -32,6 +32,7 @@ Lovingly tuned for the **ALT Mive Style Folder (AT-M120)**.
 - **Clamshell tricks**: Choose what opens when you flip the phone open (Home, Resume Last App, or Notifications), plus an optional snap sound when you close it. **Flip Reset on Sleep** tidies up (back to Home, menus closed, cursor hidden) whenever the screen goes dark, so unrooted phones get a clean flip-shut too.
 - **Soft-key navigation**: Recents and Back act as little LSK / RSK soft keys on Home and in the drawer, and you can switch that off in *Settings > Virtual Cursor*.
 - **Mochibunny pocket pet 🐰**: The little bunny on Home is yours to look after now! Press Center on her (or tap her) to pop open a tiny **Feed / Pet / Chat** pill, or use `1` / `2` / `3` on the keypad. Treats show up on their own: walk a little (1 per 1,000 steps, if your phone has a step counter), clear your notifications, or plug in your charger. She gets peckish, sulky, and sleepy as the day goes on, and her little speech bubbles change with her mood. No guilt, no game over, just a cozy loaf ♡
+- **Mochiwalker Companion (`Mochiwalker`)**: Pair Mochibun over BLE with [Mochiwalker](https://github.com/smolstinkyprincess/Mochiwalker), companion firmware for the **Waveshare ESP32-S3-ePaper-1.54 V2**, to check on Mochibunny and send care actions on the go.
 - **Offline & private**: No internet permission, no camera permission, no telemetry (verified on the merged release manifest in CI). See [`PRIVACY.md`](PRIVACY.md) for every declared permission and optional helper.
 
 ### Make it yours

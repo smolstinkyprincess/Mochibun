@@ -233,6 +233,13 @@ object PreferencesManager {
     const val KEY_SHOW_ROOT_OPTIONS = "pref_show_root_options"
     const val KEY_NON_ROOT_SCREEN_OFF_RESET = "pref_non_root_screen_off_reset"
 
+    /**
+     * Opt-in MicroMochi BLE companion (PetBleCompanionServer). Off by default and deliberately not
+     * in backups: on Android 12+ it also needs the runtime Nearby devices permission, which a
+     * restore can't grant.
+     */
+    const val KEY_BLE_COMPANION_ENABLED = "pref_ble_companion_enabled"
+
     const val KEY_WALLPAPER_URI = "wallpaper_uri"
 
     const val KEY_PHOTO_FRAME_URI = "pref_photo_frame_uri"
@@ -404,6 +411,10 @@ object PreferencesManager {
     /** Whether root / LSPosed rows are shown in settings. Loaded in [init]. */
     val showRootOptions: StateFlow<Boolean>
         get() = SystemAccessPrefs.showRootOptions
+
+    /** MicroMochi BLE companion switch ([KEY_BLE_COMPANION_ENABLED]). Loaded in [init]. */
+    val bleCompanionEnabled: StateFlow<Boolean>
+        get() = SystemAccessPrefs.bleCompanionEnabled
 
     /** True once [init] has loaded every StateFlow; getters then serve the cached values. */
     internal var initialized = false
@@ -758,6 +769,9 @@ object PreferencesManager {
 
     fun setNonRootScreenOffResetEnabled(context: Context, enabled: Boolean) =
         SystemAccessPrefs.setNonRootScreenOffResetEnabled(context, enabled)
+
+    fun setBleCompanionEnabled(context: Context, enabled: Boolean) =
+        SystemAccessPrefs.setBleCompanionEnabled(context, enabled)
 
     fun isKeyHookEnabled(context: Context): Boolean =
         SystemAccessPrefs.isKeyHookEnabled(context)

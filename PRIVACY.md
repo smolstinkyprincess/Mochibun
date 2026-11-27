@@ -27,6 +27,10 @@ All elevated or sensitive capabilities are **opt-in** and run strictly on-device
    - **Purpose:** Powers the in-launcher Notifications page and Now Playing media controls.
    - **Privacy:** Active notifications and media metadata are read in memory for display while the launcher runs and are never persisted or shared.
 
+4. **MicroMochi Keychain (`PetBleCompanionServer`, off by default)**
+   - **Purpose:** Lets an ESP32 e-paper keychain show Mochibunny and send Feed/Pet over local Bluetooth Low Energy (protocol: [`docs/micromochi_ble_protocol.md`](docs/micromochi_ble_protocol.md)).
+   - **Privacy:** Runs only after you enable *Settings > Permissions & Root > MicroMochi Keychain (BLE)*. No internet, no scanning, no location. Every characteristic requires an encrypted, bonded link, so only a keychain you paired can read her state or spend treats. Only pet stats, mood and a dialogue line are shared. While it is enabled and no keychain is connected, the phone advertises a fixed Mochibun service UUID that nearby BLE scanners can see. Turn the switch off to stop advertising.
+
 ---
 
 ## Manifest Permissions Explained
@@ -37,6 +41,7 @@ All elevated or sensitive capabilities are **opt-in** and run strictly on-device
 | `SYSTEM_ALERT_WINDOW` | Draws the floating virtual mouse pointer over other apps when toggled on. |
 | `FOREGROUND_SERVICE` | Runs `VirtualCursorService` (`specialUse`) only while the virtual cursor is visible on screen. |
 | `ACTIVITY_RECOGNITION` | Optional, **never prompted at runtime**. Only reads today's `TYPE_STEP_COUNTER` total if you manually grant it in Android App Info to feed Mochibunny's step treats and sub-display ticker. |
+| `BLUETOOTH_ADVERTISE`, `BLUETOOTH_CONNECT` (Android 12+), `BLUETOOTH`, `BLUETOOTH_ADMIN` (Android 11 and lower only) | Optional MicroMochi Keychain: advertise and host a local BLE GATT server only while you have enabled it. Requested at runtime ("Nearby devices") only when you turn the switch on. No `BLUETOOTH_SCAN` or location permission is declared. |
 | `ACCESS_WIFI_STATE`, `ACCESS_NETWORK_STATE` | Read-only local status indicators for the Home status card and Quick Settings (no network I/O). |
 | `VIBRATE`, `WAKE_LOCK`, `FLASHLIGHT`, `MODIFY_AUDIO_SETTINGS`, `REORDER_TASKS`, `KILL_BACKGROUND_PROCESSES`, `EXPAND_STATUS_BAR` | Keypad haptics, screen/lid handling, flashlight (`0` hold), Media Volume Lock, Recents task switching, and Quick Settings shade. |
 | `STATUS_BAR_SERVICE`, `STOP_APP_SWITCHES`, `MEDIA_CONTENT_CONTROL`, `WRITE_SECURE_SETTINGS` | Protected permissions only active if granted by a rooted user (e.g., via QuickSwitch); ignored harmlessly on stock phones. |

@@ -117,13 +117,13 @@ class NonRootModeTest {
     fun permissionsRowsHideRootCardAndStayContiguous() {
         val nonRoot = permissionsRowIds(showRootOptions = false)
         assertEquals(
-            listOf("home", "ime", "overlay", "a11y", "notifications", "cursor", "show_root"),
+            listOf("home", "ime", "overlay", "a11y", "notifications", "cursor", "ble_companion", "show_root"),
             nonRoot
         )
         assertTrue(ROOT_PERMISSION_ROWS.none { it in nonRoot })
         assertFalse("magisk_root_lsposed" in nonRoot)
         assertContiguous(nonRoot)
-        assertEquals(7, settingsJumpNumber(nonRoot, "show_root"))
+        assertEquals(8, settingsJumpNumber(nonRoot, "show_root"))
 
         val rooted = permissionsRowIds(showRootOptions = true)
         assertEquals(
@@ -134,6 +134,7 @@ class NonRootModeTest {
                 "a11y",
                 "notifications",
                 "cursor",
+                "ble_companion",
                 "show_root",
                 "magisk_root_lsposed"
             ),
@@ -141,8 +142,8 @@ class NonRootModeTest {
         )
         assertTrue(ROOT_PERMISSION_ROWS.none { it in rooted })
         assertContiguous(rooted)
-        assertEquals(7, settingsJumpNumber(rooted, "show_root"))
-        assertEquals(8, settingsJumpNumber(rooted, "magisk_root_lsposed"))
+        assertEquals(8, settingsJumpNumber(rooted, "show_root"))
+        assertEquals(9, settingsJumpNumber(rooted, "magisk_root_lsposed"))
         assertNull(settingsJumpNumber(rooted, "missing"))
 
         assertEquals(ROOT_PERMISSION_ROWS, MAGISK_ROOT_LSPOSED_ROW_IDS)

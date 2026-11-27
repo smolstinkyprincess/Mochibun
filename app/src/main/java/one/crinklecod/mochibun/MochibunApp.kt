@@ -30,6 +30,7 @@ import one.crinklecod.mochibun.data.repository.J2meGameRepository
 import one.crinklecod.mochibun.data.repository.NotificationTracker
 import one.crinklecod.mochibun.data.repository.TypographyManager
 import one.crinklecod.mochibun.data.repository.WidgetRepository
+import one.crinklecod.mochibun.pet.PetBleCompanionServer
 import one.crinklecod.mochibun.pet.PetManager
 import one.crinklecod.mochibun.ui.components.MascotSpriteStore
 import one.crinklecod.mochibun.ui.dialogs.clearDialogBitmapCaches
@@ -73,6 +74,8 @@ class MochibunApp : Application(), ImageLoaderFactory {
     private fun initUnlockedServices() {
         PreferencesManager.init(this)
         PetManager.init(this)
+        // Opt-in MicroMochi BLE keychain; stays idle (no radio work) while the switch is off
+        PetBleCompanionServer.init(this)
         ExternalThemeManager.init(this)
         HardwareRemapManager.init(this)
         TypographyManager.scanFontsInBackground(this)

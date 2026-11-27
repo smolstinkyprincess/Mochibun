@@ -416,11 +416,11 @@ class SettingsHubStressContractTest {
 
     @Test
     fun magiskRootLsposedSubScreenRestoresParentRowFocus() {
-        assertEquals(7, permissionsRowIds(showRootOptions = false).size)
-        assertEquals(8, permissionsRowIds(showRootOptions = true).size)
+        assertEquals(8, permissionsRowIds(showRootOptions = false).size)
+        assertEquals(9, permissionsRowIds(showRootOptions = true).size)
         assertEquals(7, MAGISK_ROOT_LSPOSED_ROW_IDS.size)
         val magiskRowIndex = PermissionsRootRowId.MAGISK_ROOT_LSPOSED.ordinal
-        assertEquals(7, magiskRowIndex) // 8th row (jump key 8)
+        assertEquals(8, magiskRowIndex) // 9th row (jump key 9)
 
         val nav = SettingsNavigationState(SettingsDestination.Hub)
         nav.navigateTo(SettingsDestination.PermissionsRoot, fromFocusIndex = 5)

@@ -219,7 +219,9 @@ Mochibun uses a cohesive **pastel retro-kawaii keitai** aesthetic built on Jetpa
             │   ├── PetLogic.kt         # Pure Kotlin rules, mood decay math, daily treat caps
             │   ├── PetManager.kt       # Atomic StateFlow<PetState> & serial IO persistence worker
             │   ├── PetPersistence.kt   # SharedPreferences (mochibunny_pet) & JSON backup codec
-            │   └── ChargerPlugTracker.kt # Ignores initial sticky power broadcast for treat granting
+            │   ├── ChargerPlugTracker.kt # Ignores initial sticky power broadcast for treat granting
+            │   ├── PetBleProtocol.kt   # Pure MicroMochi BLE wire format (UUIDs, JSON payload, command bytes)
+            │   └── PetBleCompanionServer.kt # Opt-in BLE GATT server + advertiser for the e-paper keychain
             ├── service/
             │   ├── InputArbiter.kt        # Coordinates typing vs raw-key layers & IME input-active state
             │   ├── ImeInputMode.kt        # Pure Kotlin ShiftMode, '*' mode cycling & predictive field gate
